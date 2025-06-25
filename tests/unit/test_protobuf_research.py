@@ -1,20 +1,20 @@
-# test_protobuf_research.py
 """
 Test completo y benchmark del sistema de investigación Protocol Buffers.
-Verifica setup, performance y prepara para comparación con otros protocolos.
+Adaptado para trabajar con la estructura asíncrona existente.
 """
 
+import asyncio
 import time
 import os
 import sys
 import statistics
 import json
 from typing import List, Dict, Any
-from dataclasses import asdict
+from pathlib import Path
 
-# Añadir paths necesarios
-sys.path.insert(0, 'src')
-sys.path.insert(0, 'src/protocols')
+# Add project root to path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 
 # Test de imports principales
@@ -23,50 +23,63 @@ def test_imports():
     print("🧪 Testing imports del sistema de investigación...")
 
     try:
-        from base_interfaces import (
-            EventData, SerializationMetrics, SerializationProtocol,
+        from src.common.base_interfaces import (
+            EventData, SerializationMetrics, EventSerializer,
             CompressionAlgorithm, EncryptionAlgorithm,
-            ResearchDataGenerator, SerializerFactory
+            ResearchDataGenerator, EventType, Severity,
+            format_bytes, format_time_ns
         )
         print("✅ Interfaces base importadas")
 
-        from protobuf.protobuf_serializer import ProtobufEventSerializer
+        from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
         print("✅ Serializer Protocol Buffers importado")
 
-        # Verificar que Protocol Buffers está disponible
-        import scada_events_pb2 as pb
-        print("✅ Schema Protocol Buffers disponible")
+        # Verificar dependencias
+        try:
+            import google.protobuf
+            print("✅ Google Protocol Buffers disponible")
+        except ImportError:
+            print("⚠️  Protocol Buffers no disponible (usando JSON fallback)")
+
+        import lz4
+        print("✅ LZ4 disponible")
+
+        from Crypto.Cipher import ChaCha20
+        print("✅ ChaCha20 disponible")
 
         return True
 
     except ImportError as e:
         print(f"❌ Error importando: {e}")
-        print("💡 Ejecuta: bash setup_research_environment.sh")
         return False
 
 
-def test_protobuf_serialization():
+async def test_protobuf_serialization():
     """Test básico de serialización Protocol Buffers."""
     print("\n🔧 Testing serialización Protocol Buffers...")
 
-    from base_interfaces import ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm
-    from protobuff.protobuf_serializer import ProtobufEventSerializer
+    from src.common.base_interfaces import (
+        ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm,
+        EventType, Severity, format_bytes, format_time_ns
+    )
+    from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
 
     # Crear serializer con diferentes configuraciones
     configs = [
         {"name": "Sin compresión ni cifrado", "compression": CompressionAlgorithm.NONE,
          "encryption": EncryptionAlgorithm.NONE},
-        {"name": "Solo LZ4", "compression": CompressionAlgorithm.LZ4, "encryption": EncryptionAlgorithm.NONE},
-        {"name": "LZ4 + ChaCha20", "compression": CompressionAlgorithm.LZ4, "encryption": EncryptionAlgorithm.CHACHA20}
+        {"name": "Solo LZ4", "compression": CompressionAlgorithm.LZ4,
+         "encryption": EncryptionAlgorithm.NONE},
+        {"name": "LZ4 + ChaCha20", "compression": CompressionAlgorithm.LZ4,
+         "encryption": EncryptionAlgorithm.CHACHA20}
     ]
 
     # Generar eventos de prueba
     generator = ResearchDataGenerator()
     security_events = generator.generate_security_events(5)
-    scada_events = generator.generate_scada_alarms(5)
-    network_events = generator.generate_network_anomalies(5)
+    mixed_events = generator.generate_mixed_events(10)
 
-    all_events = security_events + scada_events + network_events
+    all_events = security_events + mixed_events
 
     print(f"   Eventos generados: {len(all_events)}")
 
@@ -78,20 +91,11 @@ def test_protobuf_serialization():
         # Crear serializer
         encryption_key = os.urandom(32) if config['encryption'] != EncryptionAlgorithm.NONE else None
 
-        # Nota: Para esta prueba, simplificamos y solo probamos casos básicos
-        if config['compression'] == CompressionAlgorithm.NONE or config['encryption'] == EncryptionAlgorithm.NONE:
-            # Para la implementación simplificada inicial
-            serializer = ProtobufEventSerializer(
-                compression=CompressionAlgorithm.LZ4,
-                encryption=EncryptionAlgorithm.CHACHA20 if encryption_key else EncryptionAlgorithm.NONE,
-                encryption_key=encryption_key
-            )
-        else:
-            serializer = ProtobufEventSerializer(
-                compression=config['compression'],
-                encryption=config['encryption'],
-                encryption_key=encryption_key
-            )
+        serializer = ProtobufEventSerializer(
+            compression=config['compression'],
+            encryption=config['encryption'],
+            encryption_key=encryption_key
+        )
 
         # Test con cada tipo de evento
         config_results = []
@@ -99,41 +103,45 @@ def test_protobuf_serialization():
         for i, event in enumerate(all_events[:3]):  # Solo primeros 3 para prueba rápida
             try:
                 # Serializar
-                serialized_data, ser_metrics = serializer.serialize(event)
+                serialized_data = await serializer.serialize(event)
+                metrics = serializer.get_metrics()
 
                 # Deserializar
-                deserialized_event, deser_metrics = serializer.deserialize(serialized_data)
+                deserialized_event = await serializer.deserialize(serialized_data)
 
                 if deserialized_event:
                     config_results.append({
-                        "event_type": event.event_type,
-                        "original_size": ser_metrics.original_size_bytes,
-                        "serialized_size": ser_metrics.serialized_size_bytes,
-                        "compression_ratio": ser_metrics.compression_ratio,
-                        "serialization_time_us": ser_metrics.serialization_time_ns / 1000,
-                        "deserialization_time_us": deser_metrics.deserialization_time_ns / 1000,
-                        "total_time_us": (
-                                                     ser_metrics.total_processing_time_ns + deser_metrics.total_processing_time_ns) / 1000
+                        "event_type": event.event_type.value,
+                        "original_size": metrics.original_size_bytes,
+                        "compressed_size": metrics.compressed_size_bytes,
+                        "final_size": metrics.final_size_bytes,
+                        "compression_ratio": metrics.compression_ratio,
+                        "serialization_time_us": metrics.serialization_time_ns / 1000,
+                        "deserialization_time_us": metrics.deserialization_time_ns / 1000,
+                        "total_time_us": metrics.total_time_ns / 1000
                     })
-                    print(
-                        f"     ✅ {event.event_type}: {len(serialized_data)} bytes, {ser_metrics.total_processing_time_ns / 1000:.1f}μs")
+                    print(f"     ✅ {event.event_type.value}: {format_bytes(len(serialized_data))}, "
+                          f"{format_time_ns(metrics.total_time_ns)}")
                 else:
-                    print(f"     ❌ {event.event_type}: Error en deserialización")
+                    print(f"     ❌ {event.event_type.value}: Error en deserialización")
 
             except Exception as e:
-                print(f"     ❌ {event.event_type}: Error - {e}")
+                print(f"     ❌ {event.event_type.value}: Error - {e}")
 
         results[config['name']] = config_results
 
     return results
 
 
-def benchmark_performance():
+async def benchmark_performance():
     """Benchmark de performance con diferentes cargas de trabajo."""
     print("\n📊 Benchmark de performance Protocol Buffers...")
 
-    from base_interfaces import ResearchDataGenerator
-    from protobuf.protobuf_serializer import ProtobufEventSerializer
+    from src.common.base_interfaces import (
+        ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm,
+        format_bytes, format_time_ns
+    )
+    from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
 
     # Configuración del benchmark
     event_counts = [100, 1000, 5000]
@@ -152,7 +160,7 @@ def benchmark_performance():
 
         # Generar carga de trabajo mixta
         generator = ResearchDataGenerator()
-        events = generator.generate_mixed_workload(count)
+        events = generator.generate_mixed_events(count)
 
         # Benchmark de serialización
         start_time = time.time()
@@ -161,9 +169,9 @@ def benchmark_performance():
         serialization_times = []
 
         for event in events:
-            ser_start = time.time_ns()
-            serialized_data, metrics = serializer.serialize(event)
-            ser_end = time.time_ns()
+            ser_start = time.perf_counter_ns()
+            serialized_data = await serializer.serialize(event)
+            ser_end = time.perf_counter_ns()
 
             serialized_events.append(serialized_data)
             total_serialized_size += len(serialized_data)
@@ -177,9 +185,9 @@ def benchmark_performance():
         successful_deserializations = 0
 
         for serialized_data in serialized_events:
-            deser_start = time.time_ns()
-            deserialized_event, metrics = serializer.deserialize(serialized_data)
-            deser_end = time.time_ns()
+            deser_start = time.perf_counter_ns()
+            deserialized_event = await serializer.deserialize(serialized_data)
+            deser_end = time.perf_counter_ns()
 
             if deserialized_event:
                 successful_deserializations += 1
@@ -226,12 +234,15 @@ def benchmark_performance():
     return benchmark_results
 
 
-def compare_event_types():
+async def compare_event_types():
     """Compara performance entre diferentes tipos de eventos."""
     print("\n📈 Comparación por tipo de evento...")
 
-    from base_interfaces import ResearchDataGenerator
-    from protobuf.protobuf_serializer import ProtobufEventSerializer
+    from src.common.base_interfaces import (
+        ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm,
+        EventType, format_bytes
+    )
+    from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
 
     encryption_key = os.urandom(32)
     serializer = ProtobufEventSerializer(
@@ -243,15 +254,16 @@ def compare_event_types():
     generator = ResearchDataGenerator()
 
     # Generar diferentes tipos de eventos
-    event_types = [
-        ("Security Events", generator.generate_security_events(100)),
-        ("SCADA Alarms", generator.generate_scada_alarms(100)),
-        ("Network Anomalies", generator.generate_network_anomalies(100))
-    ]
+    event_groups = []
+
+    # Generar eventos por tipo
+    for event_type in [EventType.SECURITY_ALERT, EventType.SCADA_ALARM, EventType.NETWORK_ANOMALY]:
+        events = [generator.generate_event_data(event_type) for _ in range(100)]
+        event_groups.append((event_type.value, events))
 
     comparison_results = {}
 
-    for event_type_name, events in event_types:
+    for event_type_name, events in event_groups:
         print(f"\n   {event_type_name}:")
 
         sizes = []
@@ -259,7 +271,8 @@ def compare_event_types():
         compression_ratios = []
 
         for event in events[:50]:  # Test con 50 eventos por tipo
-            serialized_data, metrics = serializer.serialize(event)
+            serialized_data = await serializer.serialize(event)
+            metrics = serializer.get_metrics()
 
             sizes.append(len(serialized_data))
             serialization_times.append(metrics.serialization_time_ns / 1000)  # μs
@@ -273,10 +286,10 @@ def compare_event_types():
             "time_std": statistics.stdev(serialization_times) if len(serialization_times) > 1 else 0
         }
 
-        print(
-            f"     Tamaño promedio: {statistics.mean(sizes):.1f} ± {statistics.stdev(sizes) if len(sizes) > 1 else 0:.1f} bytes")
-        print(
-            f"     Tiempo promedio: {statistics.mean(serialization_times):.1f} ± {statistics.stdev(serialization_times) if len(serialization_times) > 1 else 0:.1f} μs")
+        print(f"     Tamaño promedio: {statistics.mean(sizes):.1f} ± "
+              f"{statistics.stdev(sizes) if len(sizes) > 1 else 0:.1f} bytes")
+        print(f"     Tiempo promedio: {statistics.mean(serialization_times):.1f} ± "
+              f"{statistics.stdev(serialization_times) if len(serialization_times) > 1 else 0:.1f} μs")
         print(f"     Compresión: {statistics.mean(compression_ratios):.1f}x")
 
     return comparison_results
@@ -295,38 +308,44 @@ def save_results(results: Dict[str, Any]):
     print(f"\n💾 Resultados guardados en: {filename}")
 
 
-def main():
+async def main():
     """Función principal del test de investigación."""
     print("🔬 SCADA Protocol Research - Protocol Buffers Test Suite")
     print("=" * 70)
 
     # Test 1: Verificar imports y setup
     if not test_imports():
-        print("\n💥 Setup incompleto. Ejecuta setup_research_environment.sh")
+        print("\n💥 Setup incompleto. Verifica las dependencias")
         return False
 
     # Test 2: Serialización básica
     try:
-        serialization_results = test_protobuf_serialization()
+        serialization_results = await test_protobuf_serialization()
         print("✅ Test de serialización completado")
     except Exception as e:
         print(f"❌ Error en test de serialización: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
     # Test 3: Benchmark de performance
     try:
-        performance_results = benchmark_performance()
+        performance_results = await benchmark_performance()
         print("✅ Benchmark de performance completado")
     except Exception as e:
         print(f"❌ Error en benchmark: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
     # Test 4: Comparación por tipos de eventos
     try:
-        comparison_results = compare_event_types()
+        comparison_results = await compare_event_types()
         print("✅ Comparación por tipos completada")
     except Exception as e:
         print(f"❌ Error en comparación: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
     # Compilar resultados finales
@@ -392,7 +411,8 @@ def main():
 
 
 if __name__ == "__main__":
-    success = main()
+    # Ejecutar con asyncio
+    success = asyncio.run(main())
 
     if success:
         print("\n🚀 Test de investigación Protocol Buffers completado exitosamente!")
@@ -400,36 +420,3 @@ if __name__ == "__main__":
     else:
         print("\n💥 Test falló. Revisar setup y dependencias.")
         sys.exit(1)
-
-
-# ============================================================
-# SCRIPT DE SETUP RÁPIDO
-# ============================================================
-
-def quick_setup():
-    """Setup rápido para testing."""
-    print("⚡ Setup rápido de testing...")
-
-    # Crear directorios necesarios
-    os.makedirs("src/protocols/protobuf", exist_ok=True)
-    os.makedirs("src/common", exist_ok=True)
-    os.makedirs("research_results/benchmarks", exist_ok=True)
-
-    # Crear __init__.py files
-    init_files = [
-        "src/__init__.py",
-        "src/protocols/__init__.py",
-        "src/protocols/protobuf/__init__.py",
-        "src/common/__init__.py"
-    ]
-
-    for init_file in init_files:
-        if not os.path.exists(init_file):
-            with open(init_file, 'w') as f:
-                f.write("# Auto-generated __init__.py\n")
-
-    print("✅ Estructura básica creada")
-
-
-if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--quick-setup":
-    quick_setup()

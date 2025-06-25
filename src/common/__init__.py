@@ -13,10 +13,10 @@ from .base_interfaces import (
 
 __all__ = [
     'CompressionAlgorithm',
-    'EncryptionAlgorithm', 
+    'EncryptionAlgorithm',
     'ResearchDataGenerator',
     'EventSerializer',
-    'EventData', 
+    'EventData',
     'SerializationMetrics',
     'EventType',
     'Severity'
