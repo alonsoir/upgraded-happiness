@@ -4,7 +4,6 @@ Protocol Buffers serializer implementation with LZ4 compression and ChaCha20 enc
 This module implements high-performance serialization using Protocol Buffers as the base
 serialization format, with optional LZ4 compression and ChaCha20 encryption.
 """
-
 import asyncio
 import json
 import os
@@ -16,6 +15,7 @@ try:
     from google.protobuf.message import Message
     from google.protobuf import json_format
     from google.protobuf.struct_pb2 import Struct
+    from google.protobuf.json_format import MessageToDict
 except ImportError:
     raise ImportError("protobuf library not found. Install with: pip install protobuf>=4.21.0")
 
@@ -39,14 +39,10 @@ except ImportError:
     aiofiles = None
 
 # Base interfaces
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from common.base_interfaces import (
-    EventSerializer,
+from src.common.base_interfaces import (
     EventData,
     SerializationMetrics,
+    EventSerializer,
     CompressionAlgorithm,
     EncryptionAlgorithm,
     measure_time_ns
@@ -190,25 +186,46 @@ class ProtobufEventSerializer(EventSerializer):
     async def _to_protobuf(self, event: Union[EventData, Dict[str, Any]]) -> bytes:
         """Convert event to Protocol Buffers bytes"""
 
-        # Convert EventData to dict if necessary
-        if isinstance(event, EventData):
-            event_dict = {
-                'event_id': event.event_id,
-                'timestamp': event.timestamp,
-                'event_type': event.event_type.value,
-                'severity': event.severity.value,
-                'source_ip': event.source_ip,
-                'target_ip': event.target_ip,
-                'properties': event.properties,
-                'metadata': event.metadata
-            }
-        else:
-            event_dict = event
+        def convert_event_data_to_dict(obj: Any) -> Any:
+            """Recursively convert EventData objects to dictionaries"""
+            print(f"DEBUG: Converting object of type {type(obj)}: {obj}")
+            if isinstance(obj, EventData):  # EventData from src.common.base_interfaces
+                print(f"DEBUG: Recognized as EventData: {obj}")
+                return {
+                    'event_id': obj.event_id,
+                    'timestamp': obj.timestamp,
+                    'event_type': obj.event_type.value if hasattr(obj.event_type, 'value') else obj.event_type,
+                    'severity': obj.severity.value if hasattr(obj.severity, 'value') else obj.severity,
+                    'source_ip': obj.source_ip,
+                    'target_ip': obj.target_ip,
+                    'properties': convert_event_data_to_dict(obj.properties),
+                    'metadata': convert_event_data_to_dict(obj.metadata)
+                }
+            elif isinstance(obj, Message):  # Handle Protocol Buffers messages
+                print(f"DEBUG: Recognized as Protocol Buffers Message: {obj}")
+                return MessageToDict(obj)
+            elif isinstance(obj, dict):
+                print(f"DEBUG: Processing dict: {obj}")
+                return {key: convert_event_data_to_dict(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                print(f"DEBUG: Processing list: {obj}")
+                return [convert_event_data_to_dict(item) for item in obj]
+            elif isinstance(obj, (int, float, str, bool)) or obj is None:
+                print(f"DEBUG: Processing primitive type: {type(obj)}: {obj}")
+                return obj
+            else:
+                print(f"DEBUG: Falling back to string conversion for type {type(obj)}: {obj}")
+                return str(obj)
 
-        # Convert to Protocol Buffers Struct (generic message type)
+        # Convert event to dictionary
+        print(f"DEBUG: Starting conversion for event: {type(event)}")
+        event_dict = convert_event_data_to_dict(event)
+        print(f"DEBUG: Converted event to: {type(event_dict)}: {event_dict}")
+
+        # Convert to Protocol Buffers Struct
         struct = Struct()
 
-        # Recursively populate the struct
+        # Populate the struct recursively
         await self._populate_struct(struct, event_dict)
 
         # Serialize to bytes
@@ -217,15 +234,18 @@ class ProtobufEventSerializer(EventSerializer):
     async def _populate_struct(self, struct: Struct, data: Dict[str, Any]):
         """Recursively populate a Protocol Buffers Struct"""
 
+        if not isinstance(data, dict):
+            print(f"DEBUG: Unexpected data type in _populate_struct: {type(data)}: {data}")
+            raise ValueError(f"Expected dict, got {type(data)}: {data}")
+
         for key, value in data.items():
+            print(f"DEBUG: Processing key {key} with value type {type(value)}: {value}")
             if value is None:
                 struct.fields[key].null_value = 0
             elif isinstance(value, bool):
                 struct.fields[key].bool_value = value
-            elif isinstance(value, int):
+            elif isinstance(value, (int, float)):
                 struct.fields[key].number_value = float(value)
-            elif isinstance(value, float):
-                struct.fields[key].number_value = value
             elif isinstance(value, str):
                 struct.fields[key].string_value = value
             elif isinstance(value, list):
@@ -234,20 +254,20 @@ class ProtobufEventSerializer(EventSerializer):
                     if isinstance(item, dict):
                         nested_struct = list_value.values.add().struct_value
                         await self._populate_struct(nested_struct, item)
+                    elif isinstance(item, (int, float)):
+                        list_value.values.add().number_value = float(item)
+                    elif isinstance(item, str):
+                        list_value.values.add().string_value = item
+                    elif isinstance(item, bool):
+                        list_value.values.add().bool_value = item
                     else:
-                        # Handle primitive types in lists
-                        list_item = list_value.values.add()
-                        if isinstance(item, str):
-                            list_item.string_value = item
-                        elif isinstance(item, (int, float)):
-                            list_item.number_value = float(item)
-                        elif isinstance(item, bool):
-                            list_item.bool_value = item
+                        print(f"DEBUG: Unexpected item type in list for key {key}: {type(item)}: {item}")
+                        list_value.values.add().string_value = str(item)
             elif isinstance(value, dict):
                 nested_struct = struct.fields[key].struct_value
                 await self._populate_struct(nested_struct, value)
             else:
-                # Convert other types to string
+                print(f"DEBUG: Unexpected value type for key {key}: {type(value)}: {value}")
                 struct.fields[key].string_value = str(value)
 
     async def _from_protobuf(self, data: bytes) -> Dict[str, Any]:
