@@ -27,3 +27,24 @@ tests/unit/test_protobuf_research_complete.py::test_imports
 (upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
 └➤
 
+(upgraded_happiness_venv) ┌<▪> ~/g/upgraded-happiness
+└➤ git branch
+* feature/bitdefender-training
+  main
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ./scripts/run_broker.sh
+
+
+Entorno virtual activado: /Users/aironman/git/upgraded-happiness/upgraded_happiness_venv
+Iniciando broker ZeroMQ en puertos 5555 (frontend) y 5556 (backend)...
+Broker ZeroMQ iniciado correctamente
+
+En otra terminal,
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ python3 src/agents/agent_scapy.py
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/src/agents/agent_scapy.py", line 2, in <module>
+    from src.protocols.protobuff import network_event_pb2  # Importación corregida
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'src'
