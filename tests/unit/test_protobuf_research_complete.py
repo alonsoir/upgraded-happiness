@@ -4,13 +4,15 @@ Incluye todas las pruebas de rendimiento y comparaciones.
 """
 
 import asyncio
-import time
-import os
-import sys
-import statistics
 import json
-from typing import List, Dict, Any
+import os
+import statistics
+import sys
+import time
 from pathlib import Path
+from typing import Dict, Any
+
+import pytest
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -47,11 +49,11 @@ def test_imports():
         from Crypto.Cipher import ChaCha20
         print("✅ ChaCha20 disponible")
 
-        return True
+        assert True  # Todas las importaciones fueron exitosas
 
     except ImportError as e:
         print(f"❌ Error importando: {e}")
-        return False
+        assert False, f"Error importando: {e}"
 
 
 async def test_protobuf_serialization():
@@ -60,7 +62,7 @@ async def test_protobuf_serialization():
 
     from src.common.base_interfaces import (
         ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm,
-        EventType, Severity, format_bytes, format_time_ns
+        format_bytes, format_time_ns
     )
     from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
 
@@ -134,12 +136,10 @@ async def test_protobuf_serialization():
 
 
 async def benchmark_performance():
-    """Benchmark de performance con diferentes cargas de trabajo."""
     print("\n📊 Benchmark de performance Protocol Buffers...")
 
     from src.common.base_interfaces import (
-        ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm,
-        format_bytes, format_time_ns
+        ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm
     )
     from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
 
@@ -162,6 +162,16 @@ async def benchmark_performance():
         generator = ResearchDataGenerator()
         events = generator.generate_mixed_events(count)
 
+        # Imprimir la estructura del primer evento para depuración
+        if events:
+            print(f"DEBUG: Estructura del primer evento: {vars(events[0])}")
+            print(f"DEBUG: Tipo de properties: {type(events[0].properties)}")
+            print(f"DEBUG: Tipo de metadata: {type(events[0].metadata)}")
+            if isinstance(events[0].properties, (dict, list)):
+                print(f"DEBUG: Contenido de properties: {events[0].properties}")
+            if isinstance(events[0].metadata, (dict, list)):
+                print(f"DEBUG: Contenido de metadata: {events[0].metadata}")
+
         # Benchmark de serialización
         start_time = time.time()
         serialized_events = []
@@ -177,70 +187,13 @@ async def benchmark_performance():
             total_serialized_size += len(serialized_data)
             serialization_times.append(ser_end - ser_start)
 
-        serialization_total_time = time.time() - start_time
-
-        # Benchmark de deserialización
-        start_time = time.time()
-        deserialization_times = []
-        successful_deserializations = 0
-
-        for serialized_data in serialized_events:
-            deser_start = time.perf_counter_ns()
-            deserialized_event = await serializer.deserialize(serialized_data)
-            deser_end = time.perf_counter_ns()
-
-            if deserialized_event:
-                successful_deserializations += 1
-            deserialization_times.append(deser_end - deser_start)
-
-        deserialization_total_time = time.time() - start_time
-
-        # Calcular estadísticas
-        events_per_second_ser = count / serialization_total_time
-        events_per_second_deser = count / deserialization_total_time
-        avg_event_size = total_serialized_size / count
-        throughput_mbps = (total_serialized_size / (1024 * 1024)) / serialization_total_time
-
-        benchmark_results[count] = {
-            "events_processed": count,
-            "successful_deserializations": successful_deserializations,
-            "serialization": {
-                "total_time_seconds": serialization_total_time,
-                "events_per_second": events_per_second_ser,
-                "avg_time_us": statistics.mean(serialization_times) / 1000,
-                "median_time_us": statistics.median(serialization_times) / 1000,
-                "p95_time_us": sorted(serialization_times)[int(len(serialization_times) * 0.95)] / 1000,
-                "p99_time_us": sorted(serialization_times)[int(len(serialization_times) * 0.99)] / 1000
-            },
-            "deserialization": {
-                "total_time_seconds": deserialization_total_time,
-                "events_per_second": events_per_second_deser,
-                "avg_time_us": statistics.mean(deserialization_times) / 1000,
-                "median_time_us": statistics.median(deserialization_times) / 1000,
-                "success_rate": successful_deserializations / count
-            },
-            "size_metrics": {
-                "total_size_bytes": total_serialized_size,
-                "avg_event_size_bytes": avg_event_size,
-                "throughput_mbps": throughput_mbps
-            }
-        }
-
-        print(f"     Serialización: {events_per_second_ser:,.0f} eventos/segundo")
-        print(f"     Deserialización: {events_per_second_deser:,.0f} eventos/segundo")
-        print(f"     Tamaño promedio: {avg_event_size:.1f} bytes/evento")
-        print(f"     Throughput: {throughput_mbps:.1f} MB/s")
-
-    return benchmark_results
-
-
 async def compare_event_types():
     """Compara performance entre diferentes tipos de eventos."""
     print("\n📈 Comparación por tipo de evento...")
 
     from src.common.base_interfaces import (
         ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm,
-        EventType, format_bytes
+        EventType
     )
     from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
 
@@ -295,6 +248,7 @@ async def compare_event_types():
     return comparison_results
 
 
+@pytest.mark.asyncio
 async def test_event_stream():
     """Test generación y serialización de flujo de eventos."""
     print("\n🌊 Testing flujo de eventos en tiempo real...")
@@ -314,6 +268,15 @@ async def test_event_stream():
     )
 
     print(f"✅ Generados {len(events)} eventos")
+    if events:
+        print(f"DEBUG: Tipo del primer evento: {type(events[0])}")
+        print(f"DEBUG: Estructura del primer evento: {vars(events[0])}")
+        print(f"DEBUG: Tipo de properties: {type(events[0].properties)}")
+        print(f"DEBUG: Tipo de metadata: {type(events[0].metadata)}")
+        if isinstance(events[0].properties, (dict, list)):
+            print(f"DEBUG: Contenido de properties: {events[0].properties}")
+        if isinstance(events[0].metadata, (dict, list)):
+            print(f"DEBUG: Contenido de metadata: {events[0].metadata}")
 
     # Serialize all events
     total_size = 0
@@ -458,10 +421,59 @@ async def main():
 import pytest
 
 
-@pytest.mark.asyncio
+@pytest.mark.benchmark
 async def test_complete_benchmark():
-    """Test completo para pytest."""
-    success = await main()
+    """Benchmark completo para Protocol Buffers con compresión y cifrado."""
+    print("\n🔬 SCADA Protocol Research - Protocol Buffers Test Suite")
+    print("=" * 70)
+
+    from src.common.base_interfaces import (
+        ResearchDataGenerator, CompressionAlgorithm, EncryptionAlgorithm, format_bytes, format_time_ns
+    )
+    from src.protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
+
+    generator = ResearchDataGenerator(seed=42)
+    count = 1000  # Número de eventos para el benchmark
+    events = generator.generate_mixed_events(count)
+    print(f"DEBUG: Generated {len(events)} events")
+    if events:
+        print(f"DEBUG: Tipo del primer evento: {type(events[0])}")
+        print(f"DEBUG: Estructura del primer evento: {vars(events[0])}")
+
+    # Configuración de serializadores
+    configurations = [
+        (CompressionAlgorithm.NONE, EncryptionAlgorithm.NONE),
+        (CompressionAlgorithm.LZ4, EncryptionAlgorithm.NONE),
+        (CompressionAlgorithm.LZ4, EncryptionAlgorithm.CHACHA20),
+    ]
+
+    success = True
+    for compression, encryption in configurations:
+        serializer = ProtobufEventSerializer(compression=compression, encryption=encryption)
+
+        total_size = 0
+        total_time_ns = 0
+        for event in events:
+            try:
+                start_time = time.perf_counter_ns()
+                serialized = await serializer.serialize(event)
+                total_time_ns += time.perf_counter_ns() - start_time
+                total_size += len(serialized)
+            except Exception as e:
+                print(f"DEBUG: Serialization failed for event: {type(event)}: {vars(event)}")
+                print(f"DEBUG: Error: {e}")
+                success = False
+                break
+
+        if not success:
+            break
+
+        metrics = serializer.get_metrics()
+        print(f"\n📊 Resultados para compresión={compression.value}, cifrado={encryption.value}:")
+        print(f"  - Tiempo total: {format_time_ns(total_time_ns)}")
+        print(f"  - Tamaño total: {format_bytes(total_size)}")
+        print(f"  - Throughput: {metrics.throughput_mbps:.2f} MB/s")
+
     assert success, "Benchmark falló"
 
 

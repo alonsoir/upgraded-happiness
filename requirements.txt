@@ -51,7 +51,7 @@ python-dotenv>=1.0.0,<2.0.0  # Load environment variables from .env
 
 # === NEW PROTOCOL RESEARCH DEPENDENCIES ===
 # Serialization protocols
-protobuf>=4.21.0,<5.0.0    # Protocol Buffers for efficient serialization
+protobuf>=4.21.0    # Protocol Buffers for efficient serialization
 
 # Compression algorithms
 lz4>=4.0.0,<5.0.0          # LZ4 compression library
