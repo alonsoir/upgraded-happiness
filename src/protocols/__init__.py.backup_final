@@ -1,0 +1,8 @@
+"""Protocols package - Serialization implementations"""
+from .protobuf.protobuf_serializer import ProtobufEventSerializer
+from .protobuf import network_event_pb2
+
+__all__ = [
+    'ProtobufEventSerializer',
+    'network_event_pb2',
+]
