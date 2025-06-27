@@ -3,46 +3,6 @@
 Agente de captura de tráfico con Scapy - Versión corregida
 """
 
-
-# Auto-discovery functions
-import socket
-import zmq
-import time
-
-def find_available_port(start_port=5555, max_attempts=10):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('localhost', port))
-                return port
-        except OSError:
-            continue
-    return start_port
-
-def find_active_broker(start_port=5555, max_attempts=10):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            context = zmq.Context()
-            socket_test = context.socket(zmq.REQ)
-            socket_test.setsockopt(zmq.RCVTIMEO, 500)
-            socket_test.connect(f"tcp://localhost:{port}")
-            socket_test.send_string("ping", zmq.NOBLOCK)
-            socket_test.close()
-            context.term()
-            print(f"✅ Broker encontrado en puerto {port}")
-            return f"tcp://localhost:{port}"
-        except:
-            continue
-    print(f"⚠️  No se encontró broker, usando puerto {start_port}")
-    return f"tcp://localhost:{start_port}"
-
-def get_smart_broker_address():
-    import sys
-    for i, arg in enumerate(sys.argv):
-        if arg == "--broker" and i + 1 < len(sys.argv):
-            return sys.argv[i + 1]
-    return find_active_broker()
-
 import zmq
 import sys
 import os

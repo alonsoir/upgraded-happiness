@@ -48,3 +48,54 @@ Traceback (most recent call last):
     from src.protocols.protobuff import network_event_pb2  # Importación corregida
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ModuleNotFoundError: No module named 'src'
+
+
+(upgraded_happiness_venv) ┌<▪> ~/g/upgraded-happiness
+└➤ lsof -i :5555
+(upgraded_happiness_venv) ┌<▪> ~/g/upgraded-happiness
+└➤ sudo python quick_fix.py
+Password:
+⚡ SOLUCIÓN RÁPIDA PARA SISTEMA
+==================================================
+🧹 Liberando puertos...
+✅ Puerto 5555 liberado
+✅ Broker inteligente creado: scripts/smart_broker.py
+🔧 Patcheando agent_scapy_fixed.py...
+⚠️  agent_scapy_fixed.py ya está patcheado
+🔧 Patcheando promiscuous_agent.py...
+⚠️  promiscuous_agent.py ya está patcheado
+🔧 Patcheando lightweight_ml_detector.py...
+⚠️  lightweight_ml_detector.py ya está patcheado
+✅ Orquestador actualizado para usar broker inteligente
+🧪 Probando sistema...
+🔌 Iniciando broker de prueba...
+✅ Broker de prueba iniciado correctamente
+
+🎉 SOLUCIÓN RÁPIDA COMPLETADA!
+
+🚀 AHORA EJECUTA:
+   python system_orchestrator.py start
+
+💡 O para prueba individual:
+   python scripts/smart_broker.py
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ sudo python system_orchestrator.py start
+🎮 SISTEMA DE DETECCIÓN DE AMENAZAS - UPGRADED HAPPINESS
+======================================================================
+🎮 ORQUESTADOR DEL SISTEMA DE DETECCIÓN DE AMENAZAS
+🕒 2025-06-27 12:18:33
+======================================================================
+
+🚀 INICIANDO SISTEMA EN MODO: DEVELOPMENT
+==================================================
+🚀 Iniciando broker...
+✅ broker iniciado (PID: 15313)
+🚀 Iniciando promiscuous_agent...
+✅ promiscuous_agent iniciado (PID: 15325)
+🚀 Iniciando lightweight_ml...
+✅ lightweight_ml iniciado (PID: 15331)
+
+🎉 SISTEMA INICIADO COMPLETAMENTE
+✅ 3/3 componentes activos
+✅ Sistema iniciado. Presiona Ctrl+C para detener...
+
