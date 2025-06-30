@@ -430,3 +430,5 @@ python -c "import zmq; c=zmq.Context(); s=c.socket(zmq.SUB); s.bind('tcp://*:555
 
 # Terminal 2: Ejecutar agente
 sudo python run_agent.py --agent-id test-001
+
+![Captura de pantalla 2025-06-30 a las 10.46.24.png](../../Desktop/Captura%20de%20pantalla%202025-06-30%20a%20las%2010.46.24.png)
