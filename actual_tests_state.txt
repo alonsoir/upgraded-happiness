@@ -99,3 +99,232 @@ Password:
 ✅ 3/3 componentes activos
 ✅ Sistema iniciado. Presiona Ctrl+C para detener...
 
+
+Lunes.
+
+Hay cosas que han funcionado, pero necesitamos limpiar, refactorizar, consolidar.
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ >....
+        print(f"   Consolidar {recommendations['fix_scripts_to_consolidate']} scripts fix_*")
+    else:
+        print(f"   Enfocar en archivos esenciales para desarrollo")
+
+    return recommendations
+
+if __name__ == "__main__":
+    main()
+EOF
+
+# Ejecutar analizador LIGERO
+echo "🚀 Ejecutando analizador INTELIGENTE (no generará 77MB)..."
+python smart_analyzer.py
+🚀 Ejecutando analizador INTELIGENTE (no generará 77MB)...
+🔍 Escaneo RÁPIDO del proyecto...
+
+==================================================
+📊 ANÁLISIS INTELIGENTE - UPGRADED HAPPINESS
+==================================================
+
+📈 RESUMEN:
+   Total archivos Python: 48
+   Scripts fix_*: 6
+   Archivos backup: 0
+   Archivos esenciales: 3
+   Archivos grandes (>100KB): 0
+   Tamaño total: 0.31 MB
+
+🔧 SCRIPTS FIX DETECTADOS:
+   📜 fix_original_scapy.py (2.5KB)
+   📜 fix_patch_final.py (9.0KB)
+   📜 fix_original_import.py (1.0KB)
+   📜 fix_init_quick.py (1.2KB)
+   📜 fix_protobuf_serializer.py (2.0KB)
+   📜 fix_final_init.py (2.0KB)
+
+🗑️  ARCHIVOS BACKUP DETECTADOS:
+   0 archivos (0.0 MB)
+
+⚡ ARCHIVOS ESENCIALES:
+   ✅ system_orchestrator.py (14.1KB, 401 líneas)
+   ✅ promiscuous_agent.py (16.7KB, 462 líneas)
+   ✅ lightweight_ml_detector.py (19.0KB, 547 líneas)
+
+🎯 RECOMENDACIONES INMEDIATAS:
+   1. 🗑️  Eliminar backups: Liberar 0.0 MB
+   2. 🔧 Consolidar 6 scripts fix_* en 1 módulo
+   3. 📊 Enfocar en 3 archivos esenciales
+
+==================================================
+
+💡 SIGUIENTE PASO RECOMENDADO:
+   Enfocar en archivos esenciales para desarrollo
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ echo ""
+echo "<0001f9ea> PASO 2: Ejecutar tests"
+cd tests_consolidated
+python run_all_tests.py
+
+echo ""
+echo "📋 PASO 3: Revisar resultados"
+echo "   - project_analysis.json: Análisis completo"
+
+🧪 PASO 2: Ejecutar tests
+🧪 INICIANDO SUITE DE TESTS - UPGRADED HAPPINESS
+==================================================
+test_bitdefender_processes_detected (test_bitdefender_integration.TestBitDefenderIntegration.test_bitdefender_processes_detected)
+Verifica que se detectan procesos BitDefender ... ok
+test_config_file_exists (test_bitdefender_integration.TestBitDefenderIntegration.test_config_file_exists)
+Verifica archivo de configuración ... FAIL
+test_dashboard_components (test_bitdefender_integration.TestBitDefenderIntegration.test_dashboard_components)
+Verifica componentes del dashboard ... ok
+test_integration_directory_exists (test_bitdefender_integration.TestBitDefenderIntegration.test_integration_directory_exists)
+Verifica que el directorio de integración existe ... FAIL
+test_ml_detector_exists (test_ml_detector.TestMLDetector.test_ml_detector_exists)
+Verifica que el detector ML existe ... FAIL
+test_ml_has_model_methods (test_ml_detector.TestMLDetector.test_ml_has_model_methods)
+Verifica que tiene métodos de modelo ... ERROR
+test_ml_syntax (test_ml_detector.TestMLDetector.test_ml_syntax)
+Verifica sintaxis del detector ML ... FAIL
+test_can_import_orchestrator (test_system_orchestrator.TestSystemOrchestrator.test_can_import_orchestrator)
+Verifica que se puede importar el módulo ... FAIL
+test_components_defined (test_system_orchestrator.TestSystemOrchestrator.test_components_defined)
+Verifica que los componentes estén definidos ... ERROR
+test_orchestrator_exists (test_system_orchestrator.TestSystemOrchestrator.test_orchestrator_exists)
+Verifica que el orquestador existe ... FAIL
+test_orchestrator_syntax (test_system_orchestrator.TestSystemOrchestrator.test_orchestrator_syntax)
+Verifica sintaxis del orquestador ... FAIL
+
+======================================================================
+ERROR: test_ml_has_model_methods (test_ml_detector.TestMLDetector.test_ml_has_model_methods)
+Verifica que tiene métodos de modelo
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_ml_detector.py", line 24, in test_ml_has_model_methods
+    with open(self.ml_path) as f:
+         ~~~~^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'lightweight_ml_detector.py'
+
+======================================================================
+ERROR: test_components_defined (test_system_orchestrator.TestSystemOrchestrator.test_components_defined)
+Verifica que los componentes estén definidos
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_system_orchestrator.py", line 26, in test_components_defined
+    with open(self.orchestrator_path) as f:
+         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'system_orchestrator.py'
+
+======================================================================
+FAIL: test_config_file_exists (test_bitdefender_integration.TestBitDefenderIntegration.test_config_file_exists)
+Verifica archivo de configuración
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_bitdefender_integration.py", line 20, in test_config_file_exists
+    self.assertTrue(config_file.exists())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_integration_directory_exists (test_bitdefender_integration.TestBitDefenderIntegration.test_integration_directory_exists)
+Verifica que el directorio de integración existe
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_bitdefender_integration.py", line 15, in test_integration_directory_exists
+    self.assertTrue(self.bd_dir.exists())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_ml_detector_exists (test_ml_detector.TestMLDetector.test_ml_detector_exists)
+Verifica que el detector ML existe
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_ml_detector.py", line 14, in test_ml_detector_exists
+    self.assertTrue(self.ml_path.exists())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_ml_syntax (test_ml_detector.TestMLDetector.test_ml_syntax)
+Verifica sintaxis del detector ML
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_ml_detector.py", line 20, in test_ml_syntax
+    self.assertEqual(result.returncode, 0, f"Syntax error: {result.stderr}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Syntax error: b"[Errno 2] No such file or directory: 'lightweight_ml_detector.py'"
+
+======================================================================
+FAIL: test_can_import_orchestrator (test_system_orchestrator.TestSystemOrchestrator.test_can_import_orchestrator)
+Verifica que se puede importar el módulo
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_system_orchestrator.py", line 39, in test_can_import_orchestrator
+    import system_orchestrator
+ModuleNotFoundError: No module named 'system_orchestrator'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_system_orchestrator.py", line 42, in test_can_import_orchestrator
+    self.fail(f"Cannot import orchestrator: {e}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Cannot import orchestrator: No module named 'system_orchestrator'
+
+======================================================================
+FAIL: test_orchestrator_exists (test_system_orchestrator.TestSystemOrchestrator.test_orchestrator_exists)
+Verifica que el orquestador existe
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_system_orchestrator.py", line 16, in test_orchestrator_exists
+    self.assertTrue(self.orchestrator_path.exists())
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_orchestrator_syntax (test_system_orchestrator.TestSystemOrchestrator.test_orchestrator_syntax)
+Verifica sintaxis del orquestador
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/aironman/git/upgraded-happiness/tests_consolidated/test_system_orchestrator.py", line 22, in test_orchestrator_syntax
+    self.assertEqual(result.returncode, 0, f"Syntax error: {result.stderr}")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Syntax error: b"[Errno 2] No such file or directory: 'system_orchestrator.py'"
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.200s
+
+FAILED (failures=7, errors=2)
+
+==================================================
+📊 RESUMEN DE TESTS:
+   Tests ejecutados: 11
+   Fallos: 7
+   Errores: 2
+
+❌ FALLOS:
+   - test_config_file_exists (test_bitdefender_integration.TestBitDefenderIntegration.test_config_file_exists): AssertionError: False is not true
+   - test_integration_directory_exists (test_bitdefender_integration.TestBitDefenderIntegration.test_integration_directory_exists): AssertionError: False is not true
+   - test_ml_detector_exists (test_ml_detector.TestMLDetector.test_ml_detector_exists): AssertionError: False is not true
+   - test_ml_syntax (test_ml_detector.TestMLDetector.test_ml_syntax): AssertionError: 1 != 0 : Syntax error: b"[Errno 2] No such file or directory: 'lightweight_ml_detector.py'"
+   - test_can_import_orchestrator (test_system_orchestrator.TestSystemOrchestrator.test_can_import_orchestrator): AssertionError: Cannot import orchestrator: No module named 'system_orchestrator'
+   - test_orchestrator_exists (test_system_orchestrator.TestSystemOrchestrator.test_orchestrator_exists): AssertionError: False is not true
+   - test_orchestrator_syntax (test_system_orchestrator.TestSystemOrchestrator.test_orchestrator_syntax): AssertionError: 1 != 0 : Syntax error: b"[Errno 2] No such file or directory: 'system_orchestrator.py'"
+
+💥 ERRORES:
+   - test_ml_has_model_methods (test_ml_detector.TestMLDetector.test_ml_has_model_methods): FileNotFoundError: [Errno 2] No such file or directory: 'lightweight_ml_detector.py'
+   - test_components_defined (test_system_orchestrator.TestSystemOrchestrator.test_components_defined): FileNotFoundError: [Errno 2] No such file or directory: 'system_orchestrator.py'
+
+⚠️  ALGUNOS TESTS FALLARON
+
+📋 PASO 3: Revisar resultados
+   - project_analysis.json: Análisis completo
+(upgraded_happiness_venv) ┌<▸> ~/g/u/tests_consolidated
+└➤
+
+
+
