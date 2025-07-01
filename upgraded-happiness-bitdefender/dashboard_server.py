@@ -8,36 +8,41 @@ Sirve página HTML en puerto 8766 y conecta a WebSocket en 8765
 import asyncio
 import json
 import logging
-import yaml
-from pathlib import Path
-from datetime import datetime
-from aiohttp import web, WSMsgType
-import aiohttp
 import random
+from datetime import datetime
+from pathlib import Path
+
+import aiohttp
+import yaml
+from aiohttp import WSMsgType, web
+
 
 class HybridDashboardServer:
     def __init__(self, config_path="bitdefender_config.yaml"):
         self.config = self._load_config(config_path)
         self.app = web.Application()
         self.setup_routes()
-        
+
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
-    
+
     def _load_config(self, config_path):
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 return yaml.safe_load(f)
         except:
-            return {'dashboard': {'port': 8765}, 'bitdefender': {'processes': [], 'log_paths': []}}
-    
+            return {
+                "dashboard": {"port": 8765},
+                "bitdefender": {"processes": [], "log_paths": []},
+            }
+
     def setup_routes(self):
-        self.app.router.add_get('/', self.serve_dashboard)
-        self.app.router.add_get('/ws', self.websocket_handler)
-    
+        self.app.router.add_get("/", self.serve_dashboard)
+        self.app.router.add_get("/ws", self.websocket_handler)
+
     async def serve_dashboard(self, request):
         """Sirve la página principal del dashboard"""
-        html_content = '''<!DOCTYPE html>
+        html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -579,99 +584,108 @@ class HybridDashboardServer:
         });
     </script>
 </body>
-</html>'''
-        return web.Response(text=html_content, content_type='text/html')
-    
+</html>"""
+        return web.Response(text=html_content, content_type="text/html")
+
     async def websocket_handler(self, request):
         """Maneja conexiones WebSocket del dashboard"""
         ws = web.WebSocketResponse()
         await ws.prepare(request)
-        
+
         # Enviar datos iniciales
         initial_data = {
-            'type': 'initial_state',
-            'data': {
-                'statistics': {
-                    'active_agents': len(self.config['bitdefender']['processes']),
-                    'threats_detected': 15,
-                    'events_processed': 1247
+            "type": "initial_state",
+            "data": {
+                "statistics": {
+                    "active_agents": len(self.config["bitdefender"]["processes"]),
+                    "threats_detected": 15,
+                    "events_processed": 1247,
                 },
-                'bitdefender_info': {
-                    'detected_processes': len(self.config['bitdefender']['processes']),
-                    'detected_paths': len(self.config['bitdefender']['log_paths'])
-                }
-            }
+                "bitdefender_info": {
+                    "detected_processes": len(self.config["bitdefender"]["processes"]),
+                    "detected_paths": len(self.config["bitdefender"]["log_paths"]),
+                },
+            },
         }
         await ws.send_str(json.dumps(initial_data))
-        
+
         # Simular eventos periódicos
         async def send_periodic_events():
             while not ws.closed:
                 try:
-                    event_types = ['malware_detected', 'suspicious_connection', 'port_scan', 'real_time_scan']
-                    severities = ['low', 'medium', 'high']
-                    
+                    event_types = [
+                        "malware_detected",
+                        "suspicious_connection",
+                        "port_scan",
+                        "real_time_scan",
+                    ]
+                    severities = ["low", "medium", "high"]
+
                     demo_event = {
-                        'type': 'demo_event',
-                        'data': {
-                            'event_type': random.choice(event_types),
-                            'severity': random.choice(severities),
-                            'details': f'Evento simulado desde BitDefender macOS',
-                            'timestamp': datetime.now().isoformat()
-                        }
+                        "type": "demo_event",
+                        "data": {
+                            "event_type": random.choice(event_types),
+                            "severity": random.choice(severities),
+                            "details": f"Evento simulado desde BitDefender macOS",
+                            "timestamp": datetime.now().isoformat(),
+                        },
                     }
-                    
+
                     await ws.send_str(json.dumps(demo_event))
                     await asyncio.sleep(random.randint(15, 45))
-                    
+
                 except Exception as e:
                     self.logger.error(f"Error enviando evento: {e}")
                     break
-        
+
         # Iniciar generador de eventos
         asyncio.create_task(send_periodic_events())
-        
+
         # Mantener conexión
         async for msg in ws:
             if msg.type == WSMsgType.ERROR:
                 break
-        
+
         return ws
-    
+
     async def start_server(self, port=8766):
         """Inicia el servidor HTTP+WebSocket"""
         runner = web.AppRunner(self.app)
         await runner.setup()
-        
-        site = web.TCPSite(runner, 'localhost', port)
+
+        site = web.TCPSite(runner, "localhost", port)
         await site.start()
-        
-        self.logger.info(f"🌐 Dashboard HTTP Server iniciado en: http://localhost:{port}")
+
+        self.logger.info(
+            f"🌐 Dashboard HTTP Server iniciado en: http://localhost:{port}"
+        )
         self.logger.info(f"📱 Abre esa URL en tu navegador para ver el dashboard")
-        
+
         return runner
+
 
 async def main():
     server = HybridDashboardServer()
     runner = await server.start_server(8766)
-    
+
     try:
         print("🚀 Servidor híbrido iniciado exitosamente:")
         print("")
         print("📱 Dashboard: http://localhost:8766")
-        print("🔌 WebSocket: integrado internamente") 
+        print("🔌 WebSocket: integrado internamente")
         print("🛡️ Datos: BitDefender + Upgraded Happiness")
         print("")
         print("⏹️  Presiona Ctrl+C para detener")
-        
+
         # Mantener ejecutándose
         while True:
             await asyncio.sleep(1)
-            
+
     except KeyboardInterrupt:
         print("\n✅ Deteniendo servidor...")
         await runner.cleanup()
         print("✅ Servidor detenido")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

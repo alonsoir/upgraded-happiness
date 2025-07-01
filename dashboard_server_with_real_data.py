@@ -8,51 +8,56 @@ Combina datos simulados con datos reales de BitDefender
 import asyncio
 import json
 import logging
+import random
+import threading
+from datetime import datetime
+from pathlib import Path
+
+import aiohttp
 import yaml
 import zmq
-import threading
-from pathlib import Path
-from datetime import datetime
-from aiohttp import web, WSMsgType
-import aiohttp
-import random
+from aiohttp import WSMsgType, web
+
 
 class EnhancedDashboardServer:
     def __init__(self, config_path="bitdefender_config.yaml"):
         self.config = self._load_config(config_path)
         self.app = web.Application()
         self.setup_routes()
-        
+
         # WebSocket clients
         self.ws_clients = set()
-        
+
         # ZeroMQ para recibir datos reales
         self.zmq_context = zmq.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.SUB)
         self.zmq_socket.setsockopt_string(zmq.SUBSCRIBE, "real.bitdefender")
-        
+
         # Estado para combinar datos reales y simulados
         self.real_events_count = 0
         self.last_real_event = None
-        
+
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
-    
+
     def _load_config(self, config_path):
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 return yaml.safe_load(f)
         except:
-            return {'dashboard': {'port': 8765}, 'bitdefender': {'processes': [], 'log_paths': []}}
-    
+            return {
+                "dashboard": {"port": 8765},
+                "bitdefender": {"processes": [], "log_paths": []},
+            }
+
     def setup_routes(self):
-        self.app.router.add_get('/', self.serve_dashboard)
-        self.app.router.add_get('/ws', self.websocket_handler)
-    
+        self.app.router.add_get("/", self.serve_dashboard)
+        self.app.router.add_get("/ws", self.websocket_handler)
+
     async def serve_dashboard(self, request):
         """Sirve la página del dashboard (mismo HTML que antes)"""
         # ... (mismo HTML que en el código anterior)
-        html_content = '''<!DOCTYPE html>
+        html_content = """<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -356,70 +361,71 @@ class EnhancedDashboardServer:
         });
     </script>
 </body>
-</html>'''
-        return web.Response(text=html_content, content_type='text/html')
-    
+</html>"""
+        return web.Response(text=html_content, content_type="text/html")
+
     async def websocket_handler(self, request):
         """WebSocket handler que también escucha datos reales"""
         ws = web.WebSocketResponse()
         await ws.prepare(request)
         self.ws_clients.add(ws)
-        
+
         # Iniciar listener de ZeroMQ en thread separado
         asyncio.create_task(self._zmq_listener(ws))
-        
+
         # Mantener conexión
         async for msg in ws:
             if msg.type == WSMsgType.ERROR:
                 break
-        
+
         self.ws_clients.discard(ws)
         return ws
-    
+
     async def _zmq_listener(self, ws):
         """Escucha eventos reales de ZeroMQ y los envía via WebSocket"""
         try:
             # Conectar a puerto donde el colector envía datos
             self.zmq_socket.connect("tcp://localhost:8766")
-            
+
             while not ws.closed:
                 try:
                     # Recibir datos reales (non-blocking)
                     topic, message = self.zmq_socket.recv_multipart(zmq.NOBLOCK)
-                    
+
                     # Parsear y enviar al cliente
-                    event_data = json.loads(message.decode('utf-8'))
+                    event_data = json.loads(message.decode("utf-8"))
                     await ws.send_str(json.dumps(event_data))
-                    
+
                     self.real_events_count += 1
                     self.last_real_event = event_data
-                    
+
                 except zmq.Again:
                     await asyncio.sleep(0.1)
                 except Exception as e:
                     self.logger.debug(f"Error en ZMQ listener: {e}")
                     await asyncio.sleep(1)
-                    
+
         except Exception as e:
             self.logger.error(f"Error en ZMQ listener: {e}")
-    
+
     async def start_server(self, port=8766):
         """Inicia el servidor mejorado"""
         runner = web.AppRunner(self.app)
         await runner.setup()
-        
-        site = web.TCPSite(runner, 'localhost', port)
+
+        site = web.TCPSite(runner, "localhost", port)
         await site.start()
-        
+
         self.logger.info(f"🌐 Dashboard MEJORADO iniciado en: http://localhost:{port}")
         self.logger.info(f"🔴 Esperando datos REALES de BitDefender...")
-        
+
         return runner
+
 
 async def main():
     server = EnhancedDashboardServer()
     runner = await server.start_server(8766)
-    
+
     try:
         print("🚀 Dashboard MEJORADO con datos REALES:")
         print("")
@@ -428,14 +434,15 @@ async def main():
         print("💡 Ejecuta en otra terminal: python real_bitdefender_collector.py")
         print("")
         print("⏹️  Presiona Ctrl+C para detener")
-        
+
         while True:
             await asyncio.sleep(1)
-            
+
     except KeyboardInterrupt:
         print("\n✅ Deteniendo servidor...")
         await runner.cleanup()
         print("✅ Servidor detenido")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

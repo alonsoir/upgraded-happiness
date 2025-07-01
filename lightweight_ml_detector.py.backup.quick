@@ -4,38 +4,33 @@ Sistema ML Ligero para Intel i9 + 32GB RAM
 Optimizado para CPU, sin dependencias GPU
 """
 
-import zmq
-import sys
-import os
-import time
 import json
-import pandas as pd
-import numpy as np
-from datetime import datetime
-from collections import defaultdict, deque
+import os
 import pickle
+import sys
 import threading
+import time
+from collections import defaultdict, deque
+from datetime import datetime
+
 import joblib
-
-# ML optimizado para CPU
-from sklearn.ensemble import (
-    IsolationForest,
-    RandomForestClassifier,
-    GradientBoostingClassifier
-)
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, f_classif
-
+import numpy as np
+import pandas as pd
 # XGBoost es muy eficiente en CPU
 import xgboost as xgb
-
+import zmq
+from sklearn.cluster import DBSCAN, KMeans
+from sklearn.decomposition import PCA
+# ML optimizado para CPU
+from sklearn.ensemble import (GradientBoostingClassifier, IsolationForest,
+                              RandomForestClassifier)
+from sklearn.feature_selection import SelectKBest, f_classif
 # Para análisis temporal básico sin GPU
 from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import RobustScaler, StandardScaler
 
 sys.path.insert(0, os.getcwd())
 

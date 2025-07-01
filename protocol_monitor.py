@@ -4,13 +4,14 @@ Monitor de protocolos en tiempo real
 Muestra exactamente qué protocolos se están capturando
 """
 
-import zmq
-import sys
 import os
+import sys
 import time
 import traceback
-from collections import defaultdict, Counter
-from scapy.all import sniff, IP, TCP, UDP, ICMP, DNS, ARP, IPv6
+from collections import Counter, defaultdict
+
+import zmq
+from scapy.all import ARP, DNS, ICMP, IP, TCP, UDP, IPv6, sniff
 from scapy.layers.http import HTTP
 
 # Agregar el directorio raíz al path
@@ -49,8 +50,8 @@ class ProtocolMonitor:
             # Analizar capas del paquete
             if pkt.haslayer(ARP):
                 protocols.append("ARP")
-                src_ip = pkt[ARP].psrc if hasattr(pkt[ARP], 'psrc') else "unknown"
-                dst_ip = pkt[ARP].pdst if hasattr(pkt[ARP], 'pdst') else "unknown"
+                src_ip = pkt[ARP].psrc if hasattr(pkt[ARP], "psrc") else "unknown"
+                dst_ip = pkt[ARP].pdst if hasattr(pkt[ARP], "pdst") else "unknown"
 
             elif pkt.haslayer(IPv6):
                 protocols.append("IPv6")
@@ -94,7 +95,12 @@ class ProtocolMonitor:
                     # Protocolos de aplicación sobre UDP
                     if dst_port == 53 or src_port == 53:
                         protocols.append("DNS")
-                    elif dst_port == 67 or src_port == 67 or dst_port == 68 or src_port == 68:
+                    elif (
+                        dst_port == 67
+                        or src_port == 67
+                        or dst_port == 68
+                        or src_port == 68
+                    ):
                         protocols.append("DHCP")
                     elif dst_port == 123 or src_port == 123:
                         protocols.append("NTP")
@@ -129,7 +135,9 @@ class ProtocolMonitor:
             if self.packet_count % 100 == 0:
                 elapsed = time.time() - self.start_time
                 rate = self.packet_count / elapsed
-                print(f"📊 Paquetes: {self.packet_count:,} | Velocidad: {rate:.1f} pkt/s | Tiempo: {elapsed:.1f}s")
+                print(
+                    f"📊 Paquetes: {self.packet_count:,} | Velocidad: {rate:.1f} pkt/s | Tiempo: {elapsed:.1f}s"
+                )
 
         except Exception as e:
             print(f"❌ Error analizando paquete: {e}")
@@ -147,7 +155,7 @@ class ProtocolMonitor:
                 iface=self.interface,
                 prn=self.analyze_packet,
                 timeout=self.monitor_time + 5,  # Un poco más de tiempo por seguridad
-                store=0
+                store=0,
             )
 
         except KeyboardInterrupt:
@@ -196,9 +204,19 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Monitor de protocolos de red")
-    parser.add_argument("-i", "--interface", default="en0", help="Interfaz de red (default: en0)")
-    parser.add_argument("-t", "--time", type=int, default=60, help="Tiempo de monitoreo en segundos (default: 60)")
-    parser.add_argument("--list-interfaces", action="store_true", help="Listar interfaces disponibles")
+    parser.add_argument(
+        "-i", "--interface", default="en0", help="Interfaz de red (default: en0)"
+    )
+    parser.add_argument(
+        "-t",
+        "--time",
+        type=int,
+        default=60,
+        help="Tiempo de monitoreo en segundos (default: 60)",
+    )
+    parser.add_argument(
+        "--list-interfaces", action="store_true", help="Listar interfaces disponibles"
+    )
 
     args = parser.parse_args()
 

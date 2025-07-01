@@ -17,22 +17,25 @@ def fix_agent_scapy():
         return False
 
     # Leer el archivo
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         content = f.read()
 
     print(f"📝 Contenido actual del archivo:")
     print("=" * 50)
     # Mostrar las primeras líneas para diagnóstico
-    lines = content.split('\n')
+    lines = content.split("\n")
     for i, line in enumerate(lines[:10]):
         print(f"{i + 1:2d}: {line}")
     print("=" * 50)
 
     # Buscar y corregir todas las variaciones de importación incorrecta
     patterns_to_fix = [
-        (r'from src\.protocols\.protobuff import', 'from src.protocols.protobuf import'),
-        (r'import src\.protocols\.protobuff\.', 'import src.protocols.protobuf.'),
-        (r'src\.protocols\.protobuff\.', 'src.protocols.protobuf.'),
+        (
+            r"from src\.protocols\.protobuff import",
+            "from src.protocols.protobuf import",
+        ),
+        (r"import src\.protocols\.protobuff\.", "import src.protocols.protobuf."),
+        (r"src\.protocols\.protobuff\.", "src.protocols.protobuf."),
     ]
 
     original_content = content
@@ -46,7 +49,7 @@ def fix_agent_scapy():
     # Verificar si se hicieron cambios
     if content != original_content:
         # Guardar el archivo corregido
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             f.write(content)
 
         print(f"\\n✅ Archivo {file_path} corregido:")
@@ -55,7 +58,7 @@ def fix_agent_scapy():
 
         print(f"\\n📝 Contenido corregido:")
         print("=" * 50)
-        lines = content.split('\n')
+        lines = content.split("\n")
         for i, line in enumerate(lines[:10]):
             print(f"{i + 1:2d}: {line}")
         print("=" * 50)

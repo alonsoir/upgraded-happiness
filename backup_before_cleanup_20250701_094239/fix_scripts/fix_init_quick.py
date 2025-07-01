@@ -29,7 +29,7 @@ __all__ = [
 '''
 
     # Escribir contenido corregido
-    with open(init_file, 'w') as f:
+    with open(init_file, "w") as f:
         f.write(corrected_content)
 
     print(f"✅ Archivo corregido: {init_file}")

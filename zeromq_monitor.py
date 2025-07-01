@@ -3,11 +3,12 @@
 Monitor del broker ZeroMQ - Ve exactamente qué está enviando tu agente
 """
 
-import zmq
-import sys
 import os
+import sys
 import time
 from collections import Counter
+
+import zmq
 
 # Agregar path para importar protobuf
 sys.path.insert(0, os.getcwd())
@@ -145,7 +146,8 @@ class ZeroMQMonitor:
             # Mostrar detalle de los primeros 10 eventos
             elif self.event_count <= 10:
                 print(
-                    f"[{self.event_count:2d}] {protocol:<12} | {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port} | {event.packet_size} bytes")
+                    f"[{self.event_count:2d}] {protocol:<12} | {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port} | {event.packet_size} bytes"
+                )
 
         except Exception as e:
             print(f"❌ Error procesando evento: {e}")
@@ -173,14 +175,18 @@ class ZeroMQMonitor:
             print(f"\n🚪 PUERTOS MÁS ACTIVOS:")
             print("-" * 30)
             for port, count in self.ports.most_common(10):
-                percentage = (count / self.event_count) * 100 if self.event_count > 0 else 0
+                percentage = (
+                    (count / self.event_count) * 100 if self.event_count > 0 else 0
+                )
                 print(f"{port:<10} | {count:>6,} ({percentage:>5.1f}%)")
 
         if self.ips:
             print(f"\n🌐 IPs MÁS ACTIVAS:")
             print("-" * 40)
             for ip, count in self.ips.most_common(10):
-                percentage = (count / self.event_count) * 100 if self.event_count > 0 else 0
+                percentage = (
+                    (count / self.event_count) * 100 if self.event_count > 0 else 0
+                )
                 print(f"{ip:<20} | {count:>6,} ({percentage:>5.1f}%)")
 
     def cleanup(self):
@@ -194,8 +200,12 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Monitor del broker ZeroMQ")
-    parser.add_argument("-b", "--broker", default="tcp://localhost:5555", help="Dirección del broker")
-    parser.add_argument("-t", "--time", type=int, default=60, help="Tiempo de monitoreo en segundos")
+    parser.add_argument(
+        "-b", "--broker", default="tcp://localhost:5555", help="Dirección del broker"
+    )
+    parser.add_argument(
+        "-t", "--time", type=int, default=60, help="Tiempo de monitoreo en segundos"
+    )
 
     args = parser.parse_args()
 

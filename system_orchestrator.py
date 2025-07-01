@@ -4,15 +4,16 @@ Orquestador del Sistema Completo de Detección de Amenazas
 Administra todos los componentes: captura, ML, dashboard, alertas
 """
 
-import os
-import sys
-import time
 import json
+import os
 import signal
 import subprocess
+import sys
 import threading
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
+
 
 class ThreatDetectionOrchestrator:
     def __init__(self):
@@ -21,26 +22,26 @@ class ThreatDetectionOrchestrator:
                 "script": "python scripts/smart_broker.py",
                 "process": None,
                 "status": "stopped",
-                "description": "ZeroMQ message broker"
+                "description": "ZeroMQ message broker",
             },
             "promiscuous_agent": {
                 "script": "sudo python promiscuous_agent.py",
                 "process": None,
-                "status": "stopped", 
-                "description": "Captura promiscua total de tráfico"
+                "status": "stopped",
+                "description": "Captura promiscua total de tráfico",
             },
             "lightweight_ml": {
                 "script": "python lightweight_ml_detector.py",
                 "process": None,
                 "status": "stopped",
-                "description": "Sistema ML ligero para Intel i9"
+                "description": "Sistema ML ligero para Intel i9",
             },
             "basic_agent": {
                 "script": "sudo python agent_scapy_fixed.py",
                 "process": None,
                 "status": "stopped",
-                "description": "Agente de captura básico"
-            }
+                "description": "Agente de captura básico",
+            },
         }
 
         self.system_config = {
@@ -51,7 +52,7 @@ class ThreatDetectionOrchestrator:
             "threat_threshold": 0.7,
             "interface": "en0",
             "broker_address": "tcp://localhost:5555",
-            "log_level": "INFO"
+            "log_level": "INFO",
         }
 
         self.running = False
@@ -67,7 +68,9 @@ class ThreatDetectionOrchestrator:
         print("-" * 50)
         for name, component in self.components.items():
             status_icon = "🟢" if component["status"] == "running" else "🔴"
-            print(f"{status_icon} {name:<20} | {component['status']:<10} | {component['description']}")
+            print(
+                f"{status_icon} {name:<20} | {component['status']:<10} | {component['description']}"
+            )
 
         print(f"\n⚙️  CONFIGURACIÓN ACTUAL:")
         print("-" * 30)
@@ -101,16 +104,21 @@ class ThreatDetectionOrchestrator:
             # Ejecutar comando
             if cmd.startswith("sudo") or "sudo" in cmd:
                 # Para comandos sudo, usar shell=True
-                process = subprocess.Popen(cmd, shell=True, 
-                                         stdout=subprocess.PIPE, 
-                                         stderr=subprocess.PIPE,
-                                         preexec_fn=os.setsid)
+                process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    preexec_fn=os.setsid,
+                )
             else:
                 # Para comandos normales
-                process = subprocess.Popen(cmd.split(), 
-                                         stdout=subprocess.PIPE, 
-                                         stderr=subprocess.PIPE,
-                                         preexec_fn=os.setsid)
+                process = subprocess.Popen(
+                    cmd.split(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    preexec_fn=os.setsid,
+                )
 
             component["process"] = process
             component["status"] = "starting"
@@ -236,7 +244,7 @@ class ThreatDetectionOrchestrator:
                 print(f"\n🎮 MENÚ PRINCIPAL:")
                 print("-" * 30)
                 print("1. Iniciar sistema completo")
-                print("2. Detener sistema completo") 
+                print("2. Detener sistema completo")
                 print("3. Reiniciar sistema")
                 print("4. Iniciar componente individual")
                 print("5. Detener componente individual")
@@ -248,7 +256,10 @@ class ThreatDetectionOrchestrator:
                 choice = input(f"\n🎯 Selecciona opción: ").strip()
 
                 if choice == "1":
-                    mode = input("Modo [development/production]: ").strip() or "development"
+                    mode = (
+                        input("Modo [development/production]: ").strip()
+                        or "development"
+                    )
                     self.start_system(mode)
 
                 elif choice == "2":
@@ -269,7 +280,11 @@ class ThreatDetectionOrchestrator:
 
                 elif choice == "5":
                     print("Componentes en ejecución:")
-                    running = [name for name, comp in self.components.items() if comp["status"] == "running"]
+                    running = [
+                        name
+                        for name, comp in self.components.items()
+                        if comp["status"] == "running"
+                    ]
                     for name in running:
                         print(f"  - {name}")
                     component = input("Componente a detener: ").strip()
@@ -293,7 +308,7 @@ class ThreatDetectionOrchestrator:
                 elif choice == "0":
                     if self.running:
                         confirm = input("⚠️  ¿Detener sistema antes de salir? [y/n]: ")
-                        if confirm.lower() in ['y', 'yes']:
+                        if confirm.lower() in ["y", "yes"]:
                             self.stop_system()
                     break
 
@@ -331,14 +346,18 @@ class ThreatDetectionOrchestrator:
         print("=" * 40)
 
         try:
-            interface = input(f"Interfaz de red ({self.system_config['interface']}): ").strip()
+            interface = input(
+                f"Interfaz de red ({self.system_config['interface']}): "
+            ).strip()
             if interface:
-                self.system_config['interface'] = interface
+                self.system_config["interface"] = interface
 
-            threshold = input(f"Umbral amenazas ({self.system_config['threat_threshold']}): ").strip()
+            threshold = input(
+                f"Umbral amenazas ({self.system_config['threat_threshold']}): "
+            ).strip()
             if threshold:
                 try:
-                    self.system_config['threat_threshold'] = float(threshold)
+                    self.system_config["threat_threshold"] = float(threshold)
                 except ValueError:
                     print("⚠️  Valor inválido")
 
@@ -349,6 +368,7 @@ class ThreatDetectionOrchestrator:
 
     def setup_signal_handlers(self):
         """Configurar manejadores de señales"""
+
         def signal_handler(signum, frame):
             print(f"\n🛑 Señal recibida: {signum}")
             if self.running:
@@ -357,6 +377,7 @@ class ThreatDetectionOrchestrator:
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
+
 
 def main():
     """Función principal"""
@@ -396,6 +417,7 @@ def main():
         orchestrator.run_interactive_menu()
 
     print("👋 Sistema cerrado")
+
 
 if __name__ == "__main__":
     main()

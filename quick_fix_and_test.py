@@ -11,10 +11,7 @@ def create_directory_structure():
     """Create the necessary directory structure"""
     print("🏗️  Creating directory structure...")
 
-    directories = [
-        "src/protocols/protobuff",
-        "tests/unit"
-    ]
+    directories = ["src/protocols/protobuff", "tests/unit"]
 
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
@@ -101,14 +98,18 @@ def test_imports():
     print("🧪 Testing imports...")
 
     # Add src to path
-    sys.path.insert(0, 'src')
+    sys.path.insert(0, "src")
 
     try:
         # Test basic imports
-        from common.base_interfaces import CompressionAlgorithm, EncryptionAlgorithm
+        from common.base_interfaces import (CompressionAlgorithm,
+                                            EncryptionAlgorithm)
+
         print("   ✅ base_interfaces imports")
 
-        from protocols.protobuff.protobuf_serializer import ProtobufEventSerializer
+        from protocols.protobuff.protobuf_serializer import \
+            ProtobufEventSerializer
+
         print("   ✅ protobuf_serializer imports")
 
         # Test serializer creation

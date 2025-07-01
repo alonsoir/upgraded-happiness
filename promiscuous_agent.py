@@ -6,18 +6,21 @@ Agente de captura promiscua total - Captura ABSOLUTAMENTE TODO
 
 # Auto-discovery functions
 import socket
-import zmq
 import time
+
+import zmq
+
 
 def find_available_port(start_port=5555, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('localhost', port))
+                s.bind(("localhost", port))
                 return port
         except OSError:
             continue
     return start_port
+
 
 def find_active_broker(start_port=5555, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
@@ -36,31 +39,26 @@ def find_active_broker(start_port=5555, max_attempts=10):
     print(f"⚠️  No se encontró broker, usando puerto {start_port}")
     return f"tcp://localhost:{start_port}"
 
+
 def get_smart_broker_address():
     import sys
+
     for i, arg in enumerate(sys.argv):
         if arg == "--broker" and i + 1 < len(sys.argv):
             return sys.argv[i + 1]
     return find_active_broker()
 
-import zmq
-import sys
-import os
-import time
+
 import json
+import os
+import sys
+import time
 import traceback
-from collections import defaultdict, Counter
-from scapy.all import (
-    sniff,
-    # Layer 2
-    Ether, ARP,
-    # Layer 3
-    IP, IPv6, ICMP,
-    # Layer 4
-    TCP, UDP,
-    # Application layers
-    DNS, DHCP, Raw
-)
+from collections import Counter, defaultdict
+
+import zmq
+from scapy.all import (ARP,  # Layer 2; Layer 3; Layer 4; Application layers
+                       DHCP, DNS, ICMP, IP, TCP, UDP, Ether, IPv6, Raw, sniff)
 
 # Importaciones opcionales
 try:
@@ -124,7 +122,7 @@ class PromiscuousAgent:
             "tls": HAS_TLS,  # TLS/SSL traffic (if available)
             "wireless": HAS_WIRELESS,  # 802.11 if available
             "raw": True,  # Raw/unknown packets
-            "promiscuous": True  # Modo promiscuo real
+            "promiscuous": True,  # Modo promiscuo real
         }
 
         # Estadísticas
@@ -134,7 +132,7 @@ class PromiscuousAgent:
             "by_layer": Counter(),
             "by_direction": Counter(),
             "sent_events": 0,
-            "errors": 0
+            "errors": 0,
         }
 
         self.start_time = time.time()
@@ -182,8 +180,8 @@ class PromiscuousAgent:
                 if self.capture_config["arp"] and pkt.haslayer(ARP):
                     protocols.append("ARP")
                     self.stats["by_protocol"]["ARP"] += 1
-                    src_ip = pkt[ARP].psrc if hasattr(pkt[ARP], 'psrc') else "unknown"
-                    dst_ip = pkt[ARP].pdst if hasattr(pkt[ARP], 'pdst') else "unknown"
+                    src_ip = pkt[ARP].psrc if hasattr(pkt[ARP], "psrc") else "unknown"
+                    dst_ip = pkt[ARP].pdst if hasattr(pkt[ARP], "pdst") else "unknown"
 
             # 802.11 Wireless
             if self.capture_config["wireless"] and HAS_WIRELESS and pkt.haslayer(Dot11):
@@ -314,8 +312,14 @@ class PromiscuousAgent:
             metadata = {
                 "protocols": protocols,
                 "direction": self._determine_direction(src_ip, dst_ip),
-                "layers_detected": len([l for l in protocols if not l.endswith("-Data") and l != "Raw-Data"]),
-                "interface": self.interface
+                "layers_detected": len(
+                    [
+                        l
+                        for l in protocols
+                        if not l.endswith("-Data") and l != "Raw-Data"
+                    ]
+                ),
+                "interface": self.interface,
             }
 
             # Guardar como string en un campo disponible (reutilizamos agent_id ampliado)
@@ -330,7 +334,8 @@ class PromiscuousAgent:
                 if self.stats["total_packets"] <= 20:
                     protocol_stack = " → ".join(protocols)
                     print(
-                        f"[{self.stats['total_packets']:3d}] {protocol_stack:<30} | {src_ip}:{src_port} → {dst_ip}:{dst_port}")
+                        f"[{self.stats['total_packets']:3d}] {protocol_stack:<30} | {src_ip}:{src_port} → {dst_ip}:{dst_port}"
+                    )
 
                 # Stats periódicas
                 elif self.stats["sent_events"] % 200 == 0:
@@ -351,9 +356,24 @@ class PromiscuousAgent:
 
         # Rangos privados
         private_ranges = [
-            "192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
-            "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-            "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31."
+            "192.168.",
+            "10.",
+            "172.16.",
+            "172.17.",
+            "172.18.",
+            "172.19.",
+            "172.20.",
+            "172.21.",
+            "172.22.",
+            "172.23.",
+            "172.24.",
+            "172.25.",
+            "172.26.",
+            "172.27.",
+            "172.28.",
+            "172.29.",
+            "172.30.",
+            "172.31.",
         ]
 
         src_private = any(src_ip.startswith(r) for r in private_ranges)
@@ -373,12 +393,16 @@ class PromiscuousAgent:
         elapsed = time.time() - self.start_time
         rate = self.stats["sent_events"] / elapsed
 
-        print(f"\n📊 STATS: {self.stats['sent_events']} eventos | {rate:.1f} evt/s | {elapsed:.1f}s")
+        print(
+            f"\n📊 STATS: {self.stats['sent_events']} eventos | {rate:.1f} evt/s | {elapsed:.1f}s"
+        )
 
         # Top 5 protocolos
         top_protocols = self.stats["by_protocol"].most_common(5)
         if top_protocols:
-            print("🔝 Top protocolos:", ", ".join([f"{p}({c})" for p, c in top_protocols]))
+            print(
+                "🔝 Top protocolos:", ", ".join([f"{p}({c})" for p, c in top_protocols])
+            )
 
     def start_promiscuous_capture(self):
         """Iniciar captura promiscua"""
@@ -393,7 +417,7 @@ class PromiscuousAgent:
                 prn=self.analyze_packet_comprehensive,
                 store=0,  # No almacenar en memoria
                 promisc=self.capture_config["promiscuous"],  # Modo promiscuo
-                monitor=False  # No modo monitor (para WiFi)
+                monitor=False,  # No modo monitor (para WiFi)
             )
 
         except KeyboardInterrupt:
@@ -443,7 +467,9 @@ def main():
 
     parser = argparse.ArgumentParser(description="Agente de captura promiscua total")
     parser.add_argument("-i", "--interface", default="en0", help="Interfaz de red")
-    parser.add_argument("-b", "--broker", default="tcp://localhost:5555", help="Broker ZeroMQ")
+    parser.add_argument(
+        "-b", "--broker", default="tcp://localhost:5555", help="Broker ZeroMQ"
+    )
 
     args = parser.parse_args()
 

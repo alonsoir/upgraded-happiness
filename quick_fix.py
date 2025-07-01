@@ -54,14 +54,18 @@ def get_smart_broker_address():
 """
 
     # Aplicar a archivos específicos
-    files_to_patch = ["agent_scapy_fixed.py", "promiscuous_agent.py", "lightweight_ml_detector.py"]
+    files_to_patch = [
+        "agent_scapy_fixed.py",
+        "promiscuous_agent.py",
+        "lightweight_ml_detector.py",
+    ]
 
     for filename in files_to_patch:
         if os.path.exists(filename):
             print(f"🔧 Patcheando {filename}...")
 
             # Leer archivo
-            with open(filename, 'r') as f:
+            with open(filename, "r") as f:
                 content = f.read()
 
             # Verificar si ya está patcheado
@@ -71,11 +75,11 @@ def get_smart_broker_address():
 
             # Hacer backup
             backup_file = f"{filename}.backup.quick"
-            with open(backup_file, 'w') as f:
+            with open(backup_file, "w") as f:
                 f.write(content)
 
             # Insertar código al principio (después del shebang y docstring)
-            lines = content.split('\n')
+            lines = content.split("\n")
             insert_pos = 5  # Después de imports iniciales
 
             lines.insert(insert_pos, autodiscovery_code)
@@ -84,12 +88,14 @@ def get_smart_broker_address():
             for i, line in enumerate(lines):
                 if 'broker_address = "tcp://localhost:' in line:
                     indent = len(line) - len(line.lstrip())
-                    lines[i] = ' ' * indent + 'broker_address = get_smart_broker_address()'
+                    lines[i] = (
+                        " " * indent + "broker_address = get_smart_broker_address()"
+                    )
                     break
 
             # Escribir archivo modificado
-            modified_content = '\n'.join(lines)
-            with open(filename, 'w') as f:
+            modified_content = "\n".join(lines)
+            with open(filename, "w") as f:
                 f.write(modified_content)
 
             print(f"✅ {filename} patcheado exitosamente")
@@ -120,7 +126,7 @@ def kill_conflicting_processes():
 
 def create_simple_broker_script():
     """Crear script de broker simple que use auto-discovery"""
-    broker_script = '''#!/usr/bin/env python3
+    broker_script = """#!/usr/bin/env python3
 import zmq
 import socket
 import time
@@ -177,10 +183,10 @@ def start_smart_broker():
 
 if __name__ == "__main__":
     start_smart_broker()
-'''
+"""
 
     os.makedirs("scripts", exist_ok=True)
-    with open("scripts/smart_broker.py", 'w') as f:
+    with open("scripts/smart_broker.py", "w") as f:
         f.write(broker_script)
 
     os.chmod("scripts/smart_broker.py", 0o755)
@@ -192,16 +198,16 @@ def fix_orchestrator_broker():
     orchestrator_file = "system_orchestrator.py"
 
     if os.path.exists(orchestrator_file):
-        with open(orchestrator_file, 'r') as f:
+        with open(orchestrator_file, "r") as f:
             content = f.read()
 
         # Cambiar script del broker
         content = content.replace(
             '"script": "./scripts/run_broker.sh"',
-            '"script": "python scripts/smart_broker.py"'
+            '"script": "python scripts/smart_broker.py"',
         )
 
-        with open(orchestrator_file, 'w') as f:
+        with open(orchestrator_file, "w") as f:
             f.write(content)
 
         print("✅ Orquestador actualizado para usar broker inteligente")
@@ -214,9 +220,11 @@ def test_system():
     try:
         # Probar broker independiente
         print("🔌 Iniciando broker de prueba...")
-        proc = subprocess.Popen([
-            "python", "scripts/smart_broker.py"
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            ["python", "scripts/smart_broker.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
         time.sleep(3)
 

@@ -8,15 +8,17 @@ Crea tests para cada componente esencial identificado
 import os
 from pathlib import Path
 
+
 def create_test_suite():
     """Crea estructura completa de tests"""
-    
+
     # Crear directorio de tests
     test_dir = Path("tests_consolidated")
     test_dir.mkdir(exist_ok=True)
-    
+
     # Test para sistema principal
-    (test_dir / "test_system_orchestrator.py").write_text('''
+    (test_dir / "test_system_orchestrator.py").write_text(
+        '''
 import unittest
 import subprocess
 import time
@@ -61,10 +63,12 @@ class TestSystemOrchestrator(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-''')
-    
+'''
+    )
+
     # Test para ML detector
-    (test_dir / "test_ml_detector.py").write_text('''
+    (test_dir / "test_ml_detector.py").write_text(
+        '''
 import unittest
 import subprocess
 from pathlib import Path
@@ -96,10 +100,12 @@ class TestMLDetector(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-''')
-    
+'''
+    )
+
     # Test para integración BitDefender
-    (test_dir / "test_bitdefender_integration.py").write_text('''
+    (test_dir / "test_bitdefender_integration.py").write_text(
+        '''
 import unittest
 import subprocess
 import json
@@ -138,10 +144,12 @@ class TestBitDefenderIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-''')
-    
+'''
+    )
+
     # Master test runner
-    (test_dir / "run_all_tests.py").write_text('''
+    (test_dir / "run_all_tests.py").write_text(
+        '''
 #!/usr/bin/env python3
 """
 Master Test Runner para Upgraded Happiness
@@ -195,14 +203,16 @@ def run_all_tests():
 if __name__ == '__main__':
     success = run_all_tests()
     sys.exit(0 if success else 1)
-''')
-    
+'''
+    )
+
     print(f"✅ Suite de tests creada en: {test_dir}")
     print("📋 Tests incluidos:")
     print("   - test_system_orchestrator.py")
-    print("   - test_ml_detector.py") 
+    print("   - test_ml_detector.py")
     print("   - test_bitdefender_integration.py")
     print("   - run_all_tests.py (master runner)")
+
 
 if __name__ == "__main__":
     create_test_suite()
