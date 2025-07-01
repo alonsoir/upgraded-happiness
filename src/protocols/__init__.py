@@ -1,7 +1,6 @@
-"""Protocols package - Serialization implementations"""
+"""Protocols package - Network event protocols"""
 
-from .protobuff.protobuf_serializer import ProtobufEventSerializer
+# Importar solo lo que existe
+from .protobuf import network_event_pb2
 
-__all__ = [
-    'ProtobufEventSerializer',
-]
+__all__ = ["network_event_pb2"]
