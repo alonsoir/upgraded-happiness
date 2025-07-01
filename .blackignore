@@ -1,0 +1,16 @@
+# Black formatting exclusions
+# Files with syntax issues or special formatting requirements
+
+# Problematic file with parsing issues
+agent_autodiscovery_patch.py
+
+# Backup directories
+backup_before_cleanup_*/
+
+# Generated protobuf files
+*_pb2.py
+
+# Temporary or experimental files
+*_patch.py
+*_debug.py
+*_temp.py
