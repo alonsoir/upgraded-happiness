@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
 # Crear el archivo
 filename = "agent_scapy_fixed.py"
-with open(filename, 'w') as f:
+with open(filename, "w") as f:
     f.write(agent_content)
 
 print(f"✅ Archivo creado: {filename}")

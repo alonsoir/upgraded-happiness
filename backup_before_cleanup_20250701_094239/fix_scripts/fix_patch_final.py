@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
 """
+Crear archivo de parche FINAL correcto
+"""
+
+import os
+import subprocess
+import sys
+
+
+def create_final_patch_file():
+    """Crear el archivo agent_autodiscovery_patch.py FINAL correcto"""
+
+    patch_content = '''#!/usr/bin/env python3
+"""
 Parche para agregar auto-discovery a agentes existentes
 """
 
@@ -15,7 +28,7 @@ import zmq
 import time
 
 def find_active_broker(start_port=5555, max_attempts=10, timeout_ms=1000):
-    """Encontrar un broker ZeroMQ activo para conectarse"""
+    \"\"\"Encontrar un broker ZeroMQ activo para conectarse\"\"\"
     context = zmq.Context()
 
     for port in range(start_port, start_port + max_attempts):
@@ -51,7 +64,7 @@ def find_active_broker(start_port=5555, max_attempts=10, timeout_ms=1000):
     return f"tcp://localhost:{start_port}"  # Fallback al puerto por defecto
 
 def get_broker_address_with_discovery(default_address="tcp://localhost:5555"):
-    """Obtener dirección del broker con auto-discovery"""
+    \"\"\"Obtener dirección del broker con auto-discovery\"\"\"
     # Si se especifica via línea de comandos o args, usar esa
     import sys
 
@@ -91,7 +104,7 @@ def patch_agent_file(agent_file, backup=True):
         return True
 
     # Encontrar donde insertar las funciones (después de imports)
-    lines = content.split('\n')
+    lines = content.split('\\n')
     insert_position = 0
 
     # Buscar última línea de import o primera línea de código
@@ -116,7 +129,7 @@ def patch_agent_file(agent_file, backup=True):
             break
 
     # Escribir archivo modificado
-    modified_content = '\n'.join(lines)
+    modified_content = '\\n'.join(lines)
 
     with open(agent_file, 'w') as f:
         f.write(modified_content)
@@ -137,7 +150,7 @@ def patch_all_agents():
 
     for agent_file in agent_files:
         if os.path.exists(agent_file):
-            print(f"\n🔧 Aplicando parche a {agent_file}...")
+            print(f"\\n🔧 Aplicando parche a {agent_file}...")
             if patch_agent_file(agent_file):
                 patched_count += 1
         else:
@@ -170,33 +183,33 @@ def main():
         # Patchear todos los agentes
         print("🎯 Aplicando parche a todos los agentes...")
         patched_count = patch_all_agents()
-        print(f"\n📊 RESUMEN:")
+        print(f"\\n📊 RESUMEN:")
         print(f"   ✅ Archivos patcheados: {patched_count}")
 
         if patched_count > 0:
-            print(f"\n🚀 BENEFICIOS DEL AUTO-DISCOVERY:")
+            print(f"\\n🚀 BENEFICIOS DEL AUTO-DISCOVERY:")
             print("   🔌 Conexión automática a brokers disponibles")
             print("   🔄 Reconexión inteligente si cambia el puerto")
             print("   ⚙️  Configuración automática de red") 
             print("   🛡️  Mayor robustez del sistema")
 
-            print(f"\n📝 PRÓXIMOS PASOS:")
+            print(f"\\n📝 PRÓXIMOS PASOS:")
             print("   1. python system_orchestrator.py start")
             print("   2. Los agentes se conectarán automáticamente")
 
     else:
         # Modo interactivo
         print("🎮 MODO INTERACTIVO")
-        print("\nOpciones disponibles:")
+        print("\\nOpciones disponibles:")
         print("1. Patchear todos los agentes")
         print("2. Patchear archivo específico")
         print("0. Salir")
 
-        choice = input("\n🎯 Selecciona opción: ").strip()
+        choice = input("\\n🎯 Selecciona opción: ").strip()
 
         if choice == "1":
             patched_count = patch_all_agents()
-            print(f"\n✅ {patched_count} agentes patcheados")
+            print(f"\\n✅ {patched_count} agentes patcheados")
 
         elif choice == "2":
             filename = input("Archivo a patchear: ").strip()
@@ -211,3 +224,68 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''
+
+    # Escribir archivo
+    filename = "agent_autodiscovery_patch.py"
+    with open(filename, "w") as f:
+        f.write(patch_content)
+
+    os.chmod(filename, 0o755)
+
+    size = os.path.getsize(filename)
+    print(f"✅ Archivo de parche CORRECTO creado: {filename}")
+    print(f"📁 Tamaño: {size:,} bytes")
+
+    return filename
+
+
+def install_dependencies():
+    """Instalar dependencias necesarias"""
+    print("📦 Instalando dependencias...")
+
+    dependencies = ["xgboost", "scikit-learn", "pandas", "numpy"]
+
+    for dep in dependencies:
+        try:
+            __import__(dep)
+            print(f"✅ {dep} ya está instalado")
+        except ImportError:
+            print(f"📦 Instalando {dep}...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", dep])
+                print(f"✅ {dep} instalado")
+            except:
+                print(f"❌ Error instalando {dep}")
+
+
+def clean_processes():
+    """Limpiar procesos que usan puertos"""
+    print("🧹 Limpiando procesos...")
+
+    try:
+        # Intentar limpiar puertos
+        subprocess.run(["pkill", "-f", "broker"], capture_output=True)
+        subprocess.run(["pkill", "-f", "agent_scapy"], capture_output=True)
+        print("✅ Procesos limpiados")
+    except:
+        print("⚠️  No se pudieron limpiar algunos procesos")
+
+
+if __name__ == "__main__":
+    print("🛠️  REPARACIÓN FINAL DEL SISTEMA")
+    print("=" * 50)
+
+    # 1. Limpiar procesos
+    clean_processes()
+
+    # 2. Instalar dependencias
+    install_dependencies()
+
+    # 3. Crear archivo de parche correcto
+    patch_file = create_final_patch_file()
+
+    print(f"\n🎉 REPARACIÓN COMPLETADA!")
+    print(f"\n🚀 EJECUTA AHORA:")
+    print("   python agent_autodiscovery_patch.py --all")
+    print("   python system_orchestrator.py start")

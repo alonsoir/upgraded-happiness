@@ -27,7 +27,7 @@ __all__ = ['network_event_pb2']
 '''
 
     # Escribir el contenido funcional
-    with open(init_file, 'w') as f:
+    with open(init_file, "w") as f:
         f.write(working_content)
 
     print(f"✅ Archivo corregido: {init_file}")
@@ -44,7 +44,7 @@ def ensure_protobuf_init():
 
     # Verificar si está vacío
     if os.path.exists(protobuf_init):
-        with open(protobuf_init, 'r') as f:
+        with open(protobuf_init, "r") as f:
             content = f.read().strip()
 
         if not content:  # Archivo vacío
@@ -54,7 +54,7 @@ from . import network_event_pb2
 
 __all__ = ['network_event_pb2']
 '''
-            with open(protobuf_init, 'w') as f:
+            with open(protobuf_init, "w") as f:
                 f.write(protobuf_content)
             print(f"✅ Contenido agregado a: {protobuf_init}")
         else:

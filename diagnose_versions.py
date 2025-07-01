@@ -20,12 +20,14 @@ def check_python_package(package_name):
     """Verificar versión de paquete Python"""
     try:
         import importlib.metadata
+
         version = importlib.metadata.version(package_name)
         return version
     except:
         try:
             # Fallback para versiones más antiguas
             import pkg_resources
+
             version = pkg_resources.get_distribution(package_name).version
             return version
         except:
@@ -56,13 +58,13 @@ try:
 
     # Verificar qué atributos tiene
     attrs = dir(google.protobuf)
-    has_runtime_version = 'runtime_version' in attrs
+    has_runtime_version = "runtime_version" in attrs
     print(f"¿Tiene runtime_version? {has_runtime_version}")
 
     if not has_runtime_version:
         print("Atributos disponibles en google.protobuf:")
         for attr in sorted(attrs):
-            if not attr.startswith('_'):
+            if not attr.startswith("_"):
                 print(f"  - {attr}")
 
 except ImportError as e:
@@ -81,7 +83,9 @@ else:
         from packaging import version
 
         if version.parse(protobuf_version) < version.parse("4.21.0"):
-            print(f"⚠️  protobuf {protobuf_version} es muy antiguo, se recomienda actualizar")
+            print(
+                f"⚠️  protobuf {protobuf_version} es muy antiguo, se recomienda actualizar"
+            )
         else:
             print(f"✅ protobuf {protobuf_version} debería ser compatible")
     except:

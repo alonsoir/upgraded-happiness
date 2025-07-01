@@ -9,7 +9,7 @@ file_path = "src/agents/agent_scapy.py"
 
 if os.path.exists(file_path):
     # Leer archivo
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         content = f.read()
 
     # Corregir la importación
@@ -20,7 +20,7 @@ if os.path.exists(file_path):
         content = content.replace(old_import, new_import)
 
         # Escribir archivo corregido
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             f.write(content)
 
         print(f"✅ Archivo {file_path} corregido")

@@ -19,7 +19,7 @@ class CloudMLStrategy:
                 "storage": "100GB temp",
                 "pros": ["Gratis", "Jupyter integrado", "GPU Tesla T4"],
                 "cons": ["Límite 12h", "Desconexión automática", "No persistente"],
-                "best_for": "Experimentación y prototipos"
+                "best_for": "Experimentación y prototipos",
             },
             "kaggle_notebooks": {
                 "cost": "GRATIS",
@@ -28,7 +28,7 @@ class CloudMLStrategy:
                 "storage": "20GB temp + datasets públicos",
                 "pros": ["GPU P100", "30h/semana", "Datasets públicos"],
                 "cons": ["Límite semanal", "No API externa"],
-                "best_for": "Entrenamiento con datasets públicos"
+                "best_for": "Entrenamiento con datasets públicos",
             },
             "paperspace_gradient": {
                 "cost": "$8/mes (Free tier)",
@@ -37,7 +37,7 @@ class CloudMLStrategy:
                 "storage": "5GB persistente gratis",
                 "pros": ["Free tier generoso", "Jupyter", "Persistent storage"],
                 "cons": ["Costo después de free tier"],
-                "best_for": "Desarrollo serio con presupuesto bajo"
+                "best_for": "Desarrollo serio con presupuesto bajo",
             },
             "aws_sagemaker": {
                 "cost": "$0.05-2.00/hora",
@@ -46,7 +46,7 @@ class CloudMLStrategy:
                 "storage": "Pay per use",
                 "pros": ["Escalable", "Producción", "Integración AWS"],
                 "cons": ["Más caro", "Complejidad setup"],
-                "best_for": "Producción y modelos grandes"
+                "best_for": "Producción y modelos grandes",
             },
             "vast_ai": {
                 "cost": "$0.10-0.50/hora",
@@ -55,8 +55,8 @@ class CloudMLStrategy:
                 "storage": "Variable",
                 "pros": ["MUY barato", "GPUs potentes", "Flexibilidad"],
                 "cons": ["Menos confiable", "Setup manual"],
-                "best_for": "Entrenamiento intensivo barato"
-            }
+                "best_for": "Entrenamiento intensivo barato",
+            },
         }
 
         self.model_strategies = {
@@ -65,22 +65,22 @@ class CloudMLStrategy:
                 "hardware": "Intel i9 + 32GB RAM",
                 "training_time": "5-30 minutos",
                 "dataset_size": "Hasta 1M eventos",
-                "accuracy": "80-85%"
+                "accuracy": "80-85%",
             },
             "medium_cloud": {
                 "models": ["Deep Neural Networks", "LSTM", "Transformers pequeños"],
                 "hardware": "Tesla T4/P100 (Colab/Kaggle)",
                 "training_time": "1-6 horas",
                 "dataset_size": "1-10M eventos",
-                "accuracy": "85-90%"
+                "accuracy": "85-90%",
             },
             "heavy_cloud": {
                 "models": ["Large Transformers", "Ensemble models", "Graph NNs"],
                 "hardware": "A100/V100 (Vast.ai/AWS)",
                 "training_time": "6-24 horas",
                 "dataset_size": "10M+ eventos",
-                "accuracy": "90-95%"
-            }
+                "accuracy": "90-95%",
+            },
         }
 
     def recommend_strategy(self, dataset_size, budget_monthly, accuracy_target):
@@ -147,7 +147,7 @@ class CloudMLStrategy:
 
     def _generate_local_pipeline(self):
         """Pipeline para entrenamiento local"""
-        pipeline = '''
+        pipeline = """
 # PIPELINE DE ENTRENAMIENTO LOCAL (Intel i9)
 
 ## 1. Preparación de datos
@@ -164,12 +164,12 @@ python lightweight_ml_detector.py --deploy --mode production
 
 # Tiempo estimado: 15-30 minutos
 # Recursos: 8 cores, 16GB RAM máximo
-'''
+"""
         return pipeline
 
     def _generate_colab_pipeline(self):
         """Pipeline para Google Colab"""
-        pipeline = '''
+        pipeline = """
 # PIPELINE PARA GOOGLE COLAB (GRATIS)
 
 ## Setup inicial en Colab
@@ -198,12 +198,12 @@ files.download('model.pth')  # Descargar modelo
 # Tiempo: 2-6 horas
 # Costo: GRATIS
 # Limitación: 12 horas continuas
-'''
+"""
         return pipeline
 
     def _generate_vastai_pipeline(self):
         """Pipeline para Vast.ai (barato)"""
-        pipeline = '''
+        pipeline = """
 # PIPELINE PARA VAST.AI (PRESUPUESTO BAJO)
 
 ## 1. Configuración de instancia
@@ -235,7 +235,7 @@ scp models/* local-machine:/models/
 # Tiempo: 6-24 horas  
 # Costo: $5-20 total
 # Resultado: Modelos de producción de alta calidad
-'''
+"""
         return pipeline
 
     def estimate_costs(self, training_hours, cloud_platform):
@@ -246,7 +246,7 @@ scp models/* local-machine:/models/
             "kaggle_notebooks": 0,  # Gratis
             "paperspace_gradient": min(8, training_hours * 0),  # Free tier
             "aws_sagemaker": training_hours * 0.736,  # ml.g4dn.xlarge
-            "vast_ai": training_hours * 0.25  # Promedio RTX 3090
+            "vast_ai": training_hours * 0.25,  # Promedio RTX 3090
         }
 
         return costs.get(cloud_platform, 0)
@@ -290,14 +290,18 @@ def main():
     try:
         print("📋 Cuéstame sobre tus necesidades:")
 
-        dataset_size = int(input("📊 Tamaño aproximado del dataset (eventos): ") or "50000")
+        dataset_size = int(
+            input("📊 Tamaño aproximado del dataset (eventos): ") or "50000"
+        )
         budget = float(input("💰 Presupuesto mensual USD (0 = gratis): ") or "0")
         accuracy = float(input("🎯 Precisión mínima deseada % (70-95): ") or "80")
 
         print("\n" + "=" * 50)
 
         # Generar recomendación
-        strategy_name, cloud = strategy.recommend_strategy(dataset_size, budget, accuracy)
+        strategy_name, cloud = strategy.recommend_strategy(
+            dataset_size, budget, accuracy
+        )
 
         # Mostrar pipeline
         print(f"\n📝 PIPELINE DE ENTRENAMIENTO:")
@@ -316,7 +320,7 @@ def main():
 
         # Mostrar comparación completa si quieren
         show_all = input(f"\n¿Ver comparación completa de opciones? [y/n]: ").lower()
-        if show_all == 'y':
+        if show_all == "y":
             strategy.show_full_comparison()
 
     except KeyboardInterrupt:

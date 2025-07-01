@@ -19,8 +19,9 @@ def create_autodiscovery_functions():
     """Crear funciones de auto-discovery para agentes"""
     return '''
 import socket
-import zmq
 import time
+
+import zmq
 
 
 def find_active_broker(start_port=5555, max_attempts=10, timeout_ms=1000):
@@ -56,7 +57,9 @@ def find_active_broker(start_port=5555, max_attempts=10, timeout_ms=1000):
             continue
 
     context.term()
-    print(f"⚠️  No se encontró broker activo en puertos {start_port}-{start_port + max_attempts - 1}")
+    print(
+        f"⚠️  No se encontró broker activo en puertos {start_port}-{start_port + max_attempts - 1}"
+    )
     return f"tcp://localhost:{start_port}"  # Fallback al puerto por defecto
 
 
@@ -164,8 +167,8 @@ def create_test_script():
 Script de prueba para auto-discovery de agentes
 """
 
-import sys
 import os
+import sys
 
 # Agregar directorio actual al path
 sys.path.insert(0, os.getcwd())
@@ -178,7 +181,7 @@ def test_autodiscovery():
 
     try:
         # Importar funciones desde agente patcheado
-        exec(open('agent_scapy_fixed.py').read(), globals())
+        exec(open("agent_scapy_fixed.py").read(), globals())
 
         # Probar auto-discovery
         print("🔍 Probando find_active_broker...")
@@ -289,7 +292,7 @@ def create_patch_file():
     filename = "agent_autodiscovery_patch.py"
 
     try:
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             f.write(patch_content)
 
         # Hacer ejecutable

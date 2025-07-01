@@ -4,8 +4,8 @@ Regenerar protobuf de manera limpia
 """
 
 import os
-import subprocess
 import shutil
+import subprocess
 
 
 def backup_and_clean():
@@ -32,7 +32,9 @@ def regenerate_protobuf():
     cmd = "protoc --python_out=. src/protocols/protobuf/network_event.proto"
 
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, check=True
+        )
         print("✅ Protobuf regenerado exitosamente")
 
         # Verificar que el archivo se creó
@@ -41,7 +43,7 @@ def regenerate_protobuf():
             print(f"✅ Archivo creado: {pb2_file}")
 
             # Mostrar las primeras líneas para verificar
-            with open(pb2_file, 'r') as f:
+            with open(pb2_file, "r") as f:
                 lines = f.readlines()
 
             print("📝 Primeras líneas del archivo regenerado:")
@@ -89,7 +91,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
     _globals['_NETWORKEVENT']._serialized_end=289
 '''
 
-    with open(pb2_file, 'w') as f:
+    with open(pb2_file, "w") as f:
         f.write(compatible_content)
 
     print(f"✅ Versión compatible creada: {pb2_file}")
@@ -100,7 +102,7 @@ def test_import():
 
     print("🧪 Probando importación...")
 
-    test_code = '''
+    test_code = """
 import sys
 import os
 sys.path.insert(0, os.getcwd())
@@ -122,14 +124,16 @@ except Exception as e:
     print(f"❌ Error: {e}")
     import traceback
     traceback.print_exc()
-'''
+"""
 
     # Escribir y ejecutar test
-    with open('temp_test.py', 'w') as f:
+    with open("temp_test.py", "w") as f:
         f.write(test_code)
 
     try:
-        result = subprocess.run("python temp_test.py", shell=True, capture_output=True, text=True)
+        result = subprocess.run(
+            "python temp_test.py", shell=True, capture_output=True, text=True
+        )
         print(result.stdout)
         if result.stderr:
             print("Errores:", result.stderr)
@@ -138,8 +142,8 @@ except Exception as e:
         return success
     finally:
         # Limpiar archivo temporal
-        if os.path.exists('temp_test.py'):
-            os.remove('temp_test.py')
+        if os.path.exists("temp_test.py"):
+            os.remove("temp_test.py")
 
 
 if __name__ == "__main__":

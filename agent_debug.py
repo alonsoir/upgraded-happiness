@@ -3,12 +3,13 @@
 Agente de debug para verificar que se envían eventos
 """
 
-import zmq
-import sys
 import os
+import sys
 import time
 import traceback
-from scapy.all import sniff, IP, TCP, UDP, IPv6, ARP
+
+import zmq
+from scapy.all import ARP, IP, TCP, UDP, IPv6, sniff
 
 # Agregar el directorio raíz al path
 sys.path.insert(0, os.getcwd())
@@ -55,19 +56,19 @@ class DebugAgent:
                 event = network_event_pb2.NetworkEvent()
                 event.event_id = f"debug_{int(time.time() * 1000)}_{self.packet_count}"
                 event.timestamp = int(pkt.time * 1e9)
-                event.source_ip = pkt['IP'].src
-                event.target_ip = pkt['IP'].dst
+                event.source_ip = pkt["IP"].src
+                event.target_ip = pkt["IP"].dst
                 event.packet_size = len(pkt)
                 event.agent_id = "debug-agent"
 
                 # Detectar puertos
                 if pkt.haslayer(TCP):
-                    event.dest_port = pkt['TCP'].dport
-                    event.src_port = pkt['TCP'].sport
+                    event.dest_port = pkt["TCP"].dport
+                    event.src_port = pkt["TCP"].sport
                     protocol = "TCP"
                 elif pkt.haslayer(UDP):
-                    event.dest_port = pkt['UDP'].dport
-                    event.src_port = pkt['UDP'].sport
+                    event.dest_port = pkt["UDP"].dport
+                    event.src_port = pkt["UDP"].sport
                     protocol = "UDP"
                 else:
                     event.dest_port = 0
@@ -82,12 +83,14 @@ class DebugAgent:
                     # Debug detallado para los primeros 20 eventos
                     if self.sent_count <= 20:
                         print(
-                            f"[{self.sent_count:2d}] ✅ ENVIADO: {protocol} {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}")
+                            f"[{self.sent_count:2d}] ✅ ENVIADO: {protocol} {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}"
+                        )
                     elif self.sent_count % 50 == 0:
                         elapsed = time.time() - self.start_time
                         rate = self.sent_count / elapsed
                         print(
-                            f"📊 Eventos enviados: {self.sent_count} | Rate: {rate:.1f} evt/s | Paquetes procesados: {self.packet_count}")
+                            f"📊 Eventos enviados: {self.sent_count} | Rate: {rate:.1f} evt/s | Paquetes procesados: {self.packet_count}"
+                        )
 
                 except Exception as e:
                     print(f"❌ Error enviando evento {self.sent_count}: {e}")
@@ -113,6 +116,7 @@ class DebugAgent:
         print("Ctrl+C para detener\n")
 
         try:
+
             def stop_filter(pkt):
                 return time.time() - self.start_time > duration
 
@@ -120,7 +124,7 @@ class DebugAgent:
                 iface=self.interface,
                 prn=self.capture_traffic,
                 timeout=duration + 5,
-                store=0
+                store=0,
             )
 
         except KeyboardInterrupt:

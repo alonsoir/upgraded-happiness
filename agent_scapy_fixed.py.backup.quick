@@ -3,12 +3,13 @@
 Agente de captura de tráfico con Scapy - Versión corregida
 """
 
-import zmq
-import sys
 import os
+import sys
 import time
 import traceback
-from scapy.all import sniff, IP, TCP, UDP
+
+import zmq
+from scapy.all import IP, TCP, UDP, sniff
 
 # Agregar el directorio raíz al path para las importaciones
 current_dir = os.path.dirname(os.path.abspath(__file__))

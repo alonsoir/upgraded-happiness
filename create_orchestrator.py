@@ -419,7 +419,7 @@ def find_available_port(start_port=5555, max_attempts=10):
             # Verificar que el puerto esté libre
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s.bind(('localhost', port))
+                s.bind(("localhost", port))
                 return port
         except OSError:
             continue
@@ -483,7 +483,7 @@ def test_port_discovery():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(0.5)
-                result = s.connect_ex(('localhost', port))
+                result = s.connect_ex(("localhost", port))
                 status = "🔴 OCUPADO" if result == 0 else "🟢 LIBRE"
                 print(f"   {port}: {status}")
         except:
@@ -506,7 +506,7 @@ def create_orchestrator_file():
     filename = "system_orchestrator.py"
 
     try:
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             f.write(orchestrator_content)
 
         # Hacer ejecutable

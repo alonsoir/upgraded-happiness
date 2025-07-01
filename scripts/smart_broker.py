@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-import zmq
-import socket
-import time
 import signal
+import socket
 import sys
+import time
+
+import zmq
+
 
 def find_available_port(start_port=5555):
     for port in range(start_port, start_port + 10):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('localhost', port))
+                s.bind(("localhost", port))
                 return port
         except OSError:
             continue
     return start_port
+
 
 def start_smart_broker():
     frontend_port = find_available_port(5555)
@@ -27,7 +30,7 @@ def start_smart_broker():
     frontend = context.socket(zmq.ROUTER)
     frontend.bind(f"tcp://*:{frontend_port}")
 
-    # Backend socket (workers se conectan aquí)  
+    # Backend socket (workers se conectan aquí)
     backend = context.socket(zmq.DEALER)
     backend.bind(f"tcp://*:{backend_port}")
 
@@ -52,6 +55,7 @@ def start_smart_broker():
         frontend.close()
         backend.close()
         context.term()
+
 
 if __name__ == "__main__":
     start_smart_broker()

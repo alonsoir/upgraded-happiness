@@ -17,15 +17,15 @@ def fix_protobuf_serializer():
         return False
 
     # Leer el archivo
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         content = f.read()
 
     # Buscar y corregir el error específico
     # El problema está en que _populate_struct recibe 'event' en lugar de 'event_dict'
 
     # Pattern para encontrar la línea problemática
-    pattern = r'await self\._populate_struct\(struct, event\)'
-    replacement = 'await self._populate_struct(struct, event_dict)'
+    pattern = r"await self\._populate_struct\(struct, event\)"
+    replacement = "await self._populate_struct(struct, event_dict)"
 
     if re.search(pattern, content):
         content = re.sub(pattern, replacement, content)
@@ -34,14 +34,16 @@ def fix_protobuf_serializer():
         print("⚠️  No se encontró el patrón exacto, buscando variaciones...")
 
         # Buscar la función _to_protobuf y asegurarse de que use event_dict
-        pattern2 = r'(await self\._populate_struct\(struct,\s*)(\w+)\)'
+        pattern2 = r"(await self\._populate_struct\(struct,\s*)(\w+)\)"
         match = re.search(pattern2, content)
-        if match and match.group(2) != 'event_dict':
-            content = re.sub(pattern2, r'\1event_dict)', content)
-            print(f"✅ Corregido: _populate_struct ahora recibe event_dict (era {match.group(2)})")
+        if match and match.group(2) != "event_dict":
+            content = re.sub(pattern2, r"\1event_dict)", content)
+            print(
+                f"✅ Corregido: _populate_struct ahora recibe event_dict (era {match.group(2)})"
+            )
 
     # Guardar el archivo corregido
-    with open(filepath, 'w') as f:
+    with open(filepath, "w") as f:
         f.write(content)
 
     print(f"✅ Archivo {filepath} actualizado")

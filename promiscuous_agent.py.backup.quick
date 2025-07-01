@@ -3,24 +3,16 @@
 Agente de captura promiscua total - Captura ABSOLUTAMENTE TODO
 """
 
-import zmq
-import sys
-import os
-import time
 import json
+import os
+import sys
+import time
 import traceback
-from collections import defaultdict, Counter
-from scapy.all import (
-    sniff,
-    # Layer 2
-    Ether, ARP,
-    # Layer 3
-    IP, IPv6, ICMP,
-    # Layer 4
-    TCP, UDP,
-    # Application layers
-    DNS, DHCP, Raw
-)
+from collections import Counter, defaultdict
+
+import zmq
+from scapy.all import (ARP,  # Layer 2; Layer 3; Layer 4; Application layers
+                       DHCP, DNS, ICMP, IP, TCP, UDP, Ether, IPv6, Raw, sniff)
 
 # Importaciones opcionales
 try:

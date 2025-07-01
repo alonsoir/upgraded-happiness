@@ -5,12 +5,12 @@ Ejecutor de Limpieza Segura - Upgraded Happiness
 Consolida y elimina archivos de forma segura
 """
 
-import os
 import json
+import os
 import shutil
-from asyncio import subprocess
-from pathlib import Path
+import subprocess
 from datetime import datetime
+from pathlib import Path
 
 
 def create_consolidated_fix_module():
@@ -233,7 +233,7 @@ if __name__ == "__main__":
 '''
 
     # Guardar módulo consolidado
-    with open('fix_module.py', 'w') as f:
+    with open("fix_module.py", "w") as f:
         f.write(consolidated_content)
 
     print("✅ Módulo consolidado creado: fix_module.py")
@@ -270,7 +270,7 @@ def execute_cleanup(action_plan, confirm=False):
         print("Ejecuta primero: python cleanup_analyzer.py")
         return False
 
-    with open("cleanup_action_plan.json", 'r') as f:
+    with open("cleanup_action_plan.json", "r") as f:
         plan = json.load(f)
 
     print("🚀 EJECUTANDO LIMPIEZA SEGURA")
@@ -288,12 +288,12 @@ def execute_cleanup(action_plan, confirm=False):
 
     # Eliminar backups
     print("\\n🗑️  Eliminando archivos backup...")
-    for backup_file in plan['immediate_delete']['backup_files']:
+    for backup_file in plan["immediate_delete"]["backup_files"]:
         try:
             file_path = Path(backup_file)
             if file_path.exists():
                 size = file_path.stat().st_size
-                if confirm or input(f"Eliminar {backup_file}? (y/N): ").lower() == 'y':
+                if confirm or input(f"Eliminar {backup_file}? (y/N): ").lower() == "y":
                     file_path.unlink()
                     deleted_count += 1
                     space_freed += size
@@ -303,12 +303,12 @@ def execute_cleanup(action_plan, confirm=False):
 
     # Eliminar temporales
     print("\\n🗑️  Eliminando archivos temporales...")
-    for temp_file in plan['immediate_delete']['temp_files']:
+    for temp_file in plan["immediate_delete"]["temp_files"]:
         try:
             file_path = Path(temp_file)
             if file_path.exists():
                 size = file_path.stat().st_size
-                if confirm or input(f"Eliminar {temp_file}? (y/N): ").lower() == 'y':
+                if confirm or input(f"Eliminar {temp_file}? (y/N): ").lower() == "y":
                     file_path.unlink()
                     deleted_count += 1
                     space_freed += size
@@ -318,13 +318,19 @@ def execute_cleanup(action_plan, confirm=False):
 
     # Eliminar duplicados
     print("\\n👥 Eliminando duplicados...")
-    for duplicate_group in plan['immediate_delete']['duplicates']:
+    for duplicate_group in plan["immediate_delete"]["duplicates"]:
         for duplicate_file in duplicate_group:
             try:
                 file_path = Path(duplicate_file)
                 if file_path.exists():
                     size = file_path.stat().st_size
-                    if confirm or input(f"Eliminar duplicado {duplicate_file}? (y/N): ").lower() == 'y':
+                    if (
+                        confirm
+                        or input(
+                            f"Eliminar duplicado {duplicate_file}? (y/N): "
+                        ).lower()
+                        == "y"
+                    ):
                         file_path.unlink()
                         deleted_count += 1
                         space_freed += size
@@ -334,12 +340,16 @@ def execute_cleanup(action_plan, confirm=False):
 
     # Consolidar y eliminar scripts fix_* (después de crear el módulo consolidado)
     print("\\n🔧 Consolidando scripts fix_*...")
-    for fix_script in plan['consolidate']['fix_scripts']:
+    for fix_script in plan["consolidate"]["fix_scripts"]:
         try:
             file_path = Path(fix_script)
-            if file_path.exists() and file_path.name.startswith('fix_'):
+            if file_path.exists() and file_path.name.startswith("fix_"):
                 size = file_path.stat().st_size
-                if confirm or input(f"Consolidar y eliminar {fix_script}? (y/N): ").lower() == 'y':
+                if (
+                    confirm
+                    or input(f"Consolidar y eliminar {fix_script}? (y/N): ").lower()
+                    == "y"
+                ):
                     file_path.unlink()
                     deleted_count += 1
                     space_freed += size
@@ -359,8 +369,9 @@ def execute_cleanup(action_plan, confirm=False):
 
     try:
         result = subprocess.run(
-            ['python', 'tests_consolidated/run_all_tests.py'],
-            capture_output=True, text=True
+            ["python", "tests_consolidated/run_all_tests.py"],
+            capture_output=True,
+            text=True,
         )
 
         if result.returncode == 0:
@@ -390,7 +401,7 @@ def main():
     # Preguntar confirmación
     response = input("\\n¿Ejecutar limpieza automática? (y/N): ").lower()
 
-    if response == 'y':
+    if response == "y":
         execute_cleanup(None, confirm=True)
     else:
         print("ℹ️  Limpieza manual activada")

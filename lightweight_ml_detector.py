@@ -6,18 +6,21 @@ Optimizado para CPU, sin dependencias GPU
 
 # Auto-discovery functions
 import socket
-import zmq
 import time
+
+import zmq
+
 
 def find_available_port(start_port=5555, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('localhost', port))
+                s.bind(("localhost", port))
                 return port
         except OSError:
             continue
     return start_port
+
 
 def find_active_broker(start_port=5555, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
@@ -36,46 +39,43 @@ def find_active_broker(start_port=5555, max_attempts=10):
     print(f"⚠️  No se encontró broker, usando puerto {start_port}")
     return f"tcp://localhost:{start_port}"
 
+
 def get_smart_broker_address():
     import sys
+
     for i, arg in enumerate(sys.argv):
         if arg == "--broker" and i + 1 < len(sys.argv):
             return sys.argv[i + 1]
     return find_active_broker()
 
 
-import zmq
-import sys
-import os
-import time
 import json
-import pandas as pd
-import numpy as np
-from datetime import datetime
-from collections import defaultdict, deque
+import os
 import pickle
+import sys
 import threading
+import time
+from collections import defaultdict, deque
+from datetime import datetime
+
 import joblib
-
-# ML optimizado para CPU
-from sklearn.ensemble import (
-    IsolationForest,
-    RandomForestClassifier,
-    GradientBoostingClassifier
-)
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.preprocessing import StandardScaler, RobustScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, f_classif
-
+import numpy as np
+import pandas as pd
 # XGBoost es muy eficiente en CPU
 import xgboost as xgb
-
+import zmq
+from sklearn.cluster import DBSCAN, KMeans
+from sklearn.decomposition import PCA
+# ML optimizado para CPU
+from sklearn.ensemble import (GradientBoostingClassifier, IsolationForest,
+                              RandomForestClassifier)
+from sklearn.feature_selection import SelectKBest, f_classif
 # Para análisis temporal básico sin GPU
 from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import RobustScaler, StandardScaler
 
 sys.path.insert(0, os.getcwd())
 
@@ -113,14 +113,14 @@ class LightweightThreatDetector:
             "kmeans": None,
             "dbscan": None,
             "sgd_classifier": None,
-            "naive_bayes": None
+            "naive_bayes": None,
         }
 
         # Pipelines de procesamiento rápido
         self.processors = {
             "scaler": RobustScaler(),  # Más robusto que StandardScaler
             "pca": PCA(n_components=20),  # Reducir dimensionalidad
-            "feature_selector": SelectKBest(score_func=f_classif, k=30)
+            "feature_selector": SelectKBest(score_func=f_classif, k=30),
         }
 
         # Cache para features frecuentes
@@ -135,7 +135,7 @@ class LightweightThreatDetector:
             "processing_time_ms": deque(maxlen=1000),
             "prediction_time_ms": deque(maxlen=1000),
             "memory_usage_mb": deque(maxlen=100),
-            "cpu_utilization": deque(maxlen=100)
+            "cpu_utilization": deque(maxlen=100),
         }
 
         print(f"🧠 DETECTOR ML LIGERO (Optimizado para Intel i9)")
@@ -169,31 +169,27 @@ class LightweightThreatDetector:
             "src_port": event.src_port,
             "dst_port": event.dest_port,
             "packet_size": event.packet_size,
-            "port_diff": abs(event.dest_port - event.src_port) if event.src_port > 0 else 0,
-
+            "port_diff": abs(event.dest_port - event.src_port)
+            if event.src_port > 0
+            else 0,
             # IP features simplificadas
             "is_internal_src": 1 if self._is_internal_ip(event.source_ip) else 0,
             "is_internal_dst": 1 if self._is_internal_ip(event.target_ip) else 0,
             "ip_class": self._classify_ip_range(event.target_ip),
-
             # Port classification (más eficiente que muchos booleanos)
             "port_category": self._categorize_port(event.dest_port),
             "src_port_category": self._categorize_port(event.src_port),
-
             # Temporal features básicas
             "hour": datetime.now().hour,
             "is_business_hours": 1 if 9 <= datetime.now().hour <= 17 else 0,
             "is_weekend": 1 if datetime.now().weekday() >= 5 else 0,
-
             # Size features
             "size_category": min(4, event.packet_size // 256),  # 0-4 categories
             "is_large_packet": 1 if event.packet_size > 1500 else 0,
-
             # Protocol inference (rápido)
             "likely_protocol": self._infer_protocol(event.dest_port),
-
             # Metadata básico
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
 
         # Cache para IPs frecuentes (optimización)
@@ -244,15 +240,21 @@ class LightweightThreatDetector:
     def _infer_protocol(self, port):
         """Inferir protocolo por puerto (0-10)"""
         protocol_map = {
-            80: 1, 8080: 1,  # HTTP
-            443: 2, 8443: 2,  # HTTPS
+            80: 1,
+            8080: 1,  # HTTP
+            443: 2,
+            8443: 2,  # HTTPS
             22: 3,  # SSH
-            25: 4, 587: 4, 465: 4,  # SMTP
+            25: 4,
+            587: 4,
+            465: 4,  # SMTP
             53: 5,  # DNS
             21: 6,  # FTP
             23: 7,  # Telnet
-            110: 8, 995: 8,  # POP3
-            143: 9, 993: 9,  # IMAP
+            110: 8,
+            995: 8,  # POP3
+            143: 9,
+            993: 9,  # IMAP
         }
         return protocol_map.get(port, 0)  # Unknown = 0
 
@@ -275,7 +277,7 @@ class LightweightThreatDetector:
             contamination=0.1,
             n_estimators=50,  # Reducido para velocidad
             n_jobs=self.cpu_config["n_jobs"],
-            random_state=42
+            random_state=42,
         )
         self.models["isolation_forest"].fit(X_processed)
 
@@ -286,7 +288,7 @@ class LightweightThreatDetector:
                 n_estimators=50,  # Optimizado para velocidad
                 max_depth=10,
                 n_jobs=self.cpu_config["n_jobs"],
-                random_state=42
+                random_state=42,
             )
             self.models["random_forest"].fit(X_processed, y)
 
@@ -299,7 +301,7 @@ class LightweightThreatDetector:
                 learning_rate=0.1,
                 n_jobs=self.cpu_config["n_jobs"],
                 random_state=42,
-                eval_metric='logloss'
+                eval_metric="logloss",
             )
             self.models["xgboost"].fit(X_processed, y)
 
@@ -307,19 +309,17 @@ class LightweightThreatDetector:
         if y is not None:
             print("⚡ Entrenando SGD Classifier...")
             self.models["sgd_classifier"] = SGDClassifier(
-                loss='hinge',
+                loss="hinge",
                 alpha=0.01,
                 random_state=42,
-                n_jobs=self.cpu_config["n_jobs"]
+                n_jobs=self.cpu_config["n_jobs"],
             )
             self.models["sgd_classifier"].fit(X_processed, y)
 
         # 5. KMeans (clustering rápido)
         print("🎯 Entrenando KMeans...")
         self.models["kmeans"] = KMeans(
-            n_clusters=5,
-            n_init=5,  # Reducido para velocidad
-            random_state=42
+            n_clusters=5, n_init=5, random_state=42  # Reducido para velocidad
         )
         self.models["kmeans"].fit(X_processed)
 
@@ -339,7 +339,9 @@ class LightweightThreatDetector:
         start_time = time.time()
 
         # Convertir a array
-        feature_array = np.array(list(features.values())[:-1]).reshape(1, -1)  # Excluir timestamp
+        feature_array = np.array(list(features.values())[:-1]).reshape(
+            1, -1
+        )  # Excluir timestamp
 
         # Preprocesar
         try:
@@ -355,16 +357,22 @@ class LightweightThreatDetector:
         # Isolation Forest (detección de anomalías)
         if self.models["isolation_forest"] is not None:
             try:
-                anomaly_score = self.models["isolation_forest"].decision_function(feature_array)[0]
-                is_anomaly = self.models["isolation_forest"].predict(feature_array)[0] == -1
+                anomaly_score = self.models["isolation_forest"].decision_function(
+                    feature_array
+                )[0]
+                is_anomaly = (
+                    self.models["isolation_forest"].predict(feature_array)[0] == -1
+                )
 
                 if is_anomaly:
-                    threats.append({
-                        "type": "anomaly",
-                        "model": "isolation_forest",
-                        "score": float(anomaly_score),
-                        "severity": "medium" if anomaly_score < -0.5 else "low"
-                    })
+                    threats.append(
+                        {
+                            "type": "anomaly",
+                            "model": "isolation_forest",
+                            "score": float(anomaly_score),
+                            "severity": "medium" if anomaly_score < -0.5 else "low",
+                        }
+                    )
             except:
                 pass
 
@@ -375,12 +383,14 @@ class LightweightThreatDetector:
                 max_proba = max(proba)
 
                 if max_proba > 0.7:  # Umbral de confianza
-                    threats.append({
-                        "type": "classification",
-                        "model": "random_forest",
-                        "probability": float(max_proba),
-                        "severity": "high" if max_proba > 0.9 else "medium"
-                    })
+                    threats.append(
+                        {
+                            "type": "classification",
+                            "model": "random_forest",
+                            "probability": float(max_proba),
+                            "severity": "high" if max_proba > 0.9 else "medium",
+                        }
+                    )
             except:
                 pass
 
@@ -391,12 +401,14 @@ class LightweightThreatDetector:
                 max_proba = max(proba)
 
                 if max_proba > 0.8:
-                    threats.append({
-                        "type": "ml_classification",
-                        "model": "xgboost",
-                        "probability": float(max_proba),
-                        "severity": "high"
-                    })
+                    threats.append(
+                        {
+                            "type": "ml_classification",
+                            "model": "xgboost",
+                            "probability": float(max_proba),
+                            "severity": "high",
+                        }
+                    )
             except:
                 pass
 
@@ -407,13 +419,15 @@ class LightweightThreatDetector:
                 distance = self.models["kmeans"].transform(feature_array)[0][cluster]
 
                 if distance > 2.0:  # Lejos del centro del cluster
-                    threats.append({
-                        "type": "outlier",
-                        "model": "kmeans",
-                        "distance": float(distance),
-                        "cluster": int(cluster),
-                        "severity": "low"
-                    })
+                    threats.append(
+                        {
+                            "type": "outlier",
+                            "model": "kmeans",
+                            "distance": float(distance),
+                            "cluster": int(cluster),
+                            "severity": "low",
+                        }
+                    )
             except:
                 pass
 
@@ -443,20 +457,23 @@ class LightweightThreatDetector:
         """Manejar detección de amenazas"""
         for threat in threats:
             print(
-                f"🚨 AMENAZA: {threat['type']} ({threat['model']}) - {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}")
+                f"🚨 AMENAZA: {threat['type']} ({threat['model']}) - {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}"
+            )
 
     def incremental_training(self):
         """Entrenamiento incremental con ventana deslizante"""
         if len(self.sliding_window) < 1000:
             return
 
-        print(f"🔄 Reentrenamiento incremental con {len(self.sliding_window)} muestras...")
+        print(
+            f"🔄 Reentrenamiento incremental con {len(self.sliding_window)} muestras..."
+        )
 
         # Convertir a DataFrame
         df = pd.DataFrame(list(self.sliding_window))
 
         # Preparar datos
-        X = df.drop(['timestamp'], axis=1).values
+        X = df.drop(["timestamp"], axis=1).values
 
         # Generar etiquetas simples (para demo)
         y = self._generate_simple_labels(df)
@@ -469,9 +486,13 @@ class LightweightThreatDetector:
         labels = []
         for _, row in df.iterrows():
             # Heurística simple para etiquetado
-            if (row.get('port_category', 0) == 6 or  # High ports
-                    row.get('packet_size', 0) > 8000 or  # Large packets
-                    (row.get('hour', 12) < 6 or row.get('hour', 12) > 22)):  # Unusual hours
+            if (
+                row.get("port_category", 0) == 6
+                or row.get("packet_size", 0) > 8000  # High ports
+                or (  # Large packets
+                    row.get("hour", 12) < 6 or row.get("hour", 12) > 22
+                )
+            ):  # Unusual hours
                 labels.append(1)  # Suspicious
             else:
                 labels.append(0)  # Normal
@@ -496,9 +517,10 @@ class LightweightThreatDetector:
                     event_batch.append(event)
 
                     # Procesar en lotes para eficiencia
-                    if (len(event_batch) >= self.cpu_config["batch_size"] or
-                            time.time() - last_batch_process > 5):  # Máximo 5 segundos
-
+                    if (
+                        len(event_batch) >= self.cpu_config["batch_size"]
+                        or time.time() - last_batch_process > 5
+                    ):  # Máximo 5 segundos
                         self.process_event_batch(event_batch)
                         event_batch = []
                         last_batch_process = time.time()
