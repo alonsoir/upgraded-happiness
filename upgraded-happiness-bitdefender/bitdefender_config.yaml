@@ -54,7 +54,7 @@ hybrid_ml:
 
 dashboard:
   enabled: true
-  port: 8765
+  port: 8766  # 🔧 CORREGIDO: era 8765, ahora coincide con el script
   host: "localhost"
 
 system:
@@ -71,7 +71,7 @@ detection_info:
   detected_paths: 7
   detected_processes: 9  # BitDefender específicos
   zmq_port: 5555
-  dashboard_port: 8765
+  dashboard_port: 8766  # 🔧 CORREGIDO: era 8765
 
 development:
   simulate_bitdefender: false

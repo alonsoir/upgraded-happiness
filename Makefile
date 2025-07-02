@@ -14,7 +14,9 @@ ACTIVATE = source $(VENV_BIN)/activate
 ORCHESTRATOR = system_orchestrator.py
 ML_DETECTOR = lightweight_ml_detector.py
 PROMISCUOUS_AGENT = promiscuous_agent.py
+BROKER = scripts/smart_broker.py
 FIX_MODULE = fix_module.py
+DASHBOARD = dashboard_server_with_real_data.py
 
 # Test directory
 TEST_DIR = tests_consolidated
@@ -28,7 +30,7 @@ PURPLE = \033[0;35m
 CYAN = \033[0;36m
 NC = \033[0m # No Color
 
-.PHONY: all help setup install install-dev install-all test test-cov format lint security check clean verify run run-daemon run-orchestrator run-detector run-agent fix backup dev status logs docs profile benchmark memory emergency-fix stop qt qr qv qs reinstall
+.PHONY: all help setup install install-dev install-all install-dashboard test test-cov format lint security check clean verify run run-daemon run-orchestrator run-broker run-detector run-agent run-dashboard run-all fix-deps setup-sudo setup-production backup dev status monitor monitor-live test-traffic logs docs profile benchmark memory emergency-fix stop qt qr qv qs qm qd quick-start reinstall
 
 # Default target
 all: setup install-all verify test
@@ -43,6 +45,7 @@ help:
 	@echo "  make install        - Install production dependencies"
 	@echo "  make install-dev    - Install development dependencies"
 	@echo "  make install-all    - Install all dependencies (prod + dev)"
+	@echo "  make install-dashboard - Install dashboard web dependencies"
 	@echo "  make clean          - Clean virtual environment"
 	@echo "  make reinstall      - Clean and reinstall everything"
 	@echo ""
@@ -61,9 +64,18 @@ help:
 	@echo "$(YELLOW)Platform Execution:$(NC)"
 	@echo "  make run            - Start platform (Interactive mode)"
 	@echo "  make run-daemon     - Start platform (Daemon mode)"
+	@echo "  make run-dashboard  - Start web dashboard (port 8766)"
+	@echo "  make run-all        - Start platform + dashboard (RECOMMENDED)"
+	@echo "  make quick-start    - Quick start with proper initialization order"
 	@echo "  make run-orchestrator - Start system orchestrator only"
+	@echo "  make run-broker     - Start ZeroMQ broker only"
 	@echo "  make run-detector   - Start ML detector only"
 	@echo "  make run-agent      - Start promiscuous agent only"
+	@echo ""
+	@echo "$(YELLOW)Web Dashboard:$(NC)"
+	@echo "  make qd             - Quick dashboard (port 8766)"
+	@echo "  make dashboard-only - Dashboard only (for testing)"
+	@echo "  make dashboard-debug - Dashboard with debug output"
 	@echo ""
 	@echo "$(YELLOW)Utilities:$(NC)"
 	@echo "  make backup         - Create project backup"
@@ -76,6 +88,17 @@ help:
 	@echo "  make profile        - Run performance profiling"
 	@echo "  make benchmark      - Run performance benchmarks"
 	@echo "  make help           - Show this help message"
+	@echo ""
+	@echo "$(YELLOW)Quick Commands:$(NC)"
+	@echo "  make qt             - Quick test"
+	@echo "  make qr             - Quick run (daemon mode)"
+	@echo "  make qv             - Quick verify"
+	@echo "  make qs             - Quick status"
+	@echo "  make qm             - Quick monitor"
+	@echo "  make qd             - Quick dashboard"
+	@echo ""
+	@echo "$(CYAN)🌐 Complete Workflow (RECOMMENDED):$(NC)"
+	@echo "  make run-all        - Start everything: platform + web dashboard"
 
 # Setup virtual environment
 setup:
@@ -103,8 +126,14 @@ install-dev: install
 	@$(ACTIVATE) && $(PIP_VENV) install -r requirements-dev.txt
 	@echo "$(GREEN)✅ Development dependencies installed$(NC)"
 
-# Install all dependencies (prod + dev)
-install-all: install-dev
+# Install dashboard dependencies
+install-dashboard: setup
+	@echo "$(BLUE)🌐 Installing dashboard web dependencies...$(NC)"
+	@$(ACTIVATE) && $(PIP_VENV) install aiohttp aiofiles pyyaml websockets
+	@echo "$(GREEN)✅ Dashboard dependencies installed$(NC)"
+
+# Install all dependencies (prod + dev + dashboard)
+install-all: install-dev install-dashboard
 	@echo "$(GREEN)✅ All dependencies installed$(NC)"
 
 # Verify system integrity
@@ -189,14 +218,51 @@ run: setup install verify
 run-daemon: setup install verify
 	@echo "$(GREEN)🚀 Starting Upgraded Happiness Platform (Daemon Mode)...$(NC)"
 	@echo "$(CYAN)========================================$(NC)"
+	@echo "$(PURPLE)🔌 ZeroMQ Broker$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER) &
+	@sleep 2
 	@echo "$(PURPLE)🤖 ML Detector$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) &
 	@sleep 2
 	@echo "$(PURPLE)🕵️  Promiscuous Agent$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(PROMISCUOUS_AGENT) &
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) &
 	@sleep 2
 	@echo "$(GREEN)✅ All components started in daemon mode$(NC)"
 	@echo "$(YELLOW)💡 Use 'make stop' to stop all components$(NC)"
+
+# Run web dashboard
+run-dashboard: setup install-dashboard
+	@echo "$(BLUE)🌐 Starting Web Dashboard...$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@echo "$(PURPLE)📱 Dashboard URL: http://localhost:8766$(NC)"
+	@echo "$(PURPLE)🔌 WebSocket: ws://localhost:8766/ws$(NC)"
+	@echo "$(YELLOW)⚠️  Make sure the platform is running first!$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD)
+
+# Run everything: platform + dashboard (RECOMMENDED)
+run-all: setup install-all verify
+	@echo "$(GREEN)🚀 Starting COMPLETE Platform + Dashboard...$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@echo "$(PURPLE)🔌 Starting ZeroMQ Broker...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER) &
+	@sleep 3
+	@echo "$(PURPLE)🤖 Starting ML Detector...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) &
+	@sleep 3
+	@echo "$(PURPLE)🕵️  Starting Promiscuous Agent...$(NC)"
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) &
+	@sleep 3
+	@echo "$(PURPLE)🌐 Starting Web Dashboard...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) &
+	@sleep 2
+	@echo ""
+	@echo "$(GREEN)✅ EVERYTHING STARTED!$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@echo "$(YELLOW)📱 Dashboard: http://localhost:8766$(NC)"
+	@echo "$(YELLOW)🔌 ZeroMQ Broker: tcp://localhost:5555$(NC)"
+	@echo "$(YELLOW)📊 Monitor: ./platform_monitor.sh$(NC)"
+	@echo ""
+	@echo "$(RED)⏹️  Use 'make stop' to stop everything$(NC)"
 
 # Run individual components
 run-orchestrator: setup install
@@ -209,7 +275,18 @@ run-detector: setup install
 
 run-agent: setup install
 	@echo "$(BLUE)🕵️  Starting Promiscuous Agent...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(PROMISCUOUS_AGENT)
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT)
+
+run-broker: setup install
+	@echo "$(BLUE)🔌 Starting ZeroMQ Broker...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER)
+
+# Dashboard utilities
+dashboard-only: run-dashboard
+
+dashboard-debug: setup install-dashboard
+	@echo "$(BLUE)🌐 Starting Dashboard with DEBUG output...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import logging; logging.basicConfig(level=logging.DEBUG)" && $(PYTHON_VENV) $(DASHBOARD)
 
 # Stop all running components
 stop:
@@ -217,16 +294,53 @@ stop:
 	@pkill -f "$(ORCHESTRATOR)" 2>/dev/null || echo "$(YELLOW)⚠️  Orchestrator not running$(NC)"
 	@pkill -f "$(ML_DETECTOR)" 2>/dev/null || echo "$(YELLOW)⚠️  ML Detector not running$(NC)"
 	@pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || echo "$(YELLOW)⚠️  Promiscuous Agent not running$(NC)"
+	@pkill -f "$(BROKER)" 2>/dev/null || echo "$(YELLOW)⚠️  Broker not running$(NC)"
+	@pkill -f "$(DASHBOARD)" 2>/dev/null || echo "$(YELLOW)⚠️  Dashboard not running$(NC)"
+	@sudo pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
 	@pkill -f "lightweight_ml_detector" 2>/dev/null || true
 	@pkill -f "promiscuous_agent" 2>/dev/null || true
 	@pkill -f "system_orchestrator" 2>/dev/null || true
+	@pkill -f "smart_broker" 2>/dev/null || true
+	@pkill -f "dashboard_server" 2>/dev/null || true
 	@echo "$(GREEN)✅ All components stopped$(NC)"
+
+# Enhanced monitoring
+monitor:
+	@if [ -f "platform_monitor.sh" ]; then \
+		chmod +x platform_monitor.sh; \
+		./platform_monitor.sh; \
+	else \
+		echo "$(RED)❌ platform_monitor.sh not found$(NC)"; \
+		echo "$(YELLOW)💡 Run basic monitoring instead...$(NC)"; \
+		make status; \
+	fi
+
+# Continuous monitoring
+monitor-live:
+	@if [ -f "platform_monitor.sh" ]; then \
+		chmod +x platform_monitor.sh; \
+		./platform_monitor.sh --continuous; \
+	else \
+		echo "$(RED)❌ platform_monitor.sh not found$(NC)"; \
+		echo "$(YELLOW)💡 Use 'watch make status' instead$(NC)"; \
+	fi
+
+# Generate test traffic
+test-traffic:
+	@if [ -f "platform_monitor.sh" ]; then \
+		chmod +x platform_monitor.sh; \
+		./platform_monitor.sh --test-traffic; \
+	else \
+		echo "$(YELLOW)⚠️  Generating basic test traffic...$(NC)"; \
+		curl -s https://httpbin.org/get > /dev/null 2>&1 && echo "$(GREEN)✅ HTTP test completed$(NC)"; \
+		ping -c 3 8.8.8.8 > /dev/null 2>&1 && echo "$(GREEN)✅ ICMP test completed$(NC)"; \
+	fi
 
 # Development mode
 dev: setup install verify test
 	@echo "$(GREEN)🚀 Development environment ready!$(NC)"
 	@echo "$(CYAN)Available development commands:$(NC)"
-	@echo "  make run            - Start platform"
+	@echo "  make run-all        - Start platform + dashboard"
 	@echo "  make test           - Run tests"
 	@echo "  make verify         - Verify system"
 
@@ -269,7 +383,7 @@ status:
 	fi
 	@echo ""
 	@echo "$(YELLOW)Core Files:$(NC)"
-	@for file in $(ORCHESTRATOR) $(ML_DETECTOR) $(PROMISCUOUS_AGENT) $(FIX_MODULE); do \
+	@for file in $(ORCHESTRATOR) $(BROKER) $(ML_DETECTOR) $(PROMISCUOUS_AGENT) $(FIX_MODULE) $(DASHBOARD); do \
 		if [ -f "$$file" ]; then \
 			echo "  ✅ $$file"; \
 		else \
@@ -279,8 +393,14 @@ status:
 	@echo ""
 	@echo "$(YELLOW)Running Processes:$(NC)"
 	@pgrep -f "$(ORCHESTRATOR)" >/dev/null && echo "  🎯 System Orchestrator: Running" || echo "  ⭕ System Orchestrator: Stopped"
+	@pgrep -f "$(BROKER)" >/dev/null && echo "  🔌 ZeroMQ Broker: Running" || echo "  ⭕ ZeroMQ Broker: Stopped"
 	@pgrep -f "$(ML_DETECTOR)" >/dev/null && echo "  🤖 ML Detector: Running" || echo "  ⭕ ML Detector: Stopped"
 	@pgrep -f "$(PROMISCUOUS_AGENT)" >/dev/null && echo "  🕵️  Promiscuous Agent: Running" || echo "  ⭕ Promiscuous Agent: Stopped"
+	@pgrep -f "$(DASHBOARD)" >/dev/null && echo "  🌐 Web Dashboard: Running (http://localhost:8766)" || echo "  ⭕ Web Dashboard: Stopped"
+	@echo ""
+	@echo "$(YELLOW)Network Ports:$(NC)"
+	@lsof -i :5555 >/dev/null 2>&1 && echo "  🔌 ZeroMQ (5555): LISTENING" || echo "  ⭕ ZeroMQ (5555): NOT LISTENING"
+	@lsof -i :8766 >/dev/null 2>&1 && echo "  🌐 Dashboard (8766): LISTENING" || echo "  ⭕ Dashboard (8766): NOT LISTENING"
 
 # Show recent logs (if log files exist)
 logs:
@@ -298,6 +418,21 @@ qt: test
 qr: run-daemon
 qv: verify
 qs: status
+qm: monitor
+qd: run-dashboard
+
+# Quick start with proper order (reproduces manual setup)
+quick-start: setup install verify
+	@echo "$(GREEN)🚀 Quick Start - Proper Order Initialization$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER) &
+	@sleep 3
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) &
+	@sleep 3
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) &
+	@sleep 2
+	@echo "$(GREEN)✅ Platform started with proper initialization order$(NC)"
+	@./platform_monitor.sh 2>/dev/null || make status
 
 # Emergency recovery
 emergency-fix: clean setup install-all fix verify
