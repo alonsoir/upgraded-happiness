@@ -1,0 +1,204 @@
+Estoy notando que el dashboard está inestable, se muere por alguna razón, veo errores 400, no se si se debe
+por las peticiones que le llegan desde las colas zeromq, pero tampoco parece que se aprecie que se estén actualizando
+los eventos que tiene que estar capturando en tiempo real mi BitDefender.
+
+Vale, lo he arrancado, veo que el dashboard seguía vivo, pero se puede apreciar que algo extraño sucede por que se ven muchos 400.
+
+En otra pestaña, mientras estaba ejecutando el dash:
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+
+└➤ # Ver qué está enviando tráfico malformado al puerto 8766
+
+sudo netstat -tuln | grep 8766
+
+# Verificar procesos que puedan estar haciendo requests malformados
+
+ps aux | grep -E "(curl|wget|http)"
+
+Password:
+
+aironman          1083   0.0  0.1 68078424  31020   ??  S     8:05AM   0:00.10 /Applications/Spotify.app/Contents/Frameworks/Spotify Helper.app/Contents/MacOS/Spotify Helper --monitor-self-annotation=ptype=crashpad-handler --type=crashpad-handler --max-uploads=5 --max-db-size=20 --max-db-age=5 --database=/Users/aironman/Library/Caches/com.spotify.client --url=https://crashdump.spotify.com:443/ --annotation=platform=macos --annotation=product=spotify --annotation=version=1.2.66.447 --handshake-fd=6
+
+aironman         21606   0.0  0.0 34252116    816 s003  S+   12:51PM   0:00.00 grep -E (curl|wget|http)
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+
+└➤
+
+En otra pestaña:
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+
+└➤ # Usar el script sincronizado solo para dashboard
+
+./start-scada-platform-with-dashboard-sync.sh --dashboard-only
+
+[2025-07-03 12:51:39] Iniciando solo el dashboard sincronizado...
+
+[2025-07-03 12:51:39] 📖 Leyendo configuración desde upgraded-happiness-bitdefender/bitdefender_config.yaml...
+
+[SUCCESS 2025-07-03 12:51:39] Configuración YAML cargada correctamente
+
+[2025-07-03 12:51:39]   • Dashboard: localhost:8766
+
+[2025-07-03 12:51:39]   • ZeroMQ Broker: 5555
+
+[2025-07-03 12:51:39]   • ZeroMQ Dashboard: 5556
+
+[2025-07-03 12:51:39]   • BitDefender: habilitado
+
+[2025-07-03 12:51:39] 🔍 Verificando dependencias del dashboard...
+
+[SUCCESS 2025-07-03 12:51:40] Dependencias del dashboard verificadas ✓
+
+[2025-07-03 12:51:40] 🔍 Detectando archivos de dashboard existentes...
+
+[SUCCESS 2025-07-03 12:51:40] ✅ Dashboard encontrado: dashboard_server_with_real_data.py
+
+[WARNING 2025-07-03 12:51:40] ⚠️ Dashboard define puerto 8765, configuración YAML usa 8766
+
+[2025-07-03 12:51:40] Se usará puerto de configuración YAML: 8766
+
+[2025-07-03 12:51:40] 🚀 Iniciando dashboard web sincronizado...
+
+[WARNING 2025-07-03 12:51:40] Puerto 8766 ya está en uso
+
+[2025-07-03 12:51:40] Intentando parar proceso en puerto 8766...
+
+[2025-07-03 12:51:42] Configuración del dashboard:
+
+[2025-07-03 12:51:42]   • Archivo: dashboard_server_with_real_data.py
+
+[2025-07-03 12:51:42]   • Host: localhost
+
+[2025-07-03 12:51:42]   • Puerto: 8766
+
+[2025-07-03 12:51:42]   • ZeroMQ Broker: 5555
+
+[2025-07-03 12:51:42] Iniciando dashboard con Python...
+
+Traceback (most recent call last):
+
+  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 448, in <module>
+
+    asyncio.run(main())
+
+    ~~~~~~~~~~~^^^^^^^^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+
+    return runner.run(main)
+
+           ~~~~~~~~~~^^^^^^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+
+    return self._loop.run_until_complete(task)
+
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+
+    return future.result()
+
+           ~~~~~~~~~~~~~^^
+
+  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 427, in main
+
+    runner = await server.start_server(8766)
+
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 417, in start_server
+
+    await site.start()
+
+  File "/Users/aironman/git/upgraded-happiness/upgraded_happiness_venv/lib/python3.13/site-packages/aiohttp/web_runner.py", line 121, in start
+
+    self._server = await loop.create_server(
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    ...<7 lines>...
+
+    )
+
+    ^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 1622, in create_server
+
+    raise OSError(err.errno, msg) from None
+
+OSError: [Errno 48] error while attempting to bind on address ('127.0.0.1', 8766): [errno 48] address already in use
+
+[ERROR 2025-07-03 12:51:47] ❌ El dashboard no se pudo iniciar
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+
+└➤
+
+En otra pestaña:
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+
+└➤ python3 dashboard_server_with_real_data.py
+
+Traceback (most recent call last):
+
+  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 448, in <module>
+
+    asyncio.run(main())
+
+    ~~~~~~~~~~~^^^^^^^^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
+
+    return runner.run(main)
+
+           ~~~~~~~~~~^^^^^^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
+
+    return self._loop.run_until_complete(task)
+
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+
+    return future.result()
+
+           ~~~~~~~~~~~~~^^
+
+  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 427, in main
+
+    runner = await server.start_server(8766)
+
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 417, in start_server
+
+    await site.start()
+
+  File "/Users/aironman/git/upgraded-happiness/upgraded_happiness_venv/lib/python3.13/site-packages/aiohttp/web_runner.py", line 121, in start
+
+    self._server = await loop.create_server(
+
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    ...<7 lines>...
+
+    )
+
+    ^
+
+  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 1622, in create_server
+
+    raise OSError(err.errno, msg) from None
+
+OSError: [Errno 48] error while attempting to bind on address ('::1', 8766, 0, 0): [errno 48] address already in use
+
+(upgraded_happiness_venv) ┌<▪> ~/g/upgraded-happiness
+
+└➤
+
