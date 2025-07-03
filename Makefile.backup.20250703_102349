@@ -289,7 +289,7 @@ dashboard-debug: setup install-dashboard
 	@$(ACTIVATE) && $(PYTHON_VENV) -c "import logging; logging.basicConfig(level=logging.DEBUG)" && $(PYTHON_VENV) $(DASHBOARD)
 
 # Stop all running components
-stop-original:
+stop:
 	@echo "$(YELLOW)🛑 Stopping all platform components...$(NC)"
 	@pkill -f "$(ORCHESTRATOR)" 2>/dev/null || echo "$(YELLOW)⚠️  Orchestrator not running$(NC)"
 	@pkill -f "$(ML_DETECTOR)" 2>/dev/null || echo "$(YELLOW)⚠️  ML Detector not running$(NC)"
@@ -437,98 +437,3 @@ quick-start: setup install verify
 # Emergency recovery
 emergency-fix: clean setup install-all fix verify
 	@echo "$(GREEN)🚑 Emergency recovery completed!$(NC)"
-# =============================================================================
-# NUCLEAR STOP INTEGRATION - Auto-generated
-# =============================================================================
-# Sistema de parada efectivo que realmente funciona con procesos root
-# Integrado automáticamente por integrate-nuclear-stop.sh
-# =============================================================================
-
-# Variables nuclear stop
-NUCLEAR_STOP_SCRIPT := nuclear-stop.sh
-
-# Setup nuclear stop
-.PHONY: setup-nuclear-stop
-setup-nuclear-stop:
-	@if [ ! -f $(NUCLEAR_STOP_SCRIPT) ]; then \
-		echo "❌ $(NUCLEAR_STOP_SCRIPT) requerido para parada efectiva"; \
-		exit 1; \
-	fi
-	@chmod +x $(NUCLEAR_STOP_SCRIPT)
-
-# NUEVA regla stop principal (nuclear)
-.PHONY: stop
-stop: setup-nuclear-stop
-	@echo "🛑 Ejecutando parada nuclear completa..."
-	@./$(NUCLEAR_STOP_SCRIPT)
-
-# Stop de emergencia (máximo nivel)
-.PHONY: emergency-stop
-emergency-stop:
-	@echo "🚨 EMERGENCY STOP - Máxima agresividad"
-	@sudo pkill -9 -f "python.*promiscuous" 2>/dev/null || true
-	@sudo pkill -9 -f "python.*broker" 2>/dev/null || true
-	@sudo pkill -9 -f "python.*detector" 2>/dev/null || true
-	@sudo pkill -9 -f "uvicorn" 2>/dev/null || true
-	@sudo lsof -ti :5555,5556,8766,8080 | xargs sudo kill -9 2>/dev/null || true
-	@sudo rm -f *.pid /tmp/*scada* /tmp/*broker* /tmp/*zmq* 2>/dev/null || true
-	@echo "💀 Emergency stop completed"
-
-# Verificar parada completa
-.PHONY: verify-stop
-verify-stop:
-	@echo "🔍 Verificando estado de parada..."
-	@echo "Procesos SCADA activos:"
-	@ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn)" | grep -v grep || echo "✅ Sin procesos SCADA activos"
-	@echo "Puertos SCADA ocupados:"
-	@lsof -i :5555,5556,8766,8080 2>/dev/null || echo "✅ Todos los puertos SCADA libres"
-
-# Status mejorado
-.PHONY: status-detailed
-status-detailed:
-	@echo "📊 Estado detallado del sistema..."
-	@echo "=== PROCESOS ==="
-	@ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn)" | grep -v grep || echo "Sin procesos SCADA"
-	@echo "=== PUERTOS ==="
-	@for port in 5555 5556 8766 8080; do \
-		echo "Puerto $$port:"; \
-		lsof -i :$$port 2>/dev/null || echo "  Libre ✅"; \
-	done
-
-# Reinicio nuclear completo
-.PHONY: restart-nuclear
-restart-nuclear: stop
-	@echo "🔄 Esperando estabilización..."
-	@sleep 3
-	@echo "🚀 Iniciando sistema limpio..."
-	$(MAKE) quick-start
-
-# Ciclo de mantenimiento completo
-.PHONY: maintenance-cycle
-maintenance-cycle:
-	@echo "🔧 Ejecutando ciclo de mantenimiento completo..."
-	$(MAKE) stop
-	$(MAKE) verify-stop
-	$(MAKE) fix-deps 2>/dev/null || true
-	$(MAKE) quick-start
-	@sleep 8
-	$(MAKE) status-detailed
-
-# Help nuclear actualizado
-.PHONY: help-nuclear
-help-nuclear:
-	@echo "🛑 COMANDOS DE PARADA NUCLEAR:"
-	@echo "  stop              - Parada nuclear completa (NUEVO, RECOMENDADO)"
-	@echo "  stop-original     - Método original (puede fallar con procesos root)"
-	@echo "  emergency-stop    - Parada de emergencia máxima"
-	@echo "  verify-stop       - Verificar parada completa"
-	@echo ""
-	@echo "🔄 REINICIO MEJORADO:"
-	@echo "  restart-nuclear   - Parada nuclear + inicio limpio"
-	@echo "  maintenance-cycle - Mantenimiento completo"
-	@echo ""
-	@echo "📊 MONITOREO:"
-	@echo "  status-detailed   - Estado completo del sistema"
-	@echo ""
-	@echo "💡 NOTA: 'make stop' ahora usa parada nuclear efectiva"
-
