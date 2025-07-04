@@ -139,4 +139,6 @@ dmypy.json
 
 *.tar.gz
 
+*.pid
+
 *.log
