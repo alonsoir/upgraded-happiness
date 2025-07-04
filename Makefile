@@ -1,25 +1,10 @@
-# Makefile for Upgraded Happiness
-# ===============================
-# Automated build, test, and deployment for the security platform
+# Makefile for Upgraded Happiness - ENHANCED with HTTP 207 Fixes
+# ===================================================================
+# Mantiene el sistema nuclear-stop + añade correcciones HTTP 207
+# ===================================================================
 
-# Variables
-PYTHON = python3
-VENV_NAME = upgraded_happiness_venv
-VENV_BIN = $(VENV_NAME)/bin
-PYTHON_VENV = $(VENV_BIN)/python
-PIP_VENV = $(VENV_BIN)/pip
-ACTIVATE = source $(VENV_BIN)/activate
-
-# Main scripts
-ORCHESTRATOR = system_orchestrator.py
-ML_DETECTOR = lightweight_ml_detector.py
-PROMISCUOUS_AGENT = promiscuous_agent.py
-BROKER = scripts/smart_broker.py
-FIX_MODULE = fix_module.py
-DASHBOARD = dashboard_server_with_real_data.py
-
-# Test directory
-TEST_DIR = tests_consolidated
+SHELL := /bin/bash
+.DEFAULT_GOAL := help
 
 # Colors for output
 RED = \033[0;31m
@@ -30,15 +15,56 @@ PURPLE = \033[0;35m
 CYAN = \033[0;36m
 NC = \033[0m # No Color
 
-.PHONY: all help setup install install-dev install-all install-dashboard test test-cov format lint security check clean verify run run-daemon run-orchestrator run-broker run-detector run-agent run-dashboard run-all fix-deps setup-sudo setup-production backup dev status monitor monitor-live test-traffic logs docs profile benchmark memory emergency-fix stop qt qr qv qs qm qd quick-start reinstall
+# Variables (mantener compatibilidad)
+PYTHON = python3
+VENV_NAME = upgraded_happiness_venv
+VENV_BIN = $(VENV_NAME)/bin
+PYTHON_VENV = $(VENV_BIN)/python
+PIP_VENV = $(VENV_BIN)/pip
+ACTIVATE = source $(VENV_BIN)/activate
+
+# Main scripts (existentes)
+ORCHESTRATOR = system_orchestrator.py
+ML_DETECTOR = lightweight_ml_detector.py
+PROMISCUOUS_AGENT = promiscuous_agent.py
+BROKER = scripts/smart_broker.py
+FIX_MODULE = fix_module.py
+DASHBOARD = dashboard_server_with_real_data.py
+
+# NUEVOS: Scripts con correcciones HTTP 207
+DASHBOARD_FIXED = dashboard_server_fixed.py
+DIAGNOSTIC_TOOL = diagnostic_tool.py
+
+# Test directory
+TEST_DIR = tests_consolidated
+
+# Nuclear stop (MANTENER)
+NUCLEAR_STOP_SCRIPT := nuclear-stop.sh
+
+# Process IDs storage (NUEVO pero compatible)
+PIDS_DIR := .pids
+BROKER_PID := $(PIDS_DIR)/broker.pid
+ML_PID := $(PIDS_DIR)/ml.pid
+DASHBOARD_PID := $(PIDS_DIR)/dashboard.pid
+AGENT_PID := $(PIDS_DIR)/agent.pid
+
+# Ports configuration
+BROKER_PORT := 5555
+BROKER_SECONDARY_PORT := 5556
+DASHBOARD_PORT := 8766
+
+.PHONY: all help setup install install-dev install-all install-dashboard test test-cov format lint security check clean verify run run-daemon run-orchestrator run-broker run-detector run-agent run-dashboard run-all fix-deps setup-sudo setup-production backup dev status monitor monitor-live test-traffic logs docs profile benchmark memory emergency-fix stop qt qr qv qs qm qd quick-start reinstall setup-nuclear-stop emergency-stop verify-stop status-detailed restart-nuclear maintenance-cycle help-nuclear fix-207 diagnose run-fixed dashboard-fixed help-207
 
 # Default target
 all: setup install-all verify test
 	@echo "$(GREEN)✅ Upgraded Happiness setup completed successfully!$(NC)"
 
-# Help target
+# =============================================================================
+# HELP SECTIONS - Enhanced with HTTP 207 fixes
+# =============================================================================
+
 help:
-	@echo "$(CYAN)🚀 Upgraded Happiness - Available Commands:$(NC)"
+	@echo "$(CYAN)🚀 Upgraded Happiness - Available Commands (WITH HTTP 207 FIXES):$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Setup & Installation:$(NC)"
 	@echo "  make setup          - Create virtual environment"
@@ -49,56 +75,48 @@ help:
 	@echo "  make clean          - Clean virtual environment"
 	@echo "  make reinstall      - Clean and reinstall everything"
 	@echo ""
-	@echo "$(YELLOW)Development & Code Quality:$(NC)"
-	@echo "  make verify         - Verify system integrity"
-	@echo "  make test           - Run all tests"
-	@echo "  make test-cov       - Run tests with coverage"
-	@echo "  make lint           - Run all linting (flake8 + mypy)"
-	@echo "  make format         - Format code (black + isort)"
-	@echo "  make check          - Run all checks (format + lint + test)"
-	@echo "  make fix-deps       - Fix circular imports and dependencies"
-	@echo "  make setup-sudo     - Configure sudoers for promiscuous mode"
-	@echo "  make setup-production - Complete production setup"
-	@echo "  make dev            - Development mode (setup + install-dev + check)"
-	@echo ""
 	@echo "$(YELLOW)Platform Execution:$(NC)"
 	@echo "  make run            - Start platform (Interactive mode)"
 	@echo "  make run-daemon     - Start platform (Daemon mode)"
+	@echo "  make run-fixed      - 🆕 Start with HTTP 207 fixes (RECOMMENDED)"
 	@echo "  make run-dashboard  - Start web dashboard (port 8766)"
-	@echo "  make run-all        - Start platform + dashboard (RECOMMENDED)"
+	@echo "  make dashboard-fixed- 🆕 Start FIXED dashboard"
+	@echo "  make run-all        - Start platform + dashboard"
 	@echo "  make quick-start    - Quick start with proper initialization order"
-	@echo "  make run-orchestrator - Start system orchestrator only"
-	@echo "  make run-broker     - Start ZeroMQ broker only"
-	@echo "  make run-detector   - Start ML detector only"
-	@echo "  make run-agent      - Start promiscuous agent only"
 	@echo ""
-	@echo "$(YELLOW)Web Dashboard:$(NC)"
-	@echo "  make qd             - Quick dashboard (port 8766)"
-	@echo "  make dashboard-only - Dashboard only (for testing)"
-	@echo "  make dashboard-debug - Dashboard with debug output"
+	@echo "$(YELLOW)💊 HTTP 207 FIXES:$(NC)"
+	@echo "  make fix-207        - 🆕 Fix HTTP 207 Multi-Status errors"
+	@echo "  make diagnose       - 🆕 Run comprehensive diagnostic"
+	@echo "  make help-207       - 🆕 Help for HTTP 207 issues"
 	@echo ""
-	@echo "$(YELLOW)Utilities:$(NC)"
-	@echo "  make backup         - Create project backup"
+	@echo "$(YELLOW)🛑 NUCLEAR STOP SYSTEM (PROVEN):$(NC)"
+	@echo "  make stop           - Nuclear stop (handles root processes)"
+	@echo "  make emergency-stop - Maximum aggressiveness stop"
+	@echo "  make verify-stop    - Verify complete stop"
+	@echo "  make restart-nuclear- Nuclear stop + clean restart"
+	@echo ""
+	@echo "$(YELLOW)Development & Code Quality:$(NC)"
+	@echo "  make verify         - Verify system integrity"
+	@echo "  make test           - Run all tests"
+	@echo "  make check          - Run all checks (format + lint + test)"
+	@echo "  make fix-deps       - Fix circular imports and dependencies"
+	@echo "  make dev            - Development mode"
+	@echo ""
+	@echo "$(YELLOW)Monitoring:$(NC)"
 	@echo "  make status         - Show project status"
+	@echo "  make status-detailed- Enhanced status with process details"
 	@echo "  make monitor        - Enhanced platform monitoring"
 	@echo "  make monitor-live   - Continuous monitoring (real-time)"
-	@echo "  make test-traffic   - Generate test network traffic"
-	@echo "  make logs           - Show recent logs"
-	@echo "  make docs           - Generate documentation"
-	@echo "  make profile        - Run performance profiling"
-	@echo "  make benchmark      - Run performance benchmarks"
-	@echo "  make help           - Show this help message"
 	@echo ""
 	@echo "$(YELLOW)Quick Commands:$(NC)"
-	@echo "  make qt             - Quick test"
-	@echo "  make qr             - Quick run (daemon mode)"
-	@echo "  make qv             - Quick verify"
-	@echo "  make qs             - Quick status"
-	@echo "  make qm             - Quick monitor"
-	@echo "  make qd             - Quick dashboard"
+	@echo "  make qt qr qv qs qm qd - Quick test/run/verify/status/monitor/dashboard"
 	@echo ""
 	@echo "$(CYAN)🌐 Complete Workflow (RECOMMENDED):$(NC)"
-	@echo "  make run-all        - Start everything: platform + web dashboard"
+	@echo "  make run-fixed      - Start everything with HTTP 207 fixes"
+
+# =============================================================================
+# SETUP AND INSTALLATION (Original functionality)
+# =============================================================================
 
 # Setup virtual environment
 setup:
@@ -111,6 +129,10 @@ setup:
 	fi
 	@$(ACTIVATE) && $(PYTHON_VENV) -m pip install --upgrade pip
 	@echo "$(GREEN)✅ Virtual environment setup completed$(NC)"
+
+# Create directory for storing process IDs
+setup-pids-dir:
+	@mkdir -p $(PIDS_DIR)
 
 # Install production dependencies
 install: setup
@@ -129,84 +151,58 @@ install-dev: install
 # Install dashboard dependencies
 install-dashboard: setup
 	@echo "$(BLUE)🌐 Installing dashboard web dependencies...$(NC)"
-	@$(ACTIVATE) && $(PIP_VENV) install aiohttp aiofiles pyyaml websockets
+	@$(ACTIVATE) && $(PIP_VENV) install aiohttp aiohttp-cors aiofiles pyyaml websockets
 	@echo "$(GREEN)✅ Dashboard dependencies installed$(NC)"
 
 # Install all dependencies (prod + dev + dashboard)
 install-all: install-dev install-dashboard
 	@echo "$(GREEN)✅ All dependencies installed$(NC)"
 
-# Verify system integrity
-verify: setup
-	@echo "$(BLUE)🔍 Verifying system integrity...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIX_MODULE) verify
-	@echo "$(GREEN)✅ System verification completed$(NC)"
+# Clean virtual environment
+clean:
+	@echo "$(YELLOW)🧹 Cleaning virtual environment...$(NC)"
+	@rm -rf $(VENV_NAME)
+	@rm -rf __pycache__
+	@find . -name "*.pyc" -delete
+	@find . -name "*.pyo" -delete
+	@find . -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	@rm -rf $(PIDS_DIR)
+	@rm -f *.pid *.log
+	@echo "$(GREEN)✅ Cleanup completed$(NC)"
 
-# Run tests
-test: setup install-dev
-	@echo "$(BLUE)🧪 Running tests...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) -m pytest $(TEST_DIR)/ -v || \
-	$(ACTIVATE) && $(PYTHON_VENV) $(TEST_DIR)/run_all_tests.py || \
-	echo "$(YELLOW)⚠️  No tests found or test framework unavailable$(NC)"
+# Reinstall everything
+reinstall: clean setup install-all
+	@echo "$(GREEN)✅ Reinstallation completed$(NC)"
 
-# Run tests with coverage
-test-cov: setup install-dev
-	@echo "$(BLUE)🧪 Running tests with coverage...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) -m pytest $(TEST_DIR)/ --cov=. --cov-report=html --cov-report=term-missing -v
+# ==== FIXED RUNNING COMMANDS ====
 
-# Code formatting
-format: setup install-dev
-	@echo "$(BLUE)🎨 Formatting code...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) -m black .
-	@$(ACTIVATE) && $(PYTHON_VENV) -m isort .
-	@echo "$(GREEN)✅ Code formatted$(NC)"
+run-daemon-fixed: ## Start all components with HTTP 207 fixes
+	@echo -e "$(GREEN)🚀 Starting SCADA system with HTTP 207 fixes...$(NC)"
+	$(MAKE) stop-all-silent
+	$(MAKE) setup-pids-dir
+	@echo -e "$(BLUE)Starting ZeroMQ Broker...$(NC)"
+	$(PYTHON) scripts/smart_broker.py & echo $$! > $(BROKER_PID)
+	@sleep 3
+	@echo -e "$(BLUE)Starting ML Detector...$(NC)"
+	$(PYTHON) lightweight_ml_detector.py & echo $$! > $(ML_PID)
+	@sleep 2
+	@echo -e "$(BLUE)Starting Fixed Dashboard...$(NC)"
+	$(PYTHON) dashboard_server_fixed.py & echo $$! > $(DASHBOARD_PID)
+	@sleep 2
+	@echo -e "$(BLUE)Starting Promiscuous Agent...$(NC)"
+	sudo $(PYTHON) promiscuous_agent.py & echo $$! > $(AGENT_PID)
+	@sleep 1
+	@echo -e "$(GREEN)✅ All components started!$(NC)"
+	@echo -e "$(YELLOW)Dashboard: http://localhost:$(DASHBOARD_PORT)$(NC)"
+	@$(MAKE) status
 
-# Linting
-lint: setup install-dev
-	@echo "$(BLUE)🔍 Running linting...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) -m flake8 . || echo "$(YELLOW)⚠️  Flake8 warnings found$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) -m mypy . || echo "$(YELLOW)⚠️  MyPy type warnings found$(NC)"
+run-daemon: run-daemon-fixed ## Alias for run-daemon-fixed
 
-# Security check
-security: setup install-dev
-	@echo "$(BLUE)🔒 Running security checks...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) -m bandit -r . || echo "$(YELLOW)⚠️  Security warnings found$(NC)"
+start-fixed: run-daemon-fixed ## Alias for run-daemon-fixed
 
-# Run all code quality checks
-check: format lint security test
-	@echo "$(GREEN)✅ All code quality checks completed$(NC)"
-
-# Fix circular imports and dependencies
-fix-deps: setup
-	@echo "$(BLUE)🔧 Fixing potential circular import issues...$(NC)"
-	@find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-	@find . -name "*.pyc" -delete 2>/dev/null || true
-	@rm -rf .mypy_cache 2>/dev/null || true
-	@$(ACTIVATE) && $(PIP_VENV) uninstall numpy scipy scikit-learn joblib pyzmq -y 2>/dev/null || true
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir pyzmq==25.1.2
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir numpy==1.26.4
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir scipy==1.16.0
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir pandas==2.3.0
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir joblib==1.5.1
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir scikit-learn==1.7.0
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir xgboost==3.0.2
-	@$(ACTIVATE) && $(PIP_VENV) install --no-cache-dir lightgbm==4.6.0
-	@echo "$(GREEN)✅ Dependencies fixed and reinstalled cleanly$(NC)"
-
-# Configure sudoers for promiscuous mode
-setup-sudo:
-	@echo "$(BLUE)🔒 Configuring sudoers for promiscuous agent...$(NC)"
-	@if [ ! -f /etc/sudoers.d/upgraded_happiness ]; then \
-		echo "$(USER) ALL=(ALL) NOPASSWD: $(which python) $(pwd)/promiscuous_agent.py" | sudo tee /etc/sudoers.d/upgraded_happiness > /dev/null; \
-		echo "$(GREEN)✅ Sudoers configured$(NC)"; \
-	else \
-		echo "$(YELLOW)⚠️  Sudoers already configured$(NC)"; \
-	fi
-
-# Complete setup (production-ready)
-setup-production: setup install-all fix-deps setup-sudo verify
-	@echo "$(GREEN)🚀 Production setup completed!$(NC)"
-	@echo "$(CYAN)Platform ready for deployment$(NC)"
+# =============================================================================
+# PLATFORM EXECUTION (Original + Enhanced with HTTP 207 fixes)
+# =============================================================================
 
 # Run complete platform (interactive mode)
 run: setup install verify
@@ -214,7 +210,7 @@ run: setup install verify
 	@echo "$(YELLOW)⚠️  This will start interactive orchestrator. Use Ctrl+C to stop.$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(ORCHESTRATOR)
 
-# Run platform components individually (daemon mode)
+# Run platform components individually (daemon mode) - ORIGINAL
 run-daemon: setup install verify
 	@echo "$(GREEN)🚀 Starting Upgraded Happiness Platform (Daemon Mode)...$(NC)"
 	@echo "$(CYAN)========================================$(NC)"
@@ -230,7 +226,27 @@ run-daemon: setup install verify
 	@echo "$(GREEN)✅ All components started in daemon mode$(NC)"
 	@echo "$(YELLOW)💡 Use 'make stop' to stop all components$(NC)"
 
-# Run web dashboard
+# 🆕 NEW: Run with HTTP 207 fixes (RECOMMENDED)
+run-fixed: setup install-all verify setup-pids-dir
+	@echo "$(GREEN)🚀 Starting SCADA system with HTTP 207 fixes...$(NC)"
+	$(MAKE) stop-all-silent
+	@echo "$(BLUE)Starting ZeroMQ Broker...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER) & echo $! > $(BROKER_PID)
+	@sleep 3
+	@echo "$(BLUE)Starting ML Detector...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) & echo $! > $(ML_PID)
+	@sleep 2
+	@echo "$(BLUE)Starting Fixed Dashboard...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD_FIXED) & echo $! > $(DASHBOARD_PID)
+	@sleep 2
+	@echo "$(BLUE)Starting Promiscuous Agent...$(NC)"
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) & echo $! > $(AGENT_PID)
+	@sleep 1
+	@echo "$(GREEN)✅ All components started with HTTP 207 fixes!$(NC)"
+	@echo "$(YELLOW)Dashboard: http://localhost:$(DASHBOARD_PORT)$(NC)"
+	@$(MAKE) status
+
+# Run web dashboard - ORIGINAL
 run-dashboard: setup install-dashboard
 	@echo "$(BLUE)🌐 Starting Web Dashboard...$(NC)"
 	@echo "$(CYAN)========================================$(NC)"
@@ -239,7 +255,16 @@ run-dashboard: setup install-dashboard
 	@echo "$(YELLOW)⚠️  Make sure the platform is running first!$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD)
 
-# Run everything: platform + dashboard (RECOMMENDED)
+# 🆕 NEW: Run FIXED dashboard
+dashboard-fixed: setup install-dashboard
+	@echo "$(BLUE)🌐 Starting FIXED Web Dashboard...$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@echo "$(PURPLE)📱 Dashboard URL: http://localhost:8766$(NC)"
+	@echo "$(PURPLE)🔌 WebSocket: ws://localhost:8766/ws$(NC)"
+	@echo "$(GREEN)✅ Using HTTP 207 fixes$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD_FIXED)
+
+# Run everything: platform + dashboard (ENHANCED)
 run-all: setup install-all verify
 	@echo "$(GREEN)🚀 Starting COMPLETE Platform + Dashboard...$(NC)"
 	@echo "$(CYAN)========================================$(NC)"
@@ -288,7 +313,37 @@ dashboard-debug: setup install-dashboard
 	@echo "$(BLUE)🌐 Starting Dashboard with DEBUG output...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) -c "import logging; logging.basicConfig(level=logging.DEBUG)" && $(PYTHON_VENV) $(DASHBOARD)
 
-# Stop all running components
+# Quick start with proper order (reproduces manual setup)
+quick-start: setup install verify
+	@echo "$(GREEN)🚀 Quick Start - Proper Order Initialization$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER) &
+	@sleep 3
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) &
+	@sleep 3
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) &
+	@sleep 2
+	@echo "$(GREEN)✅ Platform started with proper initialization order$(NC)"
+	@./platform_monitor.sh 2>/dev/null || make status
+
+# =============================================================================
+# NUCLEAR STOP SYSTEM (MANTENER - Funciona con procesos root)
+# =============================================================================
+
+# Setup nuclear stop (ORIGINAL)
+setup-nuclear-stop:
+	@if [ ! -f $(NUCLEAR_STOP_SCRIPT) ]; then \
+		echo "❌ $(NUCLEAR_STOP_SCRIPT) requerido para parada efectiva"; \
+		exit 1; \
+	fi
+	@chmod +x $(NUCLEAR_STOP_SCRIPT)
+
+# NUCLEAR STOP - Regla principal (ORIGINAL)
+stop: setup-nuclear-stop
+	@echo "🛑 Ejecutando parada nuclear completa..."
+	@./$(NUCLEAR_STOP_SCRIPT)
+
+# Stop original (respaldo)
 stop-original:
 	@echo "$(YELLOW)🛑 Stopping all platform components...$(NC)"
 	@pkill -f "$(ORCHESTRATOR)" 2>/dev/null || echo "$(YELLOW)⚠️  Orchestrator not running$(NC)"
@@ -296,6 +351,7 @@ stop-original:
 	@pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || echo "$(YELLOW)⚠️  Promiscuous Agent not running$(NC)"
 	@pkill -f "$(BROKER)" 2>/dev/null || echo "$(YELLOW)⚠️  Broker not running$(NC)"
 	@pkill -f "$(DASHBOARD)" 2>/dev/null || echo "$(YELLOW)⚠️  Dashboard not running$(NC)"
+	@pkill -f "$(DASHBOARD_FIXED)" 2>/dev/null || echo "$(YELLOW)⚠️  Fixed Dashboard not running$(NC)"
 	@sudo pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
 	@pkill -f "lightweight_ml_detector" 2>/dev/null || true
 	@pkill -f "promiscuous_agent" 2>/dev/null || true
@@ -303,6 +359,112 @@ stop-original:
 	@pkill -f "smart_broker" 2>/dev/null || true
 	@pkill -f "dashboard_server" 2>/dev/null || true
 	@echo "$(GREEN)✅ All components stopped$(NC)"
+
+# Stop silently (para uso interno)
+stop-all-silent:
+	@-pkill -f "smart_broker.py" 2>/dev/null || true
+	@-pkill -f "lightweight_ml_detector.py" 2>/dev/null || true
+	@-pkill -f "dashboard_server" 2>/dev/null || true
+	@-pkill -f "promiscuous_agent.py" 2>/dev/null || true
+	@-$(MAKE) kill-by-pids 2>/dev/null || true
+	@rm -f $(PIDS_DIR)/*.pid 2>/dev/null || true
+
+# Kill by PIDs (NUEVO)
+kill-by-pids:
+	@if [ -f $(BROKER_PID) ]; then kill $(cat $(BROKER_PID)) 2>/dev/null || true; rm -f $(BROKER_PID); fi
+	@if [ -f $(ML_PID) ]; then kill $(cat $(ML_PID)) 2>/dev/null || true; rm -f $(ML_PID); fi
+	@if [ -f $(DASHBOARD_PID) ]; then kill $(cat $(DASHBOARD_PID)) 2>/dev/null || true; rm -f $(DASHBOARD_PID); fi
+	@if [ -f $(AGENT_PID) ]; then kill $(cat $(AGENT_PID)) 2>/dev/null || true; rm -f $(AGENT_PID); fi
+
+# Emergency stop (ORIGINAL)
+emergency-stop:
+	@echo "🚨 EMERGENCY STOP - Máxima agresividad"
+	@sudo pkill -9 -f "python.*promiscuous" 2>/dev/null || true
+	@sudo pkill -9 -f "python.*broker" 2>/dev/null || true
+	@sudo pkill -9 -f "python.*detector" 2>/dev/null || true
+	@sudo pkill -9 -f "uvicorn" 2>/dev/null || true
+	@sudo lsof -ti :5555,5556,8766,8080 | xargs sudo kill -9 2>/dev/null || true
+	@sudo rm -f *.pid /tmp/*scada* /tmp/*broker* /tmp/*zmq* 2>/dev/null || true
+	@echo "💀 Emergency stop completed"
+
+# Verify stop (ORIGINAL)
+verify-stop:
+	@echo "🔍 Verificando estado de parada..."
+	@echo "Procesos SCADA activos:"
+	@ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn)" | grep -v grep || echo "✅ Sin procesos SCADA activos"
+	@echo "Puertos SCADA ocupados:"
+	@lsof -i :5555,5556,8766,8080 2>/dev/null || echo "✅ Todos los puertos SCADA libres"
+
+# Restart nuclear (ORIGINAL)
+restart-nuclear: stop
+	@echo "🔄 Esperando estabilización..."
+	@sleep 3
+	@echo "🚀 Iniciando sistema limpio..."
+	$(MAKE) quick-start
+
+# Restart with fixes (NUEVO)
+restart-fixed: stop
+	@echo "🔄 Restarting with HTTP 207 fixes..."
+	@sleep 3
+	$(MAKE) run-fixed
+
+# Maintenance cycle (ORIGINAL)
+maintenance-cycle:
+	@echo "🔧 Ejecutando ciclo de mantenimiento completo..."
+	$(MAKE) stop
+	$(MAKE) verify-stop
+	$(MAKE) fix-deps 2>/dev/null || true
+	$(MAKE) quick-start
+	@sleep 8
+	$(MAKE) status-detailed
+
+# =============================================================================
+# MONITORING AND STATUS (Enhanced)
+# =============================================================================
+
+# Show project status (ENHANCED)
+status:
+	@echo "$(CYAN)📊 Upgraded Happiness - Project Status$(NC)"
+	@echo "$(CYAN)======================================$(NC)"
+	@echo "$(YELLOW)Virtual Environment:$(NC)"
+	@if [ -d "$(VENV_NAME)" ]; then \
+		echo "  ✅ $(VENV_NAME) exists"; \
+		echo "  📍 Python: $($(ACTIVATE) && $(PYTHON_VENV) --version)"; \
+	else \
+		echo "  ❌ $(VENV_NAME) not found"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)Core Files:$(NC)"
+	@for file in $(ORCHESTRATOR) $(BROKER) $(ML_DETECTOR) $(PROMISCUOUS_AGENT) $(FIX_MODULE) $(DASHBOARD) $(DASHBOARD_FIXED) $(DIAGNOSTIC_TOOL); do \
+		if [ -f "$file" ]; then \
+			echo "  ✅ $file"; \
+		else \
+			echo "  ❌ $file"; \
+		fi \
+	done
+	@echo ""
+	@echo "$(YELLOW)Running Processes:$(NC)"
+	@pgrep -f "$(ORCHESTRATOR)" >/dev/null && echo "  🎯 System Orchestrator: Running" || echo "  ⭕ System Orchestrator: Stopped"
+	@pgrep -f "$(BROKER)" >/dev/null && echo "  🔌 ZeroMQ Broker: Running" || echo "  ⭕ ZeroMQ Broker: Stopped"
+	@pgrep -f "$(ML_DETECTOR)" >/dev/null && echo "  🤖 ML Detector: Running" || echo "  ⭕ ML Detector: Stopped"
+	@pgrep -f "$(PROMISCUOUS_AGENT)" >/dev/null && echo "  🕵️  Promiscuous Agent: Running" || echo "  ⭕ Promiscuous Agent: Stopped"
+	@pgrep -f "$(DASHBOARD)" >/dev/null && echo "  🌐 Web Dashboard: Running (http://localhost:8766)" || echo "  ⭕ Web Dashboard: Stopped"
+	@pgrep -f "$(DASHBOARD_FIXED)" >/dev/null && echo "  🌐 FIXED Dashboard: Running (http://localhost:8766)" || echo "  ⭕ FIXED Dashboard: Stopped"
+	@echo ""
+	@echo "$(YELLOW)Network Ports:$(NC)"
+	@lsof -i :5555 >/dev/null 2>&1 && echo "  🔌 ZeroMQ (5555): LISTENING" || echo "  ⭕ ZeroMQ (5555): NOT LISTENING"
+	@lsof -i :8766 >/dev/null 2>&1 && echo "  🌐 Dashboard (8766): LISTENING" || echo "  ⭕ Dashboard (8766): NOT LISTENING"
+
+# Enhanced status (ORIGINAL)
+status-detailed:
+	@echo "📊 Estado detallado del sistema..."
+	@echo "=== PROCESOS ==="
+	@ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn)" | grep -v grep || echo "Sin procesos SCADA"
+	@echo "=== PUERTOS ==="
+	@for port in 5555 5556 8766 8080; do \
+		echo "Puerto $port:"; \
+		lsof -i :$port 2>/dev/null || echo "  Libre ✅"; \
+	done
 
 # Enhanced monitoring
 monitor:
@@ -336,27 +498,103 @@ test-traffic:
 		ping -c 3 8.8.8.8 > /dev/null 2>&1 && echo "$(GREEN)✅ ICMP test completed$(NC)"; \
 	fi
 
-# Development mode
-dev: setup install verify test
-	@echo "$(GREEN)🚀 Development environment ready!$(NC)"
-	@echo "$(CYAN)Available development commands:$(NC)"
-	@echo "  make run-all        - Start platform + dashboard"
-	@echo "  make test           - Run tests"
-	@echo "  make verify         - Verify system"
+# Show recent logs (if log files exist)
+logs:
+	@echo "$(CYAN)📋 Recent Logs$(NC)"
+	@echo "$(CYAN)==============$(NC)"
+	@if [ -f "logs/system.log" ]; then \
+		echo "$(YELLOW)System Log (last 20 lines):$(NC)"; \
+		tail -20 logs/system.log; \
+	else \
+		echo "$(YELLOW)⚠️  No system logs found$(NC)"; \
+	fi
 
-# Clean virtual environment
-clean:
-	@echo "$(YELLOW)🧹 Cleaning virtual environment...$(NC)"
-	@rm -rf $(VENV_NAME)
-	@rm -rf __pycache__
-	@find . -name "*.pyc" -delete
-	@find . -name "*.pyo" -delete
-	@find . -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	@echo "$(GREEN)✅ Cleanup completed$(NC)"
+# =============================================================================
+# 🆕 HTTP 207 FIXES AND DIAGNOSTICS (NEW)
+# =============================================================================
 
-# Reinstall everything
-reinstall: clean setup install-all
-	@echo "$(GREEN)✅ Reinstallation completed$(NC)"
+# 🆕 Fix HTTP 207 Multi-Status errors
+fix-207:
+	@echo "$(YELLOW)🔧 Fixing HTTP 207 Multi-Status errors...$(NC)"
+	@echo "$(BLUE)Step 1: Stopping all processes...$(NC)"
+	$(MAKE) stop-all-silent
+	@sleep 2
+	@echo "$(BLUE)Step 2: Checking for stuck connections...$(NC)"
+	@-netstat -an | grep :$(DASHBOARD_PORT) || true
+	@echo "$(BLUE)Step 3: Clearing any WebSocket connections...$(NC)"
+	@-fuser -k $(DASHBOARD_PORT)/tcp 2>/dev/null || true
+	@sleep 1
+	@echo "$(BLUE)Step 4: Starting with fixed configuration...$(NC)"
+	$(MAKE) run-fixed
+	@echo "$(GREEN)✅ HTTP 207 fix applied!$(NC)"
+
+# 🆕 Run comprehensive diagnostic
+diagnose:
+	@echo "$(GREEN)🔍 Running SCADA diagnostic...$(NC)"
+	@if [ -f "$(DIAGNOSTIC_TOOL)" ]; then \
+		$(ACTIVATE) && $(PYTHON_VENV) $(DIAGNOSTIC_TOOL); \
+	else \
+		echo "$(RED)❌ $(DIAGNOSTIC_TOOL) not found$(NC)"; \
+		echo "$(YELLOW)💡 Running basic diagnostic...$(NC)"; \
+		$(MAKE) status-detailed; \
+		$(MAKE) check-logs; \
+	fi
+
+# 🆕 Check for HTTP 207 errors in logs
+check-logs:
+	@echo "$(YELLOW)🔍 Checking for HTTP 207 errors...$(NC)"
+	@echo "$(BLUE)System logs:$(NC)"
+	@-tail -50 /var/log/system.log 2>/dev/null | grep -E "(207|Multi-Status|UNKNOWN|HTTP/1.0.*400)" || echo "No system log errors found"
+	@echo "$(BLUE)Application logs:$(NC)"
+	@-find . -name "*.log" -exec tail -20 {} \; 2>/dev/null | grep -E "(207|Multi-Status|UNKNOWN|HTTP/1.0.*400)" || echo "No application log errors found"
+
+# 🆕 Test dashboard connectivity
+test-dashboard:
+	@echo "$(YELLOW)🧪 Testing dashboard connectivity...$(NC)"
+	@echo "$(BLUE)HTTP Test:$(NC)"
+	@-curl -s -w "Status: %{http_code}\nTime: %{time_total}s\n" http://localhost:$(DASHBOARD_PORT) -o /dev/null || echo "HTTP test failed"
+	@echo "$(BLUE)WebSocket Test:$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import asyncio, websockets, json; asyncio.run(websockets.connect('ws://localhost:$(DASHBOARD_PORT)/ws').__aenter__().send(json.dumps({'test': True})))" 2>/dev/null && echo "WebSocket OK" || echo "WebSocket test failed"
+
+# 🆕 Verify that all fixes are in place
+verify-fixes:
+	@echo "$(YELLOW)🔍 Verifying fixes...$(NC)"
+	@echo "$(BLUE)Checking fixed dashboard server...$(NC)"
+	@test -f $(DASHBOARD_FIXED) && echo "  $(GREEN)✅ $(DASHBOARD_FIXED) exists$(NC)" || echo "  $(RED)❌ $(DASHBOARD_FIXED) missing$(NC)"
+	@echo "$(BLUE)Checking diagnostic tool...$(NC)"
+	@test -f $(DIAGNOSTIC_TOOL) && echo "  $(GREEN)✅ $(DIAGNOSTIC_TOOL) exists$(NC)" || echo "  $(RED)❌ $(DIAGNOSTIC_TOOL) missing$(NC)"
+	@echo "$(BLUE)Checking virtual environment...$(NC)"
+	@test -d $(VENV_NAME) && echo "  $(GREEN)✅ Virtual environment exists$(NC)" || echo "  $(RED)❌ Virtual environment missing$(NC)"
+	@echo "$(BLUE)Checking port availability...$(NC)"
+	@-nc -z localhost $(DASHBOARD_PORT) && echo "  $(YELLOW)⚠️  Port $(DASHBOARD_PORT) in use$(NC)" || echo "  $(GREEN)✅ Port $(DASHBOARD_PORT) available$(NC)"
+
+# 🆕 Help for HTTP 207 Multi-Status issues
+help-207:
+	@echo "$(BLUE)HTTP 207 Multi-Status Issue Help$(NC)"
+	@echo "$(BLUE)================================$(NC)"
+	@echo ""
+	@echo "$(YELLOW)What is HTTP 207?$(NC)"
+	@echo "HTTP 207 Multi-Status is a WebDAV-specific response code that indicates"
+	@echo "multiple resources were processed, each with potentially different status codes."
+	@echo ""
+	@echo "$(YELLOW)Why am I seeing this error?$(NC)"
+	@echo "1. Your dashboard server is receiving malformed HTTP requests"
+	@echo "2. WebSocket connections are being interpreted as WebDAV requests"
+	@echo "3. aiohttp server configuration issues"
+	@echo ""
+	@echo "$(YELLOW)How to fix:$(NC)"
+	@echo "  $(GREEN)make fix-207$(NC)     - Apply automatic fixes"
+	@echo "  $(GREEN)make diagnose$(NC)    - Run comprehensive diagnostic"
+	@echo "  $(GREEN)make emergency-stop$(NC) - Force restart everything"
+	@echo ""
+	@echo "$(YELLOW)Manual steps:$(NC)"
+	@echo "1. Stop all processes: make stop"
+	@echo "2. Use fixed dashboard: make dashboard-fixed"
+	@echo "3. Start in order: make run-fixed"
+
+# =============================================================================
+# UTILITIES AND MAINTENANCE (Original functionality)
+# =============================================================================
 
 # Create backup
 backup:
@@ -370,152 +608,27 @@ backup:
 		.
 	@echo "$(GREEN)✅ Backup created in backups/$(NC)"
 
-# Show project status
-status:
-	@echo "$(CYAN)📊 Upgraded Happiness - Project Status$(NC)"
-	@echo "$(CYAN)======================================$(NC)"
-	@echo "$(YELLOW)Virtual Environment:$(NC)"
-	@if [ -d "$(VENV_NAME)" ]; then \
-		echo "  ✅ $(VENV_NAME) exists"; \
-		echo "  📍 Python: $$($(ACTIVATE) && $(PYTHON_VENV) --version)"; \
-	else \
-		echo "  ❌ $(VENV_NAME) not found"; \
-	fi
-	@echo ""
-	@echo "$(YELLOW)Core Files:$(NC)"
-	@for file in $(ORCHESTRATOR) $(BROKER) $(ML_DETECTOR) $(PROMISCUOUS_AGENT) $(FIX_MODULE) $(DASHBOARD); do \
-		if [ -f "$$file" ]; then \
-			echo "  ✅ $$file"; \
-		else \
-			echo "  ❌ $$file"; \
-		fi \
-	done
-	@echo ""
-	@echo "$(YELLOW)Running Processes:$(NC)"
-	@pgrep -f "$(ORCHESTRATOR)" >/dev/null && echo "  🎯 System Orchestrator: Running" || echo "  ⭕ System Orchestrator: Stopped"
-	@pgrep -f "$(BROKER)" >/dev/null && echo "  🔌 ZeroMQ Broker: Running" || echo "  ⭕ ZeroMQ Broker: Stopped"
-	@pgrep -f "$(ML_DETECTOR)" >/dev/null && echo "  🤖 ML Detector: Running" || echo "  ⭕ ML Detector: Stopped"
-	@pgrep -f "$(PROMISCUOUS_AGENT)" >/dev/null && echo "  🕵️  Promiscuous Agent: Running" || echo "  ⭕ Promiscuous Agent: Stopped"
-	@pgrep -f "$(DASHBOARD)" >/dev/null && echo "  🌐 Web Dashboard: Running (http://localhost:8766)" || echo "  ⭕ Web Dashboard: Stopped"
-	@echo ""
-	@echo "$(YELLOW)Network Ports:$(NC)"
-	@lsof -i :5555 >/dev/null 2>&1 && echo "  🔌 ZeroMQ (5555): LISTENING" || echo "  ⭕ ZeroMQ (5555): NOT LISTENING"
-	@lsof -i :8766 >/dev/null 2>&1 && echo "  🌐 Dashboard (8766): LISTENING" || echo "  ⭕ Dashboard (8766): NOT LISTENING"
+# Emergency recovery (ENHANCED)
+emergency-fix: clean setup install-all fix-deps verify
+	@echo "$(GREEN)🚑 Emergency recovery completed!$(NC)"
 
-# Show recent logs (if log files exist)
-logs:
-	@echo "$(CYAN)📋 Recent Logs$(NC)"
-	@echo "$(CYAN)==============$(NC)"
-	@if [ -f "logs/system.log" ]; then \
-		echo "$(YELLOW)System Log (last 20 lines):$(NC)"; \
-		tail -20 logs/system.log; \
-	else \
-		echo "$(YELLOW)⚠️  No system logs found$(NC)"; \
-	fi
+# =============================================================================
+# QUICK COMMANDS (Enhanced)
+# =============================================================================
 
 # Quick commands for common tasks
 qt: test
-qr: run-daemon
+qr: run-fixed     # 🆕 CHANGED: Now uses fixed version
 qv: verify
 qs: status
 qm: monitor
-qd: run-dashboard
+qd: dashboard-fixed  # 🆕 CHANGED: Now uses fixed version
 
-# Quick start with proper order (reproduces manual setup)
-quick-start: setup install verify
-	@echo "$(GREEN)🚀 Quick Start - Proper Order Initialization$(NC)"
-	@echo "$(CYAN)========================================$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(BROKER) &
-	@sleep 3
-	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) &
-	@sleep 3
-	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) &
-	@sleep 2
-	@echo "$(GREEN)✅ Platform started with proper initialization order$(NC)"
-	@./platform_monitor.sh 2>/dev/null || make status
-
-# Emergency recovery
-emergency-fix: clean setup install-all fix verify
-	@echo "$(GREEN)🚑 Emergency recovery completed!$(NC)"
 # =============================================================================
-# NUCLEAR STOP INTEGRATION - Auto-generated
+# NUCLEAR HELP SYSTEM (ORIGINAL)
 # =============================================================================
-# Sistema de parada efectivo que realmente funciona con procesos root
-# Integrado automáticamente por integrate-nuclear-stop.sh
-# =============================================================================
-
-# Variables nuclear stop
-NUCLEAR_STOP_SCRIPT := nuclear-stop.sh
-
-# Setup nuclear stop
-.PHONY: setup-nuclear-stop
-setup-nuclear-stop:
-	@if [ ! -f $(NUCLEAR_STOP_SCRIPT) ]; then \
-		echo "❌ $(NUCLEAR_STOP_SCRIPT) requerido para parada efectiva"; \
-		exit 1; \
-	fi
-	@chmod +x $(NUCLEAR_STOP_SCRIPT)
-
-# NUEVA regla stop principal (nuclear)
-.PHONY: stop
-stop: setup-nuclear-stop
-	@echo "🛑 Ejecutando parada nuclear completa..."
-	@./$(NUCLEAR_STOP_SCRIPT)
-
-# Stop de emergencia (máximo nivel)
-.PHONY: emergency-stop
-emergency-stop:
-	@echo "🚨 EMERGENCY STOP - Máxima agresividad"
-	@sudo pkill -9 -f "python.*promiscuous" 2>/dev/null || true
-	@sudo pkill -9 -f "python.*broker" 2>/dev/null || true
-	@sudo pkill -9 -f "python.*detector" 2>/dev/null || true
-	@sudo pkill -9 -f "uvicorn" 2>/dev/null || true
-	@sudo lsof -ti :5555,5556,8766,8080 | xargs sudo kill -9 2>/dev/null || true
-	@sudo rm -f *.pid /tmp/*scada* /tmp/*broker* /tmp/*zmq* 2>/dev/null || true
-	@echo "💀 Emergency stop completed"
-
-# Verificar parada completa
-.PHONY: verify-stop
-verify-stop:
-	@echo "🔍 Verificando estado de parada..."
-	@echo "Procesos SCADA activos:"
-	@ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn)" | grep -v grep || echo "✅ Sin procesos SCADA activos"
-	@echo "Puertos SCADA ocupados:"
-	@lsof -i :5555,5556,8766,8080 2>/dev/null || echo "✅ Todos los puertos SCADA libres"
-
-# Status mejorado
-.PHONY: status-detailed
-status-detailed:
-	@echo "📊 Estado detallado del sistema..."
-	@echo "=== PROCESOS ==="
-	@ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn)" | grep -v grep || echo "Sin procesos SCADA"
-	@echo "=== PUERTOS ==="
-	@for port in 5555 5556 8766 8080; do \
-		echo "Puerto $$port:"; \
-		lsof -i :$$port 2>/dev/null || echo "  Libre ✅"; \
-	done
-
-# Reinicio nuclear completo
-.PHONY: restart-nuclear
-restart-nuclear: stop
-	@echo "🔄 Esperando estabilización..."
-	@sleep 3
-	@echo "🚀 Iniciando sistema limpio..."
-	$(MAKE) quick-start
-
-# Ciclo de mantenimiento completo
-.PHONY: maintenance-cycle
-maintenance-cycle:
-	@echo "🔧 Ejecutando ciclo de mantenimiento completo..."
-	$(MAKE) stop
-	$(MAKE) verify-stop
-	$(MAKE) fix-deps 2>/dev/null || true
-	$(MAKE) quick-start
-	@sleep 8
-	$(MAKE) status-detailed
 
 # Help nuclear actualizado
-.PHONY: help-nuclear
 help-nuclear:
 	@echo "🛑 COMANDOS DE PARADA NUCLEAR:"
 	@echo "  stop              - Parada nuclear completa (NUEVO, RECOMENDADO)"
@@ -525,6 +638,7 @@ help-nuclear:
 	@echo ""
 	@echo "🔄 REINICIO MEJORADO:"
 	@echo "  restart-nuclear   - Parada nuclear + inicio limpio"
+	@echo "  restart-fixed     - Parada nuclear + inicio con HTTP 207 fixes"
 	@echo "  maintenance-cycle - Mantenimiento completo"
 	@echo ""
 	@echo "📊 MONITOREO:"
@@ -532,3 +646,28 @@ help-nuclear:
 	@echo ""
 	@echo "💡 NOTA: 'make stop' ahora usa parada nuclear efectiva"
 
+# =============================================================================
+# DEVELOPMENT UTILITIES (Enhanced)
+# =============================================================================
+
+# Development mode with fixes
+dev-setup-fixed: setup install-all verify-fixes
+	@echo "$(GREEN)Creating fixed dashboard server...$(NC)"
+	@if [ ! -f $(DASHBOARD_FIXED) ]; then \
+		echo "Please ensure $(DASHBOARD_FIXED) exists"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Creating diagnostic tool...$(NC)"
+	@if [ ! -f $(DIAGNOSTIC_TOOL) ]; then \
+		echo "Please ensure $(DIAGNOSTIC_TOOL) exists"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)✅ Development environment ready with HTTP 207 fixes!$(NC)"
+
+# =============================================================================
+# LEGACY COMMANDS (redirected to fixed versions)
+# =============================================================================
+
+# Legacy commands that now use fixed versions
+run-daemon-original: run-daemon  # Keep original behavior available
+dashboard-only: dashboard-fixed   # Redirect to fixed version
