@@ -1,164 +1,135 @@
 #!/usr/bin/env python3
 """
-Broker ZeroMQ simple para recibir del agente promiscuo (PUB/SUB)
-Compatible con la configuración actual del agente
+🔧 Simple ZeroMQ Broker - SCADA System
+Recibe mensajes del agente promiscuo y los retransmite
 """
 
 import zmq
 import time
 import threading
 import signal
+import sys
 from datetime import datetime
 
 
 class SimpleBroker:
-    def __init__(self):
+    def __init__(self, input_port=5559, output_port=5560):
+        self.input_port = input_port
+        self.output_port = output_port
         self.running = True
+        self.message_count = 0
+
+        # Configurar ZeroMQ
         self.context = zmq.Context()
-        self.messages_received = 0
-        self.last_message_time = None
+
+        # Socket SUB para recibir del agente
+        self.subscriber = self.context.socket(zmq.SUB)
+        self.subscriber.bind(f"tcp://*:{input_port}")
+        self.subscriber.setsockopt(zmq.SUBSCRIBE, b"")  # Suscribirse a todos los mensajes
+
+        # Socket PUB para retransmitir
+        self.publisher = self.context.socket(zmq.PUB)
+        self.publisher.bind(f"tcp://*:{output_port}")
 
         # Configurar manejo de señales
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
 
+        print("🔧 Broker Completo ZeroMQ - Sistema SCADA")
+        print("=" * 56)
+        print(f"Recibe del agente ({input_port}) y retransmite ({output_port})")
+        print("=" * 56)
+
     def signal_handler(self, signum, frame):
-        print("\n🛑 Deteniendo broker...")
+        """Manejo limpio de señales"""
+        print(f"\n🛑 Señal {signum} recibida. Cerrando broker...")
         self.running = False
 
-    def start_subscriber(self, port):
-        """Iniciar subscriber para recibir del agente"""
-        try:
-            # Crear socket SUB para recibir del agente PUB
-            sub_socket = self.context.socket(zmq.SUB)
-            sub_socket.setsockopt(zmq.SUBSCRIBE, b"")  # Suscribirse a todo
-            sub_socket.bind(f"tcp://*:{port}")
+    def start_stats_monitor(self):
+        """Monitor de estadísticas en hilo separado"""
 
-            print(f"📡 Broker SUB escuchando en puerto {port}")
-            print("   Esperando datos del agente promiscuo...")
-
+        def stats_loop():
+            last_count = 0
             while self.running:
-                try:
-                    # Recibir datos del agente con timeout
-                    sub_socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 segundo
-                    binary_data = sub_socket.recv()
+                time.sleep(10)
+                if self.message_count > last_count:
+                    print(f"📊 Estado: ✅ ACTIVO | Mensajes: {self.message_count}")
+                    last_count = self.message_count
+                elif self.message_count == 0:
+                    print(f"📊 Estado: ⏳ Esperando primer mensaje | Mensajes: {self.message_count}")
 
-                    self.messages_received += 1
-                    self.last_message_time = time.time()
-
-                    # RETRANSMITIR al puerto de salida
-                    if hasattr(self, 'pub_socket'):
-                        try:
-                            self.pub_socket.send(binary_data, zmq.NOBLOCK)
-                        except zmq.Again:
-                            pass  # Si no se puede enviar inmediatamente, continuar
-
-                    # Log cada mensaje recibido
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    size = len(binary_data)
-                    print(f"[{timestamp}] 📨 Mensaje #{self.messages_received} recibido ({size} bytes) → RETRANSMITIDO")
-
-                    # Mostrar estadísticas cada 50 mensajes
-                    if self.messages_received % 50 == 0:
-                        print(f"🔥 Total recibidos: {self.messages_received} mensajes")
-
-                except zmq.Again:
-                    # Timeout, continuar
-                    pass
-                except Exception as e:
-                    print(f"❌ Error recibiendo: {e}")
-                    break
-
-        except Exception as e:
-            print(f"❌ Error configurando subscriber: {e}")
-        finally:
-            sub_socket.close()
-
-    def start_publisher(self, port):
-        """Iniciar publisher para retransmitir a otros componentes"""
-        try:
-            # Crear socket PUB para retransmitir
-            self.pub_socket = self.context.socket(zmq.PUB)
-            self.pub_socket.bind(f"tcp://*:{port}")
-
-            print(f"📤 Broker PUB retransmitiendo en puerto {port}")
-            print("   Listo para retransmitir mensajes recibidos")
-
-            # Mantener el socket activo
-            while self.running:
-                time.sleep(1)
-
-        except Exception as e:
-            print(f"❌ Error configurando publisher: {e}")
-        finally:
-            if hasattr(self, 'pub_socket'):
-                self.pub_socket.close()
+        stats_thread = threading.Thread(target=stats_loop, daemon=True)
+        stats_thread.start()
 
     def run(self):
-        """Ejecutar broker completo"""
+        """Ejecutar el broker principal"""
         print("🔌 BROKER SIMPLE ZeroMQ - PUB/SUB CON RETRANSMISIÓN")
-        print("=" * 60)
+        print("=" * 56)
         print("Configurado para recibir del agente y retransmitir")
-        print("=" * 60)
-
-        # Iniciar subscriber en hilo separado (recibir del agente)
-        sub_thread = threading.Thread(
-            target=self.start_subscriber,
-            args=(5559,),  # Puerto donde el agente envía
-            daemon=True
-        )
-        sub_thread.start()
-
-        # Iniciar publisher en hilo separado (retransmitir)
-        pub_thread = threading.Thread(
-            target=self.start_publisher,
-            args=(5560,),  # Puerto para retransmitir
-            daemon=True
-        )
-        pub_thread.start()
-
-        print("\n🚀 Broker iniciado correctamente")
+        print("=" * 56)
+        print(f"📡 Broker SUB escuchando en puerto {self.input_port}")
+        print("   Esperando datos del agente promiscuo...")
+        print(f"📤 Broker PUB retransmitiendo en puerto {self.output_port}")
+        print("   Listo para retransmitir mensajes recibidos")
+        print("🚀 Broker iniciado correctamente")
         print("💡 El agente debería conectarse automáticamente")
-        print("⚠️  Ctrl+C para detener\n")
+        print("⚠️  Ctrl+C para detener")
+
+        # Iniciar monitor de estadísticas
+        self.start_stats_monitor()
 
         try:
-            # Mostrar estadísticas en tiempo real
             while self.running:
-                if self.last_message_time:
-                    seconds_ago = time.time() - self.last_message_time
-                    if seconds_ago < 10:
-                        status = "✅ ACTIVO"
-                    else:
-                        status = f"⚠️ Inactivo ({seconds_ago:.1f}s)"
-                else:
-                    status = "⏳ Esperando primer mensaje"
+                try:
+                    # Recibir mensaje del agente (no bloqueante)
+                    message = self.subscriber.recv(zmq.NOBLOCK)
+                    self.message_count += 1
 
-                print(f"\r📊 Estado: {status} | Mensajes: {self.messages_received}", end="", flush=True)
-                time.sleep(2)
+                    # Retransmitir inmediatamente
+                    self.publisher.send(message)
+
+                    # Log del mensaje
+                    timestamp = datetime.now().strftime("%H:%M:%S")
+                    print(
+                        f"[{timestamp}] 📨 Mensaje #{self.message_count} recibido ({len(message)} bytes) → RETRANSMITIDO")
+
+                except zmq.Again:
+                    # No hay mensajes disponibles, continuar
+                    time.sleep(0.1)
+                    continue
+                except Exception as e:
+                    print(f"❌ Error procesando mensaje: {e}")
+                    continue
 
         except KeyboardInterrupt:
-            pass
+            print("\n🛑 Broker detenido por usuario")
+        except Exception as e:
+            print(f"❌ Error fatal en broker: {e}")
         finally:
-            self.running = False
-            print(f"\n\n🏁 Broker detenido")
-            print(f"📈 Total mensajes procesados: {self.messages_received}")
+            self.cleanup()
 
-            # Esperar threads
-            sub_thread.join(timeout=2)
-            pub_thread.join(timeout=2)
+    def cleanup(self):
+        """Limpieza de recursos"""
+        print("🧹 Cerrando broker...")
+        self.running = False
 
+        try:
+            self.subscriber.close()
+            self.publisher.close()
             self.context.term()
+            print("✅ Broker cerrado correctamente")
+        except Exception as e:
+            print(f"⚠️ Error durante limpieza: {e}")
 
 
 def main():
     """Función principal"""
-    print("🔧 Broker Completo ZeroMQ - Sistema SCADA")
-    print("=" * 60)
-    print("Recibe del agente (5559) y retransmite (5560)")
-    print("=" * 60)
-
-    broker = SimpleBroker()
-    broker.run()
+    try:
+        broker = SimpleBroker()
+        broker.run()
+    except Exception as e:
+        print(f"❌ Error iniciando broker: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
