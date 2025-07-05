@@ -142,3 +142,5 @@ dmypy.json
 *.pid
 
 *.log
+
+*.out

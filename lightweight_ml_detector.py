@@ -11,7 +11,7 @@ import time
 import zmq
 
 
-def find_available_port(start_port=5555, max_attempts=10):
+def find_available_port(start_port=5560, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -22,7 +22,7 @@ def find_available_port(start_port=5555, max_attempts=10):
     return start_port
 
 
-def find_active_broker(start_port=5555, max_attempts=10):
+def find_active_broker(start_port=5560, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             context = zmq.Context()
@@ -89,7 +89,7 @@ except ImportError as e:
 
 
 class LightweightThreatDetector:
-    def __init__(self, broker_address="tcp://localhost:5555"):
+    def __init__(self, broker_address="tcp://localhost:5560"):
         self.broker_address = broker_address
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
