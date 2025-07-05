@@ -11,7 +11,7 @@ import time
 import zmq
 
 
-def find_available_port(start_port=5555, max_attempts=10):
+def find_available_port(start_port=5559, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -22,7 +22,7 @@ def find_available_port(start_port=5555, max_attempts=10):
     return start_port
 
 
-def find_active_broker(start_port=5555, max_attempts=10):
+def find_active_broker(start_port=5559, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             context = zmq.Context()
@@ -101,7 +101,7 @@ except ImportError as e:
 
 
 class PromiscuousAgent:
-    def __init__(self, broker_address="tcp://localhost:5555", interface="en0"):
+    def __init__(self, broker_address="tcp://localhost:5559", interface="en0"):
         self.broker_address = broker_address
         self.interface = interface
         self.context = zmq.Context()
@@ -468,7 +468,7 @@ def main():
     parser = argparse.ArgumentParser(description="Agente de captura promiscua total")
     parser.add_argument("-i", "--interface", default="en0", help="Interfaz de red")
     parser.add_argument(
-        "-b", "--broker", default="tcp://localhost:5555", help="Broker ZeroMQ"
+        "-b", "--broker", default="tcp://localhost:5559", help="Broker ZeroMQ"
     )
 
     args = parser.parse_args()
