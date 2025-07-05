@@ -1,4 +1,5 @@
 # secuencia, un comando en cada terminal.
+rm *.out
 
 nohup python simple_broker.py > simple_broker.out 2>&1 &
 
