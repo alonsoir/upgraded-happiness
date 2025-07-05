@@ -1,20 +1,22 @@
 # secuencia, un comando en cada terminal.
 rm *.out
 
-nohup python simple_broker.py > simple_broker.out 2>&1 &
+nohup python simple_broker.py > simple_broker.out 2>&1 & -> KO!
 
 # Crear una sesión
 screen -S mi_agente
 
 # Dentro de screen ejecutar normalmente
-sudo python promiscuous_agent.py
+sudo python promiscuous_agent.py -> OK
 
 # Desconectarte con Ctrl+A, D
 # Reconectarte después con: screen -r mi_agente
 
-nohup python binary_monitor.py > binary_monitor.out 2>&1 &
+nohup python binary_monitor.py > binary_monitor.out 2>&1 & -> KO! no detecta nada
 
-nohup python ml_detector_5560.py > ml_detector_5560.out 2>&1 &
+nohup python ml_detector_5560.py > ml_detector_5560.out 2>&1 & -> OK
 
-nohup python protobuf_gis_dashboard.py > protobuf_gis_dashboard.out 2>&1 &
+nohup python protobuf_gis_dashboard.py > protobuf_gis_dashboard.out 2>&1 & OK!
+
+python hybrid_dashboard.py KO!
 
