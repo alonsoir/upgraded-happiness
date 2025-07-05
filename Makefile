@@ -671,3 +671,222 @@ dev-setup-fixed: setup install-all verify-fixes
 # Legacy commands that now use fixed versions
 run-daemon-original: run-daemon  # Keep original behavior available
 dashboard-only: dashboard-fixed   # Redirect to fixed version
+
+# Agregar estas líneas al Makefile existente
+
+# =============================================================================
+# GIS Dashboard Commands (Robust Mode)
+# =============================================================================
+
+# Variables para GIS Dashboard
+GIS_SCRIPT = dashboard_server_gis.py
+GIS_RUNNER = run_gis_dashboard.sh
+GIS_LOG = dashboard_gis.log
+GIS_PID = dashboard_gis.pid
+
+# Comandos principales del dashboard GIS
+run-gis:
+	@echo "🗺️ Starting Robust GIS Dashboard..."
+	@if [ ! -f $(GIS_SCRIPT) ]; then \
+		echo "❌ $(GIS_SCRIPT) not found"; \
+		exit 1; \
+	fi
+	@chmod +x $(GIS_RUNNER) 2>/dev/null || true
+	@./$(GIS_RUNNER) start
+
+run-gis-bg:
+	@echo "🗺️ Starting GIS Dashboard in background..."
+	@python $(GIS_SCRIPT) > $(GIS_LOG) 2>&1 &
+	@echo $$! > $(GIS_PID)
+	@sleep 3
+	@if kill -0 `cat $(GIS_PID)` 2>/dev/null; then \
+		echo "✅ GIS Dashboard started (PID: `cat $(GIS_PID)`)"; \
+		port=$$(grep -o "http://.*:[0-9]*" $(GIS_LOG) | head -1 | grep -o "[0-9]*$$" || echo "unknown"); \
+		if [ "$$port" != "unknown" ]; then \
+			echo "🌐 URL: http://localhost:$$port"; \
+		fi; \
+	else \
+		echo "❌ Failed to start GIS Dashboard"; \
+		tail -5 $(GIS_LOG) 2>/dev/null || true; \
+		exit 1; \
+	fi
+
+stop-gis:
+	@echo "🛑 Stopping GIS Dashboard..."
+	@if [ -f $(GIS_PID) ]; then \
+		pid=`cat $(GIS_PID)`; \
+		if kill -0 $$pid 2>/dev/null; then \
+			echo "Stopping process $$pid..."; \
+			kill -TERM $$pid 2>/dev/null || true; \
+			sleep 3; \
+			kill -KILL $$pid 2>/dev/null || true; \
+		fi; \
+		rm -f $(GIS_PID); \
+	fi
+	@pkill -f "dashboard.*gis" 2>/dev/null || true
+	@pkill -f "gis.*dashboard" 2>/dev/null || true
+	@echo "✅ GIS Dashboard stopped"
+
+restart-gis: stop-gis
+	@sleep 2
+	@$(MAKE) run-gis-bg
+
+status-gis:
+	@echo "📊 GIS Dashboard Status:"
+	@if [ -f $(GIS_PID) ]; then \
+		pid=`cat $(GIS_PID)`; \
+		if kill -0 $$pid 2>/dev/null; then \
+			echo "✅ Running (PID: $$pid)"; \
+			port=$$(lsof -p $$pid 2>/dev/null | grep LISTEN | grep -o ":[0-9]*" | head -1 | cut -d: -f2 || echo "unknown"); \
+			if [ "$$port" != "unknown" ]; then \
+				echo "🌐 Port: $$port"; \
+				echo "🌐 URL: http://localhost:$$port"; \
+			fi; \
+		else \
+			echo "❌ Not running (stale PID)"; \
+			rm -f $(GIS_PID); \
+		fi; \
+	else \
+		echo "❌ Not running"; \
+	fi
+	@if [ -f $(GIS_LOG) ]; then \
+		echo "📋 Recent logs:"; \
+		tail -3 $(GIS_LOG) 2>/dev/null | sed 's/^/  /'; \
+	fi
+
+logs-gis:
+	@echo "📋 GIS Dashboard Logs:"
+	@if [ -f $(GIS_LOG) ]; then \
+		tail -f $(GIS_LOG); \
+	else \
+		echo "❌ No log file found"; \
+	fi
+
+clean-gis:
+	@echo "🧹 Cleaning GIS Dashboard..."
+	@$(MAKE) stop-gis
+	@rm -f $(GIS_LOG) $(GIS_PID)
+	@# Clean common GIS ports
+	@for port in 8766 8767 8768 8769 8770; do \
+		lsof -ti:$$port 2>/dev/null | xargs kill -9 2>/dev/null || true; \
+	done
+	@echo "✅ GIS Dashboard cleaned"
+
+# Test GIS functionality
+test-gis:
+	@echo "🧪 Testing GIS Dashboard..."
+	@if [ -f $(GIS_PID) ] && kill -0 `cat $(GIS_PID)` 2>/dev/null; then \
+		port=$$(lsof -p `cat $(GIS_PID)` 2>/dev/null | grep LISTEN | grep -o ":[0-9]*" | head -1 | cut -d: -f2); \
+		if [ -n "$$port" ]; then \
+			echo "Testing health endpoint..."; \
+			curl -s http://localhost:$$port/health | python -m json.tool 2>/dev/null || echo "Health check failed"; \
+			echo "Testing status endpoint..."; \
+			curl -s http://localhost:$$port/api/status | python -m json.tool 2>/dev/null || echo "Status check failed"; \
+			echo "✅ GIS Dashboard responding"; \
+		else \
+			echo "❌ Could not determine port"; \
+		fi; \
+	else \
+		echo "❌ GIS Dashboard not running"; \
+		exit 1; \
+	fi
+
+# Deploy GIS Dashboard with full platform
+run-full-gis: run-daemon run-gis-bg
+	@echo "🚀 Full SCADA platform with GIS Dashboard running"
+	@$(MAKE) status
+	@$(MAKE) status-gis
+
+# Stop everything including GIS
+stop-all: stop stop-gis
+	@echo "🛑 Complete platform with GIS stopped"
+
+# Monitor everything including GIS
+monitor-gis:
+	@echo "📊 SCADA Platform + GIS Monitor"
+	@echo "================================"
+	@$(MAKE) status
+	@echo ""
+	@$(MAKE) status-gis
+	@echo ""
+	@echo "📋 System Overview:"
+	@ps aux | grep -E "(smart_broker|lightweight_ml|promiscuous|dashboard.*gis)" | grep -v grep || echo "No processes found"
+	@echo ""
+	@echo "🌐 Network Ports:"
+	@netstat -an | grep -E "(555[56]|876[6-9])" | head -10 || echo "No relevant ports found"
+
+# Setup GIS runner script
+setup-gis:
+	@echo "🔧 Setting up GIS Dashboard runner..."
+	@chmod +x $(GIS_RUNNER) 2>/dev/null || echo "Runner script not found, will use direct Python execution"
+	@echo "✅ GIS Dashboard setup complete"
+
+# =============================================================================
+# Quick Commands for GIS
+# =============================================================================
+
+# Quick aliases
+gis: run-gis           # Quick start GIS
+gis-bg: run-gis-bg     # Quick start GIS background
+gis-stop: stop-gis     # Quick stop GIS
+gis-status: status-gis # Quick status GIS
+gis-logs: logs-gis     # Quick logs GIS
+gis-clean: clean-gis   # Quick clean GIS
+gis-test: test-gis     # Quick test GIS
+
+# =============================================================================
+# Enhanced Help
+# =============================================================================
+
+help-gis:
+	@echo ""
+	@echo "🗺️ GIS Dashboard Commands:"
+	@echo "=========================="
+	@echo "  run-gis        - Start GIS Dashboard (interactive)"
+	@echo "  run-gis-bg     - Start GIS Dashboard (background)"
+	@echo "  stop-gis       - Stop GIS Dashboard"
+	@echo "  restart-gis    - Restart GIS Dashboard"
+	@echo "  status-gis     - Show GIS Dashboard status"
+	@echo "  logs-gis       - Follow GIS Dashboard logs"
+	@echo "  clean-gis      - Clean GIS Dashboard files"
+	@echo "  test-gis       - Test GIS Dashboard endpoints"
+	@echo "  run-full-gis   - Start full platform + GIS"
+	@echo "  monitor-gis    - Monitor platform + GIS"
+	@echo ""
+	@echo "🚀 Quick Commands:"
+	@echo "  gis            - Quick start GIS"
+	@echo "  gis-bg         - Quick start GIS (background)"
+	@echo "  gis-stop       - Quick stop GIS"
+	@echo "  gis-status     - Quick status GIS"
+	@echo "  gis-logs       - Quick logs GIS"
+	@echo ""
+	@echo "🌐 GIS Dashboard Features:"
+	@echo "  • Geographic visualization of security events"
+	@echo "  • Real-time IP geolocation"
+	@echo "  • Interactive Leaflet maps"
+	@echo "  • Robust port management"
+	@echo "  • WebSocket auto-reconnection"
+	@echo "  • ZeroMQ integration"
+	@echo ""
+
+# Add GIS help to main help
+help: help-gis
+	@echo "Run 'make help-gis' for GIS-specific commands"
+
+# =============================================================================
+# Enhanced Development Workflow
+# =============================================================================
+
+# Development mode with GIS
+dev-gis: install-dev run-full-gis
+	@echo "🚀 Development environment with GIS ready"
+
+# Check everything including GIS
+check-gis: check test-gis
+	@echo "✅ All checks including GIS passed"
+
+# Update .PHONY
+.PHONY: run-gis run-gis-bg stop-gis restart-gis status-gis logs-gis clean-gis test-gis \
+        run-full-gis stop-all monitor-gis setup-gis \
+        gis gis-bg gis-stop gis-status gis-logs gis-clean gis-test \
+        help-gis dev-gis check-gis

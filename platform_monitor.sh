@@ -202,7 +202,7 @@ emergency_stop() {
     sudo pkill -f promiscuous_agent.py 2>/dev/null && print_status "OK" "Promiscuous agent stopped"
     
     # Stop ML detector
-    pkill -f lightweight_ml_detector.py 2>/dev/null && print_status "OK" "ML detector stopped"
+    pkill -f corrected_ml_detector.py 2>/dev/null && print_status "OK" "ML detector stopped"
     
     # Stop broker
     pkill -f smart_broker.py 2>/dev/null && print_status "OK" "ZeroMQ broker stopped"
