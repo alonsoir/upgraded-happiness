@@ -2,6 +2,7 @@
 """
 Sistema ML Ligero para Intel i9 + 32GB RAM
 Optimizado para CPU, sin dependencias GPU
+lightweight_ml_detector.py - PUERTO CORREGIDO + MULTIPART FIX
 """
 
 # Auto-discovery functions
@@ -11,7 +12,7 @@ import time
 import zmq
 
 
-def find_available_port(start_port=5555, max_attempts=10):
+def find_available_port(start_port=5559, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -22,7 +23,7 @@ def find_available_port(start_port=5555, max_attempts=10):
     return start_port
 
 
-def find_active_broker(start_port=5555, max_attempts=10):
+def find_active_broker(start_port=5559, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         try:
             context = zmq.Context()
@@ -89,11 +90,12 @@ except ImportError as e:
 
 
 class LightweightThreatDetector:
-    def __init__(self, broker_address="tcp://localhost:5555"):
+    def __init__(self, broker_address="tcp://localhost:5559"):
         self.broker_address = broker_address
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
-        self.socket.setsockopt(zmq.SUBSCRIBE, b"")
+        # ⭐ FIX: Suscribirse al topic específico del agente promiscuo
+        self.socket.setsockopt(zmq.SUBSCRIBE, b"network_event")
 
         # Optimización para CPU Intel i9
         self.cpu_config = {
@@ -142,13 +144,15 @@ class LightweightThreatDetector:
         print(f"💾 RAM disponible: 32GB (usando hasta 24GB)")
         print(f"🔧 CPU cores: {self.cpu_config['n_jobs']}")
         print(f"📊 Batch size: {self.cpu_config['batch_size']}")
+        print(f"🔌 Conectando a: {broker_address}")
+        print(f"📡 Suscrito a topic: 'network_event'")  # AÑADIDO
         print("=" * 60)
 
     def connect(self):
         """Conectar al broker ZeroMQ"""
         try:
             self.socket.connect(self.broker_address)
-            print("✅ Conectado al broker ZeroMQ")
+            print(f"✅ Conectado al Enhanced Promiscuous Agent: {self.broker_address}")
             return True
         except Exception as e:
             print(f"❌ Error conectando: {e}")
@@ -188,6 +192,10 @@ class LightweightThreatDetector:
             "is_large_packet": 1 if event.packet_size > 1500 else 0,
             # Protocol inference (rápido)
             "likely_protocol": self._infer_protocol(event.dest_port),
+            # GPS/Geolocation features (usando coordenadas del enhanced agent)
+            "has_gps": 1 if (event.latitude != 0.0 or event.longitude != 0.0) else 0,
+            "lat_category": int(abs(event.latitude) // 10) if event.latitude != 0.0 else 0,
+            "lon_category": int(abs(event.longitude) // 10) if event.longitude != 0.0 else 0,
             # Metadata básico
             "timestamp": time.time(),
         }
@@ -361,7 +369,7 @@ class LightweightThreatDetector:
                     feature_array
                 )[0]
                 is_anomaly = (
-                    self.models["isolation_forest"].predict(feature_array)[0] == -1
+                        self.models["isolation_forest"].predict(feature_array)[0] == -1
                 )
 
                 if is_anomaly:
@@ -456,8 +464,13 @@ class LightweightThreatDetector:
     def handle_threat_detection(self, event, threats):
         """Manejar detección de amenazas"""
         for threat in threats:
+            # Mostrar coordenadas GPS si existen
+            gps_info = ""
+            if event.latitude != 0.0 or event.longitude != 0.0:
+                gps_info = f" GPS:({event.latitude:.3f},{event.longitude:.3f})"
+
             print(
-                f"🚨 AMENAZA: {threat['type']} ({threat['model']}) - {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}"
+                f"🚨 AMENAZA: {threat['type']} ({threat['model']}) - {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}{gps_info}"
             )
 
     def incremental_training(self):
@@ -487,11 +500,11 @@ class LightweightThreatDetector:
         for _, row in df.iterrows():
             # Heurística simple para etiquetado
             if (
-                row.get("port_category", 0) == 6
-                or row.get("packet_size", 0) > 8000  # High ports
-                or (  # Large packets
+                    row.get("port_category", 0) == 6
+                    or row.get("packet_size", 0) > 8000  # High ports
+                    or (  # Large packets
                     row.get("hour", 12) < 6 or row.get("hour", 12) > 22
-                )
+            )
             ):  # Unusual hours
                 labels.append(1)  # Suspicious
             else:
@@ -502,6 +515,8 @@ class LightweightThreatDetector:
     def start_monitoring(self):
         """Iniciar monitoreo optimizado"""
         print("🚀 Iniciando monitoreo ML ligero...")
+        print("📡 Esperando eventos del Enhanced Promiscuous Agent...")
+        print("🔄 Configurado para recibir mensajes multipart ZeroMQ")  # AÑADIDO
 
         event_batch = []
         last_batch_process = time.time()
@@ -509,17 +524,22 @@ class LightweightThreatDetector:
         try:
             while True:
                 try:
-                    # Recibir evento
-                    message = self.socket.recv(zmq.NOBLOCK)
+                    # ⭐ FIX: Recibir mensaje multipart correctamente
+                    topic, message = self.socket.recv_multipart(zmq.NOBLOCK)
+
+                    # Debug: mostrar que estamos recibiendo eventos
+                    if len(event_batch) == 0:  # Solo mostrar el primer evento
+                        print(f"📨 Primer evento recibido - Topic: {topic.decode()}, Tamaño: {len(message)} bytes")
+
                     event = network_event_pb2.NetworkEvent()
-                    event.ParseFromString(message)
+                    event.ParseFromString(message)  # Ahora parseamos el mensaje correcto
 
                     event_batch.append(event)
 
                     # Procesar en lotes para eficiencia
                     if (
-                        len(event_batch) >= self.cpu_config["batch_size"]
-                        or time.time() - last_batch_process > 5
+                            len(event_batch) >= self.cpu_config["batch_size"]
+                            or time.time() - last_batch_process > 5
                     ):  # Máximo 5 segundos
                         self.process_event_batch(event_batch)
                         event_batch = []
@@ -545,18 +565,95 @@ class LightweightThreatDetector:
             if event_batch:  # Procesar eventos restantes
                 self.process_event_batch(event_batch)
 
+    # En lightweight_ml_detector.py, añadir al final de la clase LightweightThreatDetector:
+
+    def save_models_quick(self):
+        """Guardar modelos actuales con timestamp"""
+        import joblib
+        from datetime import datetime
+        from pathlib import Path
+
+        models_dir = Path("saved_models")
+        models_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        saved_files = []
+
+        # Guardar cada modelo
+        for model_name, model in self.models.items():
+            if model is not None:
+                filename = models_dir / f"{model_name}_{timestamp}.joblib"
+                joblib.dump(model, filename)
+                saved_files.append(filename)
+                print(f"💾 {model_name} → {filename}")
+
+        # Guardar procesadores
+        processors_file = models_dir / f"processors_{timestamp}.joblib"
+        joblib.dump(self.processors, processors_file)
+        print(f"💾 Procesadores → {processors_file}")
+
+        print(f"✅ {len(saved_files)} modelos guardados")
+        return saved_files
+
+    def load_models_quick(self, timestamp=None):
+        """Cargar modelos guardados"""
+        import joblib
+        from pathlib import Path
+
+        models_dir = Path("saved_models")
+        if not models_dir.exists():
+            print("❌ No hay modelos guardados")
+            return False
+
+        # Si no se especifica timestamp, usar el más reciente
+        if timestamp is None:
+            model_files = list(models_dir.glob("isolation_forest_*.joblib"))
+            if model_files:
+                latest_file = max(model_files, key=lambda f: f.stat().st_mtime)
+                timestamp = latest_file.stem.split('_')[-1]
+            else:
+                print("❌ No se encontraron modelos")
+                return False
+
+        print(f"📂 Cargando modelos del timestamp: {timestamp}")
+
+        # Cargar modelos
+        for model_name in self.models.keys():
+            model_file = models_dir / f"{model_name}_{timestamp}.joblib"
+            if model_file.exists():
+                self.models[model_name] = joblib.load(model_file)
+                print(f"📂 {model_name} ✓")
+
+        # Cargar procesadores
+        processors_file = models_dir / f"processors_{timestamp}.joblib"
+        if processors_file.exists():
+            self.processors = joblib.load(processors_file)
+            print(f"📂 Procesadores ✓")
+
+        return True
 
 def main():
     """Función principal optimizada"""
+    print("🤖 ML DETECTOR LIGERO - PUERTO CORREGIDO + MULTIPART FIX")
+    print("=" * 55)
+    print("🔧 FIX 1: Puerto 5560 → 5559")
+    print("🔧 FIX 2: Recepción multipart ZeroMQ")
+    print("📡 FUENTE: Enhanced Promiscuous Agent")
+    print("🧠 ENTRENAMIENTO: Datos sintéticos + aprendizaje incremental")
+    print("⚡ OPTIMIZADO: Intel i9 + 32GB RAM")
+    print("=" * 55)
+
     detector = LightweightThreatDetector()
 
     if detector.connect():
-        # Entrenamiento inicial con datos sintéticos
-        print("📚 Generando datos de entrenamiento inicial...")
-        X_initial = np.random.rand(1000, 15)  # 1000 muestras, 15 features
-        y_initial = np.random.choice([0, 1], 1000)  # Etiquetas aleatorias
+        # Entrenamiento inicial
+        X_initial = np.random.rand(1000, 17)
+        y_initial = np.random.choice([0, 1], 1000)
 
         detector.train_lightweight_models(X_initial, y_initial)
+
+        # ⭐ AÑADIR: Guardar modelos automáticamente
+        detector.save_models_quick()
 
         try:
             detector.start_monitoring()

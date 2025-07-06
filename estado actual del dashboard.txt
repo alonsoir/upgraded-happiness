@@ -1,204 +1,140 @@
-Estoy notando que el dashboard está inestable, se muere por alguna razón, veo errores 400, no se si se debe
-por las peticiones que le llegan desde las colas zeromq, pero tampoco parece que se aprecie que se estén actualizando
-los eventos que tiene que estar capturando en tiempo real mi BitDefender.
-
-Vale, lo he arrancado, veo que el dashboard seguía vivo, pero se puede apreciar que algo extraño sucede por que se ven muchos 400.
-
-En otra pestaña, mientras estaba ejecutando el dash:
+# secuencia, un comando en cada terminal.
+rm *.out
+En una terminal
+sudo python3 promiscuous_agent.py enhanced_agent_config.json
+En otra terminal
 
 (upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
-
-└➤ # Ver qué está enviando tráfico malformado al puerto 8766
-
-sudo netstat -tuln | grep 8766
-
-# Verificar procesos que puedan estar haciendo requests malformados
-
-ps aux | grep -E "(curl|wget|http)"
-
-Password:
-
-aironman          1083   0.0  0.1 68078424  31020   ??  S     8:05AM   0:00.10 /Applications/Spotify.app/Contents/Frameworks/Spotify Helper.app/Contents/MacOS/Spotify Helper --monitor-self-annotation=ptype=crashpad-handler --type=crashpad-handler --max-uploads=5 --max-db-size=20 --max-db-age=5 --database=/Users/aironman/Library/Caches/com.spotify.client --url=https://crashdump.spotify.com:443/ --annotation=platform=macos --annotation=product=spotify --annotation=version=1.2.66.447 --handshake-fd=6
-
-aironman         21606   0.0  0.0 34252116    816 s003  S+   12:51PM   0:00.00 grep -E (curl|wget|http)
-
+└➤ # Test rápido de importación
+python3 -c "
+from src.protocols.protobuf import network_event_pb2
+event = network_event_pb2.NetworkEvent()
+event.event_type = 'test'  # Este era el que fallaba
+print('✅ Protobuf funcionando - todos los campos disponibles')
+"
+/Users/aironman/git/upgraded-happiness/upgraded_happiness_venv/lib/python3.13/site-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.29.3 is exactly one major version older than the runtime version 6.31.1 at network_event.proto. Please update the gencode to avoid compatibility violations in the next runtime release.
+  warnings.warn(
+✅ Protobuf funcionando - todos los campos disponibles
 (upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ # Terminal 3 - Tráfico normal
+ping -c 3 google.com
 
+# Tráfico con GPS
+python3 generate_gps_traffic.py
+PING google.com (142.250.200.142): 56 data bytes
+64 bytes from 142.250.200.142: icmp_seq=0 ttl=116 time=13.563 ms
+64 bytes from 142.250.200.142: icmp_seq=1 ttl=116 time=14.347 ms
+64 bytes from 142.250.200.142: icmp_seq=2 ttl=116 time=12.244 ms
+
+--- google.com ping statistics ---
+3 packets transmitted, 3 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 12.244/13.385/14.347/0.868 ms
+🌍 Generador de Tráfico GPS para Enhanced Promiscuous Agent
+==========================================================
+🎯 Modo ráfaga única
+💡 Para modo continuo: python3 generate_gps_traffic.py continuous [intervalo]
+
+📡 Generando ráfaga de tráfico con GPS...
+/Users/aironman/git/upgraded-happiness/generate_gps_traffic.py:37: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  "timestamp": datetime.utcnow().isoformat(),
+   📤 MQTT-like UDP enviado: 306 bytes
+   📤 Coordenadas simples UDP enviado: 31 bytes
+   📤 MQTT-like UDP enviado: 303 bytes
+   📤 Coordenadas simples UDP enviado: 32 bytes
+   📤 MQTT-like UDP enviado: 303 bytes
+   📤 Coordenadas simples UDP enviado: 31 bytes
+   📤 MQTT-like UDP enviado: 313 bytes
+   📤 Coordenadas simples UDP enviado: 36 bytes
+   📤 MQTT-like UDP enviado: 304 bytes
+   📤 Coordenadas simples UDP enviado: 31 bytes
+✅ Ráfaga completada: 10 mensajes enviados
+
+✅ Ráfaga completada: 10 mensajes con coordenadas GPS
+
+📋 Para probar:
+1. Ejecutar el agente promiscuo en una terminal
+2. Ejecutar el subscriber en otra terminal
+3. Ejecutar este generador para ver detección GPS
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
 └➤
 
-En otra pestaña:
+En otra terminal
+
+python3 generate_gps_traffic.py continuous 15
+
+En otra terminal
+
+python3 generate_gps_traffic.py continuous 10
+
+En otra terminal
+python ml_detector_with_persistence.py
+
+En otra terminal
+
+python hybrid_dashboard.py ->PDTE
+
+En otra terminal
 
 (upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ # Ver qué modelos tienes
+ls -la saved_models/
 
-└➤ # Usar el script sincronizado solo para dashboard
-
-./start-scada-platform-with-dashboard-sync.sh --dashboard-only
-
-[2025-07-03 12:51:39] Iniciando solo el dashboard sincronizado...
-
-[2025-07-03 12:51:39] 📖 Leyendo configuración desde upgraded-happiness-bitdefender/bitdefender_config.yaml...
-
-[SUCCESS 2025-07-03 12:51:39] Configuración YAML cargada correctamente
-
-[2025-07-03 12:51:39]   • Dashboard: localhost:8766
-
-[2025-07-03 12:51:39]   • ZeroMQ Broker: 5555
-
-[2025-07-03 12:51:39]   • ZeroMQ Dashboard: 5556
-
-[2025-07-03 12:51:39]   • BitDefender: habilitado
-
-[2025-07-03 12:51:39] 🔍 Verificando dependencias del dashboard...
-
-[SUCCESS 2025-07-03 12:51:40] Dependencias del dashboard verificadas ✓
-
-[2025-07-03 12:51:40] 🔍 Detectando archivos de dashboard existentes...
-
-[SUCCESS 2025-07-03 12:51:40] ✅ Dashboard encontrado: dashboard_server_with_real_data.py
-
-[WARNING 2025-07-03 12:51:40] ⚠️ Dashboard define puerto 8765, configuración YAML usa 8766
-
-[2025-07-03 12:51:40] Se usará puerto de configuración YAML: 8766
-
-[2025-07-03 12:51:40] 🚀 Iniciando dashboard web sincronizado...
-
-[WARNING 2025-07-03 12:51:40] Puerto 8766 ya está en uso
-
-[2025-07-03 12:51:40] Intentando parar proceso en puerto 8766...
-
-[2025-07-03 12:51:42] Configuración del dashboard:
-
-[2025-07-03 12:51:42]   • Archivo: dashboard_server_with_real_data.py
-
-[2025-07-03 12:51:42]   • Host: localhost
-
-[2025-07-03 12:51:42]   • Puerto: 8766
-
-[2025-07-03 12:51:42]   • ZeroMQ Broker: 5555
-
-[2025-07-03 12:51:42] Iniciando dashboard con Python...
-
-Traceback (most recent call last):
-
-  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 448, in <module>
-
-    asyncio.run(main())
-
-    ~~~~~~~~~~~^^^^^^^^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
-
-    return runner.run(main)
-
-           ~~~~~~~~~~^^^^^^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
-
-    return self._loop.run_until_complete(task)
-
-           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
-
-    return future.result()
-
-           ~~~~~~~~~~~~~^^
-
-  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 427, in main
-
-    runner = await server.start_server(8766)
-
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 417, in start_server
-
-    await site.start()
-
-  File "/Users/aironman/git/upgraded-happiness/upgraded_happiness_venv/lib/python3.13/site-packages/aiohttp/web_runner.py", line 121, in start
-
-    self._server = await loop.create_server(
-
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    ...<7 lines>...
-
-    )
-
-    ^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 1622, in create_server
-
-    raise OSError(err.errno, msg) from None
-
-OSError: [Errno 48] error while attempting to bind on address ('127.0.0.1', 8766): [errno 48] address already in use
-
-[ERROR 2025-07-03 12:51:47] ❌ El dashboard no se pudo iniciar
-
+# Ver tamaños
+ls -lh saved_models/
+total 1776
+drwxr-xr-x   9 aironman staff    288 Jul  6 10:33 .
+drwxr-xr-x 150 aironman staff   4800 Jul  6 10:33 ..
+-rw-r--r--   1 aironman staff 916936 Jul  6 10:33 isolation_forest_20250706_103339.joblib
+-rw-r--r--   1 aironman staff   5415 Jul  6 10:33 kmeans_20250706_103339.joblib
+-rw-r--r--   1 aironman staff   1319 Jul  6 10:33 naive_bayes_20250706_103339.joblib
+-rw-r--r--   1 aironman staff   1120 Jul  6 10:33 processors_20250706_103339.joblib
+-rw-r--r--   1 aironman staff 755209 Jul  6 10:33 random_forest_20250706_103339.joblib
+-rw-r--r--   1 aironman staff   1261 Jul  6 10:33 sgd_classifier_20250706_103339.joblib
+-rw-r--r--   1 aironman staff 120722 Jul  6 10:33 xgboost_20250706_103339.joblib
+total 1.8M
+-rw-r--r-- 1 aironman staff 896K Jul  6 10:33 isolation_forest_20250706_103339.joblib
+-rw-r--r-- 1 aironman staff 5.3K Jul  6 10:33 kmeans_20250706_103339.joblib
+-rw-r--r-- 1 aironman staff 1.3K Jul  6 10:33 naive_bayes_20250706_103339.joblib
+-rw-r--r-- 1 aironman staff 1.1K Jul  6 10:33 processors_20250706_103339.joblib
+-rw-r--r-- 1 aironman staff 738K Jul  6 10:33 random_forest_20250706_103339.joblib
+-rw-r--r-- 1 aironman staff 1.3K Jul  6 10:33 sgd_classifier_20250706_103339.joblib
+-rw-r--r-- 1 aironman staff 118K Jul  6 10:33 xgboost_20250706_103339.joblib
 (upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ >....
+    X_test = np.random.rand(5, 17)
+    features = {'src_port': 80, 'dst_port': 443, 'packet_size': 1500,
+                'is_internal_src': 0, 'is_internal_dst': 1, 'hour': 14,
+                'has_gps': 1, 'lat_category': 4, 'lon_category': 7,
+                'ip_class': 2, 'port_category': 2, 'src_port_category': 1,
+                'is_business_hours': 1, 'is_weekend': 0, 'size_category': 3,
+                'is_large_packet': 1, 'likely_protocol': 2, 'timestamp': 0}
 
-└➤
-
-En otra pestaña:
-
+    threats = detector.predict_threat(features)
+    print(f'<0001f9e0> Test de predicción: {len(threats)} amenazas detectadas')
+else:
+    print('❌ No se pudieron cargar modelos')
+"
+/Users/aironman/git/upgraded-happiness/upgraded_happiness_venv/lib/python3.13/site-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.29.3 is exactly one major version older than the runtime version 6.31.1 at network_event.proto. Please update the gencode to avoid compatibility violations in the next runtime release.
+  warnings.warn(
+✅ Protobuf importado exitosamente
+🧠 DETECTOR ML LIGERO (Optimizado para Intel i9)
+💾 RAM disponible: 32GB (usando hasta 24GB)
+🔧 CPU cores: 8
+📊 Batch size: 1000
+🔌 Conectando a: tcp://localhost:5559
+📡 Suscrito a topic: 'network_event'
+============================================================
+📂 Cargando modelos del timestamp: 103339
+✅ Modelos cargados desde disco
+   isolation_forest: ❌
+   random_forest: ❌
+   xgboost: ❌
+   gradient_boost: ❌
+   kmeans: ❌
+   dbscan: ❌
+   sgd_classifier: ❌
+   naive_bayes: ❌
+🧠 Test de predicción: 0 amenazas detectadas
 (upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
-
-└➤ python3 dashboard_server_with_real_data.py
-
-Traceback (most recent call last):
-
-  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 448, in <module>
-
-    asyncio.run(main())
-
-    ~~~~~~~~~~~^^^^^^^^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 195, in run
-
-    return runner.run(main)
-
-           ~~~~~~~~~~^^^^^^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 118, in run
-
-    return self._loop.run_until_complete(task)
-
-           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
-
-    return future.result()
-
-           ~~~~~~~~~~~~~^^
-
-  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 427, in main
-
-    runner = await server.start_server(8766)
-
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  File "/Users/aironman/git/upgraded-happiness/dashboard_server_with_real_data.py", line 417, in start_server
-
-    await site.start()
-
-  File "/Users/aironman/git/upgraded-happiness/upgraded_happiness_venv/lib/python3.13/site-packages/aiohttp/web_runner.py", line 121, in start
-
-    self._server = await loop.create_server(
-
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    ...<7 lines>...
-
-    )
-
-    ^
-
-  File "/usr/local/Cellar/python@3.13/3.13.4/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 1622, in create_server
-
-    raise OSError(err.errno, msg) from None
-
-OSError: [Errno 48] error while attempting to bind on address ('::1', 8766, 0, 0): [errno 48] address already in use
-
-(upgraded_happiness_venv) ┌<▪> ~/g/upgraded-happiness
-
 └➤
 

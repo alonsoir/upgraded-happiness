@@ -180,4 +180,39 @@ except Exception as e:
 fi
 
 echo ""
+#!/bin/bash
+
+echo "🔍 Buscando procesos en puerto 8766..."
+
+# Buscar procesos específicos del proyecto
+echo "📋 Procesos del proyecto upgraded-happiness:"
+ps aux | grep -E "(dashboard|upgraded-happiness|gis)" | grep -v grep
+
+# Buscar procesos Python que podrían estar usando el puerto
+echo "🐍 Procesos Python activos:"
+ps aux | grep python | grep -v grep
+
+# Verificar puertos IPv6 también
+echo "🌐 Verificando puertos IPv6:"
+netstat -an | grep 8766
+
+# Verificar conexiones TCP
+echo "🔗 Conexiones TCP:"
+ss -tulpn | grep 8766
+
+# Buscar procesos con lsof usando diferentes flags
+echo "🔍 Verificación exhaustiva con lsof:"
+sudo lsof -i TCP:8766
+sudo lsof -i UDP:8766
+sudo lsof -i :8766
+
+# Terminar procesos específicos si los encuentra
+echo "⚡ Terminando procesos relacionados..."
+pkill -f "dashboard.*gis"
+pkill -f "gis.*dashboard"
+
+# Esperar un momento para que se liberen los sockets
+sleep 2
+
+echo "✅ Limpieza completada. Intenta ejecutar el dashboard nuevamente."
 echo -e "${GREEN}🎯 Script de verificación completado${NC}"
