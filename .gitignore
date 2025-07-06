@@ -144,3 +144,5 @@ dmypy.json
 *.log
 
 *.out
+
+*.joblib
