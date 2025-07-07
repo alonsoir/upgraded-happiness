@@ -140,7 +140,7 @@ class AdvancedZMQDebugger:
         # Buscar archivos del dashboard
         dashboard_files = [
             'enhanced_protobuf_gis_dashboard.py',
-            'hybrid_dashboard.py',
+            'real_zmq_dashboard.py',
             'minimal_dashboard.py',
             'ultra_basic_dashboard.py'
         ]

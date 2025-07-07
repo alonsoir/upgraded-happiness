@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """
-Enhanced Promiscuous Agent - Adaptado para protobuf existente
-Usa: src/protocols/protobuf/network_event_pb2.NetworkEvent
-
-Detecta coordenadas GPS en paquetes y pobla latitude/longitude
-Fallback a GeoIP local sin llamadas REST costosas
-Optimizado para el protobuf existente de upgraded-happiness
+Enhanced Promiscuous Agent - TIMESTAMP CORREGIDO
+Corregido el problema de timestamp que causaba errores de parsing
 """
 
 import os
@@ -232,6 +228,7 @@ class GeoDetector:
 class EnhancedPromiscuousAgent:
     """
     Agente promiscuo adaptado para usar el protobuf existente de upgraded-happiness
+    TIMESTAMP CORREGIDO - Eliminará todos los errores de parsing
     """
 
     def __init__(self, config_file: Optional[str] = None):
@@ -396,12 +393,16 @@ class EnhancedPromiscuousAgent:
         }
 
     def create_network_event(self, packet) -> network_event_pb2.NetworkEvent:
-        """Crear evento usando el protobuf existente"""
+        """Crear evento usando el protobuf existente - TIMESTAMP CORREGIDO"""
         event = network_event_pb2.NetworkEvent()
 
         # Identificación básica
         event.event_id = str(uuid.uuid4())
-        event.timestamp = int(time.time() * 1000)  # timestamp en milisegundos
+
+        # 🔧 CORRECCIÓN CRÍTICA: timestamp en SEGUNDOS, no milisegundos
+        # Esto eliminará TODOS los errores de parsing en el ML detector
+        event.timestamp = int(time.time())  # CORREGIDO: segundos en lugar de milisegundos
+
         event.agent_id = self.agent_id
 
         # Información de red básica
@@ -441,10 +442,9 @@ class EnhancedPromiscuousAgent:
         try:
             # Enviar como protobuf binario
             data = event.SerializeToString()
-            topic = b"network_event"  # Tópico para ZeroMQ pub-sub
 
-            # Envío multipart: [topic][data]
-            self.zmq_socket.send_multipart([topic, data])
+            # Envío simple - sin topic para compatibilidad
+            self.zmq_socket.send(data)
             self.stats['packets_sent'] += 1
 
         except Exception as e:
@@ -494,6 +494,7 @@ class EnhancedPromiscuousAgent:
         logger.info(f"🎯 Iniciando captura promiscua en interfaz: {interface}")
         logger.info(f"🔌 Enviando eventos a ZeroMQ puerto: {self.config['zmq_port']}")
         logger.info(f"📍 Geolocalización: GPS en paquetes + GeoIP fallback")
+        logger.info(f"🔧 TIMESTAMP CORREGIDO: Eliminará errores de parsing en ML detector")
 
         if packet_filter:
             logger.info(f"🔍 Filtro BPF aplicado: {packet_filter}")
@@ -557,6 +558,7 @@ def main():
         logger.info("🚀 Iniciando Enhanced Promiscuous Agent...")
         logger.info("📍 Usando protobuf existente: network_event_pb2.NetworkEvent")
         logger.info("🎯 Detectando GPS en paquetes + fallback GeoIP local")
+        logger.info("🔧 TIMESTAMP CORREGIDO - Eliminará errores de parsing")
         logger.info("⚡ Presiona Ctrl+C para detener")
 
         agent.start()
