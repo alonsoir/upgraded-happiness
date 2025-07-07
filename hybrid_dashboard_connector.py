@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔗 Hybrid Dashboard Connector
-Conecta promiscuous_agent.py específicamente con hybrid_dashboard.py
+Conecta promiscuous_agent.py específicamente con real_zmq_dashboard.py
 """
 
 import zmq
@@ -30,12 +30,12 @@ class HybridDashboardConnector:
         self.running = False
 
     def analyze_hybrid_dashboard(self):
-        """Analiza la configuración del hybrid_dashboard.py"""
+        """Analiza la configuración del real_zmq_dashboard.py"""
         print("🔍 ANALIZANDO HYBRID_DASHBOARD.PY")
         print("-" * 40)
 
         try:
-            with open('hybrid_dashboard.py', 'r', encoding='utf-8') as f:
+            with open('real_zmq_dashboard.py', 'r', encoding='utf-8') as f:
                 content = f.read()
 
             # Buscar puerto ZMQ
@@ -69,7 +69,7 @@ class HybridDashboardConnector:
             zmq_ports = [p for p in ports_found if p in [5555, 5556, 5557, 5558, 5559, 5560]]
             http_ports = [p for p in http_ports if p >= 8000]
 
-            print(f"✅ Archivo encontrado: hybrid_dashboard.py")
+            print(f"✅ Archivo encontrado: real_zmq_dashboard.py")
             print(f"🔧 Puertos ZMQ detectados: {zmq_ports}")
             print(f"🌐 Puertos HTTP detectados: {http_ports}")
 
@@ -89,7 +89,7 @@ class HybridDashboardConnector:
             }
 
         except FileNotFoundError:
-            print("❌ hybrid_dashboard.py no encontrado")
+            print("❌ real_zmq_dashboard.py no encontrado")
             return {'file_exists': False}
         except Exception as e:
             print(f"❌ Error analizando archivo: {e}")
@@ -175,7 +175,7 @@ class HybridDashboardConnector:
                 # Log del primer mensaje para confirmación
                 if self.message_count == 1:
                     print(f"🎉 ¡PRIMER EVENTO REENVIADO AL DASHBOARD!")
-                    print(f"   Ahora deberías ver datos reales en hybrid_dashboard.py")
+                    print(f"   Ahora deberías ver datos reales en real_zmq_dashboard.py")
 
             except zmq.Again:
                 # Verificar si llevamos mucho tiempo sin mensajes
@@ -202,7 +202,7 @@ class HybridDashboardConnector:
         # 1. Analizar configuración del dashboard
         config = self.analyze_hybrid_dashboard()
         if not config['file_exists']:
-            print("❌ No se puede proceder sin hybrid_dashboard.py")
+            print("❌ No se puede proceder sin real_zmq_dashboard.py")
             return
 
         # 2. Verificar que el agente esté enviando datos
@@ -212,14 +212,14 @@ class HybridDashboardConnector:
             print("📋 PASOS PARA ACTIVAR:")
             print("1. Terminal 1: sudo python3 promiscuous_agent.py")
             print("2. Terminal 2: python3 hybrid_dashboard_connector.py")
-            print("3. Terminal 3: python3 hybrid_dashboard.py")
+            print("3. Terminal 3: python3 real_zmq_dashboard.py")
             return
 
         # 3. Verificar si necesitamos bridge
         if self.agent_port == self.dashboard_port:
             print(f"\n✅ PUERTOS COINCIDEN ({self.agent_port})")
             print("💡 No necesitas bridge, conexión directa debería funcionar")
-            print(f"   Ejecutar: python3 hybrid_dashboard.py")
+            print(f"   Ejecutar: python3 real_zmq_dashboard.py")
         else:
             print(f"\n🌉 PUERTOS DIFERENTES - Bridge necesario")
             print(f"   Agente: {self.agent_port} → Dashboard: {self.dashboard_port}")
