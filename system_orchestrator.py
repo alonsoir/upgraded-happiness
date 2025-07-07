@@ -1,422 +1,496 @@
 #!/usr/bin/env python3
 """
-Orquestador del Sistema Completo de Detección de Amenazas
-Administra todos los componentes: captura, ML, dashboard, alertas
+🚀 System Orchestrator - Gestión completa del sistema SCADA + ML + Firewall
+Orquesta todos los componentes del sistema de respuesta automática
 """
 
-import json
-import os
-import signal
 import subprocess
 import sys
-import threading
 import time
+import os
+import signal
+import threading
+import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-class ThreatDetectionOrchestrator:
+
+class SystemOrchestrator:
+    """Orquestador del sistema completo"""
+
     def __init__(self):
-        self.components = {
-            "broker": {
-                "script": "python scripts/smart_broker.py",
-                "process": None,
-                "status": "stopped",
-                "description": "ZeroMQ message broker",
-            },
-            "promiscuous_agent": {
-                "script": "sudo python promiscuous_agent.py",
-                "process": None,
-                "status": "stopped",
-                "description": "Captura promiscua total de tráfico",
-            },
-            "lightweight_ml": {
-                "script": "python lightweight_ml_detector.py",
-                "process": None,
-                "status": "stopped",
-                "description": "Sistema ML ligero para Intel i9",
-            },
-            "basic_agent": {
-                "script": "sudo python agent_scapy_fixed.py",
-                "process": None,
-                "status": "stopped",
-                "description": "Agente de captura básico",
-            },
-        }
-
-        self.system_config = {
-            "mode": "development",  # development, production, training
-            "capture_mode": "promiscuous",  # promiscuous, selective, passive
-            "ml_enabled": True,
-            "auto_firewall": False,
-            "threat_threshold": 0.7,
-            "interface": "en0",
-            "broker_address": "tcp://localhost:5555",
-            "log_level": "INFO",
-        }
-
+        self.processes = {}
         self.running = False
-        self.startup_order = ["broker", "promiscuous_agent", "lightweight_ml"]
+        self.base_dir = Path(__file__).parent
 
-        print(f"🎮 ORQUESTADOR DEL SISTEMA DE DETECCIÓN DE AMENAZAS")
-        print(f"🕒 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 70)
+        # Configuración de componentes
+        self.components = {
+            'promiscuous_agent': {
+                'script': 'promiscuous_agent.py',
+                'config': 'enhanced_agent_config.json',
+                'description': '📡 Agente de captura promiscua',
+                'port': None,
+                'required': True,
+                'startup_delay': 0
+            },
+            'ml_detector': {
+                'script': 'ml_detector_with_persistence.py',
+                'config': None,
+                'description': '🤖 Detector ML con persistencia',
+                'port': '5559→5560',
+                'required': True,
+                'startup_delay': 3
+            },
+            'firewall_agent': {
+                'script': 'firewall_agent.py',
+                'config': None,
+                'description': '🔥 Agente de firewall',
+                'port': '5561',
+                'required': True,
+                'startup_delay': 1
+            },
+            'dashboard': {
+                'script': 'real_zmq_dashboard.py',
+                'config': None,
+                'description': '📊 Dashboard interactivo',
+                'port': '8000',
+                'required': True,
+                'startup_delay': 2
+            },
+            'gps_generator': {
+                'script': 'generate_gps_traffic.py',
+                'config': 'continuous 15',
+                'description': '🗺️ Generador de tráfico GPS',
+                'port': None,
+                'required': False,
+                'startup_delay': 5
+            }
+        }
 
-    def show_status(self):
-        """Mostrar estado de todos los componentes"""
-        print(f"\n📊 ESTADO DEL SISTEMA:")
-        print("-" * 50)
+        # Estado del sistema
+        self.system_status = {
+            'start_time': None,
+            'components_started': 0,
+            'components_failed': 0,
+            'total_components': len([c for c in self.components.values() if c['required']])
+        }
+
+    def check_prerequisites(self):
+        """Verificar prerequisitos del sistema"""
+        logger.info("🔍 Verificando prerequisitos...")
+
+        issues = []
+
+        # Verificar archivos de script
         for name, component in self.components.items():
-            status_icon = "🟢" if component["status"] == "running" else "🔴"
-            print(
-                f"{status_icon} {name:<20} | {component['status']:<10} | {component['description']}"
+            script_path = self.base_dir / component['script']
+            if not script_path.exists():
+                issues.append(f"Script faltante: {component['script']}")
+                logger.error(f"❌ Script faltante: {script_path}")
+            else:
+                logger.info(f"✅ Script encontrado: {component['script']}")
+
+        # Verificar archivos de configuración
+        config_files = ['enhanced_agent_config.json']
+        for config_file in config_files:
+            config_path = self.base_dir / config_file
+            if not config_path.exists():
+                issues.append(f"Archivo de configuración faltante: {config_file}")
+                logger.warning(f"⚠️ Config faltante: {config_path}")
+
+        # Verificar puertos disponibles
+        ports_to_check = [5559, 5560, 5561, 8000]
+        for port in ports_to_check:
+            if self._is_port_in_use(port):
+                issues.append(f"Puerto {port} ya está en uso")
+                logger.warning(f"⚠️ Puerto {port} ocupado")
+
+        # Verificar permisos (para firewall)
+        if not self._check_firewall_permissions():
+            issues.append("Sin permisos para modificar firewall (sudo requerido)")
+            logger.warning("⚠️ Sin permisos para firewall")
+
+        if issues:
+            logger.error("❌ Problemas encontrados:")
+            for issue in issues:
+                logger.error(f"   - {issue}")
+            return False
+
+        logger.info("✅ Todos los prerequisitos verificados")
+        return True
+
+    def _is_port_in_use(self, port):
+        """Verificar si un puerto está en uso"""
+        import socket
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                return s.connect_ex(('localhost', port)) == 0
+        except:
+            return False
+
+    def _check_firewall_permissions(self):
+        """Verificar permisos para modificar firewall"""
+        try:
+            # Verificar si podemos ejecutar sudo sin contraseña
+            result = subprocess.run(['sudo', '-n', 'true'],
+                                    capture_output=True, timeout=5)
+            return result.returncode == 0
+        except:
+            return False
+
+    def start_component(self, name, component):
+        """Iniciar un componente específico"""
+        try:
+            logger.info(f"🚀 Iniciando {component['description']}...")
+
+            # Construir comando
+            cmd = [sys.executable, component['script']]
+            if component['config']:
+                if component['script'] == 'generate_gps_traffic.py':
+                    cmd.extend(component['config'].split())
+                else:
+                    cmd.append(component['config'])
+
+            # Iniciar proceso
+            process = subprocess.Popen(
+                cmd,
+                cwd=self.base_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
 
-        print(f"\n⚙️  CONFIGURACIÓN ACTUAL:")
-        print("-" * 30)
-        for key, value in self.system_config.items():
-            print(f"   {key:<20} | {value}")
+            self.processes[name] = {
+                'process': process,
+                'component': component,
+                'start_time': datetime.now(),
+                'status': 'starting'
+            }
 
-    def start_component(self, component_name):
-        """Iniciar un componente específico"""
-        if component_name not in self.components:
-            print(f"❌ Componente desconocido: {component_name}")
-            return False
+            # Esperar un poco para verificar que no falle inmediatamente
+            time.sleep(1)
 
-        component = self.components[component_name]
-
-        if component["status"] == "running":
-            print(f"⚠️  {component_name} ya está ejecutándose")
-            return True
-
-        print(f"🚀 Iniciando {component_name}...")
-
-        try:
-            # Preparar comando
-            cmd = component["script"]
-
-            # Ajustes específicos por componente
-            if "agent" in component_name:
-                cmd += f" -i {self.system_config['interface']}"
-                if "broker_address" in self.system_config:
-                    cmd += f" -b {self.system_config['broker_address']}"
-
-            # Ejecutar comando
-            if cmd.startswith("sudo") or "sudo" in cmd:
-                # Para comandos sudo, usar shell=True
-                process = subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    preexec_fn=os.setsid,
-                )
+            if process.poll() is None:
+                self.processes[name]['status'] = 'running'
+                self.system_status['components_started'] += 1
+                logger.info(f"✅ {component['description']} iniciado")
+                return True
             else:
-                # Para comandos normales
-                process = subprocess.Popen(
-                    cmd.split(),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    preexec_fn=os.setsid,
-                )
-
-            component["process"] = process
-            component["status"] = "starting"
-
-            print(f"✅ {component_name} iniciado (PID: {process.pid})")
-
-            # Verificar que el proceso se inició correctamente
-            time.sleep(3)
-            if process.poll() is not None:
                 stdout, stderr = process.communicate()
-                print(f"❌ {component_name} terminó inesperadamente")
-                if stderr:
-                    print(f"Error: {stderr.decode()}")
-                component["status"] = "error"
+                logger.error(f"❌ Error iniciando {name}: {stderr}")
+                self.system_status['components_failed'] += 1
                 return False
-            else:
-                component["status"] = "running"
-
-            return True
 
         except Exception as e:
-            print(f"❌ Error iniciando {component_name}: {e}")
-            component["status"] = "error"
+            logger.error(f"❌ Excepción iniciando {name}: {e}")
+            self.system_status['components_failed'] += 1
             return False
 
-    def stop_component(self, component_name):
-        """Detener un componente específico"""
-        if component_name not in self.components:
-            print(f"❌ Componente desconocido: {component_name}")
-            return False
+    def start_system(self, include_optional=False):
+        """Iniciar todo el sistema"""
+        logger.info("🚀 INICIANDO SISTEMA COMPLETO")
+        logger.info("=" * 50)
 
-        component = self.components[component_name]
-
-        if component["status"] not in ["running", "starting"]:
-            print(f"⚠️  {component_name} no está ejecutándose")
-            return True
-
-        print(f"🛑 Deteniendo {component_name}...")
-
-        try:
-            if component["process"]:
-                # Intentar terminación gentil del grupo de procesos
-                try:
-                    os.killpg(os.getpgid(component["process"].pid), signal.SIGTERM)
-                except:
-                    # Si no funciona, terminar el proceso directamente
-                    component["process"].terminate()
-
-                # Esperar terminación
-                try:
-                    component["process"].wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    # Forzar terminación
-                    try:
-                        os.killpg(os.getpgid(component["process"].pid), signal.SIGKILL)
-                    except:
-                        component["process"].kill()
-                    component["process"].wait()
-
-                component["process"] = None
-
-            component["status"] = "stopped"
-            print(f"✅ {component_name} detenido")
-            return True
-
-        except Exception as e:
-            print(f"❌ Error deteniendo {component_name}: {e}")
-            return False
-
-    def start_system(self, mode="development"):
-        """Iniciar el sistema completo"""
-        print(f"\n🚀 INICIANDO SISTEMA EN MODO: {mode.upper()}")
-        print("=" * 50)
-
-        self.system_config["mode"] = mode
+        self.system_status['start_time'] = datetime.now()
         self.running = True
 
-        success_count = 0
+        # Verificar prerequisitos
+        if not self.check_prerequisites():
+            logger.error("❌ No se puede iniciar el sistema - prerequisitos no cumplidos")
+            return False
 
-        for component_name in self.startup_order:
-            if self.start_component(component_name):
-                success_count += 1
-                time.sleep(5)  # Pausa entre inicios
-            else:
-                print(f"❌ Fallo iniciando {component_name}, continuando...")
+        # Iniciar componentes en orden
+        startup_order = [
+            'firewall_agent',  # Primero el agente de firewall
+            'promiscuous_agent',  # Luego el agente de captura
+            'dashboard',  # Dashboard para visualizar
+            'ml_detector',  # ML detector último (necesita los otros)
+        ]
 
-        if success_count == len(self.startup_order):
-            print(f"\n🎉 SISTEMA INICIADO COMPLETAMENTE")
-            print(f"✅ {success_count}/{len(self.startup_order)} componentes activos")
+        if include_optional:
+            startup_order.append('gps_generator')
+
+        for component_name in startup_order:
+            if component_name not in self.components:
+                continue
+
+            component = self.components[component_name]
+
+            # Aplicar delay de startup
+            if component['startup_delay'] > 0:
+                logger.info(f"⏰ Esperando {component['startup_delay']}s antes de iniciar {component_name}...")
+                time.sleep(component['startup_delay'])
+
+            success = self.start_component(component_name, component)
+
+            if not success and component['required']:
+                logger.error(f"❌ Componente crítico {component_name} falló - abortando")
+                self.stop_system()
+                return False
+
+        # Resumen de inicio
+        logger.info("")
+        logger.info("📊 RESUMEN DE INICIO:")
+        logger.info(f"   ✅ Componentes iniciados: {self.system_status['components_started']}")
+        logger.info(f"   ❌ Componentes fallidos: {self.system_status['components_failed']}")
+        logger.info(f"   🎯 Componentes requeridos: {self.system_status['total_components']}")
+
+        if self.system_status['components_started'] >= self.system_status['total_components']:
+            logger.info("")
+            logger.info("🎉 SISTEMA INICIADO EXITOSAMENTE")
+            self._print_access_info()
+            return True
         else:
-            print(f"\n⚠️  SISTEMA INICIADO PARCIALMENTE")
-            print(f"🔥 {success_count}/{len(self.startup_order)} componentes activos")
+            logger.error("❌ No se pudieron iniciar todos los componentes críticos")
+            return False
 
-        return success_count > 0
+    def _print_access_info(self):
+        """Imprimir información de acceso"""
+        logger.info("")
+        logger.info("🔗 INFORMACIÓN DE ACCESO:")
+        logger.info("   📊 Dashboard: http://localhost:8000")
+        logger.info("   📡 API Stats: http://localhost:8000/api/stats")
+        logger.info("   🔥 Firewall Log: http://localhost:8000/api/firewall/log")
+        logger.info("")
+        logger.info("🔌 PUERTOS DEL SISTEMA:")
+        logger.info("   5559: Eventos capturados → ML Detector")
+        logger.info("   5560: Eventos enriquecidos → Dashboard")
+        logger.info("   5561: Comandos firewall → Agente")
+        logger.info("   8000: Dashboard web")
+        logger.info("")
+        logger.info("🎯 FUNCIONALIDADES ACTIVAS:")
+        logger.info("   ✅ Captura de paquetes en tiempo real")
+        logger.info("   ✅ Análisis ML automático")
+        logger.info("   ✅ Dashboard interactivo")
+        logger.info("   ✅ Respuesta automática a amenazas")
+        logger.info("   ✅ Gestión inteligente de firewall")
+
+    def monitor_system(self):
+        """Monitorear el estado del sistema"""
+        logger.info("👁️ Iniciando monitoreo del sistema...")
+
+        while self.running:
+            try:
+                time.sleep(10)  # Verificar cada 10 segundos
+
+                dead_processes = []
+                for name, proc_info in self.processes.items():
+                    process = proc_info['process']
+
+                    if process.poll() is not None:
+                        # Proceso ha terminado
+                        dead_processes.append(name)
+                        stdout, stderr = process.communicate()
+                        logger.error(f"💀 Proceso {name} terminó inesperadamente")
+                        if stderr:
+                            logger.error(f"   Error: {stderr}")
+
+                # Remover procesos muertos
+                for name in dead_processes:
+                    del self.processes[name]
+                    self.system_status['components_failed'] += 1
+
+                # Si perdemos componentes críticos, alertar
+                if dead_processes:
+                    critical_dead = [name for name in dead_processes
+                                     if self.components[name]['required']]
+                    if critical_dead:
+                        logger.error(f"🚨 Componentes críticos terminaron: {critical_dead}")
+
+            except Exception as e:
+                logger.error(f"❌ Error en monitoreo: {e}")
 
     def stop_system(self):
-        """Detener el sistema completo"""
-        print(f"\n🛑 DETENIENDO SISTEMA COMPLETO...")
-        print("=" * 40)
-
+        """Detener todo el sistema"""
+        logger.info("🛑 Deteniendo sistema...")
         self.running = False
 
-        # Detener en orden inverso
-        for component_name in reversed(self.startup_order):
-            self.stop_component(component_name)
-            time.sleep(2)
-
-        print(f"✅ Sistema detenido completamente")
-
-    def restart_system(self):
-        """Reiniciar el sistema completo"""
-        print(f"\n🔄 REINICIANDO SISTEMA...")
-        self.stop_system()
-        time.sleep(5)
-        self.start_system(self.system_config["mode"])
-
-    def run_interactive_menu(self):
-        """Ejecutar menú interactivo"""
-        while True:
+        for name, proc_info in self.processes.items():
             try:
-                self.show_status()
+                process = proc_info['process']
+                logger.info(f"🛑 Deteniendo {name}...")
 
-                print(f"\n🎮 MENÚ PRINCIPAL:")
-                print("-" * 30)
-                print("1. Iniciar sistema completo")
-                print("2. Detener sistema completo")
-                print("3. Reiniciar sistema")
-                print("4. Iniciar componente individual")
-                print("5. Detener componente individual")
-                print("6. Ver logs (simulado)")
-                print("7. Estado detallado")
-                print("8. Cambiar configuración")
-                print("0. Salir")
+                # Intentar terminación grácil
+                process.terminate()
 
-                choice = input(f"\n🎯 Selecciona opción: ").strip()
+                # Esperar hasta 5 segundos
+                try:
+                    process.wait(timeout=5)
+                    logger.info(f"✅ {name} detenido gracilmente")
+                except subprocess.TimeoutExpired:
+                    # Forzar terminación
+                    process.kill()
+                    logger.warning(f"⚠️ {name} terminado forzosamente")
 
-                if choice == "1":
-                    mode = (
-                        input("Modo [development/production]: ").strip()
-                        or "development"
-                    )
-                    self.start_system(mode)
+            except Exception as e:
+                logger.error(f"❌ Error deteniendo {name}: {e}")
 
-                elif choice == "2":
-                    self.stop_system()
+        self.processes.clear()
+        logger.info("✅ Sistema detenido completamente")
 
-                elif choice == "3":
-                    self.restart_system()
+    def get_system_status(self):
+        """Obtener estado actual del sistema"""
+        status = {
+            'running': self.running,
+            'uptime_seconds': 0,
+            'components': {}
+        }
 
-                elif choice == "4":
-                    print("Componentes disponibles:")
-                    for name in self.components.keys():
-                        print(f"  - {name}")
-                    component = input("Componente a iniciar: ").strip()
-                    if component in self.components:
-                        self.start_component(component)
-                    else:
-                        print("❌ Componente no válido")
+        if self.system_status['start_time']:
+            status['uptime_seconds'] = (datetime.now() - self.system_status['start_time']).total_seconds()
 
-                elif choice == "5":
-                    print("Componentes en ejecución:")
-                    running = [
-                        name
-                        for name, comp in self.components.items()
-                        if comp["status"] == "running"
-                    ]
-                    for name in running:
-                        print(f"  - {name}")
-                    component = input("Componente a detener: ").strip()
-                    if component in self.components:
-                        self.stop_component(component)
-                    else:
-                        print("❌ Componente no válido")
+        for name, proc_info in self.processes.items():
+            process = proc_info['process']
+            status['components'][name] = {
+                'status': 'running' if process.poll() is None else 'dead',
+                'pid': process.pid,
+                'start_time': proc_info['start_time'].isoformat(),
+                'description': proc_info['component']['description']
+            }
 
-                elif choice == "6":
-                    print("🔍 Logs del sistema:")
-                    print("📊 Ver: tail -f logs/*.log (cuando estén implementados)")
-                    input("Presiona Enter para continuar...")
+        return status
 
-                elif choice == "7":
-                    self.show_detailed_status()
-                    input("Presiona Enter para continuar...")
+    def interactive_menu(self):
+        """Menú interactivo para gestionar el sistema"""
+        while True:
+            print("\n" + "=" * 50)
+            print("🛡️ SCADA ML FIREWALL SYSTEM - ORCHESTRATOR")
+            print("=" * 50)
+            print("1. 🚀 Iniciar sistema completo")
+            print("2. 🚀 Iniciar sistema + generador GPS")
+            print("3. 📊 Ver estado del sistema")
+            print("4. 🛑 Detener sistema")
+            print("5. 🔍 Verificar prerequisitos")
+            print("6. 📋 Ver logs en tiempo real")
+            print("7. ❌ Salir")
+            print()
 
-                elif choice == "8":
-                    self.configure_system()
+            choice = input("Selecciona una opción: ").strip()
 
-                elif choice == "0":
+            if choice == '1':
+                if not self.running:
+                    self.start_system(include_optional=False)
                     if self.running:
-                        confirm = input("⚠️  ¿Detener sistema antes de salir? [y/n]: ")
-                        if confirm.lower() in ["y", "yes"]:
-                            self.stop_system()
-                    break
-
+                        # Iniciar monitoreo en thread separado
+                        monitor_thread = threading.Thread(target=self.monitor_system, daemon=True)
+                        monitor_thread.start()
                 else:
-                    print("❌ Opción no válida")
+                    print("⚠️ El sistema ya está ejecutándose")
 
-                time.sleep(1)
+            elif choice == '2':
+                if not self.running:
+                    self.start_system(include_optional=True)
+                    if self.running:
+                        monitor_thread = threading.Thread(target=self.monitor_system, daemon=True)
+                        monitor_thread.start()
+                else:
+                    print("⚠️ El sistema ya está ejecutándose")
 
-            except KeyboardInterrupt:
-                print(f"\n\n🛑 Interrumpido por usuario")
+            elif choice == '3':
+                status = self.get_system_status()
+                print(f"\n📊 Estado del sistema:")
+                print(f"   Running: {status['running']}")
+                print(f"   Uptime: {status['uptime_seconds']:.1f}s")
+                print(f"   Componentes activos: {len(status['components'])}")
+                for name, comp_status in status['components'].items():
+                    print(f"   - {name}: {comp_status['status']} (PID: {comp_status['pid']})")
+
+            elif choice == '4':
                 if self.running:
                     self.stop_system()
-                break
-            except Exception as e:
-                print(f"❌ Error en menú: {e}")
+                else:
+                    print("⚠️ El sistema no está ejecutándose")
 
-    def show_detailed_status(self):
-        """Mostrar estado detallado del sistema"""
-        print(f"\n📊 ESTADO DETALLADO DEL SISTEMA")
-        print("=" * 60)
+            elif choice == '5':
+                self.check_prerequisites()
 
-        for name, component in self.components.items():
-            print(f"\n🔧 {name.upper()}:")
-            print(f"   Estado: {component['status']}")
-            print(f"   Descripción: {component['description']}")
-            print(f"   Script: {component['script']}")
-
-            if component["process"]:
-                print(f"   PID: {component['process'].pid}")
-                print(f"   Ejecutándose: {component['process'].poll() is None}")
-
-    def configure_system(self):
-        """Configurar el sistema"""
-        print(f"\n⚙️  CONFIGURACIÓN DEL SISTEMA")
-        print("=" * 40)
-
-        try:
-            interface = input(
-                f"Interfaz de red ({self.system_config['interface']}): "
-            ).strip()
-            if interface:
-                self.system_config["interface"] = interface
-
-            threshold = input(
-                f"Umbral amenazas ({self.system_config['threat_threshold']}): "
-            ).strip()
-            if threshold:
+            elif choice == '6':
+                print("📋 Logs en tiempo real (Ctrl+C para volver al menú)...")
                 try:
-                    self.system_config["threat_threshold"] = float(threshold)
-                except ValueError:
-                    print("⚠️  Valor inválido")
+                    # Mostrar logs de todos los procesos
+                    time.sleep(2)
+                    print("💡 Implementar tail de logs aquí...")
+                except KeyboardInterrupt:
+                    print("\n🔙 Volviendo al menú...")
 
-            print("✅ Configuración actualizada")
+            elif choice == '7':
+                if self.running:
+                    print("🛑 Deteniendo sistema antes de salir...")
+                    self.stop_system()
+                print("👋 ¡Hasta luego!")
+                break
 
-        except KeyboardInterrupt:
-            print("\n⚠️  Configuración cancelada")
+            else:
+                print("❌ Opción inválida")
 
-    def setup_signal_handlers(self):
-        """Configurar manejadores de señales"""
 
-        def signal_handler(signum, frame):
-            print(f"\n🛑 Señal recibida: {signum}")
-            if self.running:
-                self.stop_system()
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+def signal_handler(signum, frame):
+    """Manejar señales del sistema"""
+    logger.info(f"🛑 Señal {signum} recibida, deteniendo sistema...")
+    global orchestrator
+    if 'orchestrator' in globals() and orchestrator.running:
+        orchestrator.stop_system()
+    sys.exit(0)
 
 
 def main():
     """Función principal"""
-    print("🎮 SISTEMA DE DETECCIÓN DE AMENAZAS - UPGRADED HAPPINESS")
-    print("=" * 70)
+    global orchestrator
 
-    orchestrator = ThreatDetectionOrchestrator()
-    orchestrator.setup_signal_handlers()
+    # Configurar manejo de señales
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    print("🚀 SYSTEM ORCHESTRATOR")
+    print("Sistema de Respuesta Automática SCADA + ML + Firewall")
+    print("=" * 60)
+
+    orchestrator = SystemOrchestrator()
 
     if len(sys.argv) > 1:
         # Modo comando
         command = sys.argv[1].lower()
 
-        if command == "start":
-            mode = sys.argv[2] if len(sys.argv) > 2 else "development"
-            orchestrator.start_system(mode)
+        if command == 'start':
+            include_gps = '--with-gps' in sys.argv
+            if orchestrator.start_system(include_optional=include_gps):
+                # Iniciar monitoreo
+                monitor_thread = threading.Thread(target=orchestrator.monitor_system, daemon=True)
+                monitor_thread.start()
 
-            try:
-                print("✅ Sistema iniciado. Presiona Ctrl+C para detener...")
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                orchestrator.stop_system()
+                # Mantener vivo
+                try:
+                    while orchestrator.running:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    orchestrator.stop_system()
 
-        elif command == "stop":
-            orchestrator.stop_system()
+        elif command == 'stop':
+            print("🛑 Modo stop no implementado (usar kill o Ctrl+C)")
 
-        elif command == "status":
-            orchestrator.show_status()
+        elif command == 'status':
+            status = orchestrator.get_system_status()
+            print(json.dumps(status, indent=2))
+
+        elif command == 'check':
+            orchestrator.check_prerequisites()
 
         else:
             print(f"❌ Comando desconocido: {command}")
-            print("Comandos disponibles: start, stop, status")
-
+            print("Comandos disponibles: start, stop, status, check")
     else:
         # Modo interactivo
-        orchestrator.run_interactive_menu()
-
-    print("👋 Sistema cerrado")
+        try:
+            orchestrator.interactive_menu()
+        except KeyboardInterrupt:
+            print("\n🛑 Interrumpido por usuario")
+            if orchestrator.running:
+                orchestrator.stop_system()
 
 
 if __name__ == "__main__":
