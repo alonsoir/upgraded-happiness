@@ -6,15 +6,18 @@ Envía comandos de firewall por puerto 5561
 """
 
 import json
-import time
-import threading
-import zmq
-import socket
-from datetime import datetime, timedelta
-from http.server import HTTPServer, BaseHTTPRequestHandler
 import logging
+import socket
+import threading
+import time
 from collections import defaultdict, deque
-import urllib.parse
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import uuid
+import time
+import json
+import zmq
+
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,20 +25,327 @@ logger = logging.getLogger(__name__)
 
 # Importar protobuf
 try:
-    from src.protocols.protobuf import network_event_pb2
-
+    from src.protocols.protobuf import network_event_extended_fixed_pb2
+    from src.protocols.protobuf import firewall_commands_pb2
     PROTOBUF_AVAILABLE = True
-    logger.info("✅ Protobuf importado desde src.protocols.protobuf.network_event_pb2")
+    logger.info("✅ Protobuf importado desde src.protocols.protobuf.network_event_extended_fixed_pb2")
+    logger.info("✅ Protobuf importado desde src.protocols.protobuf.firewall_commands_pb2")
 except ImportError:
     try:
-        import network_event_pb2
+        import network_event_extended_fixed_pb2
+        import firewall_commands_pb2
 
         PROTOBUF_AVAILABLE = True
-        logger.info("✅ Protobuf importado desde directorio local")
+        logger.info("✅ Protobuf network_event_extended_fixed_pb2 y firewall_commands_pb2 importados desde directorio local")
     except ImportError:
         PROTOBUF_AVAILABLE = False
         logger.error("❌ Protobuf no disponible")
 
+
+class FirewallCommandGenerator:
+    """Generador de comandos de firewall específicos por SO"""
+
+    def __init__(self):
+        # Cache de información de nodos
+        self.known_nodes = {}
+
+        # Reglas básicas por tipo de amenaza
+        self.threat_rules = {
+            'port_scan': {
+                'action': 'BLOCK_IP',
+                'duration': 3600,
+                'priority': 'HIGH'
+            },
+            'anomaly_high': {
+                'action': 'BLOCK_IP',
+                'duration': 1800,
+                'priority': 'MEDIUM'
+            },
+            'rate_limit_exceeded': {
+                'action': 'RATE_LIMIT_IP',
+                'duration': 900,
+                'priority': 'MEDIUM',
+                'rate_limit_rule': '10/min'
+            },
+            'suspicious_port': {
+                'action': 'BLOCK_PORT',
+                'duration': 3600,
+                'priority': 'HIGH'
+            }
+        }
+
+    def register_node(self, event_data):
+        """Registra un nodo cuando recibe su handshake inicial"""
+        if event_data.get('is_initial_handshake'):
+            node_id = event_data.get('agent_id')  # o el campo que uses para identificar nodos
+
+            self.known_nodes[node_id] = {
+                'so_identifier': event_data.get('so_identifier', 'unknown'),
+                'hostname': event_data.get('node_hostname', 'unknown'),
+                'os_version': event_data.get('os_version', 'unknown'),
+                'firewall_status': event_data.get('firewall_status', 'unknown'),
+                'last_seen': time.time()
+            }
+
+            print(f"🖥️  Nodo registrado: {node_id} ({event_data.get('so_identifier')})")
+
+    def analyze_threat_and_generate_commands(self, event_data) -> list:
+        """Analiza un evento y genera comandos de firewall si es necesario"""
+        commands = []
+
+        # Análisis básico de amenazas
+        threat_type = self.detect_threat_type(event_data)
+
+        if threat_type:
+            # Generar comando basado en el tipo de amenaza
+            command = self.create_firewall_command(event_data, threat_type)
+            if command:
+                commands.append(command)
+
+        return commands
+
+    def detect_threat_type(self, event_data) -> str:
+        """Detecta el tipo de amenaza basado en el evento"""
+
+        # Anomalía alta
+        anomaly_score = event_data.get('anomaly_score', 0)
+        if anomaly_score > 0.8:
+            return 'anomaly_high'
+
+        # Puerto sospechoso (puertos SCADA)
+        dest_port = event_data.get('dest_port', 0)
+        suspicious_ports = [22, 23, 502, 1911, 4840, 20000]  # SSH, Telnet, Modbus, etc.
+        if dest_port in suspicious_ports:
+            return 'suspicious_port'
+
+        # Rate limiting (necesitarías lógica adicional para detectar esto)
+        event_type = event_data.get('event_type', '')
+        if 'flood' in event_type.lower() or 'brute' in event_type.lower():
+            return 'rate_limit_exceeded'
+
+        # Port scanning (necesitarías lógica adicional)
+        if 'scan' in event_type.lower():
+            return 'port_scan'
+
+        return None
+
+    def create_firewall_command(self, event_data, threat_type) -> dict:
+        """Crea un comando de firewall específico"""
+
+        if threat_type not in self.threat_rules:
+            return None
+
+        rule = self.threat_rules[threat_type]
+        source_ip = event_data.get('source_ip')
+        dest_port = event_data.get('dest_port', 0)
+
+        if not source_ip:
+            return None
+
+        command = {
+            'command_id': str(uuid.uuid4()),
+            'action': rule['action'],
+            'target_ip': source_ip,
+            'target_port': dest_port if rule['action'] in ['BLOCK_PORT', 'UNBLOCK_PORT'] else 0,
+            'duration_seconds': rule['duration'],
+            'reason': f"Detected {threat_type} from {source_ip}",
+            'priority': rule['priority'],
+            'dry_run': True,  # Siempre dry_run por seguridad
+            'rate_limit_rule': rule.get('rate_limit_rule', ''),
+            'extra_params': {}
+        }
+
+        return command
+
+    def create_command_batch(self, target_node_id, commands, description="Dashboard generated commands") -> dict:
+        """Crea un lote de comandos para enviar al firewall agent"""
+
+        if target_node_id not in self.known_nodes:
+            print(f"⚠️  Nodo desconocido: {target_node_id}")
+            return None
+
+        node_info = self.known_nodes[target_node_id]
+
+        batch = {
+            'batch_id': str(uuid.uuid4()),
+            'target_node_id': target_node_id,
+            'so_identifier': node_info['so_identifier'],
+            'timestamp': int(time.time() * 1000),
+            'generated_by': 'dashboard',
+            'dry_run_all': True,  # Siempre seguro
+            'commands': commands,
+            'description': description,
+            'source_event_id': '',  # Se puede llenar con el ID del evento que originó
+            'confidence_score': 0.8,  # Ajustar según tu lógica
+            'expected_execution_time': len(commands) * 2  # Estimación: 2 segundos por comando
+        }
+
+        return batch
+
+
+# ====== CLASE PARA INTEGRAR EN TU DASHBOARD ======
+class DashboardFirewallIntegration:
+    """Integración de firewall para tu dashboard existente"""
+
+    def __init__(self, dashboard_instance):
+        self.dashboard = dashboard_instance
+        self.command_generator = FirewallCommandGenerator()
+
+        # Socket para enviar comandos al firewall agent
+        self.firewall_socket = None
+        self.setup_firewall_socket()
+
+        # Estado de la UI
+        self.selected_events = []
+        self.pending_commands = {}
+
+    def setup_firewall_socket(self):
+        """Configura socket para enviar comandos de firewall"""
+        try:
+            import zmq
+            context = zmq.Context()
+            self.firewall_socket = context.socket(zmq.PUSH)
+            self.firewall_socket.connect("tcp://localhost:5561")  # Puerto del firewall agent
+            print("🔥 Conectado al Firewall Agent en puerto 5561")
+        except Exception as e:
+            print(f"⚠️  No se pudo conectar al Firewall Agent: {e}")
+
+    def process_received_event(self, event_data):
+        """Procesa un evento recibido (llamar desde tu loop principal)"""
+
+        # Registrar nodo si es handshake inicial
+        self.command_generator.register_node(event_data)
+
+        # Analizar amenazas automáticamente
+        suggested_commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
+
+        if suggested_commands:
+            print(
+                f"💡 {len(suggested_commands)} comando(s) sugerido(s) para evento {event_data.get('event_id', 'unknown')}")
+
+            # Guardar comandos sugeridos para aprobación manual
+            event_id = event_data.get('event_id')
+            self.pending_commands[event_id] = {
+                'event': event_data,
+                'commands': suggested_commands,
+                'timestamp': time.time()
+            }
+
+    def handle_event_click(self, event_data):
+        """Maneja click en un evento (integrar con tu UI)"""
+
+        event_id = event_data.get('event_id')
+        agent_id = event_data.get('agent_id')
+
+        print(f"🖱️  Click en evento {event_id}")
+
+        # Verificar si hay comandos pendientes para este evento
+        if event_id in self.pending_commands:
+            pending = self.pending_commands[event_id]
+            commands = pending['commands']
+
+            print(f"💭 Comandos sugeridos para este evento:")
+            for i, cmd in enumerate(commands):
+                print(f"  {i + 1}. {cmd['action']} {cmd['target_ip']} - {cmd['reason']}")
+
+            # Aquí puedes integrar con tu UI para mostrar opciones
+            # Por ejemplo, botones "Aplicar", "Rechazar", "Modificar"
+
+            return {
+                'has_suggestions': True,
+                'commands': commands,
+                'event': event_data
+            }
+        else:
+            # Generar comandos on-demand
+            commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
+
+            if commands:
+                print(f"💡 Comandos generados on-demand:")
+                for i, cmd in enumerate(commands):
+                    print(f"  {i + 1}. {cmd['action']} {cmd['target_ip']} - {cmd['reason']}")
+
+                return {
+                    'has_suggestions': True,
+                    'commands': commands,
+                    'event': event_data
+                }
+            else:
+                print("ℹ️  No se detectaron amenazas en este evento")
+                return {
+                    'has_suggestions': False,
+                    'event': event_data
+                }
+
+    def approve_and_send_commands(self, event_id):
+        """Aprueba y envía comandos pendientes"""
+
+        if event_id not in self.pending_commands:
+            print(f"❌ No hay comandos pendientes para evento {event_id}")
+            return False
+
+        pending = self.pending_commands[event_id]
+        commands = pending['commands']
+        event_data = pending['event']
+        agent_id = event_data.get('agent_id')
+
+        # Crear lote de comandos
+        batch = self.command_generator.create_command_batch(
+            target_node_id=agent_id,
+            commands=commands,
+            description=f"Commands for event {event_id}"
+        )
+
+        if not batch:
+            print(f"❌ No se pudo crear lote de comandos")
+            return False
+
+        # Enviar al firewall agent
+        success = self.send_command_batch(batch)
+
+        if success:
+            # Limpiar comandos pendientes
+            del self.pending_commands[event_id]
+            print(f"✅ Comandos enviados para evento {event_id}")
+
+        return success
+
+    def send_command_batch(self, batch) -> bool:
+        """Envía un lote de comandos al firewall agent"""
+
+        if not self.firewall_socket:
+            print("❌ No hay conexión con Firewall Agent")
+            return False
+
+        try:
+            # Por ahora enviar como JSON, luego cambiar a protobuf
+            batch_json = json.dumps(batch)
+            self.firewall_socket.send_string(batch_json)
+
+            print(f"📤 Lote {batch['batch_id']} enviado al Firewall Agent")
+            print(f"   📋 {len(batch['commands'])} comando(s)")
+            print(f"   🎯 Nodo destino: {batch['target_node_id']}")
+            print(f"   🖥️  SO: {batch['so_identifier']}")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ Error enviando comandos: {e}")
+            return False
+
+    def get_pending_commands_summary(self):
+        """Retorna resumen de comandos pendientes"""
+        summary = {
+            'total_events_with_commands': len(self.pending_commands),
+            'total_commands': sum(len(p['commands']) for p in self.pending_commands.values()),
+            'oldest_pending': None
+        }
+
+        if self.pending_commands:
+            oldest = min(self.pending_commands.values(), key=lambda x: x['timestamp'])
+            summary['oldest_pending'] = time.time() - oldest['timestamp']
+
+        return summary
 
 class FirewallCommandSender:
     """Cliente ZeroMQ para enviar comandos de firewall al puerto 5561"""
@@ -161,7 +471,7 @@ class ZeroMQListener:
 
                 if PROTOBUF_AVAILABLE:
                     try:
-                        event = network_event_pb2.NetworkEvent()
+                        event = network_event_extended_fixed_pb2.NetworkEvent()
                         event.ParseFromString(message)
                         self._process_event(event)
                     except Exception as e:
@@ -340,6 +650,8 @@ class ZeroMQListener:
 
 class DashboardHandler(BaseHTTPRequestHandler):
     """Handler del dashboard con capacidades de firewall"""
+
+    self.firewall_integration = DashboardFirewallIntegration(self)
 
     shared_data = {
         'events': [],
