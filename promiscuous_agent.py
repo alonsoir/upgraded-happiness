@@ -4,26 +4,19 @@ Enhanced Promiscuous Agent - TIMESTAMP CORREGIDO
 Corregido el problema de timestamp que causaba errores de parsing
 """
 
-import os
-import sys
-import time
-import uuid
-import hashlib
-import socket
-import psutil
-import logging
-import threading
-from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
-
-# Network and packet capture
-from scapy.all import *
-import netifaces
+import json
 
 # Messaging and serialization
 import zmq
-import json
+# Network and packet capture
+from scapy.all import *
 
+try:
+    from src.protocols.protobuf import network_event_extended_fixed_pb2 as network_event_extended_pb2
+    EXTENDED_PROTOBUF = True
+except ImportError:
+    from src.protocols.protobuf import network_event_pb2
+    EXTENDED_PROTOBUF = False
 # Geolocation
 try:
     import geoip2.database
@@ -34,15 +27,6 @@ except ImportError:
     GEOIP_AVAILABLE = False
     print("⚠️  GeoIP2 no disponible. Instalar con: pip install geoip2")
 
-# Protocol Buffers - USAR EL EXISTENTE
-try:
-    from src.protocols.protobuf import network_event_pb2
-
-    print("✅ Protobuf importado exitosamente")
-    PROTOBUF_AVAILABLE = True
-except ImportError as e:
-    print(f"❌ Error importando protobuf: {e}")
-    sys.exit(1)
 
 # Detector de coordenadas GPS (implementación simplificada integrada)
 import re
@@ -59,6 +43,144 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import platform
+import subprocess
+import shutil
+import socket
+import uuid
+
+
+# ====== AÑADIR ESTA CLASE A TU ARCHIVO ======
+class SystemDetector:
+    """Detector ligero de SO y firewall para integrar en tu agente existente"""
+
+    def __init__(self):
+        self._so_identifier = None
+        self._node_info = None
+        self._is_first_event = True
+
+    def get_so_identifier(self) -> str:
+        """Retorna identificador único del SO y firewall"""
+        if self._so_identifier is None:
+            self._so_identifier = self._detect_so_identifier()
+        return self._so_identifier
+
+    def _detect_so_identifier(self) -> str:
+        """Detecta SO y firewall, retorna identificador compacto"""
+        os_name = platform.system().lower()
+
+        if os_name == "linux":
+            firewall = self._detect_linux_firewall()
+            return f"linux_{firewall}"
+        elif os_name == "windows":
+            return "windows_firewall"
+        elif os_name == "darwin":
+            return "darwin_pf"
+        else:
+            return "unknown_unknown"
+
+    def _detect_linux_firewall(self) -> str:
+        """Detecta tipo de firewall en Linux"""
+        # Orden de prioridad: ufw -> firewalld -> iptables
+        if shutil.which('ufw'):
+            try:
+                result = subprocess.run(['ufw', 'status'],
+                                        capture_output=True, text=True, timeout=3)
+                if result.returncode == 0:
+                    return 'ufw'
+            except:
+                pass
+
+        if shutil.which('firewall-cmd'):
+            try:
+                result = subprocess.run(['systemctl', 'is-active', 'firewalld'],
+                                        capture_output=True, text=True, timeout=3)
+                if result.returncode == 0:
+                    return 'firewalld'
+            except:
+                pass
+
+        if shutil.which('iptables'):
+            return 'iptables'
+
+        return 'unknown'
+
+    def get_node_info_for_handshake(self) -> dict:
+        """Retorna información completa del nodo para el primer evento"""
+        if self._node_info is None:
+            try:
+                # Detectar estado del firewall
+                firewall_status = "unknown"
+                os_name = platform.system().lower()
+
+                if os_name == "linux":
+                    firewall_status = self._get_linux_firewall_status()
+                elif os_name == "windows":
+                    firewall_status = self._get_windows_firewall_status()
+                elif os_name == "darwin":
+                    firewall_status = self._get_macos_firewall_status()
+
+                self._node_info = {
+                    'node_hostname': socket.gethostname(),
+                    'os_version': f"{platform.system()} {platform.release()}",
+                    'firewall_status': firewall_status,
+                    'agent_version': '1.0.0'  # Tu versión actual
+                }
+            except Exception as e:
+                self._node_info = {
+                    'node_hostname': 'unknown',
+                    'os_version': 'unknown',
+                    'firewall_status': 'unknown',
+                    'agent_version': '1.0.0'
+                }
+
+        return self._node_info
+
+    def _get_linux_firewall_status(self) -> str:
+        """Obtiene estado del firewall en Linux"""
+        try:
+            if shutil.which('ufw'):
+                result = subprocess.run(['ufw', 'status'], capture_output=True, text=True, timeout=3)
+                if 'Status: active' in result.stdout:
+                    return 'active'
+                else:
+                    return 'inactive'
+        except:
+            pass
+        return 'unknown'
+
+    def _get_windows_firewall_status(self) -> str:
+        """Obtiene estado del firewall en Windows"""
+        try:
+            result = subprocess.run(['netsh', 'advfirewall', 'show', 'allprofiles', 'state'],
+                                    capture_output=True, text=True, timeout=5)
+            if 'State                                 ON' in result.stdout:
+                return 'active'
+            else:
+                return 'inactive'
+        except:
+            pass
+        return 'unknown'
+
+    def _get_macos_firewall_status(self) -> str:
+        """Obtiene estado del firewall en macOS"""
+        try:
+            result = subprocess.run(['pfctl', '-s', 'info'],
+                                    capture_output=True, text=True, timeout=3)
+            if 'Status: Enabled' in result.stdout:
+                return 'active'
+            else:
+                return 'inactive'
+        except:
+            pass
+        return 'unknown'
+
+    def is_first_event(self) -> bool:
+        """Retorna True solo para el primer evento (handshake)"""
+        if self._is_first_event:
+            self._is_first_event = False
+            return True
+        return False
 
 class GeoDetector:
     """Detector simplificado de coordenadas GPS en paquetes"""
@@ -258,6 +380,10 @@ class EnhancedPromiscuousAgent:
         self._init_zmq()
         self._init_geoip()
 
+        self.system_detector = SystemDetector()
+        self.so_identifier = self.system_detector.get_so_identifier()
+        print(f"🖥️  SO detectado: {self.so_identifier}")
+
         logger.info(f"🚀 Enhanced Promiscuous Agent iniciado - ID: {self.agent_id}")
 
     def _load_config(self, config_file: Optional[str]) -> Dict[str, Any]:
@@ -392,47 +518,96 @@ class EnhancedPromiscuousAgent:
             'timestamp': time.time()
         }
 
-    def create_network_event(self, packet) -> network_event_pb2.NetworkEvent:
-        """Crear evento usando el protobuf existente - TIMESTAMP CORREGIDO"""
-        event = network_event_pb2.NetworkEvent()
+    def create_enhanced_network_event(self, packet) -> 'NetworkEvent':
+        """
+        Crear evento usando el protobuf disponible (extendido o original)
+        """
 
-        # Identificación básica
-        event.event_id = str(uuid.uuid4())
+        if EXTENDED_PROTOBUF:
+            # Usar protobuf extendido
+            event = network_event_extended_pb2.NetworkEvent()
 
-        # 🔧 CORRECCIÓN CRÍTICA: timestamp en SEGUNDOS, no milisegundos
-        # Esto eliminará TODOS los errores de parsing en el ML detector
-        event.timestamp = int(time.time())  # CORREGIDO: segundos en lugar de milisegundos
+            # Campos básicos
+            event.event_id = str(uuid.uuid4())
+            event.timestamp = int(time.time())  # Timestamp en segundos
+            event.agent_id = self.agent_id
 
-        event.agent_id = self.agent_id
+            # Información de red
+            if IP in packet:
+                event.source_ip = packet[IP].src
+                event.target_ip = packet[IP].dst
 
-        # Información de red básica
-        if IP in packet:
-            event.source_ip = packet[IP].src
-            event.target_ip = packet[IP].dst
+                # Geolocalización
+                src_lat, src_lon, src_source = self.get_geolocation(packet, packet[IP].src)
+                event.latitude = src_lat
+                event.longitude = src_lon
 
-            # 🌍 GEOLOCALIZACIÓN CRÍTICA - usando campos existentes
-            src_lat, src_lon, src_source = self.get_geolocation(packet, packet[IP].src)
-            # Para el protobuf existente, usaremos las coordenadas del origen
-            # (se podría extender el protobuf para tener src_lat, src_lon, dst_lat, dst_lon)
-            event.latitude = src_lat
-            event.longitude = src_lon
+            # Puertos
+            if TCP in packet:
+                event.src_port = packet[TCP].sport
+                event.dest_port = packet[TCP].dport
+            elif UDP in packet:
+                event.src_port = packet[UDP].sport
+                event.dest_port = packet[UDP].dport
 
-        # Puertos
-        if TCP in packet:
-            event.src_port = packet[TCP].sport
-            event.dest_port = packet[TCP].dport
-        elif UDP in packet:
-            event.src_port = packet[UDP].sport
-            event.dest_port = packet[UDP].dport
+            # Campos adicionales
+            event.packet_size = len(packet)
+            event.event_type = "network_capture"
+            event.anomaly_score = 0.0
+            event.risk_score = 0.0
+            event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
 
-        # Tamaño del paquete
-        event.packet_size = len(packet)
+            # CAMPOS EXTENDIDOS - NUEVA FUNCIONALIDAD
+            event.so_identifier = self.system_detector.get_so_identifier()
 
-        # Información adicional usando campos existentes
-        event.event_type = "network_capture"
-        event.anomaly_score = 0.0  # Será poblado por ML detector
-        event.risk_score = 0.0  # Será poblado por ML detector
-        event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
+            # Solo en el primer evento, añadir información completa
+            if self.system_detector.is_first_event():
+                node_info = self.system_detector.get_node_info_for_handshake()
+                event.is_initial_handshake = True
+                event.node_hostname = node_info['node_hostname']
+                event.os_version = node_info['os_version']
+                event.firewall_status = node_info['firewall_status']
+                event.agent_version = node_info['agent_version']
+
+                print(f"📤 Enviando handshake inicial con SO: {event.so_identifier}")
+            else:
+                event.is_initial_handshake = False
+                event.node_hostname = ""
+                event.os_version = ""
+                event.firewall_status = ""
+                event.agent_version = ""
+
+        else:
+            # Fallback al protobuf original
+            event = network_event_pb2.NetworkEvent()
+
+            # Solo campos básicos disponibles
+            event.event_id = str(uuid.uuid4())
+            event.timestamp = int(time.time())
+            event.agent_id = self.agent_id
+
+            if IP in packet:
+                event.source_ip = packet[IP].src
+                event.target_ip = packet[IP].dst
+
+                src_lat, src_lon, src_source = self.get_geolocation(packet, packet[IP].src)
+                event.latitude = src_lat
+                event.longitude = src_lon
+
+            if TCP in packet:
+                event.src_port = packet[TCP].sport
+                event.dest_port = packet[TCP].dport
+            elif UDP in packet:
+                event.src_port = packet[UDP].sport
+                event.dest_port = packet[UDP].dport
+
+            event.packet_size = len(packet)
+            event.event_type = "network_capture"
+            event.anomaly_score = 0.0
+            event.risk_score = 0.0
+            event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
+
+            print("⚠️  Usando protobuf network_event_extended_fixed.")
 
         self.stats['packets_captured'] += 1
         return event
@@ -454,9 +629,8 @@ class EnhancedPromiscuousAgent:
     def packet_handler(self, packet):
         """Handler principal para procesar paquetes capturados"""
         try:
-            # Crear evento de red con geolocalización
-            event = self.create_network_event(packet)
-
+            # Crear evento de red con geolocalización e informacion para hacer un handshake
+            event = self.create_enhanced_network_event(packet)
             # Enviar via ZeroMQ
             self.send_event(event)
 
