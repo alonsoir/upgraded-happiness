@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 🛡️ Dashboard SCADA REAL - ZeroMQ 5560 + Mapa Interactivo + Comandos Firewall
-Conectado a eventos enriquecidos por ML del puerto 5560
-Envía comandos de firewall por puerto 5561
+Conectado a eventos enriquecidos por ML del puerto 5560 (PROTOBUF)
+Envía comandos de firewall por puerto 5561 (PROTOBUF)
+ACTUALIZADO: Usa estructuras protobuf reales con enums y campos correctos
 """
 
 import json
@@ -14,80 +15,105 @@ from collections import defaultdict, deque
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import uuid
-import time
-import json
-import zmq
-
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Importar protobuf
+# Importar protobuf y zmq
+try:
+    import zmq
+
+    ZMQ_AVAILABLE = True
+    logger.info("✅ ZMQ disponible")
+except ImportError:
+    ZMQ_AVAILABLE = False
+    logger.error("❌ ZMQ no disponible")
+
+# Importar protobuf - USAR ESTRUCTURAS REALES
 try:
     from src.protocols.protobuf import network_event_extended_fixed_pb2
     from src.protocols.protobuf import firewall_commands_pb2
+
     PROTOBUF_AVAILABLE = True
-    logger.info("✅ Protobuf importado desde src.protocols.protobuf.network_event_extended_fixed_pb2")
-    logger.info("✅ Protobuf importado desde src.protocols.protobuf.firewall_commands_pb2")
+    logger.info("✅ Protobuf importado desde src.protocols.protobuf")
 except ImportError:
     try:
         import network_event_extended_fixed_pb2
         import firewall_commands_pb2
 
         PROTOBUF_AVAILABLE = True
-        logger.info("✅ Protobuf network_event_extended_fixed_pb2 y firewall_commands_pb2 importados desde directorio local")
+        logger.info("✅ Protobuf importado desde directorio local")
     except ImportError:
         PROTOBUF_AVAILABLE = False
         logger.error("❌ Protobuf no disponible")
 
 
 class FirewallCommandGenerator:
-    """Generador de comandos de firewall específicos por SO"""
+    """Generador de comandos de firewall usando estructuras protobuf reales"""
 
     def __init__(self):
         # Cache de información de nodos
         self.known_nodes = {}
 
+        # Mapeo de acciones a enums
+        self.action_mapping = {
+            'block_ip': firewall_commands_pb2.BLOCK_IP,
+            'unblock_ip': firewall_commands_pb2.UNBLOCK_IP,
+            'block_port': firewall_commands_pb2.BLOCK_PORT,
+            'unblock_port': firewall_commands_pb2.UNBLOCK_PORT,
+            'rate_limit': firewall_commands_pb2.RATE_LIMIT_IP,
+            'allow_temp': firewall_commands_pb2.ALLOW_IP_TEMP
+        }
+
+        # Mapeo de prioridades a enums
+        self.priority_mapping = {
+            'low': firewall_commands_pb2.LOW,
+            'medium': firewall_commands_pb2.MEDIUM,
+            'high': firewall_commands_pb2.HIGH,
+            'critical': firewall_commands_pb2.CRITICAL
+        }
+
         # Reglas básicas por tipo de amenaza
         self.threat_rules = {
             'port_scan': {
-                'action': 'BLOCK_IP',
+                'action': 'block_ip',
                 'duration': 3600,
-                'priority': 'HIGH'
+                'priority': 'high'
             },
             'anomaly_high': {
-                'action': 'BLOCK_IP',
+                'action': 'block_ip',
                 'duration': 1800,
-                'priority': 'MEDIUM'
+                'priority': 'medium'
             },
             'rate_limit_exceeded': {
-                'action': 'RATE_LIMIT_IP',
+                'action': 'rate_limit',
                 'duration': 900,
-                'priority': 'MEDIUM',
+                'priority': 'medium',
                 'rate_limit_rule': '10/min'
             },
             'suspicious_port': {
-                'action': 'BLOCK_PORT',
+                'action': 'block_ip',
                 'duration': 3600,
-                'priority': 'HIGH'
+                'priority': 'high'
             }
         }
 
     def register_node(self, event_data):
         """Registra un nodo cuando recibe su handshake inicial"""
         if event_data.get('is_initial_handshake'):
-            node_id = event_data.get('agent_id')  # o el campo que uses para identificar nodos
+            node_id = event_data.get('agent_id', 'unknown')
 
             self.known_nodes[node_id] = {
                 'so_identifier': event_data.get('so_identifier', 'unknown'),
                 'hostname': event_data.get('node_hostname', 'unknown'),
                 'os_version': event_data.get('os_version', 'unknown'),
                 'firewall_status': event_data.get('firewall_status', 'unknown'),
+                'agent_version': event_data.get('agent_version', 'unknown'),
                 'last_seen': time.time()
             }
 
-            print(f"🖥️  Nodo registrado: {node_id} ({event_data.get('so_identifier')})")
+            logger.info(f"🖥️  Nodo registrado: {node_id} ({event_data.get('so_identifier')})")
 
     def analyze_threat_and_generate_commands(self, event_data) -> list:
         """Analiza un evento y genera comandos de firewall si es necesario"""
@@ -98,7 +124,7 @@ class FirewallCommandGenerator:
 
         if threat_type:
             # Generar comando basado en el tipo de amenaza
-            command = self.create_firewall_command(event_data, threat_type)
+            command = self.create_firewall_command_protobuf(event_data, threat_type)
             if command:
                 commands.append(command)
 
@@ -118,19 +144,21 @@ class FirewallCommandGenerator:
         if dest_port in suspicious_ports:
             return 'suspicious_port'
 
-        # Rate limiting (necesitarías lógica adicional para detectar esto)
+        # Rate limiting
         event_type = event_data.get('event_type', '')
         if 'flood' in event_type.lower() or 'brute' in event_type.lower():
             return 'rate_limit_exceeded'
 
-        # Port scanning (necesitarías lógica adicional)
+        # Port scanning
         if 'scan' in event_type.lower():
             return 'port_scan'
 
         return None
 
-    def create_firewall_command(self, event_data, threat_type) -> dict:
-        """Crea un comando de firewall específico"""
+    def create_firewall_command_protobuf(self, event_data, threat_type):
+        """Crea un comando de firewall usando protobuf real"""
+        if not PROTOBUF_AVAILABLE:
+            return None
 
         if threat_type not in self.threat_rules:
             return None
@@ -142,251 +170,173 @@ class FirewallCommandGenerator:
         if not source_ip:
             return None
 
-        command = {
-            'command_id': str(uuid.uuid4()),
-            'action': rule['action'],
-            'target_ip': source_ip,
-            'target_port': dest_port if rule['action'] in ['BLOCK_PORT', 'UNBLOCK_PORT'] else 0,
-            'duration_seconds': rule['duration'],
-            'reason': f"Detected {threat_type} from {source_ip}",
-            'priority': rule['priority'],
-            'dry_run': True,  # Siempre dry_run por seguridad
-            'rate_limit_rule': rule.get('rate_limit_rule', ''),
-            'extra_params': {}
-        }
+        # Crear comando protobuf usando estructura real
+        command = firewall_commands_pb2.FirewallCommand()
+        command.command_id = str(uuid.uuid4())
+        command.action = self.action_mapping[rule['action']]
+        command.target_ip = source_ip
+
+        if rule['action'] in ['block_port', 'unblock_port']:
+            command.target_port = dest_port
+        else:
+            command.target_port = 0
+
+        command.duration_seconds = rule['duration']
+        command.reason = f"Detected {threat_type} from {source_ip}"
+        command.priority = self.priority_mapping[rule['priority']]
+        command.dry_run = True  # Siempre dry_run por seguridad
+
+        # Agregar rate limiting si aplica
+        if 'rate_limit_rule' in rule:
+            command.rate_limit_rule = rule['rate_limit_rule']
+
+        # Agregar parámetros extra específicos del SO
+        if 'extra_params' in rule:
+            for key, value in rule['extra_params'].items():
+                command.extra_params[key] = value
 
         return command
 
-    def create_command_batch(self, target_node_id, commands, description="Dashboard generated commands") -> dict:
+    def create_command_batch(self, target_node_id, commands, description="Dashboard generated commands"):
         """Crea un lote de comandos para enviar al firewall agent"""
+        if not PROTOBUF_AVAILABLE:
+            return None
 
         if target_node_id not in self.known_nodes:
-            print(f"⚠️  Nodo desconocido: {target_node_id}")
+            logger.warning(f"⚠️  Nodo desconocido: {target_node_id}")
             return None
 
         node_info = self.known_nodes[target_node_id]
 
-        batch = {
-            'batch_id': str(uuid.uuid4()),
-            'target_node_id': target_node_id,
-            'so_identifier': node_info['so_identifier'],
-            'timestamp': int(time.time() * 1000),
-            'generated_by': 'dashboard',
-            'dry_run_all': True,  # Siempre seguro
-            'commands': commands,
-            'description': description,
-            'source_event_id': '',  # Se puede llenar con el ID del evento que originó
-            'confidence_score': 0.8,  # Ajustar según tu lógica
-            'expected_execution_time': len(commands) * 2  # Estimación: 2 segundos por comando
-        }
+        # Crear lote usando estructura protobuf real
+        batch = firewall_commands_pb2.FirewallCommandBatch()
+        batch.batch_id = str(uuid.uuid4())
+        batch.target_node_id = target_node_id
+        batch.so_identifier = node_info['so_identifier']
+        batch.timestamp = int(time.time() * 1000)
+        batch.generated_by = 'dashboard'
+        batch.dry_run_all = True  # Siempre seguro
+        batch.description = description
+        batch.confidence_score = 0.8
+        batch.expected_execution_time = len(commands) * 2
+
+        # Agregar comandos al lote
+        for command in commands:
+            batch.commands.append(command)
 
         return batch
 
 
-# ====== CLASE PARA INTEGRAR EN TU DASHBOARD ======
-class DashboardFirewallIntegration:
-    """Integración de firewall para tu dashboard existente"""
-
-    def __init__(self, dashboard_instance):
-        self.dashboard = dashboard_instance
-        self.command_generator = FirewallCommandGenerator()
-
-        # Socket para enviar comandos al firewall agent
-        self.firewall_socket = None
-        self.setup_firewall_socket()
-
-        # Estado de la UI
-        self.selected_events = []
-        self.pending_commands = {}
-
-    def setup_firewall_socket(self):
-        """Configura socket para enviar comandos de firewall"""
-        try:
-            import zmq
-            context = zmq.Context()
-            self.firewall_socket = context.socket(zmq.PUSH)
-            self.firewall_socket.connect("tcp://localhost:5561")  # Puerto del firewall agent
-            print("🔥 Conectado al Firewall Agent en puerto 5561")
-        except Exception as e:
-            print(f"⚠️  No se pudo conectar al Firewall Agent: {e}")
-
-    def process_received_event(self, event_data):
-        """Procesa un evento recibido (llamar desde tu loop principal)"""
-
-        # Registrar nodo si es handshake inicial
-        self.command_generator.register_node(event_data)
-
-        # Analizar amenazas automáticamente
-        suggested_commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
-
-        if suggested_commands:
-            print(
-                f"💡 {len(suggested_commands)} comando(s) sugerido(s) para evento {event_data.get('event_id', 'unknown')}")
-
-            # Guardar comandos sugeridos para aprobación manual
-            event_id = event_data.get('event_id')
-            self.pending_commands[event_id] = {
-                'event': event_data,
-                'commands': suggested_commands,
-                'timestamp': time.time()
-            }
-
-    def handle_event_click(self, event_data):
-        """Maneja click en un evento (integrar con tu UI)"""
-
-        event_id = event_data.get('event_id')
-        agent_id = event_data.get('agent_id')
-
-        print(f"🖱️  Click en evento {event_id}")
-
-        # Verificar si hay comandos pendientes para este evento
-        if event_id in self.pending_commands:
-            pending = self.pending_commands[event_id]
-            commands = pending['commands']
-
-            print(f"💭 Comandos sugeridos para este evento:")
-            for i, cmd in enumerate(commands):
-                print(f"  {i + 1}. {cmd['action']} {cmd['target_ip']} - {cmd['reason']}")
-
-            # Aquí puedes integrar con tu UI para mostrar opciones
-            # Por ejemplo, botones "Aplicar", "Rechazar", "Modificar"
-
-            return {
-                'has_suggestions': True,
-                'commands': commands,
-                'event': event_data
-            }
-        else:
-            # Generar comandos on-demand
-            commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
-
-            if commands:
-                print(f"💡 Comandos generados on-demand:")
-                for i, cmd in enumerate(commands):
-                    print(f"  {i + 1}. {cmd['action']} {cmd['target_ip']} - {cmd['reason']}")
-
-                return {
-                    'has_suggestions': True,
-                    'commands': commands,
-                    'event': event_data
-                }
-            else:
-                print("ℹ️  No se detectaron amenazas en este evento")
-                return {
-                    'has_suggestions': False,
-                    'event': event_data
-                }
-
-    def approve_and_send_commands(self, event_id):
-        """Aprueba y envía comandos pendientes"""
-
-        if event_id not in self.pending_commands:
-            print(f"❌ No hay comandos pendientes para evento {event_id}")
-            return False
-
-        pending = self.pending_commands[event_id]
-        commands = pending['commands']
-        event_data = pending['event']
-        agent_id = event_data.get('agent_id')
-
-        # Crear lote de comandos
-        batch = self.command_generator.create_command_batch(
-            target_node_id=agent_id,
-            commands=commands,
-            description=f"Commands for event {event_id}"
-        )
-
-        if not batch:
-            print(f"❌ No se pudo crear lote de comandos")
-            return False
-
-        # Enviar al firewall agent
-        success = self.send_command_batch(batch)
-
-        if success:
-            # Limpiar comandos pendientes
-            del self.pending_commands[event_id]
-            print(f"✅ Comandos enviados para evento {event_id}")
-
-        return success
-
-    def send_command_batch(self, batch) -> bool:
-        """Envía un lote de comandos al firewall agent"""
-
-        if not self.firewall_socket:
-            print("❌ No hay conexión con Firewall Agent")
-            return False
-
-        try:
-            # Por ahora enviar como JSON, luego cambiar a protobuf
-            batch_json = json.dumps(batch)
-            self.firewall_socket.send_string(batch_json)
-
-            print(f"📤 Lote {batch['batch_id']} enviado al Firewall Agent")
-            print(f"   📋 {len(batch['commands'])} comando(s)")
-            print(f"   🎯 Nodo destino: {batch['target_node_id']}")
-            print(f"   🖥️  SO: {batch['so_identifier']}")
-
-            return True
-
-        except Exception as e:
-            print(f"❌ Error enviando comandos: {e}")
-            return False
-
-    def get_pending_commands_summary(self):
-        """Retorna resumen de comandos pendientes"""
-        summary = {
-            'total_events_with_commands': len(self.pending_commands),
-            'total_commands': sum(len(p['commands']) for p in self.pending_commands.values()),
-            'oldest_pending': None
-        }
-
-        if self.pending_commands:
-            oldest = min(self.pending_commands.values(), key=lambda x: x['timestamp'])
-            summary['oldest_pending'] = time.time() - oldest['timestamp']
-
-        return summary
-
 class FirewallCommandSender:
-    """Cliente ZeroMQ para enviar comandos de firewall al puerto 5561"""
+    """Cliente ZeroMQ para enviar comandos de firewall al puerto 5561 usando PROTOBUF"""
 
     def __init__(self):
+        if not ZMQ_AVAILABLE:
+            logger.error("ZMQ no disponible para FirewallCommandSender")
+            self.socket = None
+            self.context = None
+            return
+
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUSH)
-        self.socket.connect("tcp://localhost:5561")
-        self.command_log = deque(maxlen=100)
-        logger.info("🔥 Firewall command sender conectado al puerto 5561")
 
-    def send_firewall_command(self, command_data):
-        """Enviar comando de firewall"""
         try:
-            # Agregar timestamp y ID único
-            command_data.update({
-                'command_id': f"fw_{int(time.time() * 1000)}",
-                'sent_timestamp': datetime.now().isoformat(),
-                'dashboard_version': "1.0"
-            })
+            self.socket.connect("tcp://localhost:5561")
+            self.command_log = deque(maxlen=100)
+            logger.info("🔥 Firewall command sender conectado al puerto 5561 (PROTOBUF)")
+        except Exception as e:
+            logger.error(f"Error conectando al puerto 5561: {e}")
+            self.socket = None
 
-            # Enviar como JSON
-            message = json.dumps(command_data).encode('utf-8')
+    def send_firewall_command_batch(self, batch):
+        """Enviar lote de comandos usando protobuf"""
+        if not self.socket or not PROTOBUF_AVAILABLE:
+            logger.error("Socket o protobuf no disponible para enviar comando")
+            return False
+
+        try:
+            # Enviar como protobuf serializado
+            message = batch.SerializeToString()
             self.socket.send(message)
 
             # Log local
             log_entry = {
                 'timestamp': datetime.now().isoformat(),
-                'action': 'firewall_command_sent',
-                'command_id': command_data['command_id'],
-                'target_ip': command_data.get('target_ip'),
-                'action_type': command_data.get('action'),
-                'agent': command_data.get('source_agent')
+                'action': 'firewall_batch_sent',
+                'batch_id': batch.batch_id,
+                'target_node': batch.target_node_id,
+                'command_count': len(batch.commands),
+                'generated_by': batch.generated_by
             }
             self.command_log.append(log_entry)
 
-            logger.info(f"🔥 Comando enviado: {command_data['action']} para {command_data.get('target_ip')}")
+            logger.info(f"🔥 Lote protobuf enviado: {batch.batch_id} ({len(batch.commands)} comandos)")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error enviando comando firewall: {e}")
+            logger.error(f"❌ Error enviando lote firewall protobuf: {e}")
+            return False
+
+    def send_firewall_command_json(self, command_data):
+        """Enviar comando individual usando JSON (convertir a protobuf)"""
+        if not self.socket or not PROTOBUF_AVAILABLE:
+            logger.error("Socket o protobuf no disponible para enviar comando")
+            return False
+
+        try:
+            # Convertir JSON a protobuf
+            command = firewall_commands_pb2.FirewallCommand()
+            command.command_id = command_data.get('command_id', str(uuid.uuid4()))
+
+            # Mapear acción string a enum
+            action_str = command_data.get('action', 'BLOCK_IP').lower()
+            if action_str == 'block_ip':
+                command.action = firewall_commands_pb2.BLOCK_IP
+            elif action_str == 'rate_limit':
+                command.action = firewall_commands_pb2.RATE_LIMIT_IP
+            elif action_str == 'allow':
+                command.action = firewall_commands_pb2.ALLOW_IP_TEMP
+            else:
+                command.action = firewall_commands_pb2.BLOCK_IP
+
+            command.target_ip = command_data.get('target_ip', '')
+            command.target_port = command_data.get('target_port', 0)
+            command.duration_seconds = command_data.get('duration_seconds', 3600)
+            command.reason = command_data.get('reason', 'Dashboard command')
+
+            # Mapear prioridad string a enum
+            priority_str = command_data.get('priority', 'MEDIUM').lower()
+            if priority_str == 'low':
+                command.priority = firewall_commands_pb2.LOW
+            elif priority_str == 'high':
+                command.priority = firewall_commands_pb2.HIGH
+            elif priority_str == 'critical':
+                command.priority = firewall_commands_pb2.CRITICAL
+            else:
+                command.priority = firewall_commands_pb2.MEDIUM
+
+            command.dry_run = command_data.get('dry_run', True)
+
+            # Crear lote con un solo comando
+            batch = firewall_commands_pb2.FirewallCommandBatch()
+            batch.batch_id = str(uuid.uuid4())
+            batch.target_node_id = command_data.get('source_agent', 'unknown')
+            batch.so_identifier = 'unknown'
+            batch.timestamp = int(time.time() * 1000)
+            batch.generated_by = 'dashboard_web'
+            batch.dry_run_all = True
+            batch.description = 'Single command from web interface'
+            batch.confidence_score = 0.8
+            batch.expected_execution_time = 2
+
+            # Agregar comando al lote
+            batch.commands.append(command)
+
+            # Enviar lote
+            return self.send_firewall_command_batch(batch)
+
+        except Exception as e:
+            logger.error(f"❌ Error convirtiendo JSON a protobuf: {e}")
             return False
 
     def get_command_log(self):
@@ -395,12 +345,14 @@ class FirewallCommandSender:
 
     def close(self):
         """Cerrar conexión"""
-        self.socket.close()
-        self.context.term()
+        if self.socket:
+            self.socket.close()
+        if self.context:
+            self.context.term()
 
 
 class ZeroMQListener:
-    """Listener de ZeroMQ puerto 5560 (eventos enriquecidos por ML)"""
+    """Listener de ZeroMQ puerto 5560 (eventos enriquecidos por ML) usando PROTOBUF"""
 
     def __init__(self, dashboard_handler):
         self.dashboard_handler = dashboard_handler
@@ -430,11 +382,17 @@ class ZeroMQListener:
             'last_event_time': None,
             'ml_models_detected': set(),
             'event_types': defaultdict(int),
-            'ports_seen': defaultdict(int)
+            'ports_seen': defaultdict(int),
+            'handshakes_received': 0,
+            'nodes_registered': 0
         }
 
     def start(self):
         """Iniciar conexión a ZeroMQ 5560"""
+        if not ZMQ_AVAILABLE:
+            logger.error("ZMQ no disponible para listener")
+            return
+
         self.running = True
 
         try:
@@ -446,19 +404,19 @@ class ZeroMQListener:
 
             self.broker_stats['connection_time'] = datetime.now()
 
-            logger.info("🔌 Conectado a ZeroMQ puerto 5560 (eventos enriquecidos por ML)")
+            logger.info("🔌 Conectado a ZeroMQ puerto 5560 (eventos enriquecidos por ML - PROTOBUF)")
 
             # Thread de escucha
             thread = threading.Thread(target=self._listen_events, daemon=True)
             thread.start()
 
-            logger.info("🎯 Dashboard iniciado - Esperando eventos enriquecidos...")
+            logger.info("🎯 Dashboard iniciado - Esperando eventos enriquecidos protobuf...")
 
         except Exception as e:
             logger.error(f"❌ Error conectando a ZeroMQ: {e}")
 
     def _listen_events(self):
-        """Escuchar eventos del puerto 5560"""
+        """Escuchar eventos del puerto 5560 (PROTOBUF)"""
         while self.running:
             try:
                 message = self.socket.recv(zmq.NOBLOCK)
@@ -469,19 +427,23 @@ class ZeroMQListener:
                 self.broker_stats['last_message_time'] = datetime.now()
                 self.broker_stats['broker_health'] = 'healthy'
 
+                # Intentar parsear como protobuf
                 if PROTOBUF_AVAILABLE:
                     try:
                         event = network_event_extended_fixed_pb2.NetworkEvent()
                         event.ParseFromString(message)
-                        self._process_event(event)
+                        self._process_event_protobuf(event)
+                        continue
                     except Exception as e:
-                        logger.debug(f"Error parsing evento: {e}")
-                else:
-                    try:
-                        event_data = json.loads(message.decode('utf-8'))
-                        self._process_json_event(event_data)
-                    except:
-                        pass
+                        logger.debug(f"Error parsing protobuf: {e}")
+
+                # Fallback a JSON (no debería ocurrir)
+                try:
+                    event_data = json.loads(message.decode('utf-8'))
+                    self._process_json_event(event_data)
+                    logger.warning("Recibido evento en JSON - se esperaba protobuf")
+                except Exception as e:
+                    logger.error(f"Error parsing mensaje: {e}")
 
             except zmq.Again:
                 time.sleep(0.1)
@@ -493,8 +455,8 @@ class ZeroMQListener:
                 logger.error(f"❌ Error en listener: {e}")
                 time.sleep(1)
 
-    def _process_event(self, event):
-        """Procesar evento protobuf"""
+    def _process_event_protobuf(self, event):
+        """Procesar evento protobuf usando todos los campos disponibles"""
         try:
             event_dict = {
                 'event_id': event.event_id or f"evt_{int(time.time() * 1000)}",
@@ -515,25 +477,38 @@ class ZeroMQListener:
                             event.latitude != 0 and event.longitude != 0),
                 'ml_enhanced': event.anomaly_score > 0 or event.risk_score > 0,
                 'risk_level': self._get_risk_level(event.risk_score),
-                'protocol': getattr(event, 'protocol', 'TCP'),  # Protocolo de red
-                'flags': getattr(event, 'flags', [])  # Flags TCP si están disponibles
+                'source': 'protobuf',
+
+                # Campos adicionales del protobuf real
+                'so_identifier': event.so_identifier or 'unknown',
+                'node_hostname': event.node_hostname or 'unknown',
+                'os_version': event.os_version or 'unknown',
+                'firewall_status': event.firewall_status or 'unknown',
+                'agent_version': event.agent_version or 'unknown',
+                'is_initial_handshake': event.is_initial_handshake
             }
+
+            # Procesar handshake inicial
+            if event.is_initial_handshake:
+                self.stats['handshakes_received'] += 1
+                self.stats['nodes_registered'] += 1
+                logger.info(f"🤝 Handshake recibido de {event.agent_id} ({event.so_identifier})")
 
             self._update_stats(event_dict)
             self._add_to_dashboard(event_dict)
 
             if event_dict['ml_enhanced']:
-                logger.info(f"📡 Evento ML: {event_dict['source_ip']} → {event_dict['target_ip']} "
+                logger.info(f"📡 Evento ML protobuf: {event_dict['source_ip']} → {event_dict['target_ip']} "
                             f"(R: {event_dict['risk_score']:.2f}, A: {event_dict['anomaly_score']:.2f})")
 
         except Exception as e:
-            logger.error(f"❌ Error procesando evento: {e}")
+            logger.error(f"❌ Error procesando evento protobuf: {e}")
 
     def _process_json_event(self, event_data):
-        """Procesar evento JSON fallback"""
+        """Procesar evento JSON (FALLBACK SOLAMENTE)"""
         try:
             event_dict = {
-                'event_id': event_data.get('event_id', 'unknown'),
+                'event_id': event_data.get('event_id', f"evt_{int(time.time() * 1000)}"),
                 'timestamp': datetime.now().isoformat(),
                 'source_ip': event_data.get('source_ip', 'unknown'),
                 'target_ip': event_data.get('target_ip', 'unknown'),
@@ -550,15 +525,22 @@ class ZeroMQListener:
                 'has_gps': event_data.get('latitude') is not None and event_data.get('longitude') is not None,
                 'ml_enhanced': event_data.get('anomaly_score', 0) > 0 or event_data.get('risk_score', 0) > 0,
                 'risk_level': self._get_risk_level(event_data.get('risk_score', 0.0)),
-                'protocol': event_data.get('protocol', 'TCP'),
-                'flags': event_data.get('flags', [])
+                'source': 'json_fallback',
+
+                # Campos adicionales con fallback
+                'so_identifier': event_data.get('so_identifier', 'unknown'),
+                'node_hostname': event_data.get('node_hostname', 'unknown'),
+                'os_version': event_data.get('os_version', 'unknown'),
+                'firewall_status': event_data.get('firewall_status', 'unknown'),
+                'agent_version': event_data.get('agent_version', 'unknown'),
+                'is_initial_handshake': event_data.get('is_initial_handshake', False)
             }
 
             self._update_stats(event_dict)
             self._add_to_dashboard(event_dict)
 
         except Exception as e:
-            logger.error(f"❌ Error procesando JSON: {e}")
+            logger.error(f"❌ Error procesando JSON fallback: {e}")
 
     def _get_risk_level(self, risk_score):
         """Calcular nivel de riesgo"""
@@ -606,6 +588,10 @@ class ZeroMQListener:
         if hasattr(self.dashboard_handler, 'shared_data'):
             self.dashboard_handler.shared_data['events'].append(event)
 
+            # Procesar evento con la integración de firewall
+            if hasattr(self.dashboard_handler, 'firewall_integration'):
+                self.dashboard_handler.firewall_integration.process_received_event(event)
+
             if len(self.dashboard_handler.shared_data['events']) > 300:
                 self.dashboard_handler.shared_data['events'] = \
                     self.dashboard_handler.shared_data['events'][-300:]
@@ -636,7 +622,9 @@ class ZeroMQListener:
             'top_ports': dict(sorted(self.stats['ports_seen'].items(),
                                      key=lambda x: x[1], reverse=True)[:10]),
             'gps_percentage': (self.stats['events_with_gps'] / max(1, self.stats['total_events'])) * 100,
-            'broker_stats': self.broker_stats
+            'broker_stats': self.broker_stats,
+            'handshakes_received': self.stats['handshakes_received'],
+            'nodes_registered': self.stats['nodes_registered']
         }
 
     def stop(self):
@@ -648,16 +636,74 @@ class ZeroMQListener:
             self.context.term()
 
 
+class DashboardFirewallIntegration:
+    """Integración de firewall para el dashboard usando protobuf real"""
+
+    def __init__(self, dashboard_instance):
+        self.dashboard = dashboard_instance
+        self.command_generator = FirewallCommandGenerator()
+
+        # Estado de la UI
+        self.selected_events = []
+        self.pending_commands = {}
+
+    def process_received_event(self, event_data):
+        """Procesa un evento recibido y genera comandos protobuf"""
+
+        # Registrar nodo si es handshake inicial
+        self.command_generator.register_node(event_data)
+
+        # Analizar amenazas automáticamente (retorna objetos protobuf)
+        suggested_commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
+
+        if suggested_commands:
+            logger.info(
+                f"💡 {len(suggested_commands)} comando(s) protobuf sugerido(s) para evento {event_data.get('event_id', 'unknown')}")
+
+            # Guardar comandos sugeridos para aprobación manual
+            event_id = event_data.get('event_id')
+            self.pending_commands[event_id] = {
+                'event': event_data,
+                'commands_protobuf': suggested_commands,  # Objetos protobuf
+                'timestamp': time.time()
+            }
+
+    def get_pending_commands_summary(self):
+        """Retorna resumen de comandos pendientes"""
+        summary = {
+            'total_events_with_commands': len(self.pending_commands),
+            'total_commands': sum(len(p['commands_protobuf']) for p in self.pending_commands.values()),
+            'oldest_pending': None
+        }
+
+        if self.pending_commands:
+            oldest = min(self.pending_commands.values(), key=lambda x: x['timestamp'])
+            summary['oldest_pending'] = time.time() - oldest['timestamp']
+
+        return summary
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
-    """Handler del dashboard con capacidades de firewall"""
+    """Handler del dashboard con capacidades de firewall usando protobuf real"""
 
-    self.firewall_integration = DashboardFirewallIntegration(self)
-
+    # Datos compartidos entre instancias del handler
     shared_data = {
         'events': [],
         'zmq_listener': None,
-        'firewall_sender': None
+        'firewall_sender': None,
+        'firewall_integration': None
     }
+
+    def __init__(self, *args, **kwargs):
+        # Inicializar integración de firewall si no existe
+        if not self.shared_data['firewall_integration']:
+            self.shared_data['firewall_integration'] = DashboardFirewallIntegration(self)
+
+        super().__init__(*args, **kwargs)
+
+    @property
+    def firewall_integration(self):
+        return self.shared_data['firewall_integration']
 
     def do_GET(self):
         """Manejar peticiones GET"""
@@ -672,6 +718,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.serve_gps_events()
             elif self.path == '/api/firewall/log':
                 self.serve_firewall_log()
+            elif self.path == '/api/firewall/pending':
+                self.serve_pending_commands()
             elif self.path == '/health':
                 self.serve_health()
             else:
@@ -687,6 +735,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.handle_firewall_block()
             elif self.path == '/api/firewall/generate':
                 self.handle_generate_firewall_command()
+            elif self.path == '/api/firewall/approve':
+                self.handle_approve_command()
             else:
                 self.send_error(404, "Not Found")
         except Exception as e:
@@ -694,7 +744,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_error(500, f"Internal Error: {e}")
 
     def handle_firewall_block(self):
-        """Manejar solicitud de bloqueo de firewall"""
+        """Manejar solicitud de bloqueo de firewall - convertir JSON web a protobuf"""
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -703,40 +753,19 @@ class DashboardHandler(BaseHTTPRequestHandler):
             event_id = request_data.get('event_id')
             target_ip = request_data.get('target_ip')
             source_agent = request_data.get('source_agent')
-            action = request_data.get('action', 'block_ip')
 
             if not target_ip or not source_agent:
                 self.send_json({'error': 'Missing required fields'}, status=400)
                 return
 
-            # Crear comando de firewall
-            firewall_command = {
-                'action': action,
-                'target_ip': target_ip,
-                'source_agent': source_agent,
-                'reason': request_data.get('reason', 'High risk event from dashboard'),
-                'firewall_rule': {
-                    'rule_type': 'iptables',
-                    'command': f"iptables -A INPUT -s {target_ip} -j DROP",
-                    'duration': request_data.get('duration', '1h'),
-                    'priority': 'high'
-                },
-                'metadata': {
-                    'event_id': event_id,
-                    'ml_scores': request_data.get('ml_scores', {}),
-                    'packet_info': request_data.get('packet_info', ''),
-                    'dashboard_user': 'operator'
-                }
-            }
-
-            # Enviar comando
+            # Enviar usando el método JSON que convierte a protobuf internamente
             if self.shared_data['firewall_sender']:
-                success = self.shared_data['firewall_sender'].send_firewall_command(firewall_command)
+                success = self.shared_data['firewall_sender'].send_firewall_command_json(request_data)
                 if success:
                     self.send_json({
                         'success': True,
-                        'message': f'Firewall command sent for {target_ip}',
-                        'command_id': firewall_command.get('command_id')
+                        'message': f'Firewall command sent for {target_ip} (converted to protobuf batch)',
+                        'command_id': request_data.get('command_id', 'auto-generated')
                     })
                 else:
                     self.send_json({'error': 'Failed to send firewall command'}, status=500)
@@ -747,8 +776,61 @@ class DashboardHandler(BaseHTTPRequestHandler):
             logger.error(f"❌ Error en firewall block: {e}")
             self.send_json({'error': str(e)}, status=500)
 
+    def handle_approve_command(self):
+        """Aprobar y ejecutar comando pendiente (protobuf nativo)"""
+        try:
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            request_data = json.loads(post_data.decode('utf-8'))
+
+            event_id = request_data.get('event_id')
+
+            if not event_id:
+                self.send_json({'error': 'Missing event_id'}, status=400)
+                return
+
+            # Verificar si hay comandos pendientes (protobuf)
+            if event_id in self.firewall_integration.pending_commands:
+                pending = self.firewall_integration.pending_commands[event_id]
+                commands_protobuf = pending['commands_protobuf']
+                event_data = pending['event']
+
+                # Crear lote de comandos
+                batch = self.firewall_integration.command_generator.create_command_batch(
+                    target_node_id=event_data.get('agent_id'),
+                    commands=commands_protobuf,
+                    description=f"Approved commands for event {event_id}"
+                )
+
+                if batch:
+                    # Enviar lote protobuf
+                    if self.shared_data['firewall_sender']:
+                        success = self.shared_data['firewall_sender'].send_firewall_command_batch(batch)
+                        if success:
+                            # Limpiar comandos pendientes
+                            del self.firewall_integration.pending_commands[event_id]
+
+                            self.send_json({
+                                'success': True,
+                                'message': f'Batch {batch.batch_id} sent successfully',
+                                'batch_id': batch.batch_id,
+                                'commands_sent': len(batch.commands)
+                            })
+                        else:
+                            self.send_json({'error': 'Failed to send command batch'}, status=500)
+                    else:
+                        self.send_json({'error': 'Firewall sender not available'}, status=500)
+                else:
+                    self.send_json({'error': 'Could not create command batch'}, status=500)
+            else:
+                self.send_json({'error': 'No pending commands for this event'}, status=404)
+
+        except Exception as e:
+            logger.error(f"❌ Error aprobando comando: {e}")
+            self.send_json({'error': str(e)}, status=500)
+
     def handle_generate_firewall_command(self):
-        """Generar comando de firewall usando Claude"""
+        """Generar comando de firewall"""
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -757,7 +839,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # Información del evento
             event_info = request_data.get('event', {})
 
-            # Generar comando inteligente (simulado - en tu implementación real usarías Claude)
+            # Generar comando inteligente
             suggested_command = self._generate_intelligent_firewall_command(event_info)
 
             self.send_json({
@@ -779,33 +861,36 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         # Determinar tipo de regla basado en el riesgo
         if risk_score >= 0.9:
-            action = 'block_ip_permanent'
-            duration = 'permanent'
-            priority = 'critical'
+            action = 'BLOCK_IP'
+            duration = 86400  # 24h
+            priority = 'CRITICAL'
         elif risk_score >= 0.8:
-            action = 'block_ip'
-            duration = '24h'
-            priority = 'high'
+            action = 'BLOCK_IP'
+            duration = 3600  # 1h
+            priority = 'HIGH'
         else:
-            action = 'rate_limit'
-            duration = '1h'
-            priority = 'medium'
+            action = 'RATE_LIMIT_IP'
+            duration = 900  # 15min
+            priority = 'MEDIUM'
 
         # Generar comando específico del protocolo
         if dest_port in [22, 3389]:  # SSH, RDP
             command = f"iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -j DROP"
         elif dest_port in [80, 443]:  # HTTP, HTTPS
-            command = f"iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -m limit --limit 10/min -j ACCEPT; iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -j DROP"
+            command = f"iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -m limit --limit 10/min -j ACCEPT"
         else:
             command = f"iptables -A INPUT -s {source_ip} -j DROP"
 
         return {
             'action': action,
             'target_ip': source_ip,  # Bloqueamos la IP de origen
+            'target_port': dest_port,
+            'duration_seconds': duration,
+            'priority': priority,
             'firewall_rule': {
                 'rule_type': 'iptables',
                 'command': command,
-                'duration': duration,
+                'duration': f"{duration}s",
                 'priority': priority
             },
             'reason': f"Automated response to risk score {risk_score:.2f}",
@@ -843,12 +928,51 @@ class DashboardHandler(BaseHTTPRequestHandler):
         else:
             self.send_json({'commands': [], 'count': 0})
 
+    def serve_pending_commands(self):
+        """Servir comandos pendientes (convertir protobuf a JSON para web)"""
+        if self.firewall_integration:
+            summary = self.firewall_integration.get_pending_commands_summary()
+            pending = {}
+
+            # Convertir comandos protobuf a JSON para la web
+            for event_id, data in self.firewall_integration.pending_commands.items():
+                commands_json = []
+                for cmd_protobuf in data['commands_protobuf']:
+                    commands_json.append({
+                        'command_id': cmd_protobuf.command_id,
+                        'action': firewall_commands_pb2.CommandAction.Name(cmd_protobuf.action),
+                        'target_ip': cmd_protobuf.target_ip,
+                        'target_port': cmd_protobuf.target_port,
+                        'duration_seconds': cmd_protobuf.duration_seconds,
+                        'reason': cmd_protobuf.reason,
+                        'priority': firewall_commands_pb2.CommandPriority.Name(cmd_protobuf.priority),
+                        'dry_run': cmd_protobuf.dry_run,
+                        'rate_limit_rule': cmd_protobuf.rate_limit_rule
+                    })
+
+                pending[event_id] = {
+                    'event': data['event'],
+                    'commands': commands_json,
+                    'timestamp': data['timestamp']
+                }
+
+            self.send_json({
+                'summary': summary,
+                'pending_commands': pending
+            })
+        else:
+            self.send_json({'summary': {}, 'pending_commands': {}})
+
     def serve_stats(self):
         """Estadísticas del sistema"""
         if self.shared_data['zmq_listener']:
             stats = self.shared_data['zmq_listener'].get_stats()
         else:
             stats = {'error': 'ZeroMQ listener not initialized'}
+
+        # Agregar estadísticas de firewall
+        if self.firewall_integration:
+            stats['firewall_stats'] = self.firewall_integration.get_pending_commands_summary()
 
         self.send_json(stats)
 
@@ -858,8 +982,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_json({
             'events': events,
             'count': len(events),
-            'source': 'zeromq_5560_ml_enriched',
-            'protobuf_available': PROTOBUF_AVAILABLE
+            'source': 'zeromq_5560_ml_enriched_protobuf',
+            'protobuf_available': PROTOBUF_AVAILABLE,
+            'zmq_available': ZMQ_AVAILABLE
         })
 
     def serve_gps_events(self):
@@ -885,9 +1010,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             'zeromq_port': 5560,
             'firewall_port': 5561,
             'protobuf_enabled': PROTOBUF_AVAILABLE,
+            'zmq_enabled': ZMQ_AVAILABLE,
             'total_events': stats.get('total_events', 0),
             'events_with_gps': stats.get('events_with_gps', 0),
-            'firewall_enabled': self.shared_data['firewall_sender'] is not None
+            'firewall_enabled': self.shared_data['firewall_sender'] is not None,
+            'communication_protocol': 'protobuf' if PROTOBUF_AVAILABLE else 'json_fallback',
+            'handshakes_received': stats.get('handshakes_received', 0),
+            'nodes_registered': stats.get('nodes_registered', 0)
         }
         self.send_json(health_data)
 
@@ -908,7 +1037,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛡️ SCADA Real - ML Enhanced + Firewall</title>
+    <title>🛡️ SCADA Real - ML Enhanced + Firewall (PROTOBUF)</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -993,6 +1122,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             background: #ff8800; color: #fff; padding: 1px 4px;
             border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
         }
+        .protobuf-badge {
+            background: #8800ff; color: #fff; padding: 1px 4px;
+            border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
+        }
+        .handshake-badge {
+            background: #00ffff; color: #000; padding: 1px 4px;
+            border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
+        }
         .risk-badge {
             padding: 1px 4px; border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
         }
@@ -1067,7 +1204,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 </head>
 <body>
     <div class="header">
-        <h1>🛡️ SCADA Real - ML Enhanced + Firewall (Puerto 5560)</h1>
+        <h1>🛡️ SCADA Real - ML Enhanced + Firewall (PROTOBUF REAL)</h1>
         <div class="status">
             <div class="status-item">
                 <span class="status-dot online" id="zmq-status"></span>
@@ -1082,10 +1219,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 <span>Firewall</span>
             </div>
             <div class="status-item">
+                <span class="status-dot" id="protobuf-status"></span>
+                <span>Protobuf</span>
+            </div>
+            <div class="status-item">
                 Eventos: <span id="total-events">0</span>
             </div>
             <div class="status-item">
-                GPS: <span id="gps-events">0</span>
+                Nodos: <span id="nodes-registered">0</span>
             </div>
             <div class="status-item">
                 ML: <span id="ml-events">0</span>
@@ -1126,11 +1267,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             </div>
 
             <div class="events-section">
-                <div class="events-header">🚨 Eventos ML Enriquecidos</div>
+                <div class="events-header">🚨 Eventos ML Enriquecidos (Protobuf Real)</div>
                 <div id="events-list">
                     <div class="event-item">
                         <div class="event-time">Conectando a ZeroMQ 5560...</div>
-                        <div class="event-ip">Esperando eventos enriquecidos por ML</div>
+                        <div class="event-ip">Esperando eventos protobuf enriquecidos por ML</div>
                     </div>
                 </div>
             </div>
@@ -1139,6 +1280,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 <button class="btn" onclick="refreshData()">🔄 Actualizar</button>
                 <button class="btn" onclick="clearMap()">🗺️ Limpiar Mapa</button>
                 <button class="btn" onclick="showFirewallLog()">🔥 Log Firewall</button>
+                <button class="btn" onclick="showPendingCommands()">📋 Pendientes</button>
             </div>
         </div>
     </div>
@@ -1147,15 +1289,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
     <div id="firewallModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>🔥 Bloquear Evento de Alto Riesgo</h2>
+                <h2>🔥 Bloquear Evento de Alto Riesgo (→ Protobuf Real)</h2>
                 <span class="close" onclick="closeFirewallModal()">&times;</span>
             </div>
             <div id="modal-event-info"></div>
             <div class="command-preview" id="command-preview">
-                Generando comando de firewall...
+                Generando comando de firewall protobuf...
             </div>
             <div class="modal-buttons">
-                <button class="btn btn-danger" onclick="executeFirewallCommand()">🛡️ Bloquear IP</button>
+                <button class="btn btn-danger" onclick="executeFirewallCommand()">🛡️ Bloquear IP (Protobuf Batch)</button>
                 <button class="btn btn-cancel" onclick="closeFirewallModal()">❌ Cancelar</button>
             </div>
         </div>
@@ -1173,7 +1315,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
                 this.initMap();
                 this.startPeriodicUpdates();
-                this.log('🛡️ Dashboard ML + Firewall inicializado');
+                this.log('🛡️ Dashboard ML + Firewall (PROTOBUF REAL) inicializado');
             }
 
             initMap() {
@@ -1190,33 +1332,39 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
             async refreshData() {
                 try {
-                    const [statsResponse, eventsResponse, gpsResponse] = await Promise.all([
+                    const [statsResponse, eventsResponse, gpsResponse, healthResponse] = await Promise.all([
                         fetch('/api/stats'),
                         fetch('/api/events'),
-                        fetch('/api/events/gps')
+                        fetch('/api/events/gps'),
+                        fetch('/health')
                     ]);
 
                     const stats = await statsResponse.json();
                     const eventsData = await eventsResponse.json();
                     const gpsData = await gpsResponse.json();
+                    const healthData = await healthResponse.json();
 
                     this.updateStats(stats);
                     this.updateEvents(eventsData.events);
                     this.updateMap(gpsData.events);
-                    this.updateStatusIndicators(stats, eventsData);
+                    this.updateStatusIndicators(stats, eventsData, healthData);
 
                 } catch (e) {
                     this.log('❌ Error actualizando datos: ' + e.message);
                 }
             }
 
-            updateStatusIndicators(stats, eventsData) {
+            updateStatusIndicators(stats, eventsData, healthData) {
                 const zmqStatus = document.getElementById('zmq-status');
                 const mlStatus = document.getElementById('ml-status');
                 const firewallStatus = document.getElementById('firewall-status');
+                const protobufStatus = document.getElementById('protobuf-status');
 
+                // Estado ZMQ
                 if (stats.total_events > this.lastEventCount) {
                     zmqStatus.className = 'status-dot online';
+
+                    // Estado ML
                     const hasMLScores = eventsData.events && eventsData.events.some(e => 
                         (e.anomaly_score && e.anomaly_score > 0) || (e.risk_score && e.risk_score > 0)
                     );
@@ -1227,14 +1375,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 }
 
                 // Estado del firewall
-                firewallStatus.className = 'status-dot online'; // Asumimos que está activo
+                firewallStatus.className = healthData.firewall_enabled ? 'status-dot online' : 'status-dot error';
+
+                // Estado protobuf
+                if (healthData.communication_protocol === 'protobuf') {
+                    protobufStatus.className = 'status-dot online';
+                } else {
+                    protobufStatus.className = 'status-dot warning';
+                }
 
                 this.lastEventCount = stats.total_events || 0;
             }
 
             updateStats(stats) {
                 document.getElementById('total-events').textContent = stats.total_events || 0;
-                document.getElementById('gps-events').textContent = stats.events_with_gps || 0;
+                document.getElementById('nodes-registered').textContent = stats.nodes_registered || 0;
                 document.getElementById('events-per-minute').textContent = stats.events_per_minute || 0;
                 document.getElementById('anomaly-events').textContent = stats.anomaly_events || 0;
                 document.getElementById('high-risk-events').textContent = stats.high_risk_events || 0;
@@ -1259,7 +1414,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     document.getElementById('events-list').innerHTML = `
                         <div class="event-item">
                             <div class="event-time">Sin eventos recientes</div>
-                            <div class="event-ip">Verifica que el ML Detector esté enviando al puerto 5560</div>
+                            <div class="event-ip">Verifica que el ML Detector esté enviando protobuf al puerto 5560</div>
                         </div>
                     `;
                     return;
@@ -1279,6 +1434,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     const time = new Date(event.timestamp).toLocaleTimeString();
                     const gpsBadge = event.has_gps ? '<span class="gps-badge">GPS</span>' : '';
                     const mlBadge = event.ml_enhanced ? '<span class="ml-badge">ML</span>' : '';
+                    const protobufBadge = event.source === 'protobuf' ? '<span class="protobuf-badge">PB</span>' : '';
+                    const handshakeBadge = event.is_initial_handshake ? '<span class="handshake-badge">HS</span>' : '';
 
                     let riskBadge = '';
                     if (event.risk_level === 'high') {
@@ -1291,16 +1448,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
                     // Botón de bloqueo para eventos de alto riesgo
                     const blockButton = (event.risk_level === 'high' || event.risk_score > 0.7) ? 
-                        '<button class="block-button" onclick="dashboard.showFirewallModal(event)">🛡️ BLOQUEAR</button>' : '';
+                        '<button class="block-button" data-event-id="' + event.event_id + '">🛡️ BLOQUEAR</button>' : '';
 
                     eventDiv.innerHTML = `
                         <div class="event-time">${time} | ${event.agent_id}</div>
-                        <div class="event-ip">${event.source_ip} → ${event.target_ip}:${event.dest_port}${gpsBadge}${mlBadge}${riskBadge}${blockButton}</div>
+                        <div class="event-ip">${event.source_ip} → ${event.target_ip}:${event.dest_port}${gpsBadge}${mlBadge}${protobufBadge}${handshakeBadge}${riskBadge}${blockButton}</div>
                         <div class="event-details">
                             A: ${(event.anomaly_score * 100).toFixed(1)}% | 
                             R: ${(event.risk_score * 100).toFixed(1)}% | 
                             ${event.packet_size}B
                             ${event.description ? ` | ${event.description}` : ''}
+                            ${event.so_identifier ? ` | ${event.so_identifier}` : ''}
                         </div>
                     `;
 
@@ -1311,9 +1469,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         }
                     });
 
-                    // Inyectar referencia al evento para el botón
-                    if (blockButton) {
-                        eventDiv.querySelector('.block-button').addEventListener('click', (e) => {
+                    // Event listener para el botón de bloqueo
+                    const blockBtn = eventDiv.querySelector('.block-button');
+                    if (blockBtn) {
+                        blockBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
                             this.showFirewallModal(event);
                         });
@@ -1350,18 +1509,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
                                 weight: 2
                             }).addTo(this.map);
 
+                            const protocolBadge = event.source === 'protobuf' ? ' [PROTOBUF]' : '';
+                            const handshakeBadge = event.is_initial_handshake ? ' [HANDSHAKE]' : '';
+
                             const popupContent = `
                                 <div style="color: #000;">
-                                    <strong>🌐 Evento ML</strong><br>
+                                    <strong>🌐 Evento ML${protocolBadge}${handshakeBadge}</strong><br>
                                     <strong>Origen:</strong> ${event.source_ip}<br>
                                     <strong>Destino:</strong> ${event.target_ip}:${event.dest_port}<br>
                                     <strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(1)}%<br>
                                     <strong>Anomalía:</strong> ${(event.anomaly_score * 100).toFixed(1)}%<br>
                                     <strong>Agente:</strong> ${event.agent_id}<br>
+                                    <strong>SO:</strong> ${event.so_identifier || 'unknown'}<br>
+                                    <strong>Hostname:</strong> ${event.node_hostname || 'unknown'}<br>
                                     ${event.description ? `<strong>Desc:</strong> ${event.description}<br>` : ''}
                                     <strong>Tiempo:</strong> ${new Date(event.timestamp).toLocaleString()}<br>
                                     ${(event.risk_level === 'high' || event.risk_score > 0.7) ? 
-                                        '<button onclick="dashboard.showFirewallModal(' + JSON.stringify(event).replace(/"/g, '&quot;') + ')" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-top: 5px;">🛡️ Bloquear IP</button>' : ''}
+                                        '<button onclick="dashboard.showFirewallModal(' + JSON.stringify(event).replace(/"/g, '&quot;') + ')" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-top: 5px;">🛡️ Bloquear IP (Protobuf)</button>' : ''}
                                 </div>
                             `;
 
@@ -1378,8 +1542,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             }
 
             showEventDetails(event) {
-                this.log(`📋 Detalles del evento: ${event.source_ip} → ${event.target_ip}`);
-                // Aquí podrías mostrar un panel lateral con detalles completos
+                this.log(`📋 Detalles del evento: ${event.source_ip} → ${event.target_ip} [${event.source || 'unknown'}]`);
+                this.log(`🖥️  Nodo: ${event.node_hostname} (${event.so_identifier})`);
             }
 
             showFirewallModal(event) {
@@ -1389,16 +1553,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 const commandPreview = document.getElementById('command-preview');
 
                 eventInfo.innerHTML = `
-                    <h3>Evento Detectado:</h3>
+                    <h3>Evento Detectado (${event.source || 'unknown'}):</h3>
                     <p><strong>IP Origen:</strong> ${event.source_ip}</p>
                     <p><strong>IP Destino:</strong> ${event.target_ip}:${event.dest_port}</p>
                     <p><strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(1)}%</p>
                     <p><strong>Anomalía:</strong> ${(event.anomaly_score * 100).toFixed(1)}%</p>
                     <p><strong>Agente:</strong> ${event.agent_id}</p>
-                    <p><strong>Protocolo:</strong> ${event.protocol || 'TCP'}</p>
+                    <p><strong>SO:</strong> ${event.so_identifier || 'unknown'}</p>
+                    <p><strong>Hostname:</strong> ${event.node_hostname || 'unknown'}</p>
+                    <p><strong>Fuente:</strong> ${event.source === 'protobuf' ? 'Protobuf ✅' : 'JSON (fallback)'}</p>
                 `;
 
-                commandPreview.textContent = 'Generando comando de firewall inteligente...';
+                commandPreview.innerHTML = 'Generando comando de firewall protobuf batch inteligente...';
 
                 modal.style.display = 'block';
 
@@ -1420,13 +1586,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     if (result.success) {
                         const cmd = result.suggested_command;
                         commandPreview.innerHTML = `
-                            <strong>Comando sugerido:</strong><br>
+                            <strong>Comando sugerido (será convertido a FirewallCommandBatch):</strong><br>
                             ${cmd.firewall_rule.command}<br><br>
                             <strong>Acción:</strong> ${cmd.action}<br>
                             <strong>Duración:</strong> ${cmd.firewall_rule.duration}<br>
                             <strong>Prioridad:</strong> ${cmd.firewall_rule.priority}<br>
                             <strong>Análisis:</strong> ${cmd.analysis.threat_type}<br>
-                            <strong>Confianza:</strong> ${cmd.analysis.confidence.toFixed(1)}%
+                            <strong>Confianza:</strong> ${cmd.analysis.confidence.toFixed(1)}%<br>
+                            <em>📦 Este comando se enviará como FirewallCommandBatch protobuf al puerto 5561</em>
                         `;
                         this.suggestedCommand = cmd;
                     } else {
@@ -1447,24 +1614,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
                             event_id: this.selectedEvent.event_id,
-                            target_ip: this.selectedEvent.source_ip, // Bloqueamos la IP de origen
+                            target_ip: this.selectedEvent.source_ip,
                             source_agent: this.selectedEvent.agent_id,
                             action: this.suggestedCommand.action,
+                            target_port: this.selectedEvent.dest_port,
+                            duration_seconds: this.suggestedCommand.duration_seconds,
                             reason: `High risk event: ${(this.selectedEvent.risk_score * 100).toFixed(1)}% risk score`,
+                            priority: this.suggestedCommand.priority,
+                            dry_run: true,
                             ml_scores: {
-                                A: this.selectedEvent.anomaly_score,
-                                R: this.selectedEvent.risk_score
+                                anomaly_score: this.selectedEvent.anomaly_score,
+                                risk_score: this.selectedEvent.risk_score
                             },
-                            packet_info: `Packet from ${this.selectedEvent.source_ip} to ${this.selectedEvent.target_ip}:${this.selectedEvent.dest_port}`,
-                            duration: this.suggestedCommand.firewall_rule.duration
+                            packet_info: `Packet from ${this.selectedEvent.source_ip} to ${this.selectedEvent.target_ip}:${this.selectedEvent.dest_port}`
                         })
                     });
 
                     const result = await response.json();
 
                     if (result.success) {
-                        this.log(`🛡️ Comando enviado: ${result.command_id}`);
-                        alert(`✅ Comando de firewall enviado exitosamente\nComando ID: ${result.command_id}`);
+                        this.log(`🛡️ Comando protobuf batch enviado: ${result.command_id}`);
+                        alert(`✅ Comando de firewall enviado exitosamente como PROTOBUF BATCH\\nComando ID: ${result.command_id}`);
                     } else {
                         alert(`❌ Error: ${result.error}`);
                     }
@@ -1487,14 +1657,36 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     const response = await fetch('/api/firewall/log');
                     const result = await response.json();
 
-                    let logText = 'LOG DE COMANDOS DE FIREWALL:\\n\\n';
+                    let logText = 'LOG DE COMANDOS DE FIREWALL (PROTOBUF BATCH):\\n\\n';
                     result.commands.forEach(cmd => {
-                        logText += `${cmd.timestamp} - ${cmd.action} - ${cmd.target_ip} (${cmd.agent})\\n`;
+                        logText += `${cmd.timestamp} - ${cmd.action} - ${cmd.target_node} (${cmd.command_count} cmd)\\n`;
                     });
 
                     alert(logText || 'No hay comandos en el log');
                 } catch (e) {
                     alert('Error obteniendo log: ' + e.message);
+                }
+            }
+
+            async showPendingCommands() {
+                try {
+                    const response = await fetch('/api/firewall/pending');
+                    const result = await response.json();
+
+                    const summary = result.summary;
+                    let text = `COMANDOS PENDIENTES (PROTOBUF BATCH):\\n\\n`;
+                    text += `Eventos con comandos: ${summary.total_events_with_commands || 0}\\n`;
+                    text += `Total comandos: ${summary.total_commands || 0}\\n`;
+
+                    if (summary.oldest_pending) {
+                        text += `Más antiguo: ${summary.oldest_pending.toFixed(1)}s\\n`;
+                    }
+
+                    text += '\\nEstos comandos serán enviados como FirewallCommandBatch protobuf al simple_firewall_agent.py';
+
+                    alert(text);
+                } catch (e) {
+                    alert('Error obteniendo comandos pendientes: ' + e.message);
                 }
             }
 
@@ -1517,14 +1709,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
         function refreshData() { dashboard.refreshData(); }
         function clearMap() { dashboard.clearMap(); }
         function showFirewallLog() { dashboard.showFirewallLog(); }
+        function showPendingCommands() { dashboard.showPendingCommands(); }
         function closeFirewallModal() { dashboard.closeFirewallModal(); }
         function executeFirewallCommand() { dashboard.executeFirewallCommand(); }
 
         document.addEventListener('DOMContentLoaded', function() {
             dashboard = new MLFirewallDashboard();
-            console.log('🛡️ Dashboard ML Enhanced + Firewall - ZeroMQ 5560/5561');
-            console.log('🤖 Mostrando eventos con ML scores en tiempo real');
-            console.log('🔥 Comandos de firewall por puerto 5561');
+            console.log('🛡️ Dashboard ML Enhanced + Firewall - ZeroMQ 5560/5561 (PROTOBUF REAL)');
+            console.log('🤖 Mostrando eventos protobuf con ML scores en tiempo real');
+            console.log('🔥 Comandos de firewall protobuf batch por puerto 5561');
+            console.log('📦 Usando estructuras protobuf reales con enums');
         });
 
         // Cerrar modal con ESC
@@ -1557,14 +1751,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def main():
     """Función principal del dashboard"""
-    print("🛡️ DASHBOARD SCADA REAL - ZeroMQ 5560 + Firewall 5561")
-    print("=" * 60)
+    print("🛡️ DASHBOARD SCADA REAL - ZeroMQ 5560 + Firewall 5561 (PROTOBUF REAL)")
+    print("=" * 75)
     print("🎯 Conectándose a:")
-    print("   📡 ZeroMQ 5560 (eventos enriquecidos por ML)")
-    print("   🔥 ZeroMQ 5561 (comandos de firewall)")
+    print("   📡 ZeroMQ 5560 (eventos enriquecidos por ML - PROTOBUF)")
+    print("   🔥 ZeroMQ 5561 (comandos de firewall - PROTOBUF)")
     print("   🤖 Eventos con anomaly_score y risk_score")
     print("   🗺️ Coordenadas GPS cuando disponibles")
     print("   🛡️ Respuesta automática a amenazas")
+    print("   📦 Comunicación usando network_event_extended_fixed_pb2")
+    print("   🔥 Comandos usando firewall_commands_pb2 con enums")
+    print("   📋 Soporte para FirewallCommandBatch")
     print("")
 
     # Verificar puerto disponible
@@ -1584,33 +1781,48 @@ def main():
         server = HTTPServer((host, port), DashboardHandler)
 
         # Inicializar firewall sender
-        firewall_sender = FirewallCommandSender()
-        DashboardHandler.shared_data['firewall_sender'] = firewall_sender
+        if ZMQ_AVAILABLE:
+            firewall_sender = FirewallCommandSender()
+            DashboardHandler.shared_data['firewall_sender'] = firewall_sender
+        else:
+            logger.warning("ZMQ no disponible - Firewall sender deshabilitado")
 
         # Inicializar listener ZeroMQ
-        zmq_listener = ZeroMQListener(DashboardHandler)
-        DashboardHandler.shared_data['zmq_listener'] = zmq_listener
-        zmq_listener.start()
+        if ZMQ_AVAILABLE:
+            zmq_listener = ZeroMQListener(DashboardHandler)
+            DashboardHandler.shared_data['zmq_listener'] = zmq_listener
+            zmq_listener.start()
+        else:
+            logger.warning("ZMQ no disponible - Listener deshabilitado")
 
         print(f"🚀 Dashboard iniciado en http://{host}:{port}")
         print(f"📊 Dashboard: http://{host}:{port}")
         print(f"📡 API Stats: http://{host}:{port}/api/stats")
         print(f"🗺️ Eventos GPS: http://{host}:{port}/api/events/gps")
         print(f"🔥 Firewall Log: http://{host}:{port}/api/firewall/log")
+        print(f"📋 Comandos Pendientes: http://{host}:{port}/api/firewall/pending")
         print("")
-        print("✅ CONECTADO A:")
-        print("   🔌 ZeroMQ puerto 5560 (entrada)")
-        print("   🔥 ZeroMQ puerto 5561 (salida firewall)")
-        print("   📦 Eventos enriquecidos con ML")
-        print("   🗺️ Mapas interactivos con GPS")
-        print("   🛡️ Sistema de respuesta automática")
+        print("✅ CONFIGURACIÓN:")
+        print(f"   🔌 ZeroMQ disponible: {ZMQ_AVAILABLE}")
+        print(f"   📦 Protobuf disponible: {PROTOBUF_AVAILABLE}")
+        if ZMQ_AVAILABLE:
+            print("   🔌 ZeroMQ puerto 5560 (entrada - PROTOBUF)")
+            print("   🔥 ZeroMQ puerto 5561 (salida firewall - PROTOBUF)")
+        if PROTOBUF_AVAILABLE:
+            print("   📦 network_event_extended_fixed_pb2 ✅")
+            print("   📦 firewall_commands_pb2 ✅")
+            print("   🔥 FirewallCommandBatch ✅")
+            print("   📋 CommandAction & CommandPriority enums ✅")
         print("")
         print("🎯 FUNCIONALIDADES:")
-        print("   ✅ Eventos clickeables en mapa y lista")
+        print("   ✅ Recepción de eventos protobuf desde ML detector")
+        print("   ✅ Procesamiento de handshakes iniciales")
+        print("   ✅ Generación automática de comandos firewall")
+        print("   ✅ Envío de FirewallCommandBatch protobuf")
         print("   ✅ Modal de confirmación para bloqueos")
-        print("   ✅ Generación inteligente de comandos")
-        print("   ✅ Envío automático al puerto 5561")
-        print("   ✅ Log de comandos ejecutados")
+        print("   ✅ Gestión de comandos pendientes")
+        print("   ✅ Indicador de nodos registrados")
+        print("   ✅ Soporte para todos los campos del protobuf")
         print("")
         print("🛑 Presiona Ctrl+C para detener")
 
@@ -1618,9 +1830,9 @@ def main():
 
     except KeyboardInterrupt:
         print("\n🛑 Dashboard detenido por usuario")
-        if 'zmq_listener' in DashboardHandler.shared_data:
+        if DashboardHandler.shared_data.get('zmq_listener'):
             DashboardHandler.shared_data['zmq_listener'].stop()
-        if 'firewall_sender' in DashboardHandler.shared_data:
+        if DashboardHandler.shared_data.get('firewall_sender'):
             DashboardHandler.shared_data['firewall_sender'].close()
     except Exception as e:
         print(f"\n❌ Error fatal: {e}")

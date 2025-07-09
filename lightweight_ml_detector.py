@@ -1,666 +1,578 @@
 #!/usr/bin/env python3
 """
-Sistema ML Ligero para Intel i9 + 32GB RAM
-Optimizado para CPU, sin dependencias GPU
-lightweight_ml_detector.py - PUERTO CORREGIDO + MULTIPART FIX
+Lightweight ML Detector para Upgraded-Happiness
+ACTUALIZADO: Usa network_event_extended_fixed_pb2 (estructuras protobuf reales)
+Puerto 5559 (entrada desde promiscuous_agent) - Puerto 5560 (salida a dashboard)
 """
 
-# Auto-discovery functions
-import socket
-import time
-
 import zmq
-
-
-def find_available_port(start_port=5559, max_attempts=10):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(("localhost", port))
-                return port
-        except OSError:
-            continue
-    return start_port
-
-
-def find_active_broker(start_port=5559, max_attempts=10):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            context = zmq.Context()
-            socket_test = context.socket(zmq.REQ)
-            socket_test.setsockopt(zmq.RCVTIMEO, 500)
-            socket_test.connect(f"tcp://localhost:{port}")
-            socket_test.send_string("ping", zmq.NOBLOCK)
-            socket_test.close()
-            context.term()
-            print(f"✅ Broker encontrado en puerto {port}")
-            return f"tcp://localhost:{port}"
-        except:
-            continue
-    print(f"⚠️  No se encontró broker, usando puerto {start_port}")
-    return f"tcp://localhost:{start_port}"
-
-
-def get_smart_broker_address():
-    import sys
-
-    for i, arg in enumerate(sys.argv):
-        if arg == "--broker" and i + 1 < len(sys.argv):
-            return sys.argv[i + 1]
-    return find_active_broker()
-
-
-import json
-import os
-import pickle
-import sys
+import time
+import logging
 import threading
-import time
-from collections import defaultdict, deque
-from datetime import datetime
-
-import joblib
 import numpy as np
-import pandas as pd
-# XGBoost es muy eficiente en CPU
-import xgboost as xgb
-import zmq
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.decomposition import PCA
-# ML optimizado para CPU
-from sklearn.ensemble import (GradientBoostingClassifier, IsolationForest,
-                              RandomForestClassifier)
-from sklearn.feature_selection import SelectKBest, f_classif
-# Para análisis temporal básico sin GPU
-from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
-from sklearn.preprocessing import RobustScaler, StandardScaler
+from collections import deque, defaultdict
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
-sys.path.insert(0, os.getcwd())
+# Configurar logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+# Importar protobuf - USAR ESTRUCTURAS REALES
 try:
-    from src.protocols.protobuf import network_event_pb2
+    from src.protocols.protobuf import network_event_extended_fixed_pb2
 
-    print("✅ Protobuf importado exitosamente")
-except ImportError as e:
-    print(f"❌ Error importando protobuf: {e}")
-    sys.exit(1)
+    PROTOBUF_AVAILABLE = True
+    logger.info("✅ Protobuf network_event_extended_fixed_pb2 importado desde src.protocols.protobuf")
+except ImportError:
+    try:
+        import network_event_extended_fixed_pb2
+
+        PROTOBUF_AVAILABLE = True
+        logger.info("✅ Protobuf network_event_extended_fixed_pb2 importado desde directorio local")
+    except ImportError:
+        PROTOBUF_AVAILABLE = False
+        logger.error("❌ Protobuf no disponible")
+
+# Importar ML dependencies
+try:
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+
+    ML_AVAILABLE = True
+    logger.info("✅ Scikit-learn disponible para ML")
+except ImportError:
+    ML_AVAILABLE = False
+    logger.warning("⚠️  Scikit-learn no disponible - ML deshabilitado")
+
+# Importar geoip
+try:
+    import geoip2.database
+    import geoip2.errors
+
+    GEOIP_AVAILABLE = True
+    logger.info("✅ GeoIP2 disponible")
+except ImportError:
+    GEOIP_AVAILABLE = False
+    logger.warning("⚠️  GeoIP2 no disponible")
 
 
-class LightweightThreatDetector:
-    def __init__(self, broker_address="tcp://localhost:5559"):
-        self.broker_address = broker_address
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.SUB)
-        # ⭐ FIX: Suscribirse al topic específico del agente promiscuo
-        self.socket.setsockopt(zmq.SUBSCRIBE, b"network_event")
+class SimpleMLModel:
+    """Modelo ML simple para detección de anomalías"""
 
-        # Optimización para CPU Intel i9
-        self.cpu_config = {
-            "n_jobs": 8,  # Usar 8 cores del i9
-            "batch_size": 1000,  # Procesar en lotes
-            "memory_limit": "24GB",  # Dejar 8GB para el SO
-            "model_cache_size": 50,  # Cachear 50 modelos
-            "feature_limit": 50,  # Máximo 50 features para eficiencia
-        }
+    def __init__(self):
+        self.anomaly_detector = None
+        self.scaler = StandardScaler()
+        self.is_trained = False
+        self.training_data = deque(maxlen=1000)
+        self.feature_names = [
+            'packet_size', 'dest_port', 'src_port',
+            'hour', 'minute', 'is_weekend',
+            'ip_entropy', 'port_frequency'
+        ]
 
-        # Modelos ligeros optimizados para CPU
-        self.models = {
-            "isolation_forest": None,
-            "random_forest": None,
-            "xgboost": None,
-            "gradient_boost": None,
-            "kmeans": None,
-            "dbscan": None,
-            "sgd_classifier": None,
-            "naive_bayes": None,
-        }
+        # Estadísticas para features
+        self.ip_stats = defaultdict(int)
+        self.port_stats = defaultdict(int)
 
-        # Pipelines de procesamiento rápido
-        self.processors = {
-            "scaler": RobustScaler(),  # Más robusto que StandardScaler
-            "pca": PCA(n_components=20),  # Reducir dimensionalidad
-            "feature_selector": SelectKBest(score_func=f_classif, k=30),
-        }
+        if ML_AVAILABLE:
+            self.anomaly_detector = IsolationForest(
+                contamination=0.1,
+                random_state=42,
+                n_estimators=100
+            )
+            logger.info("🤖 Modelo ML inicializado")
+        else:
+            logger.warning("⚠️  Modelo ML no disponible - usando heurísticas")
 
-        # Cache para features frecuentes
-        self.feature_cache = {}
-        self.pattern_cache = deque(maxlen=10000)  # Últimos 10k patrones
+    def extract_features(self, event_data: Dict) -> np.ndarray:
+        """Extrae características del evento para ML"""
 
-        # Ventana deslizante para entrenamiento incremental
-        self.sliding_window = deque(maxlen=5000)  # 5k samples para reentrenamiento
+        # Características básicas
+        packet_size = event_data.get('packet_size', 0)
+        dest_port = event_data.get('dest_port', 0)
+        src_port = event_data.get('src_port', 0)
 
-        # Estadísticas de rendimiento
-        self.performance_stats = {
-            "processing_time_ms": deque(maxlen=1000),
-            "prediction_time_ms": deque(maxlen=1000),
-            "memory_usage_mb": deque(maxlen=100),
-            "cpu_utilization": deque(maxlen=100),
-        }
+        # Características temporales
+        now = datetime.now()
+        hour = now.hour
+        minute = now.minute
+        is_weekend = 1 if now.weekday() >= 5 else 0
 
-        print(f"🧠 DETECTOR ML LIGERO (Optimizado para Intel i9)")
-        print(f"💾 RAM disponible: 32GB (usando hasta 24GB)")
-        print(f"🔧 CPU cores: {self.cpu_config['n_jobs']}")
-        print(f"📊 Batch size: {self.cpu_config['batch_size']}")
-        print(f"🔌 Conectando a: {broker_address}")
-        print(f"📡 Suscrito a topic: 'network_event'")  # AÑADIDO
-        print("=" * 60)
+        # Características de IP (entropía simple)
+        source_ip = event_data.get('source_ip', '')
+        ip_entropy = len(set(source_ip.replace('.', ''))) / max(len(source_ip), 1)
 
-    def connect(self):
-        """Conectar al broker ZeroMQ"""
+        # Frecuencia de puerto
+        self.port_stats[dest_port] += 1
+        port_frequency = self.port_stats[dest_port]
+
+        return np.array([
+            packet_size, dest_port, src_port,
+            hour, minute, is_weekend,
+            ip_entropy, port_frequency
+        ])
+
+    def train_or_update(self, features: np.ndarray):
+        """Entrena o actualiza el modelo"""
+        if not ML_AVAILABLE:
+            return
+
+        self.training_data.append(features)
+
+        # Entrenar cuando tengamos suficientes datos
+        if len(self.training_data) >= 100 and not self.is_trained:
+            X = np.array(list(self.training_data))
+            X_scaled = self.scaler.fit_transform(X)
+            self.anomaly_detector.fit(X_scaled)
+            self.is_trained = True
+            logger.info("🎯 Modelo ML entrenado con %d muestras", len(self.training_data))
+
+        # Reentrenar periódicamente
+        elif self.is_trained and len(self.training_data) % 200 == 0:
+            X = np.array(list(self.training_data))
+            X_scaled = self.scaler.fit_transform(X)
+            self.anomaly_detector.fit(X_scaled)
+            logger.info("🔄 Modelo ML reentrenado")
+
+    def predict_anomaly(self, features: np.ndarray) -> Tuple[float, float]:
+        """Predice anomalía y score de riesgo"""
+
+        if not ML_AVAILABLE or not self.is_trained:
+            # Usar heurísticas simples
+            return self._heuristic_prediction(features)
+
         try:
-            self.socket.connect(self.broker_address)
-            print(f"✅ Conectado al Enhanced Promiscuous Agent: {self.broker_address}")
-            return True
+            # Usar modelo ML
+            X_scaled = self.scaler.transform(features.reshape(1, -1))
+            anomaly_score = self.anomaly_detector.decision_function(X_scaled)[0]
+
+            # Normalizar score (-1 a 1) -> (0 a 1)
+            anomaly_score = max(0, min(1, (1 - anomaly_score) / 2))
+
+            # Calcular risk score basado en múltiples factores
+            risk_score = self._calculate_risk_score(features, anomaly_score)
+
+            return anomaly_score, risk_score
+
         except Exception as e:
-            print(f"❌ Error conectando: {e}")
-            return False
+            logger.error("Error en predicción ML: %s", e)
+            return self._heuristic_prediction(features)
 
-    def extract_lightweight_features(self, event):
-        """Extraer features optimizadas para procesamiento rápido"""
-        # Cache check para IPs frecuentes
-        cache_key = f"{event.source_ip}:{event.target_ip}:{event.dest_port}"
-        if cache_key in self.feature_cache:
-            cached_features = self.feature_cache[cache_key].copy()
-            cached_features["timestamp"] = time.time()
-            return cached_features
+    def _heuristic_prediction(self, features: np.ndarray) -> Tuple[float, float]:
+        """Predicción heurística cuando ML no está disponible"""
 
-        # Features básicas optimizadas
-        features = {
-            # Network features (más importantes)
-            "src_port": event.src_port,
-            "dst_port": event.dest_port,
-            "packet_size": event.packet_size,
-            "port_diff": abs(event.dest_port - event.src_port)
-            if event.src_port > 0
-            else 0,
-            # IP features simplificadas
-            "is_internal_src": 1 if self._is_internal_ip(event.source_ip) else 0,
-            "is_internal_dst": 1 if self._is_internal_ip(event.target_ip) else 0,
-            "ip_class": self._classify_ip_range(event.target_ip),
-            # Port classification (más eficiente que muchos booleanos)
-            "port_category": self._categorize_port(event.dest_port),
-            "src_port_category": self._categorize_port(event.src_port),
-            # Temporal features básicas
-            "hour": datetime.now().hour,
-            "is_business_hours": 1 if 9 <= datetime.now().hour <= 17 else 0,
-            "is_weekend": 1 if datetime.now().weekday() >= 5 else 0,
-            # Size features
-            "size_category": min(4, event.packet_size // 256),  # 0-4 categories
-            "is_large_packet": 1 if event.packet_size > 1500 else 0,
-            # Protocol inference (rápido)
-            "likely_protocol": self._infer_protocol(event.dest_port),
-            # GPS/Geolocation features (usando coordenadas del enhanced agent)
-            "has_gps": 1 if (event.latitude != 0.0 or event.longitude != 0.0) else 0,
-            "lat_category": int(abs(event.latitude) // 10) if event.latitude != 0.0 else 0,
-            "lon_category": int(abs(event.longitude) // 10) if event.longitude != 0.0 else 0,
-            # Metadata básico
-            "timestamp": time.time(),
-        }
+        packet_size, dest_port, src_port = features[0], features[1], features[2]
 
-        # Cache para IPs frecuentes (optimización)
-        if len(self.feature_cache) < 1000:  # Limitar cache
-            self.feature_cache[cache_key] = features.copy()
+        anomaly_score = 0.0
+        risk_score = 0.0
 
-        return features
+        # Heurística 1: Tamaño de paquete anómalo
+        if packet_size > 1500 or packet_size < 20:
+            anomaly_score += 0.3
 
-    def _is_internal_ip(self, ip):
-        """Verificación rápida de IP interna"""
-        if not ip or ip == "unknown":
-            return 0
-        return 1 if ip.startswith(("192.168.", "10.", "172.")) else 0
+        # Heurística 2: Puertos sospechosos
+        suspicious_ports = [22, 23, 135, 139, 445, 1433, 3389, 5900]
+        if dest_port in suspicious_ports:
+            risk_score += 0.4
 
-    def _classify_ip_range(self, ip):
-        """Clasificar rango de IP (0-5)"""
-        if not ip or ip == "unknown":
-            return 0
+        # Heurística 3: Puertos no estándar
+        if dest_port > 49152 or (dest_port < 1024 and dest_port not in [80, 443, 22, 21]):
+            anomaly_score += 0.2
 
-        if ip.startswith("192.168."):
-            return 1  # LAN
-        elif ip.startswith("10."):
-            return 2  # Private Class A
-        elif ip.startswith("172."):
-            return 3  # Private Class B
-        elif ip.startswith(("8.8.", "1.1.", "208.67.")):
-            return 4  # Public DNS
+        # Heurística 4: Combinaciones sospechosas
+        if dest_port == 22 and packet_size < 100:  # SSH con paquetes pequeños
+            risk_score += 0.3
+
+        return min(anomaly_score, 1.0), min(risk_score, 1.0)
+
+    def _calculate_risk_score(self, features: np.ndarray, anomaly_score: float) -> float:
+        """Calcula score de riesgo basado en múltiples factores"""
+
+        packet_size, dest_port, src_port = features[0], features[1], features[2]
+        hour = features[3]
+
+        risk_score = anomaly_score * 0.5  # Base del score de anomalía
+
+        # Factor 1: Puertos de alto riesgo
+        high_risk_ports = [22, 23, 135, 139, 445, 1433, 3389, 5900]
+        if dest_port in high_risk_ports:
+            risk_score += 0.3
+
+        # Factor 2: Horario sospechoso (madrugada)
+        if hour >= 0 and hour <= 5:
+            risk_score += 0.1
+
+        # Factor 3: Tamaño de paquete anómalo
+        if packet_size > 1400:
+            risk_score += 0.2
+
+        # Factor 4: Puertos dinámicos como destino
+        if dest_port > 49152:
+            risk_score += 0.15
+
+        return min(risk_score, 1.0)
+
+
+class GeoIPEnricher:
+    """Enriquecedor geográfico para IPs"""
+
+    def __init__(self, db_path: str = None):
+        self.reader = None
+        self.enabled = False
+
+        if GEOIP_AVAILABLE and db_path:
+            try:
+                self.reader = geoip2.database.Reader(db_path)
+                self.enabled = True
+                logger.info("🌍 GeoIP database cargada: %s", db_path)
+            except Exception as e:
+                logger.warning("⚠️  Error cargando GeoIP database: %s", e)
         else:
-            return 5  # Other public
+            logger.warning("⚠️  GeoIP no disponible o sin base de datos")
 
-    def _categorize_port(self, port):
-        """Categorizar puerto (0-6) para eficiencia"""
-        if port == 0:
-            return 0
-        elif port < 1024:
-            return 1  # Privileged
-        elif port in [80, 443, 22, 25, 53, 21, 23]:
-            return 2  # Common services
-        elif 1024 <= port <= 5000:
-            return 3  # Registered
-        elif 5001 <= port <= 32767:
-            return 4  # Registered high
-        elif 32768 <= port <= 49151:
-            return 5  # Dynamic/ephemeral
-        else:
-            return 6  # Private/dynamic high
+    def enrich_ip(self, ip: str) -> Tuple[Optional[float], Optional[float]]:
+        """Enriquece IP con coordenadas geográficas"""
 
-    def _infer_protocol(self, port):
-        """Inferir protocolo por puerto (0-10)"""
-        protocol_map = {
-            80: 1,
-            8080: 1,  # HTTP
-            443: 2,
-            8443: 2,  # HTTPS
-            22: 3,  # SSH
-            25: 4,
-            587: 4,
-            465: 4,  # SMTP
-            53: 5,  # DNS
-            21: 6,  # FTP
-            23: 7,  # Telnet
-            110: 8,
-            995: 8,  # POP3
-            143: 9,
-            993: 9,  # IMAP
-        }
-        return protocol_map.get(port, 0)  # Unknown = 0
-
-    def train_lightweight_models(self, X, y=None):
-        """Entrenar modelos optimizados para CPU"""
-        print(f"🔧 Entrenando modelos con {len(X)} muestras...")
-
-        start_time = time.time()
-
-        # Preprocesamiento rápido
-        X_processed = self.processors["scaler"].fit_transform(X)
-
-        # Reducir dimensionalidad si es necesario
-        if X_processed.shape[1] > 20:
-            X_processed = self.processors["pca"].fit_transform(X_processed)
-
-        # 1. Isolation Forest (muy rápido para anomalías)
-        print("🌲 Entrenando Isolation Forest...")
-        self.models["isolation_forest"] = IsolationForest(
-            contamination=0.1,
-            n_estimators=50,  # Reducido para velocidad
-            n_jobs=self.cpu_config["n_jobs"],
-            random_state=42,
-        )
-        self.models["isolation_forest"].fit(X_processed)
-
-        # 2. Random Forest (eficiente y preciso)
-        if y is not None and len(np.unique(y)) > 1:
-            print("🌳 Entrenando Random Forest...")
-            self.models["random_forest"] = RandomForestClassifier(
-                n_estimators=50,  # Optimizado para velocidad
-                max_depth=10,
-                n_jobs=self.cpu_config["n_jobs"],
-                random_state=42,
-            )
-            self.models["random_forest"].fit(X_processed, y)
-
-        # 3. XGBoost (excelente en CPU)
-        if y is not None and len(np.unique(y)) > 1:
-            print("🚀 Entrenando XGBoost...")
-            self.models["xgboost"] = xgb.XGBClassifier(
-                n_estimators=50,
-                max_depth=6,
-                learning_rate=0.1,
-                n_jobs=self.cpu_config["n_jobs"],
-                random_state=42,
-                eval_metric="logloss",
-            )
-            self.models["xgboost"].fit(X_processed, y)
-
-        # 4. SGD Classifier (muy rápido, ideal para streaming)
-        if y is not None:
-            print("⚡ Entrenando SGD Classifier...")
-            self.models["sgd_classifier"] = SGDClassifier(
-                loss="hinge",
-                alpha=0.01,
-                random_state=42,
-                n_jobs=self.cpu_config["n_jobs"],
-            )
-            self.models["sgd_classifier"].fit(X_processed, y)
-
-        # 5. KMeans (clustering rápido)
-        print("🎯 Entrenando KMeans...")
-        self.models["kmeans"] = KMeans(
-            n_clusters=5, n_init=5, random_state=42  # Reducido para velocidad
-        )
-        self.models["kmeans"].fit(X_processed)
-
-        # 6. Naive Bayes (ultrarrápido)
-        if y is not None:
-            print("🧮 Entrenando Naive Bayes...")
-            self.models["naive_bayes"] = GaussianNB()
-            self.models["naive_bayes"].fit(X_processed, y)
-
-        training_time = time.time() - start_time
-        print(f"✅ Entrenamiento completado en {training_time:.2f} segundos")
-
-        return X_processed
-
-    def predict_threat(self, features):
-        """Predicción rápida de amenazas"""
-        start_time = time.time()
-
-        # Convertir a array
-        feature_array = np.array(list(features.values())[:-1]).reshape(
-            1, -1
-        )  # Excluir timestamp
-
-        # Preprocesar
-        try:
-            feature_array = self.processors["scaler"].transform(feature_array)
-            if hasattr(self.processors["pca"], "components_"):
-                feature_array = self.processors["pca"].transform(feature_array)
-        except:
-            # Si no están entrenados los processors, usar array original
-            pass
-
-        threats = []
-
-        # Isolation Forest (detección de anomalías)
-        if self.models["isolation_forest"] is not None:
-            try:
-                anomaly_score = self.models["isolation_forest"].decision_function(
-                    feature_array
-                )[0]
-                is_anomaly = (
-                        self.models["isolation_forest"].predict(feature_array)[0] == -1
-                )
-
-                if is_anomaly:
-                    threats.append(
-                        {
-                            "type": "anomaly",
-                            "model": "isolation_forest",
-                            "score": float(anomaly_score),
-                            "severity": "medium" if anomaly_score < -0.5 else "low",
-                        }
-                    )
-            except:
-                pass
-
-        # Random Forest
-        if self.models["random_forest"] is not None:
-            try:
-                proba = self.models["random_forest"].predict_proba(feature_array)[0]
-                max_proba = max(proba)
-
-                if max_proba > 0.7:  # Umbral de confianza
-                    threats.append(
-                        {
-                            "type": "classification",
-                            "model": "random_forest",
-                            "probability": float(max_proba),
-                            "severity": "high" if max_proba > 0.9 else "medium",
-                        }
-                    )
-            except:
-                pass
-
-        # XGBoost
-        if self.models["xgboost"] is not None:
-            try:
-                proba = self.models["xgboost"].predict_proba(feature_array)[0]
-                max_proba = max(proba)
-
-                if max_proba > 0.8:
-                    threats.append(
-                        {
-                            "type": "ml_classification",
-                            "model": "xgboost",
-                            "probability": float(max_proba),
-                            "severity": "high",
-                        }
-                    )
-            except:
-                pass
-
-        # KMeans (clustering)
-        if self.models["kmeans"] is not None:
-            try:
-                cluster = self.models["kmeans"].predict(feature_array)[0]
-                distance = self.models["kmeans"].transform(feature_array)[0][cluster]
-
-                if distance > 2.0:  # Lejos del centro del cluster
-                    threats.append(
-                        {
-                            "type": "outlier",
-                            "model": "kmeans",
-                            "distance": float(distance),
-                            "cluster": int(cluster),
-                            "severity": "low",
-                        }
-                    )
-            except:
-                pass
-
-        prediction_time = time.time() - start_time
-        self.performance_stats["prediction_time_ms"].append(prediction_time * 1000)
-
-        return threats
-
-    def process_event_batch(self, events):
-        """Procesar eventos en lotes para eficiencia"""
-        if not events:
-            return
-
-        features_batch = []
-        for event in events:
-            features = self.extract_lightweight_features(event)
-            features_batch.append(features)
-            self.sliding_window.append(features)
-
-        # Procesar amenazas en lote
-        for i, features in enumerate(features_batch):
-            threats = self.predict_threat(features)
-            if threats:
-                self.handle_threat_detection(events[i], threats)
-
-    def handle_threat_detection(self, event, threats):
-        """Manejar detección de amenazas"""
-        for threat in threats:
-            # Mostrar coordenadas GPS si existen
-            gps_info = ""
-            if event.latitude != 0.0 or event.longitude != 0.0:
-                gps_info = f" GPS:({event.latitude:.3f},{event.longitude:.3f})"
-
-            print(
-                f"🚨 AMENAZA: {threat['type']} ({threat['model']}) - {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}{gps_info}"
-            )
-
-    def incremental_training(self):
-        """Entrenamiento incremental con ventana deslizante"""
-        if len(self.sliding_window) < 1000:
-            return
-
-        print(
-            f"🔄 Reentrenamiento incremental con {len(self.sliding_window)} muestras..."
-        )
-
-        # Convertir a DataFrame
-        df = pd.DataFrame(list(self.sliding_window))
-
-        # Preparar datos
-        X = df.drop(["timestamp"], axis=1).values
-
-        # Generar etiquetas simples (para demo)
-        y = self._generate_simple_labels(df)
-
-        # Reentrenar modelos rápidos
-        self.train_lightweight_models(X, y)
-
-    def _generate_simple_labels(self, df):
-        """Generar etiquetas simples para entrenamiento"""
-        labels = []
-        for _, row in df.iterrows():
-            # Heurística simple para etiquetado
-            if (
-                    row.get("port_category", 0) == 6
-                    or row.get("packet_size", 0) > 8000  # High ports
-                    or (  # Large packets
-                    row.get("hour", 12) < 6 or row.get("hour", 12) > 22
-            )
-            ):  # Unusual hours
-                labels.append(1)  # Suspicious
-            else:
-                labels.append(0)  # Normal
-
-        return np.array(labels)
-
-    def start_monitoring(self):
-        """Iniciar monitoreo optimizado"""
-        print("🚀 Iniciando monitoreo ML ligero...")
-        print("📡 Esperando eventos del Enhanced Promiscuous Agent...")
-        print("🔄 Configurado para recibir mensajes multipart ZeroMQ")  # AÑADIDO
-
-        event_batch = []
-        last_batch_process = time.time()
+        if not self.enabled or not ip or ip == 'unknown':
+            return None, None
 
         try:
-            while True:
-                try:
-                    # ⭐ FIX: Recibir mensaje multipart correctamente
-                    topic, message = self.socket.recv_multipart(zmq.NOBLOCK)
+            response = self.reader.city(ip)
+            latitude = float(response.location.latitude) if response.location.latitude else None
+            longitude = float(response.location.longitude) if response.location.longitude else None
 
-                    # Debug: mostrar que estamos recibiendo eventos
-                    if len(event_batch) == 0:  # Solo mostrar el primer evento
-                        print(f"📨 Primer evento recibido - Topic: {topic.decode()}, Tamaño: {len(message)} bytes")
+            return latitude, longitude
 
-                    event = network_event_pb2.NetworkEvent()
-                    event.ParseFromString(message)  # Ahora parseamos el mensaje correcto
+        except geoip2.errors.AddressNotFoundError:
+            return None, None
+        except Exception as e:
+            logger.debug("Error en GeoIP para %s: %s", ip, e)
+            return None, None
 
-                    event_batch.append(event)
+    def close(self):
+        """Cierra la base de datos GeoIP"""
+        if self.reader:
+            self.reader.close()
 
-                    # Procesar en lotes para eficiencia
-                    if (
-                            len(event_batch) >= self.cpu_config["batch_size"]
-                            or time.time() - last_batch_process > 5
-                    ):  # Máximo 5 segundos
-                        self.process_event_batch(event_batch)
-                        event_batch = []
-                        last_batch_process = time.time()
 
-                        # Reentrenamiento periódico
-                        if len(self.sliding_window) >= 2000:
-                            self.incremental_training()
+class LightweightMLDetector:
+    """Detector ML ligero que procesa eventos y los enriquece"""
 
-                except zmq.Again:
-                    time.sleep(0.1)
+    def __init__(self, input_port=5559, output_port=5560, geoip_db_path=None):
+        self.input_port = input_port
+        self.output_port = output_port
+        self.running = False
 
-                    # Procesar lote parcial si hay timeout
-                    if event_batch and time.time() - last_batch_process > 10:
-                        self.process_event_batch(event_batch)
-                        event_batch = []
-                        last_batch_process = time.time()
+        # ZeroMQ setup
+        self.context = zmq.Context()
+        self.input_socket = None
+        self.output_socket = None
 
-                    continue
+        # Componentes ML
+        self.ml_model = SimpleMLModel()
+        self.geoip_enricher = GeoIPEnricher(geoip_db_path)
 
-        except KeyboardInterrupt:
-            print(f"\n🛑 Monitoreo detenido")
-            if event_batch:  # Procesar eventos restantes
-                self.process_event_batch(event_batch)
+        # Estadísticas
+        self.stats = {
+            'events_processed': 0,
+            'events_enriched': 0,
+            'anomalies_detected': 0,
+            'high_risk_events': 0,
+            'geoip_enriched': 0,
+            'handshakes_processed': 0,
+            'start_time': time.time()
+        }
 
-    # En lightweight_ml_detector.py, añadir al final de la clase LightweightThreatDetector:
+        # Buffer para procesamiento
+        self.event_buffer = deque(maxlen=100)
 
-    def save_models_quick(self):
-        """Guardar modelos actuales con timestamp"""
-        import joblib
-        from datetime import datetime
-        from pathlib import Path
+        logger.info("🤖 LightweightMLDetector inicializado")
+        logger.info("📡 Input port: %d", input_port)
+        logger.info("📤 Output port: %d", output_port)
+        logger.info("🧠 ML disponible: %s", ML_AVAILABLE)
+        logger.info("🌍 GeoIP disponible: %s", GEOIP_AVAILABLE)
 
-        models_dir = Path("saved_models")
-        models_dir.mkdir(exist_ok=True)
+    def start(self):
+        """Inicia el detector ML"""
+        try:
+            # Configurar sockets
+            self.input_socket = self.context.socket(zmq.SUB)
+            self.input_socket.connect(f"tcp://localhost:{self.input_port}")
+            self.input_socket.setsockopt(zmq.SUBSCRIBE, b"")
+            self.input_socket.setsockopt(zmq.RCVTIMEO, 1000)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        saved_files = []
+            self.output_socket = self.context.socket(zmq.PUB)
+            self.output_socket.bind(f"tcp://*:{self.output_port}")
 
-        # Guardar cada modelo
-        for model_name, model in self.models.items():
-            if model is not None:
-                filename = models_dir / f"{model_name}_{timestamp}.joblib"
-                joblib.dump(model, filename)
-                saved_files.append(filename)
-                print(f"💾 {model_name} → {filename}")
+            self.running = True
 
-        # Guardar procesadores
-        processors_file = models_dir / f"processors_{timestamp}.joblib"
-        joblib.dump(self.processors, processors_file)
-        print(f"💾 Procesadores → {processors_file}")
+            print(f"\n🤖 Lightweight ML Detector Started (PROTOBUF REAL)")
+            print(f"📡 Input: localhost:{self.input_port} (from promiscuous_agent)")
+            print(f"📤 Output: localhost:{self.output_port} (to dashboard)")
+            print(f"📦 Protobuf: {'✅ Available' if PROTOBUF_AVAILABLE else '❌ Not available'}")
+            print(f"🧠 ML: {'✅ Available' if ML_AVAILABLE else '❌ Heuristics only'}")
+            print(f"🌍 GeoIP: {'✅ Available' if self.geoip_enricher.enabled else '❌ Not available'}")
+            print("=" * 70)
 
-        print(f"✅ {len(saved_files)} modelos guardados")
-        return saved_files
+            # Thread principal de procesamiento
+            processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
+            processing_thread.start()
 
-    def load_models_quick(self, timestamp=None):
-        """Cargar modelos guardados"""
-        import joblib
-        from pathlib import Path
+            # Thread de estadísticas
+            stats_thread = threading.Thread(target=self._stats_loop, daemon=True)
+            stats_thread.start()
 
-        models_dir = Path("saved_models")
-        if not models_dir.exists():
-            print("❌ No hay modelos guardados")
-            return False
+            # Mantener vivo
+            try:
+                while self.running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\n🛑 Stopping ML detector...")
+                self.running = False
 
-        # Si no se especifica timestamp, usar el más reciente
-        if timestamp is None:
-            model_files = list(models_dir.glob("isolation_forest_*.joblib"))
-            if model_files:
-                latest_file = max(model_files, key=lambda f: f.stat().st_mtime)
-                timestamp = latest_file.stem.split('_')[-1]
-            else:
-                print("❌ No se encontraron modelos")
-                return False
+        except Exception as e:
+            logger.error("Error starting ML detector: %s", e)
+            raise
+        finally:
+            self.cleanup()
 
-        print(f"📂 Cargando modelos del timestamp: {timestamp}")
+    def _processing_loop(self):
+        """Loop principal de procesamiento"""
+        logger.info("🔄 Iniciando loop de procesamiento...")
 
-        # Cargar modelos
-        for model_name in self.models.keys():
-            model_file = models_dir / f"{model_name}_{timestamp}.joblib"
-            if model_file.exists():
-                self.models[model_name] = joblib.load(model_file)
-                print(f"📂 {model_name} ✓")
+        while self.running:
+            try:
+                # Recibir evento
+                message = self.input_socket.recv(zmq.NOBLOCK)
+                self.stats['events_processed'] += 1
 
-        # Cargar procesadores
-        processors_file = models_dir / f"processors_{timestamp}.joblib"
-        if processors_file.exists():
-            self.processors = joblib.load(processors_file)
-            print(f"📂 Procesadores ✓")
+                # Procesar evento
+                enriched_event = self._process_event(message)
 
-        return True
+                if enriched_event:
+                    # Enviar evento enriquecido
+                    self.output_socket.send(enriched_event)
+                    self.stats['events_enriched'] += 1
+
+            except zmq.Again:
+                continue  # Timeout - continuar
+            except Exception as e:
+                logger.error("Error en processing loop: %s", e)
+                time.sleep(0.1)
+
+    def _process_event(self, message: bytes) -> Optional[bytes]:
+        """Procesa un evento individual usando estructuras protobuf reales"""
+
+        if not PROTOBUF_AVAILABLE:
+            logger.warning("Protobuf no disponible - no se puede procesar evento")
+            return None
+
+        try:
+            # Parsear evento protobuf entrante
+            event = network_event_extended_fixed_pb2.NetworkEvent()
+            event.ParseFromString(message)
+
+            # Convertir a diccionario para procesamiento
+            event_dict = {
+                'event_id': event.event_id,
+                'source_ip': event.source_ip,
+                'target_ip': event.target_ip,
+                'packet_size': event.packet_size,
+                'dest_port': event.dest_port,
+                'src_port': event.src_port,
+                'agent_id': event.agent_id,
+                'event_type': event.event_type,
+                'description': event.description,
+                'so_identifier': event.so_identifier,
+                'node_hostname': event.node_hostname,
+                'os_version': event.os_version,
+                'firewall_status': event.firewall_status,
+                'agent_version': event.agent_version,
+                'is_initial_handshake': event.is_initial_handshake
+            }
+
+            # Procesar handshake inicial
+            if event.is_initial_handshake:
+                self.stats['handshakes_processed'] += 1
+                logger.info(f"🤝 Procesando handshake inicial de {event.agent_id} ({event.so_identifier})")
+
+                # Para handshakes, solo pasamos la información sin ML
+                enriched_event = network_event_extended_fixed_pb2.NetworkEvent()
+                enriched_event.CopyFrom(event)  # Copiar todo el evento original
+
+                # Enriquecer con GeoIP si está disponible
+                if event.source_ip and event.source_ip != 'unknown':
+                    latitude, longitude = self.geoip_enricher.enrich_ip(event.source_ip)
+                    if latitude is not None and longitude is not None:
+                        enriched_event.latitude = latitude
+                        enriched_event.longitude = longitude
+                        self.stats['geoip_enriched'] += 1
+
+                return enriched_event.SerializeToString()
+
+            # Para eventos normales, aplicar ML
+            # Extraer features para ML
+            features = self.ml_model.extract_features(event_dict)
+
+            # Entrenar/actualizar modelo
+            self.ml_model.train_or_update(features)
+
+            # Predecir anomalía y riesgo
+            anomaly_score, risk_score = self.ml_model.predict_anomaly(features)
+
+            # Estadísticas
+            if anomaly_score > 0.7:
+                self.stats['anomalies_detected'] += 1
+            if risk_score > 0.8:
+                self.stats['high_risk_events'] += 1
+
+            # Enriquecer con GeoIP
+            latitude, longitude = self.geoip_enricher.enrich_ip(event.source_ip)
+            if latitude is not None and longitude is not None:
+                self.stats['geoip_enriched'] += 1
+
+            # Crear evento enriquecido usando toda la estructura protobuf
+            enriched_event = network_event_extended_fixed_pb2.NetworkEvent()
+
+            # Copiar campos originales
+            enriched_event.event_id = event.event_id
+            enriched_event.timestamp = event.timestamp
+            enriched_event.source_ip = event.source_ip
+            enriched_event.target_ip = event.target_ip
+            enriched_event.packet_size = event.packet_size
+            enriched_event.dest_port = event.dest_port
+            enriched_event.src_port = event.src_port
+            enriched_event.agent_id = event.agent_id
+            enriched_event.event_type = event.event_type
+            enriched_event.description = event.description
+
+            # Copiar campos adicionales del protobuf real
+            enriched_event.so_identifier = event.so_identifier
+            enriched_event.node_hostname = event.node_hostname
+            enriched_event.os_version = event.os_version
+            enriched_event.firewall_status = event.firewall_status
+            enriched_event.agent_version = event.agent_version
+            enriched_event.is_initial_handshake = event.is_initial_handshake
+
+            # Agregar enriquecimiento ML
+            enriched_event.anomaly_score = anomaly_score
+            enriched_event.risk_score = risk_score
+
+            # Agregar coordenadas GPS si están disponibles
+            if latitude is not None and longitude is not None:
+                enriched_event.latitude = latitude
+                enriched_event.longitude = longitude
+
+            # Enriquecer descripción
+            if anomaly_score > 0.5 or risk_score > 0.5:
+                ml_info = f"ML: A:{anomaly_score:.2f} R:{risk_score:.2f}"
+                if event.description:
+                    enriched_event.description = f"{ml_info} | {event.description}"
+                else:
+                    enriched_event.description = ml_info
+
+            logger.debug("📊 Evento enriquecido: %s A:%.2f R:%.2f",
+                         event.event_id, anomaly_score, risk_score)
+
+            return enriched_event.SerializeToString()
+
+        except Exception as e:
+            logger.error("Error procesando evento: %s", e)
+            return None
+
+    def _stats_loop(self):
+        """Loop de estadísticas"""
+        while self.running:
+            try:
+                time.sleep(30)  # Cada 30 segundos
+                self._print_stats()
+            except Exception as e:
+                logger.error("Error en stats loop: %s", e)
+
+    def _print_stats(self):
+        """Imprime estadísticas"""
+        uptime = time.time() - self.stats['start_time']
+
+        print(f"\n📊 ML Detector Stats - Uptime: {uptime:.0f}s")
+        print(f"📥 Events Processed: {self.stats['events_processed']}")
+        print(f"📤 Events Enriched: {self.stats['events_enriched']}")
+        print(f"🚨 Anomalies Detected: {self.stats['anomalies_detected']}")
+        print(f"⚠️  High Risk Events: {self.stats['high_risk_events']}")
+        print(f"🌍 GeoIP Enriched: {self.stats['geoip_enriched']}")
+        print(f"🤝 Handshakes Processed: {self.stats['handshakes_processed']}")
+        print(f"🤖 ML Model Trained: {self.ml_model.is_trained}")
+        print(f"📚 Training Samples: {len(self.ml_model.training_data)}")
+        print("-" * 50)
+
+    def get_statistics(self) -> Dict:
+        """Retorna estadísticas completas"""
+        uptime = time.time() - self.stats['start_time']
+
+        return {
+            'uptime_seconds': uptime,
+            'events_processed': self.stats['events_processed'],
+            'events_enriched': self.stats['events_enriched'],
+            'anomalies_detected': self.stats['anomalies_detected'],
+            'high_risk_events': self.stats['high_risk_events'],
+            'geoip_enriched': self.stats['geoip_enriched'],
+            'handshakes_processed': self.stats['handshakes_processed'],
+            'ml_model_trained': self.ml_model.is_trained,
+            'training_samples': len(self.ml_model.training_data),
+            'protobuf_available': PROTOBUF_AVAILABLE,
+            'ml_available': ML_AVAILABLE,
+            'geoip_available': self.geoip_enricher.enabled
+        }
+
+    def cleanup(self):
+        """Limpia recursos"""
+        if self.input_socket:
+            self.input_socket.close()
+        if self.output_socket:
+            self.output_socket.close()
+        if self.context:
+            self.context.term()
+        if self.geoip_enricher:
+            self.geoip_enricher.close()
+
 
 def main():
-    """Función principal optimizada"""
-    print("🤖 ML DETECTOR LIGERO - PUERTO CORREGIDO + MULTIPART FIX")
-    print("=" * 55)
-    print("🔧 FIX 1: Puerto 5560 → 5559")
-    print("🔧 FIX 2: Recepción multipart ZeroMQ")
-    print("📡 FUENTE: Enhanced Promiscuous Agent")
-    print("🧠 ENTRENAMIENTO: Datos sintéticos + aprendizaje incremental")
-    print("⚡ OPTIMIZADO: Intel i9 + 32GB RAM")
-    print("=" * 55)
+    """Función principal"""
+    import argparse
 
-    detector = LightweightThreatDetector()
+    parser = argparse.ArgumentParser(description='Lightweight ML Detector (PROTOBUF REAL)')
+    parser.add_argument('--input-port', type=int, default=5559,
+                        help='Input port (from promiscuous_agent)')
+    parser.add_argument('--output-port', type=int, default=5560,
+                        help='Output port (to dashboard)')
+    parser.add_argument('--geoip-db', type=str, default=None,
+                        help='Path to GeoIP database file')
 
-    if detector.connect():
-        # Entrenamiento inicial
-        X_initial = np.random.rand(1000, 17)
-        y_initial = np.random.choice([0, 1], 1000)
+    args = parser.parse_args()
 
-        detector.train_lightweight_models(X_initial, y_initial)
+    if not PROTOBUF_AVAILABLE:
+        print("❌ Error: Protobuf no disponible")
+        print("📦 Instalar con: pip install protobuf")
+        return 1
 
-        # ⭐ AÑADIR: Guardar modelos automáticamente
-        detector.save_models_quick()
+    detector = LightweightMLDetector(
+        input_port=args.input_port,
+        output_port=args.output_port,
+        geoip_db_path=args.geoip_db
+    )
 
-        try:
-            detector.start_monitoring()
-        finally:
-            detector.socket.close()
-            detector.context.term()
+    try:
+        detector.start()
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
+    except Exception as e:
+        logger.error("Error fatal: %s", e)
+        return 1
+    finally:
+        detector._print_stats()
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit(main())
