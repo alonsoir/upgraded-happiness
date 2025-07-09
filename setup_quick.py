@@ -75,7 +75,7 @@ def verify_required_files():
         'simple_system_detection.py',
         'simple_firewall_agent.py',
         'event_analyzer.py',
-        'test_integration.py',
+        'integration_test.py',
         'start_security_platform.py',
         'rule_engine_config.json'
     ]
@@ -279,10 +279,10 @@ python start_security_platform.py
 
 ```bash
 # Test integration
-python test_integration.py
+python integration_test.py
 
 # Test with automation
-python test_integration.py --auto
+python integration_test.py --auto
 ```
 
 ## 📊 System Components
@@ -392,7 +392,7 @@ def print_final_instructions():
     print(f"   python start_security_platform.py  # Direct")
     print(f"")
     print(f"2️⃣  Test the system:")
-    print(f"   python test_integration.py")
+    print(f"   python integration_test.py")
     print(f"")
     print(f"3️⃣  Configure rules:")
     print(f"   Edit rule_engine_config.json")
