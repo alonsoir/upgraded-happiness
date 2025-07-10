@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-🛡️ Dashboard SCADA REAL - ZeroMQ 5560 + Mapa Interactivo + Comandos Firewall
-Conectado a eventos enriquecidos por ML del puerto 5560 (PROTOBUF)
-Envía comandos de firewall por puerto 5561 (PROTOBUF)
-ACTUALIZADO: Usa estructuras protobuf reales con enums y campos correctos
+🛡️ Dashboard SCADA REAL - ZeroMQ + Mapa Interactivo + Comandos Firewall
+REFACTORIZADO: Lee TODA la configuración desde JSON
+Usa dashboard_config.json para TODA la configuración
+Conectado a eventos enriquecidos por ML (puerto configurable)
+Envía comandos de firewall (puerto configurable)
 """
 
 import json
@@ -11,13 +12,17 @@ import logging
 import socket
 import threading
 import time
+import os
+import sys
+import argparse
 from collections import defaultdict, deque
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import uuid
+from typing import Dict
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configurar logging básico (se reconfigurará desde JSON)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importar protobuf y zmq
@@ -50,9 +55,12 @@ except ImportError:
 
 
 class FirewallCommandGenerator:
-    """Generador de comandos de firewall usando estructuras protobuf reales"""
+    """Generador de comandos de firewall configurado desde JSON"""
 
-    def __init__(self):
+    def __init__(self, firewall_config: Dict):
+        """Inicializar generador con configuración JSON"""
+        self.config = firewall_config
+
         # Cache de información de nodos
         self.known_nodes = {}
 
@@ -74,30 +82,24 @@ class FirewallCommandGenerator:
             'critical': firewall_commands_pb2.CRITICAL
         }
 
-        # Reglas básicas por tipo de amenaza
-        self.threat_rules = {
-            'port_scan': {
-                'action': 'block_ip',
-                'duration': 3600,
-                'priority': 'high'
-            },
-            'anomaly_high': {
-                'action': 'block_ip',
-                'duration': 1800,
-                'priority': 'medium'
-            },
-            'rate_limit_exceeded': {
-                'action': 'rate_limit',
-                'duration': 900,
-                'priority': 'medium',
-                'rate_limit_rule': '10/min'
-            },
-            'suspicious_port': {
-                'action': 'block_ip',
-                'duration': 3600,
-                'priority': 'high'
-            }
-        }
+        # Reglas de amenazas desde configuración JSON
+        self.threat_rules = self.config.get('threat_rules', {})
+
+        # Configuración de detección automática
+        self.auto_threat_detection = self.config.get('auto_threat_detection', True)
+        self.require_manual_approval = self.config.get('require_manual_approval', True)
+        self.max_pending_commands = self.config.get('max_pending_commands', 100)
+
+        # Umbrales desde configuración
+        self.threat_thresholds = self.config.get('threat_thresholds', {})
+        self.high_risk_score = self.threat_thresholds.get('high_risk_score', 0.8)
+        self.critical_risk_score = self.threat_thresholds.get('critical_risk_score', 0.9)
+        self.anomaly_threshold = self.threat_thresholds.get('anomaly_threshold', 0.7)
+
+        logger.info("🔥 FirewallCommandGenerator initialized from JSON config")
+        logger.info(f"Auto detection: {self.auto_threat_detection}")
+        logger.info(f"Manual approval: {self.require_manual_approval}")
+        logger.info(f"Threat rules: {len(self.threat_rules)}")
 
     def register_node(self, event_data):
         """Registra un nodo cuando recibe su handshake inicial"""
@@ -116,47 +118,60 @@ class FirewallCommandGenerator:
             logger.info(f"🖥️  Nodo registrado: {node_id} ({event_data.get('so_identifier')})")
 
     def analyze_threat_and_generate_commands(self, event_data) -> list:
-        """Analiza un evento y genera comandos de firewall si es necesario"""
+        """Analiza un evento y genera comandos de firewall usando configuración"""
+        if not self.auto_threat_detection:
+            return []
+
         commands = []
 
-        # Análisis básico de amenazas
+        # Análisis de amenazas usando configuración
         threat_type = self.detect_threat_type(event_data)
 
-        if threat_type:
-            # Generar comando basado en el tipo de amenaza
-            command = self.create_firewall_command_protobuf(event_data, threat_type)
-            if command:
-                commands.append(command)
+        if threat_type and threat_type in self.threat_rules:
+            # Verificar si debe aplicarse automáticamente
+            rule = self.threat_rules[threat_type]
+            if not self.require_manual_approval and rule.get('auto_apply', False):
+                # Generar comando basado en el tipo de amenaza
+                command = self.create_firewall_command_protobuf(event_data, threat_type)
+                if command:
+                    commands.append(command)
 
         return commands
 
     def detect_threat_type(self, event_data) -> str:
-        """Detecta el tipo de amenaza basado en el evento"""
+        """Detecta el tipo de amenaza basado en configuración"""
 
-        # Anomalía alta
+        # Anomalía alta usando umbral configurado
         anomaly_score = event_data.get('anomaly_score', 0)
-        if anomaly_score > 0.8:
+        if anomaly_score > self.anomaly_threshold:
             return 'anomaly_high'
 
-        # Puerto sospechoso (puertos SCADA)
+        # Riesgo crítico usando umbral configurado
+        risk_score = event_data.get('risk_score', 0)
+        if risk_score > self.critical_risk_score:
+            return 'brute_force'
+        elif risk_score > self.high_risk_score:
+            return 'suspicious_port'
+
+        # Puerto sospechoso usando configuración del dashboard
         dest_port = event_data.get('dest_port', 0)
-        suspicious_ports = [22, 23, 502, 1911, 4840, 20000]  # SSH, Telnet, Modbus, etc.
+        suspicious_ports = self.config.get('suspicious_ports', [22, 23, 135, 139, 445])
         if dest_port in suspicious_ports:
             return 'suspicious_port'
 
-        # Rate limiting
+        # Patrones de eventos según configuración
         event_type = event_data.get('event_type', '')
-        if 'flood' in event_type.lower() or 'brute' in event_type.lower():
-            return 'rate_limit_exceeded'
+        description = event_data.get('description', '').lower()
 
-        # Port scanning
-        if 'scan' in event_type.lower():
+        if 'flood' in description or 'brute' in description:
+            return 'rate_limit_exceeded'
+        elif 'scan' in description:
             return 'port_scan'
 
         return None
 
     def create_firewall_command_protobuf(self, event_data, threat_type):
-        """Crea un comando de firewall usando protobuf real"""
+        """Crea un comando de firewall usando protobuf real y configuración"""
         if not PROTOBUF_AVAILABLE:
             return None
 
@@ -170,7 +185,7 @@ class FirewallCommandGenerator:
         if not source_ip:
             return None
 
-        # Crear comando protobuf usando estructura real
+        # Crear comando protobuf usando configuración
         command = firewall_commands_pb2.FirewallCommand()
         command.command_id = str(uuid.uuid4())
         command.action = self.action_mapping[rule['action']]
@@ -181,10 +196,12 @@ class FirewallCommandGenerator:
         else:
             command.target_port = 0
 
-        command.duration_seconds = rule['duration']
+        command.duration_seconds = rule['duration_seconds']
         command.reason = f"Detected {threat_type} from {source_ip}"
         command.priority = self.priority_mapping[rule['priority']]
-        command.dry_run = True  # Siempre dry_run por seguridad
+
+        # Dry run basado en configuración
+        command.dry_run = rule.get('dry_run', True)
 
         # Agregar rate limiting si aplica
         if 'rate_limit_rule' in rule:
@@ -215,7 +232,7 @@ class FirewallCommandGenerator:
         batch.so_identifier = node_info['so_identifier']
         batch.timestamp = int(time.time() * 1000)
         batch.generated_by = 'dashboard'
-        batch.dry_run_all = True  # Siempre seguro
+        batch.dry_run_all = True  # Seguro por defecto
         batch.description = description
         batch.confidence_score = 0.8
         batch.expected_execution_time = len(commands) * 2
@@ -226,26 +243,43 @@ class FirewallCommandGenerator:
 
         return batch
 
+    def get_pending_commands_summary(self):
+        """Retorna resumen de comandos pendientes"""
+        # Implementación básica - se extenderá en la integración
+        return {
+            'total_events_with_commands': 0,
+            'total_commands': 0,
+            'oldest_pending': None
+        }
+
 
 class FirewallCommandSender:
-    """Cliente ZeroMQ para enviar comandos de firewall al puerto 5561 usando PROTOBUF"""
+    """Cliente ZeroMQ para enviar comandos configurado desde JSON"""
 
-    def __init__(self):
+    def __init__(self, network_config: Dict):
+        """Inicializar sender con configuración de red"""
+        self.config = network_config
+
         if not ZMQ_AVAILABLE:
             logger.error("ZMQ no disponible para FirewallCommandSender")
             self.socket = None
             self.context = None
             return
 
-        self.context = zmq.Context()
+        # Configuración desde JSON
+        self.output_port = self.config['zmq_output_port']
+        self.max_message_size = self.config.get('max_message_size', 1048576)
+
+        self.context = zmq.Context(self.config.get('zmq_context_threads', 1))
         self.socket = self.context.socket(zmq.PUSH)
 
         try:
-            self.socket.connect("tcp://localhost:5561")
+            output_addr = f"tcp://localhost:{self.output_port}"
+            self.socket.connect(output_addr)
             self.command_log = deque(maxlen=100)
-            logger.info("🔥 Firewall command sender conectado al puerto 5561 (PROTOBUF)")
+            logger.info(f"🔥 Firewall command sender conectado a {output_addr} (PROTOBUF)")
         except Exception as e:
-            logger.error(f"Error conectando al puerto 5561: {e}")
+            logger.error(f"Error conectando al puerto {self.output_port}: {e}")
             self.socket = None
 
     def send_firewall_command_batch(self, batch):
@@ -257,6 +291,12 @@ class FirewallCommandSender:
         try:
             # Enviar como protobuf serializado
             message = batch.SerializeToString()
+
+            # Verificar tamaño del mensaje
+            if len(message) > self.max_message_size:
+                logger.warning(f"Mensaje muy grande: {len(message)} bytes (límite: {self.max_message_size})")
+                return False
+
             self.socket.send(message)
 
             # Log local
@@ -266,11 +306,13 @@ class FirewallCommandSender:
                 'batch_id': batch.batch_id,
                 'target_node': batch.target_node_id,
                 'command_count': len(batch.commands),
-                'generated_by': batch.generated_by
+                'generated_by': batch.generated_by,
+                'message_size': len(message)
             }
             self.command_log.append(log_entry)
 
-            logger.info(f"🔥 Lote protobuf enviado: {batch.batch_id} ({len(batch.commands)} comandos)")
+            logger.info(
+                f"🔥 Lote protobuf enviado: {batch.batch_id} ({len(batch.commands)} comandos, {len(message)} bytes)")
             return True
 
         except Exception as e:
@@ -352,21 +394,29 @@ class FirewallCommandSender:
 
 
 class ZeroMQListener:
-    """Listener de ZeroMQ puerto 5560 (eventos enriquecidos por ML) usando PROTOBUF"""
+    """Listener de ZeroMQ configurado desde JSON"""
 
-    def __init__(self, dashboard_handler):
+    def __init__(self, dashboard_handler, network_config: Dict):
+        """Inicializar listener con configuración JSON"""
         self.dashboard_handler = dashboard_handler
+        self.config = network_config
+
+        # Configuración de red desde JSON
+        self.input_port = self.config['zmq_input_port']
+        self.socket_timeout = self.config.get('zmq_socket_timeout', 5000)
+
         self.running = False
         self.context = None
         self.socket = None
 
-        # Estadísticas del broker
+        # Estadísticas del broker configuradas
         self.broker_stats = {
             'connection_time': None,
             'total_messages': 0,
             'bytes_received': 0,
             'last_message_time': None,
-            'broker_health': 'unknown'
+            'broker_health': 'unknown',
+            'max_message_size': self.config.get('max_message_size', 1048576)
         }
 
         # Estadísticas de eventos
@@ -384,11 +434,14 @@ class ZeroMQListener:
             'event_types': defaultdict(int),
             'ports_seen': defaultdict(int),
             'handshakes_received': 0,
-            'nodes_registered': 0
+            'nodes_registered': 0,
+            'protobuf_events': 0,
+            'json_events': 0,
+            'parsing_errors': 0
         }
 
     def start(self):
-        """Iniciar conexión a ZeroMQ 5560"""
+        """Iniciar conexión a ZeroMQ usando configuración"""
         if not ZMQ_AVAILABLE:
             logger.error("ZMQ no disponible para listener")
             return
@@ -396,15 +449,17 @@ class ZeroMQListener:
         self.running = True
 
         try:
-            self.context = zmq.Context()
+            self.context = zmq.Context(self.config.get('zmq_context_threads', 1))
             self.socket = self.context.socket(zmq.SUB)
-            self.socket.connect("tcp://localhost:5560")
+
+            input_addr = f"tcp://localhost:{self.input_port}"
+            self.socket.connect(input_addr)
             self.socket.setsockopt(zmq.SUBSCRIBE, b"")
-            self.socket.setsockopt(zmq.RCVTIMEO, 5000)
+            self.socket.setsockopt(zmq.RCVTIMEO, self.socket_timeout)
 
             self.broker_stats['connection_time'] = datetime.now()
 
-            logger.info("🔌 Conectado a ZeroMQ puerto 5560 (eventos enriquecidos por ML - PROTOBUF)")
+            logger.info(f"🔌 Conectado a ZeroMQ {input_addr} (eventos enriquecidos por ML - PROTOBUF)")
 
             # Thread de escucha
             thread = threading.Thread(target=self._listen_events, daemon=True)
@@ -416,7 +471,7 @@ class ZeroMQListener:
             logger.error(f"❌ Error conectando a ZeroMQ: {e}")
 
     def _listen_events(self):
-        """Escuchar eventos del puerto 5560 (PROTOBUF)"""
+        """Escuchar eventos del puerto configurado (PROTOBUF)"""
         while self.running:
             try:
                 message = self.socket.recv(zmq.NOBLOCK)
@@ -427,23 +482,31 @@ class ZeroMQListener:
                 self.broker_stats['last_message_time'] = datetime.now()
                 self.broker_stats['broker_health'] = 'healthy'
 
+                # Verificar tamaño del mensaje
+                if len(message) > self.broker_stats['max_message_size']:
+                    logger.warning(f"Mensaje muy grande recibido: {len(message)} bytes")
+
                 # Intentar parsear como protobuf
                 if PROTOBUF_AVAILABLE:
                     try:
                         event = network_event_extended_fixed_pb2.NetworkEvent()
                         event.ParseFromString(message)
                         self._process_event_protobuf(event)
+                        self.stats['protobuf_events'] += 1
                         continue
                     except Exception as e:
                         logger.debug(f"Error parsing protobuf: {e}")
+                        self.stats['parsing_errors'] += 1
 
                 # Fallback a JSON (no debería ocurrir)
                 try:
                     event_data = json.loads(message.decode('utf-8'))
                     self._process_json_event(event_data)
+                    self.stats['json_events'] += 1
                     logger.warning("Recibido evento en JSON - se esperaba protobuf")
                 except Exception as e:
                     logger.error(f"Error parsing mensaje: {e}")
+                    self.stats['parsing_errors'] += 1
 
             except zmq.Again:
                 time.sleep(0.1)
@@ -586,15 +649,18 @@ class ZeroMQListener:
     def _add_to_dashboard(self, event):
         """Añadir evento al dashboard"""
         if hasattr(self.dashboard_handler, 'shared_data'):
+            # Usar configuración para límite de eventos
+            max_events = self.dashboard_handler.shared_data.get('max_events_buffer', 300)
+
             self.dashboard_handler.shared_data['events'].append(event)
 
             # Procesar evento con la integración de firewall
             if hasattr(self.dashboard_handler, 'firewall_integration'):
                 self.dashboard_handler.firewall_integration.process_received_event(event)
 
-            if len(self.dashboard_handler.shared_data['events']) > 300:
+            if len(self.dashboard_handler.shared_data['events']) > max_events:
                 self.dashboard_handler.shared_data['events'] = \
-                    self.dashboard_handler.shared_data['events'][-300:]
+                    self.dashboard_handler.shared_data['events'][-max_events:]
 
     def get_stats(self):
         """Obtener estadísticas completas"""
@@ -624,7 +690,10 @@ class ZeroMQListener:
             'gps_percentage': (self.stats['events_with_gps'] / max(1, self.stats['total_events'])) * 100,
             'broker_stats': self.broker_stats,
             'handshakes_received': self.stats['handshakes_received'],
-            'nodes_registered': self.stats['nodes_registered']
+            'nodes_registered': self.stats['nodes_registered'],
+            'protobuf_events': self.stats['protobuf_events'],
+            'json_events': self.stats['json_events'],
+            'parsing_errors': self.stats['parsing_errors']
         }
 
     def stop(self):
@@ -637,15 +706,23 @@ class ZeroMQListener:
 
 
 class DashboardFirewallIntegration:
-    """Integración de firewall para el dashboard usando protobuf real"""
+    """Integración de firewall para el dashboard configurada desde JSON"""
 
-    def __init__(self, dashboard_instance):
+    def __init__(self, dashboard_instance, firewall_config: Dict):
+        """Inicializar integración con configuración JSON"""
         self.dashboard = dashboard_instance
-        self.command_generator = FirewallCommandGenerator()
+        self.config = firewall_config
+        self.command_generator = FirewallCommandGenerator(firewall_config)
 
         # Estado de la UI
         self.selected_events = []
         self.pending_commands = {}
+
+        # Configuración desde JSON
+        self.max_pending = self.config.get('max_pending_commands', 100)
+        self.command_timeout = self.config.get('command_timeout_seconds', 300)
+
+        logger.info("🔥 DashboardFirewallIntegration initialized from JSON config")
 
     def process_received_event(self, event_data):
         """Procesa un evento recibido y genera comandos protobuf"""
@@ -653,27 +730,53 @@ class DashboardFirewallIntegration:
         # Registrar nodo si es handshake inicial
         self.command_generator.register_node(event_data)
 
-        # Analizar amenazas automáticamente (retorna objetos protobuf)
-        suggested_commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
+        # Analizar amenazas automáticamente usando configuración
+        if self.config.get('auto_threat_detection', True):
+            suggested_commands = self.command_generator.analyze_threat_and_generate_commands(event_data)
 
-        if suggested_commands:
-            logger.info(
-                f"💡 {len(suggested_commands)} comando(s) protobuf sugerido(s) para evento {event_data.get('event_id', 'unknown')}")
+            if suggested_commands:
+                logger.info(
+                    f"💡 {len(suggested_commands)} comando(s) protobuf sugerido(s) para evento {event_data.get('event_id', 'unknown')}")
 
-            # Guardar comandos sugeridos para aprobación manual
-            event_id = event_data.get('event_id')
-            self.pending_commands[event_id] = {
-                'event': event_data,
-                'commands_protobuf': suggested_commands,  # Objetos protobuf
-                'timestamp': time.time()
-            }
+                # Guardar comandos sugeridos para aprobación manual
+                event_id = event_data.get('event_id')
+
+                # Limpiar comandos antiguos
+                self._cleanup_old_commands()
+
+                # Verificar límite de comandos pendientes
+                if len(self.pending_commands) < self.max_pending:
+                    self.pending_commands[event_id] = {
+                        'event': event_data,
+                        'commands_protobuf': suggested_commands,  # Objetos protobuf
+                        'timestamp': time.time()
+                    }
+
+    def _cleanup_old_commands(self):
+        """Limpiar comandos antiguos basado en configuración"""
+        current_time = time.time()
+        expired_commands = []
+
+        for event_id, command_data in self.pending_commands.items():
+            if current_time - command_data['timestamp'] > self.command_timeout:
+                expired_commands.append(event_id)
+
+        for event_id in expired_commands:
+            del self.pending_commands[event_id]
+
+        if expired_commands:
+            logger.info(f"🧹 Limpiados {len(expired_commands)} comandos expirados")
 
     def get_pending_commands_summary(self):
         """Retorna resumen de comandos pendientes"""
+        self._cleanup_old_commands()
+
         summary = {
             'total_events_with_commands': len(self.pending_commands),
             'total_commands': sum(len(p['commands_protobuf']) for p in self.pending_commands.values()),
-            'oldest_pending': None
+            'oldest_pending': None,
+            'max_pending': self.max_pending,
+            'timeout_seconds': self.command_timeout
         }
 
         if self.pending_commands:
@@ -683,27 +786,180 @@ class DashboardFirewallIntegration:
         return summary
 
 
+def load_dashboard_config(config_file=None):
+    """Cargar configuración del dashboard desde JSON"""
+    default_config = {
+        "agent_info": {
+            "name": "real_zmq_dashboard_with_firewall",
+            "version": "1.0.0",
+            "description": "Dashboard SCADA con ML y firewall integrado"
+        },
+        "network": {
+            "http_host": "127.0.0.1",
+            "http_port": 8000,
+            "zmq_input_port": 5560,
+            "zmq_output_port": 5561,
+            "zmq_context_threads": 1,
+            "zmq_socket_timeout": 5000,
+            "max_message_size": 1048576
+        },
+        "dashboard": {
+            "max_events_buffer": 300,
+            "max_markers_on_map": 500,
+            "event_display_limit": 50,
+            "gps_events_limit": 30,
+            "auto_refresh_interval": 3000,
+            "enable_real_time_updates": True
+        },
+        "firewall_integration": {
+            "enabled": True,
+            "auto_threat_detection": True,
+            "require_manual_approval": True,
+            "max_pending_commands": 100,
+            "command_timeout_seconds": 300,
+            "threat_thresholds": {
+                "high_risk_score": 0.8,
+                "critical_risk_score": 0.9,
+                "anomaly_threshold": 0.7,
+                "auto_block_enabled": False
+            }
+        },
+        "threat_rules": {
+            "port_scan": {
+                "action": "block_ip",
+                "duration_seconds": 3600,
+                "priority": "high",
+                "auto_apply": False
+            },
+            "anomaly_high": {
+                "action": "block_ip",
+                "duration_seconds": 1800,
+                "priority": "medium",
+                "auto_apply": False
+            },
+            "rate_limit_exceeded": {
+                "action": "rate_limit",
+                "duration_seconds": 900,
+                "priority": "medium",
+                "rate_limit_rule": "10/min",
+                "auto_apply": False
+            },
+            "suspicious_port": {
+                "action": "block_ip",
+                "duration_seconds": 3600,
+                "priority": "high",
+                "auto_apply": False
+            },
+            "brute_force": {
+                "action": "block_ip",
+                "duration_seconds": 7200,
+                "priority": "critical",
+                "auto_apply": False
+            }
+        },
+        "suspicious_ports": [22, 23, 135, 139, 445, 1433, 3389, 5900, 502, 1911, 4840, 20000],
+        "logging": {
+            "level": "INFO",
+            "file": "logs/dashboard.log",
+            "max_size_mb": 50,
+            "backup_count": 5,
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "console_output": True,
+            "log_api_requests": True,
+            "log_firewall_commands": True
+        },
+        "security": {
+            "enable_cors": True,
+            "allowed_origins": ["*"],
+            "max_request_size": 1048576,
+            "rate_limiting": {
+                "enabled": False,
+                "max_requests_per_minute": 120
+            }
+        },
+        "map_settings": {
+            "default_center_lat": 40.0,
+            "default_center_lon": 0.0,
+            "default_zoom": 2,
+            "marker_colors": {
+                "low_risk": "#4CAF50",
+                "medium_risk": "#FF9800",
+                "high_risk": "#F44336",
+                "no_risk": "#00ff88"
+            },
+            "marker_sizes": {
+                "low_risk": 8,
+                "medium_risk": 10,
+                "high_risk": 12,
+                "no_risk": 6
+            }
+        },
+        "geoip": {
+            "database_path": "GeoLite2-City.mmdb",
+            "cache_size": 10000,
+            "cache_ttl_seconds": 3600
+        }
+    }
+
+    if config_file and os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                user_config = json.load(f)
+
+            # Merge recursivo de configuraciones
+            def merge_config(base, update):
+                for key, value in update.items():
+                    if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                        merge_config(base[key], value)
+                    else:
+                        base[key] = value
+
+            merge_config(default_config, user_config)
+            logger.info(f"📄 Dashboard configuración cargada desde {config_file}")
+
+        except Exception as e:
+            logger.error(f"❌ Error cargando configuración dashboard: {e}")
+            logger.info("⚠️ Usando configuración por defecto")
+    else:
+        if config_file:
+            logger.warning(f"⚠️ Dashboard config no encontrado: {config_file}")
+        logger.info("⚠️ Usando configuración dashboard por defecto")
+
+    return default_config
+
+
 class DashboardHandler(BaseHTTPRequestHandler):
-    """Handler del dashboard con capacidades de firewall usando protobuf real"""
+    """Handler del dashboard con configuración JSON completa"""
 
     # Datos compartidos entre instancias del handler
     shared_data = {
         'events': [],
         'zmq_listener': None,
         'firewall_sender': None,
-        'firewall_integration': None
+        'firewall_integration': None,
+        'config': None,
+        'max_events_buffer': 300,
+        'auto_refresh_interval': 3000
     }
 
     def __init__(self, *args, **kwargs):
         # Inicializar integración de firewall si no existe
-        if not self.shared_data['firewall_integration']:
-            self.shared_data['firewall_integration'] = DashboardFirewallIntegration(self)
+        if not self.shared_data['firewall_integration'] and self.shared_data['config']:
+            firewall_config = self.shared_data['config']['firewall_integration']
+            firewall_config.update(self.shared_data['config'].get('threat_rules', {}))
+            firewall_config['suspicious_ports'] = self.shared_data['config'].get('suspicious_ports', [])
+
+            self.shared_data['firewall_integration'] = DashboardFirewallIntegration(self, firewall_config)
 
         super().__init__(*args, **kwargs)
 
     @property
     def firewall_integration(self):
         return self.shared_data['firewall_integration']
+
+    @property
+    def config(self):
+        return self.shared_data['config']
 
     def do_GET(self):
         """Manejar peticiones GET"""
@@ -758,6 +1014,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 self.send_json({'error': 'Missing required fields'}, status=400)
                 return
 
+            # Usar configuración para límites de request
+            if self.config and self.config['security'].get('max_request_size'):
+                if len(post_data) > self.config['security']['max_request_size']:
+                    self.send_json({'error': 'Request too large'}, status=413)
+                    return
+
             # Enviar usando el método JSON que convierte a protobuf internamente
             if self.shared_data['firewall_sender']:
                 success = self.shared_data['firewall_sender'].send_firewall_command_json(request_data)
@@ -790,7 +1052,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
 
             # Verificar si hay comandos pendientes (protobuf)
-            if event_id in self.firewall_integration.pending_commands:
+            if self.firewall_integration and event_id in self.firewall_integration.pending_commands:
                 pending = self.firewall_integration.pending_commands[event_id]
                 commands_protobuf = pending['commands_protobuf']
                 event_data = pending['event']
@@ -830,7 +1092,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_json({'error': str(e)}, status=500)
 
     def handle_generate_firewall_command(self):
-        """Generar comando de firewall"""
+        """Generar comando de firewall usando configuración"""
         try:
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
@@ -839,7 +1101,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             # Información del evento
             event_info = request_data.get('event', {})
 
-            # Generar comando inteligente
+            # Generar comando inteligente usando configuración
             suggested_command = self._generate_intelligent_firewall_command(event_info)
 
             self.send_json({
@@ -852,19 +1114,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_json({'error': str(e)}, status=500)
 
     def _generate_intelligent_firewall_command(self, event_info):
-        """Generar comando de firewall inteligente basado en el evento"""
+        """Generar comando de firewall inteligente basado en configuración y evento"""
         target_ip = event_info.get('target_ip', 'unknown')
         source_ip = event_info.get('source_ip', 'unknown')
         risk_score = event_info.get('risk_score', 0)
         dest_port = event_info.get('dest_port', 0)
         protocol = event_info.get('protocol', 'TCP')
 
-        # Determinar tipo de regla basado en el riesgo
-        if risk_score >= 0.9:
+        # Usar configuración para determinar tipo de regla
+        threat_thresholds = self.config.get('firewall_integration', {}).get('threat_thresholds', {})
+        critical_threshold = threat_thresholds.get('critical_risk_score', 0.9)
+        high_threshold = threat_thresholds.get('high_risk_score', 0.8)
+
+        # Determinar tipo de regla basado en configuración
+        if risk_score >= critical_threshold:
             action = 'BLOCK_IP'
             duration = 86400  # 24h
             priority = 'CRITICAL'
-        elif risk_score >= 0.8:
+        elif risk_score >= high_threshold:
             action = 'BLOCK_IP'
             duration = 3600  # 1h
             priority = 'HIGH'
@@ -873,9 +1140,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
             duration = 900  # 15min
             priority = 'MEDIUM'
 
+        # Verificar puertos sospechosos desde configuración
+        suspicious_ports = self.config.get('suspicious_ports', [])
+
         # Generar comando específico del protocolo
-        if dest_port in [22, 3389]:  # SSH, RDP
-            command = f"iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -j DROP"
+        if dest_port in suspicious_ports:
+            if dest_port in [22, 3389]:  # SSH, RDP
+                command = f"iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -j DROP"
+            else:
+                command = f"iptables -A INPUT -s {source_ip} -j DROP"
         elif dest_port in [80, 443]:  # HTTP, HTTPS
             command = f"iptables -A INPUT -s {source_ip} -p {protocol.lower()} --dport {dest_port} -m limit --limit 10/min -j ACCEPT"
         else:
@@ -897,14 +1170,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             'analysis': {
                 'threat_type': self._analyze_threat_type(event_info),
                 'recommended_action': action,
-                'confidence': min(risk_score * 100, 95)
+                'confidence': min(risk_score * 100, 95),
+                'used_configuration': True
             }
         }
 
     def _analyze_threat_type(self, event_info):
-        """Analizar tipo de amenaza basado en el evento"""
+        """Analizar tipo de amenaza basado en configuración"""
         dest_port = event_info.get('dest_port', 0)
         packet_size = event_info.get('packet_size', 0)
+
+        # Usar puertos sospechosos de configuración
+        suspicious_ports = self.config.get('suspicious_ports', [])
 
         if dest_port == 22:
             return 'SSH_BRUTE_FORCE'
@@ -912,6 +1189,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return 'RDP_ATTACK'
         elif dest_port in [80, 443]:
             return 'WEB_ATTACK'
+        elif dest_port in suspicious_ports:
+            return 'SUSPICIOUS_PORT_ACCESS'
         elif packet_size > 1400:
             return 'POTENTIAL_DDoS'
         else:
@@ -923,7 +1202,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             log_data = self.shared_data['firewall_sender'].get_command_log()
             self.send_json({
                 'commands': log_data,
-                'count': len(log_data)
+                'count': len(log_data),
+                'configuration': {
+                    'output_port': self.config['network']['zmq_output_port'] if self.config else 'unknown',
+                    'max_message_size': self.config['network'].get('max_message_size', 0) if self.config else 0
+                }
             })
         else:
             self.send_json({'commands': [], 'count': 0})
@@ -958,13 +1241,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
             self.send_json({
                 'summary': summary,
-                'pending_commands': pending
+                'pending_commands': pending,
+                'configuration': {
+                    'max_pending': summary['max_pending'],
+                    'timeout_seconds': summary['timeout_seconds']
+                }
             })
         else:
             self.send_json({'summary': {}, 'pending_commands': {}})
 
     def serve_stats(self):
-        """Estadísticas del sistema"""
+        """Estadísticas del sistema usando configuración"""
         if self.shared_data['zmq_listener']:
             stats = self.shared_data['zmq_listener'].get_stats()
         else:
@@ -974,32 +1261,57 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if self.firewall_integration:
             stats['firewall_stats'] = self.firewall_integration.get_pending_commands_summary()
 
+        # Agregar información de configuración
+        if self.config:
+            stats['configuration'] = {
+                'input_port': self.config['network']['zmq_input_port'],
+                'output_port': self.config['network']['zmq_output_port'],
+                'max_events_buffer': self.config['dashboard']['max_events_buffer'],
+                'auto_refresh_interval': self.config['dashboard']['auto_refresh_interval'],
+                'firewall_enabled': self.config['firewall_integration']['enabled'],
+                'auto_threat_detection': self.config['firewall_integration']['auto_threat_detection']
+            }
+
         self.send_json(stats)
 
     def serve_events(self):
-        """Eventos recientes"""
-        events = self.shared_data['events'][-50:]
+        """Eventos recientes usando configuración"""
+        # Usar límite de configuración
+        limit = self.config['dashboard']['event_display_limit'] if self.config else 50
+        events = self.shared_data['events'][-limit:]
+
         self.send_json({
             'events': events,
             'count': len(events),
-            'source': 'zeromq_5560_ml_enriched_protobuf',
+            'total_events': len(self.shared_data['events']),
+            'source': 'zeromq_ml_enriched_protobuf',
             'protobuf_available': PROTOBUF_AVAILABLE,
-            'zmq_available': ZMQ_AVAILABLE
+            'zmq_available': ZMQ_AVAILABLE,
+            'configuration': {
+                'display_limit': limit,
+                'total_buffer_size': self.config['dashboard']['max_events_buffer'] if self.config else 'unknown'
+            }
         })
 
     def serve_gps_events(self):
-        """Solo eventos con GPS"""
+        """Solo eventos con GPS usando configuración"""
         all_events = self.shared_data['events']
         gps_events = [e for e in all_events if e.get('has_gps')]
 
+        # Usar límite de configuración
+        limit = self.config['dashboard']['gps_events_limit'] if self.config else 30
+
         self.send_json({
-            'events': gps_events[-30:],
+            'events': gps_events[-limit:],
             'count': len(gps_events),
-            'total_events': len(all_events)
+            'total_events': len(all_events),
+            'configuration': {
+                'gps_limit': limit
+            }
         })
 
     def serve_health(self):
-        """Health check"""
+        """Health check usando configuración"""
         stats = {}
         if self.shared_data['zmq_listener']:
             stats = self.shared_data['zmq_listener'].get_stats()
@@ -1007,8 +1319,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
         health_data = {
             'status': 'healthy' if stats.get('total_events', 0) > 0 else 'waiting_for_events',
             'timestamp': datetime.now().isoformat(),
-            'zeromq_port': 5560,
-            'firewall_port': 5561,
             'protobuf_enabled': PROTOBUF_AVAILABLE,
             'zmq_enabled': ZMQ_AVAILABLE,
             'total_events': stats.get('total_events', 0),
@@ -1018,193 +1328,231 @@ class DashboardHandler(BaseHTTPRequestHandler):
             'handshakes_received': stats.get('handshakes_received', 0),
             'nodes_registered': stats.get('nodes_registered', 0)
         }
+
+        # Agregar información de configuración
+        if self.config:
+            health_data.update({
+                'zeromq_input_port': self.config['network']['zmq_input_port'],
+                'zeromq_output_port': self.config['network']['zmq_output_port'],
+                'http_port': self.config['network']['http_port'],
+                'configuration_loaded': True,
+                'threat_rules_count': len(self.config.get('threat_rules', {})),
+                'suspicious_ports_count': len(self.config.get('suspicious_ports', []))
+            })
+        else:
+            health_data['configuration_loaded'] = False
+
         self.send_json(health_data)
 
     def send_json(self, data, status=200):
-        """Enviar respuesta JSON"""
+        """Enviar respuesta JSON con configuración CORS"""
         json_data = json.dumps(data, indent=2, default=str)
         self.send_response(status)
         self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+
+        # CORS desde configuración
+        if self.config and self.config['security'].get('enable_cors', True):
+            allowed_origins = self.config['security'].get('allowed_origins', ['*'])
+            if '*' in allowed_origins:
+                self.send_header('Access-Control-Allow-Origin', '*')
+            else:
+                # En producción, usar orígenes específicos
+                self.send_header('Access-Control-Allow-Origin', allowed_origins[0])
+
         self.send_header('Content-length', str(len(json_data.encode('utf-8'))))
         self.end_headers()
         self.wfile.write(json_data.encode('utf-8'))
 
     def serve_dashboard(self):
-        """Dashboard HTML interactivo"""
-        html = """<!DOCTYPE html>
+        """Dashboard HTML interactivo con configuración dinámica"""
+
+        # Valores por defecto si no hay configuración
+        refresh_interval = 3000
+        if self.config:
+            refresh_interval = self.config['dashboard'].get('auto_refresh_interval', 3000)
+
+        html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛡️ SCADA Real - ML Enhanced + Firewall (PROTOBUF)</title>
+    <title>🛡️ SCADA Real - ML Enhanced + Firewall (JSON CONFIG)</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #0f0f23 0%, #1a1a3a 100%);
             color: #fff; overflow: hidden;
-        }
-        .header { 
+        }}
+        .header {{ 
             background: rgba(0, 0, 0, 0.9); padding: 0.8rem;
             border-bottom: 2px solid #00ff88;
             display: flex; justify-content: space-between; align-items: center;
-        }
-        .header h1 { color: #00ff88; font-size: 1.3rem; }
-        .status { display: flex; gap: 15px; align-items: center; font-size: 0.85rem; }
-        .status-item { 
+        }}
+        .header h1 {{ color: #00ff88; font-size: 1.3rem; }}
+        .status {{ display: flex; gap: 15px; align-items: center; font-size: 0.85rem; }}
+        .status-item {{ 
             background: rgba(255, 255, 255, 0.1);
             padding: 4px 8px; border-radius: 12px;
-        }
-        .status-dot { 
+        }}
+        .status-dot {{ 
             width: 8px; height: 8px; border-radius: 50%;
             display: inline-block; margin-right: 5px;
             animation: pulse 2s infinite;
-        }
-        .online { background: #00ff88; }
-        .warning { background: #ffaa00; }
-        .error { background: #ff4444; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        }}
+        .online {{ background: #00ff88; }}
+        .warning {{ background: #ffaa00; }}
+        .error {{ background: #ff4444; }}
+        @keyframes pulse {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} 100% {{ opacity: 1; }} }}
 
-        .main-container { 
+        .main-container {{ 
             display: grid; grid-template-columns: 1fr 380px;
             height: calc(100vh - 70px); gap: 1rem; padding: 1rem;
-        }
-        .map-container { position: relative; border-radius: 10px; overflow: hidden; }
-        #map { height: 100%; width: 100%; }
+        }}
+        .map-container {{ position: relative; border-radius: 10px; overflow: hidden; }}
+        #map {{ height: 100%; width: 100%; }}
 
-        .sidebar { 
+        .sidebar {{ 
             background: rgba(0, 0, 0, 0.8); border-radius: 10px;
             padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;
-        }
+        }}
 
-        .stats-grid {
+        .stats-grid {{
             display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-        }
-        .stat-card {
+        }}
+        .stat-card {{
             background: rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px;
             text-align: center; border-left: 3px solid #00ff88;
-        }
-        .stat-value { font-size: 1.4rem; font-weight: bold; color: #00ff88; }
-        .stat-label { font-size: 0.8rem; color: #ccc; margin-top: 3px; }
+        }}
+        .stat-value {{ font-size: 1.4rem; font-weight: bold; color: #00ff88; }}
+        .stat-label {{ font-size: 0.8rem; color: #ccc; margin-top: 3px; }}
 
-        .events-section { flex: 1; }
-        .events-header { color: #00ff88; font-size: 1.1rem; margin-bottom: 0.5rem; }
-        .event-item { 
+        .config-info {{
+            background: rgba(0, 100, 200, 0.1); border-radius: 8px; padding: 10px;
+            border-left: 3px solid #0066cc; font-size: 0.8rem;
+        }}
+
+        .events-section {{ flex: 1; }}
+        .events-header {{ color: #00ff88; font-size: 1.1rem; margin-bottom: 0.5rem; }}
+        .event-item {{ 
             background: rgba(255, 255, 255, 0.1);
             border-left: 3px solid #00ff88; padding: 8px;
             margin-bottom: 8px; border-radius: 5px; font-size: 0.85rem;
             animation: slideIn 0.5s ease; cursor: pointer;
             transition: all 0.3s ease;
-        }
-        .event-item:hover { 
+        }}
+        .event-item:hover {{ 
             background: rgba(255, 255, 255, 0.2);
             border-left-color: #ff8800;
             transform: translateX(5px);
-        }
-        .event-item.high-risk {
+        }}
+        .event-item.high-risk {{
             border-left-color: #ff4444;
             background: rgba(255, 68, 68, 0.1);
-        }
-        .event-item.high-risk:hover {
+        }}
+        .event-item.high-risk:hover {{
             background: rgba(255, 68, 68, 0.2);
             box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
-        }
-        .event-time { font-size: 0.75rem; color: #aaa; }
-        .event-ip { font-weight: bold; color: #00ff88; font-family: monospace; }
-        .event-details { font-size: 0.75rem; color: #ccc; margin-top: 3px; }
-        .gps-badge { 
+        }}
+        .event-time {{ font-size: 0.75rem; color: #aaa; }}
+        .event-ip {{ font-weight: bold; color: #00ff88; font-family: monospace; }}
+        .event-details {{ font-size: 0.75rem; color: #ccc; margin-top: 3px; }}
+        .gps-badge {{ 
             background: #00ff88; color: #000; padding: 1px 4px; 
             border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
-        }
-        .ml-badge {
+        }}
+        .ml-badge {{
             background: #ff8800; color: #fff; padding: 1px 4px;
             border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
-        }
-        .protobuf-badge {
+        }}
+        .protobuf-badge {{
             background: #8800ff; color: #fff; padding: 1px 4px;
             border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
-        }
-        .handshake-badge {
+        }}
+        .handshake-badge {{
             background: #00ffff; color: #000; padding: 1px 4px;
             border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
-        }
-        .risk-badge {
+        }}
+        .config-badge {{
+            background: #0066cc; color: #fff; padding: 1px 4px;
+            border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
+        }}
+        .risk-badge {{
             padding: 1px 4px; border-radius: 3px; font-size: 0.7rem; margin-left: 5px;
-        }
-        .risk-low { background: #4CAF50; color: white; }
-        .risk-medium { background: #FF9800; color: white; }
-        .risk-high { background: #F44336; color: white; }
+        }}
+        .risk-low {{ background: #4CAF50; color: white; }}
+        .risk-medium {{ background: #FF9800; color: white; }}
+        .risk-high {{ background: #F44336; color: white; }}
 
-        .block-button {
+        .block-button {{
             background: #ff4444; color: white; border: none;
             padding: 4px 8px; border-radius: 3px; font-size: 0.7rem;
             cursor: pointer; margin-left: 5px; opacity: 0.8;
             transition: opacity 0.3s ease;
-        }
-        .block-button:hover {
+        }}
+        .block-button:hover {{
             opacity: 1;
             background: #ff2222;
-        }
+        }}
 
-        .ml-models {
+        .ml-models {{
             background: rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 10px;
-        }
-        .ml-model { 
+        }}
+        .ml-model {{ 
             background: rgba(0, 255, 136, 0.2); color: #00ff88;
             padding: 3px 8px; border-radius: 15px; font-size: 0.75rem;
             display: inline-block; margin: 2px;
-        }
+        }}
 
-        .btn { 
+        .btn {{ 
             background: #00ff88; color: #0f0f23; padding: 6px 12px;
             border: none; border-radius: 5px; cursor: pointer;
             margin: 3px; font-weight: bold; font-size: 0.8rem;
-        }
-        .btn:hover { background: #00cc66; }
+        }}
+        .btn:hover {{ background: #00cc66; }}
 
         /* Modal styles */
-        .modal {
+        .modal {{
             display: none; position: fixed; z-index: 10000;
             left: 0; top: 0; width: 100%; height: 100%;
             background-color: rgba(0, 0, 0, 0.8);
-        }
-        .modal-content {
+        }}
+        .modal-content {{
             background: linear-gradient(135deg, #1a1a3a 0%, #2a2a4a 100%);
             margin: 5% auto; padding: 20px; border-radius: 10px;
             width: 80%; max-width: 600px; color: #fff;
             border: 2px solid #ff4444;
-        }
-        .modal-header {
+        }}
+        .modal-header {{
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 20px; color: #ff4444;
-        }
-        .close {
+        }}
+        .close {{
             color: #aaa; font-size: 28px; font-weight: bold;
             cursor: pointer; line-height: 1;
-        }
-        .close:hover { color: #fff; }
-        .command-preview {
+        }}
+        .close:hover {{ color: #fff; }}
+        .command-preview {{
             background: rgba(0, 0, 0, 0.5); padding: 15px;
             border-radius: 5px; font-family: monospace;
             margin: 15px 0; color: #00ff88;
             border-left: 3px solid #ff4444;
-        }
-        .modal-buttons {
+        }}
+        .modal-buttons {{
             display: flex; gap: 10px; margin-top: 20px;
-        }
-        .btn-danger { background: #ff4444; color: white; }
-        .btn-danger:hover { background: #ff2222; }
-        .btn-cancel { background: #666; color: white; }
-        .btn-cancel:hover { background: #555; }
+        }}
+        .btn-danger {{ background: #ff4444; color: white; }}
+        .btn-danger:hover {{ background: #ff2222; }}
+        .btn-cancel {{ background: #666; color: white; }}
+        .btn-cancel:hover {{ background: #555; }}
 
-        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideIn {{ from {{ opacity: 0; transform: translateX(-20px); }} to {{ opacity: 1; transform: translateX(0); }} }}
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🛡️ SCADA Real - ML Enhanced + Firewall (PROTOBUF REAL)</h1>
+        <h1>🛡️ SCADA Real - ML Enhanced + Firewall (JSON CONFIG)</h1>
         <div class="status">
             <div class="status-item">
                 <span class="status-dot online" id="zmq-status"></span>
@@ -1221,6 +1569,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             <div class="status-item">
                 <span class="status-dot" id="protobuf-status"></span>
                 <span>Protobuf</span>
+            </div>
+            <div class="status-item">
+                <span class="status-dot" id="config-status"></span>
+                <span>Config</span>
             </div>
             <div class="status-item">
                 Eventos: <span id="total-events">0</span>
@@ -1240,6 +1592,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         </div>
 
         <div class="sidebar">
+            <div class="config-info">
+                <strong>📄 Configuración JSON:</strong><br>
+                <span id="config-details">Cargando...</span>
+            </div>
+
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="events-per-minute">0</div>
@@ -1267,10 +1624,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             </div>
 
             <div class="events-section">
-                <div class="events-header">🚨 Eventos ML Enriquecidos (Protobuf Real)</div>
+                <div class="events-header">🚨 Eventos ML Enriquecidos (JSON Config)</div>
                 <div id="events-list">
                     <div class="event-item">
-                        <div class="event-time">Conectando a ZeroMQ 5560...</div>
+                        <div class="event-time">Conectando a ZeroMQ (puerto configurado)...</div>
                         <div class="event-ip">Esperando eventos protobuf enriquecidos por ML</div>
                     </div>
                 </div>
@@ -1281,6 +1638,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 <button class="btn" onclick="clearMap()">🗺️ Limpiar Mapa</button>
                 <button class="btn" onclick="showFirewallLog()">🔥 Log Firewall</button>
                 <button class="btn" onclick="showPendingCommands()">📋 Pendientes</button>
+                <button class="btn" onclick="showConfig()">⚙️ Config</button>
             </div>
         </div>
     </div>
@@ -1289,15 +1647,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
     <div id="firewallModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>🔥 Bloquear Evento de Alto Riesgo (→ Protobuf Real)</h2>
+                <h2>🔥 Bloquear Evento de Alto Riesgo (→ Protobuf JSON Config)</h2>
                 <span class="close" onclick="closeFirewallModal()">&times;</span>
             </div>
             <div id="modal-event-info"></div>
             <div class="command-preview" id="command-preview">
-                Generando comando de firewall protobuf...
+                Generando comando de firewall protobuf usando configuración JSON...
             </div>
             <div class="modal-buttons">
-                <button class="btn btn-danger" onclick="executeFirewallCommand()">🛡️ Bloquear IP (Protobuf Batch)</button>
+                <button class="btn btn-danger" onclick="executeFirewallCommand()">🛡️ Bloquear IP (JSON Config)</button>
                 <button class="btn btn-cancel" onclick="closeFirewallModal()">❌ Cancelar</button>
             </div>
         </div>
@@ -1305,33 +1663,34 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
-        class MLFirewallDashboard {
-            constructor() {
+        class MLFirewallDashboard {{
+            constructor() {{
                 this.map = null;
                 this.markers = new Map();
                 this.lastEventCount = 0;
                 this.allEvents = [];
                 this.selectedEvent = null;
+                this.config = null;
 
                 this.initMap();
                 this.startPeriodicUpdates();
-                this.log('🛡️ Dashboard ML + Firewall (PROTOBUF REAL) inicializado');
-            }
+                this.log('🛡️ Dashboard ML + Firewall (JSON CONFIG) inicializado');
+            }}
 
-            initMap() {
+            initMap() {{
                 this.map = L.map('map').setView([40.0, 0.0], 2);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
                     attribution: '©OpenStreetMap, ©CartoDB'
-                }).addTo(this.map);
-            }
+                }}).addTo(this.map);
+            }}
 
-            log(message) {
+            log(message) {{
                 const now = new Date().toLocaleTimeString();
-                console.log(`[${now}] ${message}`);
-            }
+                console.log(`[${{now}}] ${{message}}`);
+            }}
 
-            async refreshData() {
-                try {
+            async refreshData() {{
+                try {{
                     const [statsResponse, eventsResponse, gpsResponse, healthResponse] = await Promise.all([
                         fetch('/api/stats'),
                         fetch('/api/events'),
@@ -1348,20 +1707,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     this.updateEvents(eventsData.events);
                     this.updateMap(gpsData.events);
                     this.updateStatusIndicators(stats, eventsData, healthData);
+                    this.updateConfigInfo(stats, healthData);
 
-                } catch (e) {
+                }} catch (e) {{
                     this.log('❌ Error actualizando datos: ' + e.message);
-                }
-            }
+                }}
+            }}
 
-            updateStatusIndicators(stats, eventsData, healthData) {
+            updateConfigInfo(stats, healthData) {{
+                const configDetails = document.getElementById('config-details');
+
+                if (stats.configuration) {{
+                    const config = stats.configuration;
+                    configDetails.innerHTML = `
+                        Input: ${{config.input_port || 'N/A'}} | 
+                        Output: ${{config.output_port || 'N/A'}} | 
+                        Buffer: ${{config.max_events_buffer || 'N/A'}} | 
+                        Refresh: ${{config.auto_refresh_interval || 'N/A'}}ms
+                    `;
+                }} else {{
+                    configDetails.innerHTML = 'No config info available';
+                }}
+            }}
+
+            updateStatusIndicators(stats, eventsData, healthData) {{
                 const zmqStatus = document.getElementById('zmq-status');
                 const mlStatus = document.getElementById('ml-status');
                 const firewallStatus = document.getElementById('firewall-status');
                 const protobufStatus = document.getElementById('protobuf-status');
+                const configStatus = document.getElementById('config-status');
 
                 // Estado ZMQ
-                if (stats.total_events > this.lastEventCount) {
+                if (stats.total_events > this.lastEventCount) {{
                     zmqStatus.className = 'status-dot online';
 
                     // Estado ML
@@ -1369,25 +1746,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         (e.anomaly_score && e.anomaly_score > 0) || (e.risk_score && e.risk_score > 0)
                     );
                     mlStatus.className = hasMLScores ? 'status-dot online' : 'status-dot warning';
-                } else {
+                }} else {{
                     zmqStatus.className = 'status-dot warning';
                     mlStatus.className = 'status-dot warning';
-                }
+                }}
 
                 // Estado del firewall
                 firewallStatus.className = healthData.firewall_enabled ? 'status-dot online' : 'status-dot error';
 
                 // Estado protobuf
-                if (healthData.communication_protocol === 'protobuf') {
+                if (healthData.communication_protocol === 'protobuf') {{
                     protobufStatus.className = 'status-dot online';
-                } else {
+                }} else {{
                     protobufStatus.className = 'status-dot warning';
-                }
+                }}
+
+                // Estado configuración
+                if (healthData.configuration_loaded) {{
+                    configStatus.className = 'status-dot online';
+                }} else {{
+                    configStatus.className = 'status-dot error';
+                }}
 
                 this.lastEventCount = stats.total_events || 0;
-            }
+            }}
 
-            updateStats(stats) {
+            updateStats(stats) {{
                 document.getElementById('total-events').textContent = stats.total_events || 0;
                 document.getElementById('nodes-registered').textContent = stats.nodes_registered || 0;
                 document.getElementById('events-per-minute').textContent = stats.events_per_minute || 0;
@@ -1400,341 +1784,375 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 document.getElementById('ml-events').textContent = mlEvents;
 
                 const mlContainer = document.getElementById('ml-models-list');
-                if (stats.ml_models_active && stats.ml_models_active.length > 0) {
+                if (stats.ml_models_active && stats.ml_models_active.length > 0) {{
                     mlContainer.innerHTML = stats.ml_models_active
-                        .map(model => `<div class="ml-model">${model}</div>`)
+                        .map(model => `<div class="ml-model">${{model}}</div>`)
                         .join('');
-                } else {
+                }} else {{
                     mlContainer.innerHTML = '<div class="ml-model">Esperando ML...</div>';
-                }
-            }
+                }}
+            }}
 
-            updateEvents(events) {
-                if (!events || events.length === 0) {
+            updateEvents(events) {{
+                if (!events || events.length === 0) {{
                     document.getElementById('events-list').innerHTML = `
                         <div class="event-item">
                             <div class="event-time">Sin eventos recientes</div>
-                            <div class="event-ip">Verifica que el ML Detector esté enviando protobuf al puerto 5560</div>
+                            <div class="event-ip">Verifica que el ML Detector esté enviando protobuf (puerto configurado)</div>
                         </div>
                     `;
                     return;
-                }
+                }}
 
                 this.allEvents = events;
                 const eventsList = document.getElementById('events-list');
                 eventsList.innerHTML = '';
 
-                events.slice(-20).reverse().forEach((event) => {
+                events.slice(-20).reverse().forEach((event) => {{
                     const eventDiv = document.createElement('div');
                     eventDiv.className = 'event-item';
-                    if (event.risk_level === 'high') {
+                    if (event.risk_level === 'high') {{
                         eventDiv.className += ' high-risk';
-                    }
+                    }}
 
                     const time = new Date(event.timestamp).toLocaleTimeString();
                     const gpsBadge = event.has_gps ? '<span class="gps-badge">GPS</span>' : '';
                     const mlBadge = event.ml_enhanced ? '<span class="ml-badge">ML</span>' : '';
                     const protobufBadge = event.source === 'protobuf' ? '<span class="protobuf-badge">PB</span>' : '';
                     const handshakeBadge = event.is_initial_handshake ? '<span class="handshake-badge">HS</span>' : '';
+                    const configBadge = '<span class="config-badge">JSON</span>';
 
                     let riskBadge = '';
-                    if (event.risk_level === 'high') {
+                    if (event.risk_level === 'high') {{
                         riskBadge = '<span class="risk-badge risk-high">ALTO</span>';
-                    } else if (event.risk_level === 'medium') {
+                    }} else if (event.risk_level === 'medium') {{
                         riskBadge = '<span class="risk-badge risk-medium">MEDIO</span>';
-                    } else if (event.risk_level === 'low') {
+                    }} else if (event.risk_level === 'low') {{
                         riskBadge = '<span class="risk-badge risk-low">BAJO</span>';
-                    }
+                    }}
 
                     // Botón de bloqueo para eventos de alto riesgo
                     const blockButton = (event.risk_level === 'high' || event.risk_score > 0.7) ? 
                         '<button class="block-button" data-event-id="' + event.event_id + '">🛡️ BLOQUEAR</button>' : '';
 
                     eventDiv.innerHTML = `
-                        <div class="event-time">${time} | ${event.agent_id}</div>
-                        <div class="event-ip">${event.source_ip} → ${event.target_ip}:${event.dest_port}${gpsBadge}${mlBadge}${protobufBadge}${handshakeBadge}${riskBadge}${blockButton}</div>
+                        <div class="event-time">${{time}} | ${{event.agent_id}}</div>
+                        <div class="event-ip">${{event.source_ip}} → ${{event.target_ip}}:${{event.dest_port}}${{gpsBadge}}${{mlBadge}}${{protobufBadge}}${{handshakeBadge}}${{configBadge}}${{riskBadge}}${{blockButton}}</div>
                         <div class="event-details">
-                            A: ${(event.anomaly_score * 100).toFixed(1)}% | 
-                            R: ${(event.risk_score * 100).toFixed(1)}% | 
-                            ${event.packet_size}B
-                            ${event.description ? ` | ${event.description}` : ''}
-                            ${event.so_identifier ? ` | ${event.so_identifier}` : ''}
+                            A: ${{(event.anomaly_score * 100).toFixed(1)}}% | 
+                            R: ${{(event.risk_score * 100).toFixed(1)}}% | 
+                            ${{event.packet_size}}B
+                            ${{event.description ? ` | ${{event.description}}` : ''}}
+                            ${{event.so_identifier ? ` | ${{event.so_identifier}}` : ''}}
                         </div>
                     `;
 
                     // Agregar event listener para click en el evento
-                    eventDiv.addEventListener('click', (e) => {
-                        if (!e.target.classList.contains('block-button')) {
+                    eventDiv.addEventListener('click', (e) => {{
+                        if (!e.target.classList.contains('block-button')) {{
                             this.showEventDetails(event);
-                        }
-                    });
+                        }}
+                    }});
 
                     // Event listener para el botón de bloqueo
                     const blockBtn = eventDiv.querySelector('.block-button');
-                    if (blockBtn) {
-                        blockBtn.addEventListener('click', (e) => {
+                    if (blockBtn) {{
+                        blockBtn.addEventListener('click', (e) => {{
                             e.stopPropagation();
                             this.showFirewallModal(event);
-                        });
-                    }
+                        }});
+                    }}
 
                     eventsList.appendChild(eventDiv);
-                });
-            }
+                }});
+            }}
 
-            updateMap(gpsEvents) {
+            updateMap(gpsEvents) {{
                 if (!gpsEvents || gpsEvents.length === 0) return;
 
-                gpsEvents.forEach(event => {
-                    if (event.latitude && event.longitude) {
-                        const markerId = `${event.event_id}_${event.latitude}_${event.longitude}`;
+                gpsEvents.forEach(event => {{
+                    if (event.latitude && event.longitude) {{
+                        const markerId = `${{event.event_id}}_${{event.latitude}}_${{event.longitude}}`;
 
-                        if (!this.markers.has(markerId)) {
+                        if (!this.markers.has(markerId)) {{
                             let markerColor = '#00ff88';
                             let markerSize = 8;
 
-                            if (event.risk_level === 'high') {
+                            if (event.risk_level === 'high') {{
                                 markerColor = '#ff4444';
                                 markerSize = 12;
-                            } else if (event.risk_level === 'medium') {
+                            }} else if (event.risk_level === 'medium') {{
                                 markerColor = '#ffaa00';
                                 markerSize = 10;
-                            }
+                            }}
 
-                            const marker = L.circleMarker([event.latitude, event.longitude], {
+                            const marker = L.circleMarker([event.latitude, event.longitude], {{
                                 color: markerColor,
                                 fillColor: markerColor,
                                 fillOpacity: 0.8,
                                 radius: markerSize,
                                 weight: 2
-                            }).addTo(this.map);
+                            }}).addTo(this.map);
 
                             const protocolBadge = event.source === 'protobuf' ? ' [PROTOBUF]' : '';
                             const handshakeBadge = event.is_initial_handshake ? ' [HANDSHAKE]' : '';
+                            const configBadge = ' [JSON CONFIG]';
 
                             const popupContent = `
                                 <div style="color: #000;">
-                                    <strong>🌐 Evento ML${protocolBadge}${handshakeBadge}</strong><br>
-                                    <strong>Origen:</strong> ${event.source_ip}<br>
-                                    <strong>Destino:</strong> ${event.target_ip}:${event.dest_port}<br>
-                                    <strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(1)}%<br>
-                                    <strong>Anomalía:</strong> ${(event.anomaly_score * 100).toFixed(1)}%<br>
-                                    <strong>Agente:</strong> ${event.agent_id}<br>
-                                    <strong>SO:</strong> ${event.so_identifier || 'unknown'}<br>
-                                    <strong>Hostname:</strong> ${event.node_hostname || 'unknown'}<br>
-                                    ${event.description ? `<strong>Desc:</strong> ${event.description}<br>` : ''}
-                                    <strong>Tiempo:</strong> ${new Date(event.timestamp).toLocaleString()}<br>
-                                    ${(event.risk_level === 'high' || event.risk_score > 0.7) ? 
-                                        '<button onclick="dashboard.showFirewallModal(' + JSON.stringify(event).replace(/"/g, '&quot;') + ')" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-top: 5px;">🛡️ Bloquear IP (Protobuf)</button>' : ''}
+                                    <strong>🌐 Evento ML${{protocolBadge}}${{handshakeBadge}}${{configBadge}}</strong><br>
+                                    <strong>Origen:</strong> ${{event.source_ip}}<br>
+                                    <strong>Destino:</strong> ${{event.target_ip}}:${{event.dest_port}}<br>
+                                    <strong>Riesgo:</strong> ${{(event.risk_score * 100).toFixed(1)}}%<br>
+                                    <strong>Anomalía:</strong> ${{(event.anomaly_score * 100).toFixed(1)}}%<br>
+                                    <strong>Agente:</strong> ${{event.agent_id}}<br>
+                                    <strong>SO:</strong> ${{event.so_identifier || 'unknown'}}<br>
+                                    <strong>Hostname:</strong> ${{event.node_hostname || 'unknown'}}<br>
+                                    ${{event.description ? `<strong>Desc:</strong> ${{event.description}}<br>` : ''}}
+                                    <strong>Tiempo:</strong> ${{new Date(event.timestamp).toLocaleString()}}<br>
+                                    ${{(event.risk_level === 'high' || event.risk_score > 0.7) ? 
+                                        '<button onclick="dashboard.showFirewallModal(' + JSON.stringify(event).replace(/"/g, '&quot;') + ')" style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-top: 5px;">🛡️ Bloquear IP (JSON Config)</button>' : ''}}
                                 </div>
                             `;
 
-                            marker.bindPopup(popupContent, { maxWidth: 300 });
+                            marker.bindPopup(popupContent, {{ maxWidth: 300 }});
                             this.markers.set(markerId, marker);
 
                             // Event listener para click en marcador
-                            marker.on('click', () => {
+                            marker.on('click', () => {{
                                 this.showEventDetails(event);
-                            });
-                        }
-                    }
-                });
-            }
+                            }});
+                        }}
+                    }}
+                }});
+            }}
 
-            showEventDetails(event) {
-                this.log(`📋 Detalles del evento: ${event.source_ip} → ${event.target_ip} [${event.source || 'unknown'}]`);
-                this.log(`🖥️  Nodo: ${event.node_hostname} (${event.so_identifier})`);
-            }
+            showEventDetails(event) {{
+                this.log(`📋 Detalles del evento: ${{event.source_ip}} → ${{event.target_ip}} [${{event.source || 'unknown'}}]`);
+                this.log(`🖥️  Nodo: ${{event.node_hostname}} (${{event.so_identifier}})`);
+            }}
 
-            showFirewallModal(event) {
+            showFirewallModal(event) {{
                 this.selectedEvent = event;
                 const modal = document.getElementById('firewallModal');
                 const eventInfo = document.getElementById('modal-event-info');
                 const commandPreview = document.getElementById('command-preview');
 
                 eventInfo.innerHTML = `
-                    <h3>Evento Detectado (${event.source || 'unknown'}):</h3>
-                    <p><strong>IP Origen:</strong> ${event.source_ip}</p>
-                    <p><strong>IP Destino:</strong> ${event.target_ip}:${event.dest_port}</p>
-                    <p><strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(1)}%</p>
-                    <p><strong>Anomalía:</strong> ${(event.anomaly_score * 100).toFixed(1)}%</p>
-                    <p><strong>Agente:</strong> ${event.agent_id}</p>
-                    <p><strong>SO:</strong> ${event.so_identifier || 'unknown'}</p>
-                    <p><strong>Hostname:</strong> ${event.node_hostname || 'unknown'}</p>
-                    <p><strong>Fuente:</strong> ${event.source === 'protobuf' ? 'Protobuf ✅' : 'JSON (fallback)'}</p>
+                    <h3>Evento Detectado (${{event.source || 'unknown'}}):</h3>
+                    <p><strong>IP Origen:</strong> ${{event.source_ip}}</p>
+                    <p><strong>IP Destino:</strong> ${{event.target_ip}}:${{event.dest_port}}</p>
+                    <p><strong>Riesgo:</strong> ${{(event.risk_score * 100).toFixed(1)}}%</p>
+                    <p><strong>Anomalía:</strong> ${{(event.anomaly_score * 100).toFixed(1)}}%</p>
+                    <p><strong>Agente:</strong> ${{event.agent_id}}</p>
+                    <p><strong>SO:</strong> ${{event.so_identifier || 'unknown'}}</p>
+                    <p><strong>Hostname:</strong> ${{event.node_hostname || 'unknown'}}</p>
+                    <p><strong>Fuente:</strong> ${{event.source === 'protobuf' ? 'Protobuf ✅' : 'JSON (fallback)'}} + JSON Config ⚙️</p>
                 `;
 
-                commandPreview.innerHTML = 'Generando comando de firewall protobuf batch inteligente...';
+                commandPreview.innerHTML = 'Generando comando de firewall protobuf batch usando configuración JSON...';
 
                 modal.style.display = 'block';
 
                 // Generar comando de firewall
                 this.generateFirewallCommand(event);
-            }
+            }}
 
-            async generateFirewallCommand(event) {
-                try {
-                    const response = await fetch('/api/firewall/generate', {
+            async generateFirewallCommand(event) {{
+                try {{
+                    const response = await fetch('/api/firewall/generate', {{
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({event: event})
-                    });
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{event: event}})
+                    }});
 
                     const result = await response.json();
                     const commandPreview = document.getElementById('command-preview');
 
-                    if (result.success) {
+                    if (result.success) {{
                         const cmd = result.suggested_command;
                         commandPreview.innerHTML = `
-                            <strong>Comando sugerido (será convertido a FirewallCommandBatch):</strong><br>
-                            ${cmd.firewall_rule.command}<br><br>
-                            <strong>Acción:</strong> ${cmd.action}<br>
-                            <strong>Duración:</strong> ${cmd.firewall_rule.duration}<br>
-                            <strong>Prioridad:</strong> ${cmd.firewall_rule.priority}<br>
-                            <strong>Análisis:</strong> ${cmd.analysis.threat_type}<br>
-                            <strong>Confianza:</strong> ${cmd.analysis.confidence.toFixed(1)}%<br>
-                            <em>📦 Este comando se enviará como FirewallCommandBatch protobuf al puerto 5561</em>
+                            <strong>Comando sugerido (JSON Config + será convertido a FirewallCommandBatch):</strong><br>
+                            ${{cmd.firewall_rule.command}}<br><br>
+                            <strong>Acción:</strong> ${{cmd.action}}<br>
+                            <strong>Duración:</strong> ${{cmd.firewall_rule.duration}}<br>
+                            <strong>Prioridad:</strong> ${{cmd.firewall_rule.priority}}<br>
+                            <strong>Análisis:</strong> ${{cmd.analysis.threat_type}}<br>
+                            <strong>Confianza:</strong> ${{cmd.analysis.confidence.toFixed(1)}}%<br>
+                            <strong>Configuración:</strong> ${{cmd.analysis.used_configuration ? '✅ JSON Config' : '❌ Hardcoded'}}<br>
+                            <em>📦 Este comando se enviará como FirewallCommandBatch protobuf al puerto configurado</em>
                         `;
                         this.suggestedCommand = cmd;
-                    } else {
+                    }} else {{
                         commandPreview.textContent = 'Error generando comando: ' + result.error;
-                    }
-                } catch (e) {
+                    }}
+                }} catch (e) {{
                     const commandPreview = document.getElementById('command-preview');
                     commandPreview.textContent = 'Error de conexión: ' + e.message;
-                }
-            }
+                }}
+            }}
 
-            async executeFirewallCommand() {
+            async executeFirewallCommand() {{
                 if (!this.selectedEvent || !this.suggestedCommand) return;
 
-                try {
-                    const response = await fetch('/api/firewall/block', {
+                try {{
+                    const response = await fetch('/api/firewall/block', {{
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{
                             event_id: this.selectedEvent.event_id,
                             target_ip: this.selectedEvent.source_ip,
                             source_agent: this.selectedEvent.agent_id,
                             action: this.suggestedCommand.action,
                             target_port: this.selectedEvent.dest_port,
                             duration_seconds: this.suggestedCommand.duration_seconds,
-                            reason: `High risk event: ${(this.selectedEvent.risk_score * 100).toFixed(1)}% risk score`,
+                            reason: `High risk event: ${{(this.selectedEvent.risk_score * 100).toFixed(1)}}% risk score (JSON Config)`,
                             priority: this.suggestedCommand.priority,
                             dry_run: true,
-                            ml_scores: {
+                            ml_scores: {{
                                 anomaly_score: this.selectedEvent.anomaly_score,
                                 risk_score: this.selectedEvent.risk_score
-                            },
-                            packet_info: `Packet from ${this.selectedEvent.source_ip} to ${this.selectedEvent.target_ip}:${this.selectedEvent.dest_port}`
-                        })
-                    });
+                            }},
+                            packet_info: `Packet from ${{this.selectedEvent.source_ip}} to ${{this.selectedEvent.target_ip}}:${{this.selectedEvent.dest_port}}`
+                        }})
+                    }});
 
                     const result = await response.json();
 
-                    if (result.success) {
-                        this.log(`🛡️ Comando protobuf batch enviado: ${result.command_id}`);
-                        alert(`✅ Comando de firewall enviado exitosamente como PROTOBUF BATCH\\nComando ID: ${result.command_id}`);
-                    } else {
-                        alert(`❌ Error: ${result.error}`);
-                    }
+                    if (result.success) {{
+                        this.log(`🛡️ Comando protobuf batch enviado (JSON Config): ${{result.command_id}}`);
+                        alert(`✅ Comando de firewall enviado exitosamente como PROTOBUF BATCH (JSON CONFIG)\\nComando ID: ${{result.command_id}}`);
+                    }} else {{
+                        alert(`❌ Error: ${{result.error}}`);
+                    }}
 
                     this.closeFirewallModal();
 
-                } catch (e) {
-                    alert(`❌ Error de conexión: ${e.message}`);
-                }
-            }
+                }} catch (e) {{
+                    alert(`❌ Error de conexión: ${{e.message}}`);
+                }}
+            }}
 
-            closeFirewallModal() {
+            closeFirewallModal() {{
                 document.getElementById('firewallModal').style.display = 'none';
                 this.selectedEvent = null;
                 this.suggestedCommand = null;
-            }
+            }}
 
-            async showFirewallLog() {
-                try {
+            async showFirewallLog() {{
+                try {{
                     const response = await fetch('/api/firewall/log');
                     const result = await response.json();
 
-                    let logText = 'LOG DE COMANDOS DE FIREWALL (PROTOBUF BATCH):\\n\\n';
-                    result.commands.forEach(cmd => {
-                        logText += `${cmd.timestamp} - ${cmd.action} - ${cmd.target_node} (${cmd.command_count} cmd)\\n`;
-                    });
+                    let logText = 'LOG DE COMANDOS DE FIREWALL (JSON CONFIG + PROTOBUF BATCH):\\n\\n';
+                    if (result.configuration) {{
+                        logText += `Configuración - Output: ${{result.configuration.output_port}}, Max Size: ${{result.configuration.max_message_size}} bytes\\n\\n`;
+                    }}
+
+                    result.commands.forEach(cmd => {{
+                        logText += `${{cmd.timestamp}} - ${{cmd.action}} - ${{cmd.target_node}} (${{cmd.command_count}} cmd, ${{cmd.message_size || 'N/A'}} bytes)\\n`;
+                    }});
 
                     alert(logText || 'No hay comandos en el log');
-                } catch (e) {
+                }} catch (e) {{
                     alert('Error obteniendo log: ' + e.message);
-                }
-            }
+                }}
+            }}
 
-            async showPendingCommands() {
-                try {
+            async showPendingCommands() {{
+                try {{
                     const response = await fetch('/api/firewall/pending');
                     const result = await response.json();
 
                     const summary = result.summary;
-                    let text = `COMANDOS PENDIENTES (PROTOBUF BATCH):\\n\\n`;
-                    text += `Eventos con comandos: ${summary.total_events_with_commands || 0}\\n`;
-                    text += `Total comandos: ${summary.total_commands || 0}\\n`;
+                    let text = `COMANDOS PENDIENTES (JSON CONFIG + PROTOBUF BATCH):\\n\\n`;
+                    text += `Eventos con comandos: ${{summary.total_events_with_commands || 0}}\\n`;
+                    text += `Total comandos: ${{summary.total_commands || 0}}\\n`;
+                    text += `Límite máximo: ${{summary.max_pending || 'N/A'}}\\n`;
+                    text += `Timeout: ${{summary.timeout_seconds || 'N/A'}}s\\n`;
 
-                    if (summary.oldest_pending) {
-                        text += `Más antiguo: ${summary.oldest_pending.toFixed(1)}s\\n`;
-                    }
+                    if (summary.oldest_pending) {{
+                        text += `Más antiguo: ${{summary.oldest_pending.toFixed(1)}}s\\n`;
+                    }}
 
-                    text += '\\nEstos comandos serán enviados como FirewallCommandBatch protobuf al simple_firewall_agent.py';
+                    text += '\\nEstos comandos serán enviados como FirewallCommandBatch protobuf al simple_firewall_agent.py usando configuración JSON';
 
                     alert(text);
-                } catch (e) {
+                }} catch (e) {{
                     alert('Error obteniendo comandos pendientes: ' + e.message);
-                }
-            }
+                }}
+            }}
 
-            clearMap() {
-                this.markers.forEach(marker => {
+            async showConfig() {{
+                try {{
+                    const response = await fetch('/health');
+                    const health = await response.json();
+
+                    let configText = 'CONFIGURACIÓN CARGADA (JSON):\\n\\n';
+                    configText += `Config loaded: ${{health.configuration_loaded ? '✅' : '❌'}}\\n`;
+                    configText += `ZeroMQ Input: ${{health.zeromq_input_port || 'N/A'}}\\n`;
+                    configText += `ZeroMQ Output: ${{health.zeromq_output_port || 'N/A'}}\\n`;
+                    configText += `HTTP Port: ${{health.http_port || 'N/A'}}\\n`;
+                    configText += `Threat Rules: ${{health.threat_rules_count || 'N/A'}}\\n`;
+                    configText += `Suspicious Ports: ${{health.suspicious_ports_count || 'N/A'}}\\n`;
+                    configText += `Protobuf: ${{health.protobuf_enabled ? '✅' : '❌'}}\\n`;
+                    configText += `ZMQ: ${{health.zmq_enabled ? '✅' : '❌'}}\\n`;
+
+                    alert(configText);
+                }} catch (e) {{
+                    alert('Error obteniendo configuración: ' + e.message);
+                }}
+            }}
+
+            clearMap() {{
+                this.markers.forEach(marker => {{
                     this.map.removeLayer(marker);
-                });
+                }});
                 this.markers.clear();
                 this.log('🗺️ Mapa limpiado');
-            }
+            }}
 
-            startPeriodicUpdates() {
-                setInterval(() => this.refreshData(), 3000);
+            startPeriodicUpdates() {{
+                // Usar intervalo de configuración dinámico
+                const refreshInterval = {refresh_interval};
+                setInterval(() => this.refreshData(), refreshInterval);
                 setTimeout(() => this.refreshData(), 1000);
-            }
-        }
+            }}
+        }}
 
         let dashboard;
 
-        function refreshData() { dashboard.refreshData(); }
-        function clearMap() { dashboard.clearMap(); }
-        function showFirewallLog() { dashboard.showFirewallLog(); }
-        function showPendingCommands() { dashboard.showPendingCommands(); }
-        function closeFirewallModal() { dashboard.closeFirewallModal(); }
-        function executeFirewallCommand() { dashboard.executeFirewallCommand(); }
+        function refreshData() {{ dashboard.refreshData(); }}
+        function clearMap() {{ dashboard.clearMap(); }}
+        function showFirewallLog() {{ dashboard.showFirewallLog(); }}
+        function showPendingCommands() {{ dashboard.showPendingCommands(); }}
+        function showConfig() {{ dashboard.showConfig(); }}
+        function closeFirewallModal() {{ dashboard.closeFirewallModal(); }}
+        function executeFirewallCommand() {{ dashboard.executeFirewallCommand(); }}
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function() {{
             dashboard = new MLFirewallDashboard();
-            console.log('🛡️ Dashboard ML Enhanced + Firewall - ZeroMQ 5560/5561 (PROTOBUF REAL)');
-            console.log('🤖 Mostrando eventos protobuf con ML scores en tiempo real');
-            console.log('🔥 Comandos de firewall protobuf batch por puerto 5561');
+            console.log('🛡️ Dashboard ML Enhanced + Firewall - JSON CONFIG');
+            console.log('🤖 ZeroMQ puertos configurados desde JSON');
+            console.log('🔥 Comandos de firewall protobuf batch por puerto configurado');
             console.log('📦 Usando estructuras protobuf reales con enums');
-        });
+            console.log('⚙️ Toda la configuración desde JSON');
+        }});
 
         // Cerrar modal con ESC
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
+        document.addEventListener('keydown', function(e) {{
+            if (e.key === 'Escape') {{
                 closeFirewallModal();
-            }
-        });
+            }}
+        }});
 
         // Cerrar modal clickeando fuera
-        window.addEventListener('click', function(e) {
+        window.addEventListener('click', function(e) {{
             const modal = document.getElementById('firewallModal');
-            if (e.target === modal) {
+            if (e.target === modal) {{
                 closeFirewallModal();
-            }
-        });
+            }}
+        }});
     </script>
 </body>
 </html>"""
@@ -1749,24 +2167,101 @@ class DashboardHandler(BaseHTTPRequestHandler):
         pass
 
 
+def setup_logging_from_config(config):
+    """Configurar logging global desde configuración JSON"""
+    log_config = config.get('logging', {})
+
+    # Configurar nivel
+    level = getattr(logging, log_config.get('level', 'INFO').upper())
+
+    # Configurar logger principal
+    logger.setLevel(level)
+
+    # Limpiar handlers existentes
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Formatter desde configuración
+    formatter = logging.Formatter(
+        log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
+
+    # Console handler si está habilitado
+    if log_config.get('console_output', True):
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+    # File handler si se especifica archivo
+    if log_config.get('file'):
+        # Crear directorio si no existe
+        log_file = log_config['file']
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+
+        from logging.handlers import RotatingFileHandler
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=log_config.get('max_size_mb', 50) * 1024 * 1024,
+            backupCount=log_config.get('backup_count', 5)
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+
 def main():
-    """Función principal del dashboard"""
-    print("🛡️ DASHBOARD SCADA REAL - ZeroMQ 5560 + Firewall 5561 (PROTOBUF REAL)")
+    """Función principal del dashboard con configuración JSON completa"""
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Dashboard SCADA con configuración JSON')
+    parser.add_argument('config_file', nargs='?',
+                        default='dashboard_config.json',
+                        help='Archivo de configuración JSON')
+    parser.add_argument('--test-config', action='store_true',
+                        help='Validar configuración y salir')
+
+    args = parser.parse_args()
+
+    # Cargar configuración
+    config = load_dashboard_config(args.config_file)
+
+    # Configurar logging desde JSON
+    setup_logging_from_config(config)
+
+    if args.test_config:
+        print("✅ Configuración JSON válida para dashboard")
+        print(f"🎯 HTTP: {config['network']['http_host']}:{config['network']['http_port']}")
+        print(f"📡 ZMQ Input: {config['network']['zmq_input_port']}")
+        print(f"🔥 ZMQ Output: {config['network']['zmq_output_port']}")
+        print(f"🛡️ Firewall: {'✅ Enabled' if config['firewall_integration']['enabled'] else '❌ Disabled'}")
+        print(f"🎯 Threat rules: {len(config.get('threat_rules', {}))}")
+        print(f"🔍 Suspicious ports: {len(config.get('suspicious_ports', []))}")
+        return 0
+
+    print("🛡️ DASHBOARD SCADA REAL - Configuración JSON Completa")
     print("=" * 75)
-    print("🎯 Conectándose a:")
-    print("   📡 ZeroMQ 5560 (eventos enriquecidos por ML - PROTOBUF)")
-    print("   🔥 ZeroMQ 5561 (comandos de firewall - PROTOBUF)")
-    print("   🤖 Eventos con anomaly_score y risk_score")
-    print("   🗺️ Coordenadas GPS cuando disponibles")
-    print("   🛡️ Respuesta automática a amenazas")
-    print("   📦 Comunicación usando network_event_extended_fixed_pb2")
-    print("   🔥 Comandos usando firewall_commands_pb2 con enums")
-    print("   📋 Soporte para FirewallCommandBatch")
+    print(f"📄 Config: {args.config_file}")
+    print(f"🎯 HTTP: {config['network']['http_host']}:{config['network']['http_port']}")
+    print(f"📡 ZMQ Input: {config['network']['zmq_input_port']} (eventos enriquecidos por ML)")
+    print(f"🔥 ZMQ Output: {config['network']['zmq_output_port']} (comandos de firewall)")
+    print(f"🛡️ Firewall: {'✅ Enabled' if config['firewall_integration']['enabled'] else '❌ Disabled'}")
+    print(
+        f"🤖 Auto threat detection: {'✅ Enabled' if config['firewall_integration']['auto_threat_detection'] else '❌ Disabled'}")
+    print(
+        f"✋ Manual approval: {'✅ Required' if config['firewall_integration']['require_manual_approval'] else '❌ Auto apply'}")
+    print(f"📋 Threat rules: {len(config.get('threat_rules', {}))}")
+    print(f"🔍 Suspicious ports: {len(config.get('suspicious_ports', []))}")
+    print(f"📊 Max events buffer: {config['dashboard']['max_events_buffer']}")
+    print(f"🔄 Auto refresh: {config['dashboard']['auto_refresh_interval']}ms")
     print("")
 
     # Verificar puerto disponible
-    host = '127.0.0.1'
-    port = 8000
+    host = config['network']['http_host']
+    port = config['network']['http_port']
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1774,24 +2269,37 @@ def main():
         sock.close()
 
         if result == 0:
-            print(f"⚠️ Puerto {port} ocupado, usando 8001...")
-            port = 8001
+            print(f"⚠️ Puerto {port} ocupado, intentando {port + 1}...")
+            port = port + 1
+            config['network']['http_port'] = port
+
+        # Guardar configuración en shared_data para handlers
+        DashboardHandler.shared_data['config'] = config
+        DashboardHandler.shared_data['max_events_buffer'] = config['dashboard']['max_events_buffer']
+        DashboardHandler.shared_data['auto_refresh_interval'] = config['dashboard']['auto_refresh_interval']
 
         # Crear servidor
         server = HTTPServer((host, port), DashboardHandler)
 
-        # Inicializar firewall sender
+        # Inicializar firewall sender con configuración
         if ZMQ_AVAILABLE:
-            firewall_sender = FirewallCommandSender()
+            firewall_sender = FirewallCommandSender(config['network'])
             DashboardHandler.shared_data['firewall_sender'] = firewall_sender
+
+            if firewall_sender.socket:
+                logger.info(f"🔥 Firewall sender configurado para puerto {config['network']['zmq_output_port']}")
+            else:
+                logger.warning("⚠️ Firewall sender no se pudo inicializar")
         else:
             logger.warning("ZMQ no disponible - Firewall sender deshabilitado")
 
-        # Inicializar listener ZeroMQ
+        # Inicializar listener ZeroMQ con configuración
         if ZMQ_AVAILABLE:
-            zmq_listener = ZeroMQListener(DashboardHandler)
+            zmq_listener = ZeroMQListener(DashboardHandler, config['network'])
             DashboardHandler.shared_data['zmq_listener'] = zmq_listener
             zmq_listener.start()
+
+            logger.info(f"📡 ZMQ listener configurado para puerto {config['network']['zmq_input_port']}")
         else:
             logger.warning("ZMQ no disponible - Listener deshabilitado")
 
@@ -1801,28 +2309,36 @@ def main():
         print(f"🗺️ Eventos GPS: http://{host}:{port}/api/events/gps")
         print(f"🔥 Firewall Log: http://{host}:{port}/api/firewall/log")
         print(f"📋 Comandos Pendientes: http://{host}:{port}/api/firewall/pending")
+        print(f"🏥 Health Check: http://{host}:{port}/health")
         print("")
-        print("✅ CONFIGURACIÓN:")
+        print("✅ CONFIGURACIÓN CARGADA:")
         print(f"   🔌 ZeroMQ disponible: {ZMQ_AVAILABLE}")
         print(f"   📦 Protobuf disponible: {PROTOBUF_AVAILABLE}")
         if ZMQ_AVAILABLE:
-            print("   🔌 ZeroMQ puerto 5560 (entrada - PROTOBUF)")
-            print("   🔥 ZeroMQ puerto 5561 (salida firewall - PROTOBUF)")
+            print(f"   🔌 ZeroMQ puerto {config['network']['zmq_input_port']} (entrada - PROTOBUF)")
+            print(f"   🔥 ZeroMQ puerto {config['network']['zmq_output_port']} (salida firewall - PROTOBUF)")
         if PROTOBUF_AVAILABLE:
             print("   📦 network_event_extended_fixed_pb2 ✅")
             print("   📦 firewall_commands_pb2 ✅")
             print("   🔥 FirewallCommandBatch ✅")
             print("   📋 CommandAction & CommandPriority enums ✅")
+
+        print(f"   📄 Configuración desde: {args.config_file}")
+        print(f"   📝 Logging: {config['logging']['level']} → {config['logging'].get('file', 'console only')}")
         print("")
-        print("🎯 FUNCIONALIDADES:")
+        print("🎯 FUNCIONALIDADES CONFIGURADAS:")
         print("   ✅ Recepción de eventos protobuf desde ML detector")
         print("   ✅ Procesamiento de handshakes iniciales")
-        print("   ✅ Generación automática de comandos firewall")
+        print("   ✅ Generación automática de comandos firewall (configurable)")
         print("   ✅ Envío de FirewallCommandBatch protobuf")
         print("   ✅ Modal de confirmación para bloqueos")
-        print("   ✅ Gestión de comandos pendientes")
+        print("   ✅ Gestión de comandos pendientes (configurable)")
         print("   ✅ Indicador de nodos registrados")
         print("   ✅ Soporte para todos los campos del protobuf")
+        print("   ✅ Configuración completa desde JSON")
+        print("   ✅ Puertos configurables")
+        print("   ✅ Umbrales de amenazas configurables")
+        print("   ✅ Rate limiting configurable")
         print("")
         print("🛑 Presiona Ctrl+C para detener")
 
@@ -1838,7 +2354,10 @@ def main():
         print(f"\n❌ Error fatal: {e}")
         import traceback
         traceback.print_exc()
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

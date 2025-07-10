@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Simple Firewall Agent para Upgraded-Happiness
-ACTUALIZADO: Display-Only por DEFECTO - NO toca el firewall del host
-Usa archivos de configuración JSON
-Puerto 5561 (entrada) - Puerto 5560 (salida confirmaciones)
+REFACTORIZADO: Lee TODA la configuración desde JSON
+Usa simple_firewall_agent_config.json para TODA la configuración
+Puerto configurable (entrada) - Puerto configurable (salida confirmaciones)
 """
 
 import zmq
@@ -12,10 +12,14 @@ import time
 import logging
 import threading
 import argparse
+import os
+import sys
 from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 from simple_system_detection import SimpleSystemDetector
 
+# Configurar logging básico (se reconfigurará desde JSON)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Importar protobuf - USAR ESTRUCTURAS REALES
@@ -53,19 +57,46 @@ class FirewallCommandResult:
 
 
 class SimpleFirewallAgent:
-    """Agente de firewall simple con soporte protobuf real"""
+    """Agente de firewall simple con configuración JSON completa"""
 
-    def __init__(self, port=5561, display_only=True):
-        self.port = port
-        self.display_only = display_only
+    def __init__(self, config_file=None):
+        """Inicializar agente desde configuración JSON"""
+        self.config = self._load_config(config_file)
+        self.config_file = config_file
+
+        # Configurar logging desde JSON PRIMERO
+        self._setup_logging()
+
+        # Todas las configuraciones desde JSON
+        self.port = self.config['network']['listen_port']
+        self.response_port = self.config['network']['response_port']
+        self.bind_address = self.config['network']['bind_address']
+        self.socket_timeout = self.config['network']['socket_timeout']
+
+        # Configuración de firewall desde JSON
+        self.display_only = not self.config['firewall']['enable_firewall_modifications']
+        self.nuclear_enabled = self.config['firewall']['nuclear_option']['enabled']
+        self.dry_run_mode = self.config['firewall']['dry_run_mode']
+        self.supported_actions = self.config['firewall']['supported_actions']
+        self.default_chain = self.config['firewall']['default_chain']
+        self.backup_rules = self.config['firewall']['backup_rules']
+        self.max_rules_per_request = self.config['firewall']['max_rules_per_request']
+
+        # Configuración de seguridad desde JSON
+        self.validate_requests = self.config['security']['validate_requests']
+        self.allowed_sources = self.config['security']['allowed_sources']
+        self.rate_limiting = self.config['security']['rate_limiting']
+        self.authentication = self.config['security']['authentication']
+
         self.running = False
 
         # Detección del sistema
         self.detector = SimpleSystemDetector()
         self.system_info = self.detector.get_system_summary()
 
-        # ZeroMQ setup
-        self.context = zmq.Context()
+        # ZeroMQ setup desde configuración
+        zmq_threads = self.config['network']['zmq_context_threads']
+        self.context = zmq.Context(zmq_threads)
         self.command_socket = None
         self.response_socket = None
 
@@ -84,34 +115,242 @@ class SimpleFirewallAgent:
         # Log de comandos ejecutados
         self.command_history = []
 
-        logger.info("SimpleFirewallAgent initialized (PROTOBUF REAL)")
+        # Rate limiting si está habilitado
+        if self.rate_limiting['enabled']:
+            self.request_times = []
+            self.max_requests_per_minute = self.rate_limiting['max_requests_per_minute']
+
+        # Estado de persistencia
+        if self.config['persistence']['save_state']:
+            self.state_file = self.config['persistence']['state_file']
+            self.auto_save_interval = self.config['persistence']['auto_save_interval']
+            self._load_state()
+
+        logger.info("SimpleFirewallAgent initialized from JSON config")
+        logger.info("Config file: %s", config_file or 'default config')
         logger.info("Node: %s", self.system_info['node_id'])
         logger.info("Firewall: %s (%s)", self.system_info['firewall_type'], self.system_info['firewall_status'])
         logger.info("Display-only mode: %s", self.display_only)
+        logger.info("Nuclear option: %s", self.nuclear_enabled)
+        logger.info("Listen port: %d", self.port)
+        logger.info("Response port: %d", self.response_port)
         logger.info("Protobuf available: %s", PROTOBUF_AVAILABLE)
 
-    def start(self):
-        """Inicia el agente de firewall"""
-        try:
-            # Configurar sockets ZeroMQ
-            self.command_socket = self.context.socket(zmq.PULL)
-            self.command_socket.bind(f"tcp://*:{self.port}")
+    def _load_config(self, config_file):
+        """Cargar configuración desde archivo JSON"""
+        default_config = {
+            "agent_info": {
+                "name": "simple_firewall_agent",
+                "version": "1.0.0",
+                "description": "Agente de firewall que escucha comandos del dashboard"
+            },
+            "network": {
+                "listen_port": 5561,
+                "response_port": 5560,
+                "bind_address": "*",
+                "zmq_context_threads": 1,
+                "socket_timeout": 5000,
+                "max_connections": 100
+            },
+            "firewall": {
+                "enable_firewall_modifications": False,
+                "nuclear_option": {
+                    "enabled": False,
+                    "description": "PELIGRO: Permite aplicar cambios reales en el firewall del sistema"
+                },
+                "dry_run_mode": True,
+                "supported_actions": [
+                    "block_ip", "unblock_ip", "block_port", "unblock_port",
+                    "list_rules", "flush_rules"
+                ],
+                "default_chain": "INPUT",
+                "backup_rules": True,
+                "max_rules_per_request": 50
+            },
+            "security": {
+                "validate_requests": True,
+                "allowed_sources": ["127.0.0.1", "localhost"],
+                "rate_limiting": {
+                    "enabled": True,
+                    "max_requests_per_minute": 30
+                },
+                "authentication": {
+                    "enabled": False,
+                    "token_required": False
+                }
+            },
+            "logging": {
+                "level": "INFO",
+                "file": "logs/firewall_agent.log",
+                "max_size_mb": 10,
+                "backup_count": 5,
+                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                "console_output": True
+            },
+            "monitoring": {
+                "health_check_interval": 30,
+                "metrics_enabled": True,
+                "report_status": True
+            },
+            "persistence": {
+                "save_state": True,
+                "state_file": "data/firewall_agent_state.json",
+                "auto_save_interval": 60
+            }
+        }
 
-            # Socket para respuestas/confirmaciones
+        if config_file and os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    user_config = json.load(f)
+
+                # Merge recursivo de configuraciones
+                self._merge_config(default_config, user_config)
+                logger.info(f"📄 Configuración cargada desde {config_file}")
+
+            except Exception as e:
+                logger.error(f"❌ Error cargando configuración: {e}")
+                logger.info("⚠️ Usando configuración por defecto")
+        else:
+            if config_file:
+                logger.warning(f"⚠️ Archivo de configuración no encontrado: {config_file}")
+            logger.info("⚠️ Usando configuración por defecto")
+
+        return default_config
+
+    def _merge_config(self, base, update):
+        """Merge recursivo de configuraciones"""
+        for key, value in update.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                self._merge_config(base[key], value)
+            else:
+                base[key] = value
+
+    def _setup_logging(self):
+        """Configurar logging desde configuración JSON"""
+        log_config = self.config.get('logging', {})
+
+        # Configurar nivel
+        level = getattr(logging, log_config.get('level', 'INFO').upper())
+        logger.setLevel(level)
+
+        # Limpiar handlers existentes
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+
+        # Formatter desde configuración
+        formatter = logging.Formatter(
+            log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        )
+
+        # Console handler si está habilitado
+        if log_config.get('console_output', True):
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(level)
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
+
+        # File handler si se especifica archivo
+        if log_config.get('file'):
+            # Crear directorio si no existe
+            log_file = log_config['file']
+            log_dir = os.path.dirname(log_file)
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+
+            from logging.handlers import RotatingFileHandler
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=log_config.get('max_size_mb', 10) * 1024 * 1024,
+                backupCount=log_config.get('backup_count', 5)
+            )
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+
+    def _load_state(self):
+        """Cargar estado persistente si existe"""
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, 'r') as f:
+                    state = json.load(f)
+                self.stats.update(state.get('stats', {}))
+                logger.info(f"📄 Estado cargado desde {self.state_file}")
+            except Exception as e:
+                logger.warning(f"⚠️ Error cargando estado: {e}")
+
+    def _save_state(self):
+        """Guardar estado persistente"""
+        if not self.config['persistence']['save_state']:
+            return
+
+        try:
+            # Crear directorio si no existe
+            state_dir = os.path.dirname(self.state_file)
+            if state_dir and not os.path.exists(state_dir):
+                os.makedirs(state_dir, exist_ok=True)
+
+            state = {
+                'stats': self.stats,
+                'last_saved': time.time(),
+                'config_file': self.config_file
+            }
+
+            with open(self.state_file, 'w') as f:
+                json.dump(state, f, indent=2)
+
+        except Exception as e:
+            logger.error(f"❌ Error guardando estado: {e}")
+
+    def _check_rate_limit(self):
+        """Verificar rate limiting si está habilitado"""
+        if not self.rate_limiting['enabled']:
+            return True
+
+        now = time.time()
+        # Limpiar requests antiguos (más de 1 minuto)
+        self.request_times = [t for t in self.request_times if now - t < 60]
+
+        if len(self.request_times) >= self.max_requests_per_minute:
+            logger.warning("⚠️ Rate limit exceeded")
+            return False
+
+        self.request_times.append(now)
+        return True
+
+    def start(self):
+        """Inicia el agente de firewall usando configuración JSON"""
+        try:
+            # Configurar sockets ZeroMQ usando configuración
+            self.command_socket = self.context.socket(zmq.PULL)
+            bind_addr = f"tcp://{self.bind_address}:{self.port}"
+            self.command_socket.bind(bind_addr)
+            self.command_socket.setsockopt(zmq.RCVTIMEO, self.socket_timeout)
+
+            # Socket para respuestas/confirmaciones usando configuración
             self.response_socket = self.context.socket(zmq.PUSH)
-            self.response_socket.connect("tcp://localhost:5560")
+            response_addr = f"tcp://localhost:{self.response_port}"
+            self.response_socket.connect(response_addr)
 
             self.running = True
 
-            print(f"\n🔥 Simple Firewall Agent Started (PROTOBUF REAL)")
-            print(f"📡 Listening on port {self.port}")
-            print(f"📤 Responses to port 5560")
+            print(f"\n🔥 Simple Firewall Agent Started (JSON CONFIG)")
+            print(f"📄 Config: {self.config_file or 'default'}")
+            print(f"📡 Listening: {bind_addr}")
+            print(f"📤 Responses: {response_addr}")
             print(f"🖥️  System: {self.system_info['os_name']} {self.system_info['os_version']}")
             print(f"🛡️  Firewall: {self.system_info['firewall_type']} ({self.system_info['firewall_status']})")
             print(f"⚠️  Mode: {'DISPLAY-ONLY (Safe)' if self.display_only else 'LIVE (Dangerous)'}")
+            print(f"💣 Nuclear: {'✅ ENABLED' if self.nuclear_enabled else '❌ DISABLED'}")
             print(f"📦 Protobuf: {'✅ Available' if PROTOBUF_AVAILABLE else '❌ Not available'}")
             print(f"🆔 Node ID: {self.system_info['node_id']}")
+            print(f"🔒 Security: Validation={self.validate_requests}, RateLimit={self.rate_limiting['enabled']}")
             print("=" * 70)
+
+            # Thread de auto-guardado si está habilitado
+            if self.config['persistence']['save_state']:
+                save_thread = threading.Thread(target=self._auto_save_loop, daemon=True)
+                save_thread.start()
 
             # Main loop
             self.listen_for_commands()
@@ -122,6 +361,15 @@ class SimpleFirewallAgent:
         finally:
             self.cleanup()
 
+    def _auto_save_loop(self):
+        """Loop de auto-guardado de estado"""
+        while self.running:
+            try:
+                time.sleep(self.auto_save_interval)
+                self._save_state()
+            except Exception as e:
+                logger.error(f"Error en auto-save: {e}")
+
     def listen_for_commands(self):
         """Loop principal - escucha comandos entrantes (protobuf primero)"""
         logger.info("Listening for firewall commands (protobuf batch & individual)...")
@@ -129,7 +377,12 @@ class SimpleFirewallAgent:
         try:
             while self.running:
                 try:
-                    # Recibir comando (con timeout)
+                    # Verificar rate limiting
+                    if not self._check_rate_limit():
+                        time.sleep(1)
+                        continue
+
+                    # Recibir comando (con timeout desde configuración)
                     if self.command_socket.poll(1000):  # 1 segundo timeout
                         message = self.command_socket.recv()
                         self.process_command_message(message)
@@ -230,10 +483,19 @@ class SimpleFirewallAgent:
             logger.warning("Batch SO %s != this system %s",
                            batch.so_identifier, self.system_info['firewall_type'])
 
+        # Verificar límite de comandos por request
+        if len(batch.commands) > self.max_rules_per_request:
+            logger.warning("Batch has %d commands, limit is %d",
+                           len(batch.commands), self.max_rules_per_request)
+
         # Procesar cada comando del lote
         for command in batch.commands:
             # Aplicar dry_run_all si está configurado
             if batch.dry_run_all:
+                command.dry_run = True
+
+            # Forzar dry_run si está en modo display-only
+            if self.display_only:
                 command.dry_run = True
 
             # Procesar comando individual
@@ -284,7 +546,7 @@ class SimpleFirewallAgent:
     def process_protobuf_command(self, command: firewall_commands_pb2.FirewallCommand) -> FirewallCommandResult:
         """Procesa un comando protobuf individual"""
 
-        # Validar comando
+        # Validar comando usando configuración
         if not self.validate_protobuf_command(command):
             return FirewallCommandResult(
                 command_id=command.command_id,
@@ -296,34 +558,31 @@ class SimpleFirewallAgent:
                 execution_time=0.0
             )
 
-        # Ejecutar comando
-        if self.display_only or command.dry_run:
+        # Ejecutar comando basado en configuración
+        if self.display_only or command.dry_run or self.dry_run_mode:
             return self.simulate_protobuf_command(command)
-        else:
+        elif self.nuclear_enabled:
             return self.apply_real_protobuf_command(command)
+        else:
+            # Nuclear no habilitado - simular aunque no sea dry_run
+            logger.warning("Real execution requested but nuclear option disabled - simulating")
+            return self.simulate_protobuf_command(command)
 
     def validate_protobuf_command(self, command: firewall_commands_pb2.FirewallCommand) -> bool:
-        """Valida un comando protobuf antes de ejecutarlo"""
+        """Valida un comando protobuf antes de ejecutarlo usando configuración"""
+
+        if not self.validate_requests:
+            return True  # Validación deshabilitada
 
         # Validaciones básicas
         if not command.target_ip:
             logger.warning("Command missing target_ip")
             return False
 
-        # Validar acción usando enum
-        if command.action not in [
-            firewall_commands_pb2.BLOCK_IP,
-            firewall_commands_pb2.UNBLOCK_IP,
-            firewall_commands_pb2.BLOCK_PORT,
-            firewall_commands_pb2.UNBLOCK_PORT,
-            firewall_commands_pb2.RATE_LIMIT_IP,
-            firewall_commands_pb2.ALLOW_IP_TEMP,
-            firewall_commands_pb2.FLUSH_RULES,
-            firewall_commands_pb2.LIST_RULES,
-            firewall_commands_pb2.BACKUP_RULES,
-            firewall_commands_pb2.RESTORE_RULES
-        ]:
-            logger.warning("Unknown action: %s", command.action)
+        # Validar acción usando configuración
+        action_name = firewall_commands_pb2.CommandAction.Name(command.action).lower()
+        if action_name not in self.supported_actions:
+            logger.warning("Unsupported action: %s", action_name)
             return False
 
         if command.duration_seconds < 0:
@@ -443,7 +702,7 @@ class SimpleFirewallAgent:
         priority = command_data.get('priority', 'MEDIUM')
         dry_run = command_data.get('dry_run', True)
 
-        # Validar comando JSON
+        # Validar comando JSON usando configuración
         if not target_ip:
             return FirewallCommandResult(
                 command_id=command_id,
@@ -455,10 +714,22 @@ class SimpleFirewallAgent:
                 execution_time=0.0
             )
 
+        # Validar acción usando configuración
+        if self.validate_requests and action_str.lower() not in self.supported_actions:
+            return FirewallCommandResult(
+                command_id=command_id,
+                success=False,
+                executed=False,
+                simulated=False,
+                firewall_command="",
+                message=f"Unsupported action: {action_str}",
+                execution_time=0.0
+            )
+
         # Generar comando específico del SO
         firewall_cmd = self.generate_firewall_command_from_json(command_data)
 
-        if self.display_only or dry_run:
+        if self.display_only or dry_run or self.dry_run_mode:
             result = FirewallCommandResult(
                 command_id=command_id,
                 success=True,
@@ -468,9 +739,20 @@ class SimpleFirewallAgent:
                 message="SIMULATED: Would execute firewall command (JSON)",
                 execution_time=0.001
             )
-        else:
+        elif self.nuclear_enabled:
             # Ejecutar comando real desde JSON
             result = self.execute_real_command_from_json(command_data, firewall_cmd)
+        else:
+            logger.warning("Real execution requested but nuclear option disabled - simulating")
+            result = FirewallCommandResult(
+                command_id=command_id,
+                success=True,
+                executed=False,
+                simulated=True,
+                firewall_command=firewall_cmd,
+                message="SIMULATED: Nuclear option disabled",
+                execution_time=0.001
+            )
 
         # Guardar en historial
         self.command_history.append({
@@ -589,15 +871,17 @@ class SimpleFirewallAgent:
             return f"# Unknown UFW action: {action}"
 
     def _generate_iptables_command(self, action: str, ip: str, port: Optional[int]) -> str:
-        """Genera comando iptables"""
+        """Genera comando iptables usando cadena de configuración"""
+        chain = self.default_chain
+
         if action in ['BLOCK_IP', 'BLOCK_PORT']:
-            return f"iptables -A INPUT -s {ip} -j DROP"
+            return f"iptables -A {chain} -s {ip} -j DROP"
         elif action == 'RATE_LIMIT_IP':
-            return f"iptables -A INPUT -s {ip} -m limit --limit 10/min -j ACCEPT"
+            return f"iptables -A {chain} -s {ip} -m limit --limit 10/min -j ACCEPT"
         elif action in ['ALLOW_IP_TEMP', 'ALLOW']:
-            return f"iptables -A INPUT -s {ip} -j ACCEPT"
+            return f"iptables -A {chain} -s {ip} -j ACCEPT"
         elif action in ['UNBLOCK_IP', 'UNBLOCK_PORT']:
-            return f"iptables -D INPUT -s {ip} -j DROP"
+            return f"iptables -D {chain} -s {ip} -j DROP"
         elif action == 'FLUSH_RULES':
             return "iptables -F"
         elif action == 'LIST_RULES':
@@ -744,7 +1028,7 @@ class SimpleFirewallAgent:
         print("─" * 70)
 
     def send_batch_response(self, batch: firewall_commands_pb2.FirewallCommandBatch, batch_result: Dict):
-        """Envía respuesta de lote procesado de vuelta al puerto 5560"""
+        """Envía respuesta de lote procesado de vuelta al puerto configurado"""
         if not self.response_socket or not PROTOBUF_AVAILABLE:
             return
 
@@ -765,7 +1049,7 @@ class SimpleFirewallAgent:
             message = response.SerializeToString()
             self.response_socket.send(message)
 
-            logger.info(f"📤 Sent batch response for {batch.batch_id} to port 5560")
+            logger.info(f"📤 Sent batch response for {batch.batch_id} to port {self.response_port}")
 
         except Exception as e:
             logger.error(f"Error sending batch response: {e}")
@@ -796,13 +1080,13 @@ class SimpleFirewallAgent:
             confirmation.node_hostname = self.system_info['node_id']
             confirmation.os_version = self.system_info['os_version']
             confirmation.firewall_status = self.system_info['firewall_status']
-            confirmation.agent_version = "firewall_agent_1.0"
+            confirmation.agent_version = self.config['agent_info']['version']
 
             # Enviar confirmación
             message = confirmation.SerializeToString()
             self.response_socket.send(message)
 
-            logger.info(f"📤 Sent confirmation for command {command.command_id} to port 5560")
+            logger.info(f"📤 Sent confirmation for command {command.command_id} to port {self.response_port}")
 
         except Exception as e:
             logger.error(f"Error sending confirmation: {e}")
@@ -823,15 +1107,26 @@ class SimpleFirewallAgent:
             'command_history_size': len(self.command_history),
             'system_info': self.system_info,
             'display_only_mode': self.display_only,
-            'protobuf_available': PROTOBUF_AVAILABLE
+            'nuclear_enabled': self.nuclear_enabled,
+            'protobuf_available': PROTOBUF_AVAILABLE,
+            'config_file': self.config_file,
+            'configuration': {
+                'listen_port': self.port,
+                'response_port': self.response_port,
+                'dry_run_mode': self.dry_run_mode,
+                'rate_limiting_enabled': self.rate_limiting['enabled'],
+                'validation_enabled': self.validate_requests,
+                'supported_actions': self.supported_actions
+            }
         }
 
     def print_statistics(self):
         """Imprime estadísticas en pantalla"""
         stats = self.get_statistics()
 
-        print("\n📊 Firewall Agent Statistics (PROTOBUF REAL)")
+        print("\n📊 Firewall Agent Statistics (JSON CONFIG)")
         print("═" * 60)
+        print(f"📄 Config file: {stats['config_file'] or 'default'}")
         print(f"⏱️  Uptime: {stats['uptime_seconds']:.0f}s")
         print(f"📨 Commands Received: {stats['commands_received']}")
         print(f"📦 Batches Received: {stats['batches_received']}")
@@ -842,10 +1137,17 @@ class SimpleFirewallAgent:
         print(f"📄 JSON Commands: {stats['json_commands']}")
         print(f"📜 History Size: {stats['command_history_size']}")
         print(f"🔒 Display-Only Mode: {stats['display_only_mode']}")
+        print(f"💣 Nuclear Enabled: {stats['nuclear_enabled']}")
         print(f"📦 Protobuf Available: {stats['protobuf_available']}")
+        print(f"🎯 Listen Port: {stats['configuration']['listen_port']}")
+        print(f"📤 Response Port: {stats['configuration']['response_port']}")
 
     def cleanup(self):
-        """Limpia recursos"""
+        """Limpia recursos y guarda estado"""
+        # Guardar estado final
+        if self.config['persistence']['save_state']:
+            self._save_state()
+
         if self.command_socket:
             self.command_socket.close()
         if self.response_socket:
@@ -906,48 +1208,84 @@ def create_test_json_command(action="BLOCK_IP", target_ip="192.168.1.100") -> st
 
 
 def main():
-    """Función principal"""
+    """Función principal con configuración JSON completa"""
     import sys
     import argparse
 
-    # Configurar logging
+    # Configurar logging básico hasta cargar configuración
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
     # Argumentos de línea de comandos
-    parser = argparse.ArgumentParser(description='Simple Firewall Agent (PROTOBUF REAL)')
-    parser.add_argument('--port', type=int, default=5561, help='Port to listen on')
+    parser = argparse.ArgumentParser(description='Simple Firewall Agent (JSON Config)')
+    parser.add_argument('config_file', nargs='?',
+                        default='simple_firewall_agent_config.json',
+                        help='Archivo de configuración JSON')
     parser.add_argument('--apply-real', action='store_true',
-                        help='DANGEROUS: Apply real firewall rules')
+                        help='DANGEROUS: Forzar modo real (ignora configuración JSON)')
+    parser.add_argument('--test-protobuf', action='store_true',
+                        help='Generar comando de prueba protobuf y salir')
 
     args = parser.parse_args()
 
-    # Crear y ejecutar agente
-    display_only = not args.apply_real
+    # Modo de prueba
+    if args.test_protobuf:
+        if PROTOBUF_AVAILABLE:
+            test_batch = create_test_protobuf_batch()
+            print(f"Generated test batch: {len(test_batch)} bytes")
+            print("Test JSON command:")
+            print(create_test_json_command())
+        else:
+            print("Protobuf not available for testing")
+        return 0
 
+    # Crear agente con configuración JSON
+    try:
+        agent = SimpleFirewallAgent(config_file=args.config_file)
+    except Exception as e:
+        print(f"❌ Error inicializando agente: {e}")
+        return 1
+
+    # Override nuclear si se especifica en línea de comandos
     if args.apply_real:
-        print("\n⚠️  WARNING: REAL MODE ENABLED!")
-        print("🚨 This will apply actual firewall rules!")
+        print("\n⚠️  WARNING: REAL MODE FORCED!")
+        print("🚨 Ignorando configuración JSON - aplicará reglas reales!")
         confirm = input("Type 'CONFIRM' to proceed: ")
         if confirm != 'CONFIRM':
             print("❌ Aborted")
-            sys.exit(1)
+            return 1
+        agent.display_only = False
+        agent.nuclear_enabled = True
+
+    # Mostrar configuración cargada
+    print(f"\n🔧 Configuración cargada desde: {args.config_file}")
+    print(f"   📡 Puerto escucha: {agent.port}")
+    print(f"   📤 Puerto respuesta: {agent.response_port}")
+    print(f"   🔒 Dry run mode: {agent.dry_run_mode}")
+    print(f"   💣 Nuclear habilitado: {agent.nuclear_enabled}")
+    print(f"   🔍 Display only: {agent.display_only}")
+    print(f"   🔧 Validación: {agent.validate_requests}")
+    print(f"   ⚡ Rate limiting: {agent.rate_limiting['enabled']}")
+    print(f"   📝 Logging: {agent.config['logging']['level']}")
 
     if not PROTOBUF_AVAILABLE:
         print("\n⚠️  WARNING: Protobuf not available!")
         print("🔄 Will fall back to JSON mode")
 
-    agent = SimpleFirewallAgent(port=args.port, display_only=display_only)
-
     try:
         agent.start()
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
+    except Exception as e:
+        logger.error("Error fatal: %s", e)
+        return 1
     finally:
         agent.print_statistics()
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
