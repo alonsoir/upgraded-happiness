@@ -654,9 +654,15 @@ class ZeroMQListener:
 
             self.dashboard_handler.shared_data['events'].append(event)
 
-            # Procesar evento con la integración de firewall
-            if hasattr(self.dashboard_handler, 'firewall_integration'):
-                self.dashboard_handler.firewall_integration.process_received_event(event)
+            # CORRECCIÓN DEL BUG: Verificar que firewall_integration existe y no es None
+            firewall_integration = getattr(self.dashboard_handler, 'firewall_integration', None)
+            if (firewall_integration and
+                hasattr(firewall_integration, 'process_received_event') and
+                callable(getattr(firewall_integration, 'process_received_event', None))):
+                try:
+                    firewall_integration.process_received_event(event)
+                except Exception as e:
+                    logger.error(f"Error en firewall integration: {e}")
 
             if len(self.dashboard_handler.shared_data['events']) > max_events:
                 self.dashboard_handler.shared_data['events'] = \
