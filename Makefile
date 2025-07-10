@@ -31,7 +31,7 @@ ACTIVATE = source $(VENV_BIN)/activate
 
 # Core Platform Scripts
 ORCHESTRATOR = system_orchestrator.py
-ML_DETECTOR = ml_detector_with_persistence.py
+ML_DETECTOR = lightweight_ml_detector.py
 PROMISCUOUS_AGENT = promiscuous_agent.py
 BROKER = scripts/smart_broker.py
 SIMPLE_BROKER = simple_broker.py
@@ -294,11 +294,11 @@ run-firewall: install-firewall-deps verify-firewall setup-pids-dir stop-firewall
 	@echo "$(BLUE)2. Starting Promiscuous Agent (Capture → Port $(CAPTURE_PORT))...$(NC)"
 	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) enhanced_agent_config.json > $(AGENT_LOG) 2>&1 & echo $$! > $(AGENT_PID)
 	@sleep 3
-	@echo "$(BLUE)3. Starting ML Detector (Port $(CAPTURE_PORT) → $(ML_ENHANCED_PORT))...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
+	@echo "$(BLUE)3. Starting Lightweight ML Detector (Port $(CAPTURE_PORT) → $(ML_ENHANCED_PORT))...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) lightweight_ml_detector_config.json > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
 	@sleep 3
 	@echo "$(BLUE)4. Starting Firewall Dashboard (Port $(ML_ENHANCED_PORT) → UI → $(FIREWALL_COMMAND_PORT))...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_DASHBOARD) > $(FIREWALL_DASHBOARD_LOG) 2>&1 & echo $$! > $(FIREWALL_DASHBOARD_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_DASHBOARD) dashboard_config.json > $(FIREWALL_DASHBOARD_LOG) 2>&1 & echo $$! > $(FIREWALL_DASHBOARD_PID)
 	@sleep 3
 	@echo ""
 	@echo "$(GREEN)🎉 FIREWALL SYSTEM OPERATIONAL$(NC)"
@@ -381,16 +381,34 @@ quick-firewall: run-firewall
 # =============================================================================
 stop-firewall:
 	@echo "$(YELLOW)🛑 Stopping Firewall System...$(NC)"
-	@-pkill -f "$(FIREWALL_AGENT)" 2>/dev/null || true
-	@-pkill -f "$(FIREWALL_DASHBOARD)" 2>/dev/null || true
-	@-pkill -f "$(GPS_GENERATOR)" 2>/dev/null || true
-	@-if [ -f $(FIREWALL_AGENT_PID) ]; then kill $$(cat $(FIREWALL_AGENT_PID)) 2>/dev/null || true; rm -f $(FIREWALL_AGENT_PID); fi
+	@echo "$(BLUE)Stopping in reverse order...$(NC)"
+
+	# 4. Dashboard (último en iniciarse, primero en pararse)
+	@-pkill -f "real_zmq_dashboard_with_firewall.py" 2>/dev/null || true
 	@-if [ -f $(FIREWALL_DASHBOARD_PID) ]; then kill $$(cat $(FIREWALL_DASHBOARD_PID)) 2>/dev/null || true; rm -f $(FIREWALL_DASHBOARD_PID); fi
-	@-if [ -f $(GPS_GENERATOR_PID) ]; then kill $$(cat $(GPS_GENERATOR_PID)) 2>/dev/null || true; rm -f $(GPS_GENERATOR_PID); fi
+	@sleep 1
+
+	# 3. ML Detector
+	@-pkill -f "lightweight_ml_detector.py" 2>/dev/null || true
 	@-if [ -f $(ML_PID) ]; then kill $$(cat $(ML_PID)) 2>/dev/null || true; rm -f $(ML_PID); fi
+	@sleep 1
+
+	# 2. Promiscuous Agent (needs sudo)
+	@-pkill -f "promiscuous_agent.py" 2>/dev/null || true
+	@-sudo pkill -f "promiscuous_agent.py" 2>/dev/null || true
 	@-if [ -f $(AGENT_PID) ]; then kill $$(cat $(AGENT_PID)) 2>/dev/null || true; rm -f $(AGENT_PID); fi
-	@-sudo pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
+	@sleep 1
+
+	# 1. Firewall Agent (primero en iniciarse, último en pararse)
+	@-pkill -f "firewall_agent.py" 2>/dev/null || true
+	@-if [ -f $(FIREWALL_AGENT_PID) ]; then kill $$(cat $(FIREWALL_AGENT_PID)) 2>/dev/null || true; rm -f $(FIREWALL_AGENT_PID); fi
+
+	# Cleanup adicional
+	@-pkill -f "generate_gps_traffic.py" 2>/dev/null || true
+	@-if [ -f $(GPS_GENERATOR_PID) ]; then kill $$(cat $(GPS_GENERATOR_PID)) 2>/dev/null || true; rm -f $(GPS_GENERATOR_PID); fi
+
 	@echo "$(GREEN)✅ Firewall system stopped$(NC)"
+
 
 stop-all:
 	@echo "$(YELLOW)🛑 Stopping all components silently...$(NC)"
