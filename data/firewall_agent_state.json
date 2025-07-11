@@ -1,0 +1,14 @@
+{
+  "stats": {
+    "commands_received": 0,
+    "commands_executed": 0,
+    "commands_simulated": 0,
+    "batches_received": 0,
+    "batches_processed": 0,
+    "protobuf_commands": 0,
+    "json_commands": 0,
+    "start_time": 1752135751.996119
+  },
+  "last_saved": 1752141359.6247969,
+  "config_file": "simple_firewall_agent_config.json"
+}

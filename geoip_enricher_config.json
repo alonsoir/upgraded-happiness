@@ -1,0 +1,92 @@
+{
+  "agent_info": {
+    "name": "geoip_enricher",
+    "version": "1.0.0",
+    "description": "Servicio de enriquecimiento geográfico para eventos de red"
+  },
+  "network": {
+    "input_port": 5559,
+    "output_port": 5560,
+    "bind_address": "*",
+    "zmq_context_threads": 1,
+    "socket_timeout": 3000,
+    "high_water_mark": 1000,
+    "linger": 0,
+    "max_message_size": 1048576
+  },
+  "geoip": {
+    "enabled": true,
+    "database_path": "GeoLite2-City.mmdb",
+    "cache_size": 10000,
+    "cache_ttl_seconds": 3600,
+    "fallback_enabled": true,
+    "private_network_mapping": {
+      "192.168.0.0/16": {
+        "lat": 38.872221,
+        "lon": -6.977015,
+        "city": "Badajoz Local",
+        "country": "ES",
+        "region": "Extremadura"
+      },
+      "10.0.0.0/8": {
+        "lat": 38.872221,
+        "lon": -6.977015,
+        "city": "Badajoz Docker",
+        "country": "ES",
+        "region": "Extremadura"
+      },
+      "172.16.0.0/12": {
+        "lat": 38.872221,
+        "lon": -6.977015,
+        "city": "Badajoz VPN",
+        "country": "ES",
+        "region": "Extremadura"
+      },
+      "127.0.0.0/8": {
+        "lat": 38.872221,
+        "lon": -6.977015,
+        "city": "Badajoz Localhost",
+        "country": "ES",
+        "region": "Extremadura"
+      }
+    }
+  },
+  "processing": {
+    "max_memory_mb": 512,
+    "stats_interval_seconds": 60,
+    "batch_processing": false,
+    "max_processing_time_seconds": 5.0,
+    "parallel_processing": {
+      "enabled": false,
+      "max_workers": 2
+    }
+  },
+  "health_check": {
+    "enabled": true,
+    "port": 8080,
+    "endpoint": "/health",
+    "interval_seconds": 30
+  },
+  "metrics": {
+    "enabled": true,
+    "port": 9090,
+    "endpoint": "/metrics",
+    "collection_interval_seconds": 15
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/geoip_enricher.log",
+    "max_size_mb": 10,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "console_output": true
+  },
+  "protobuf": {
+    "enabled": true,
+    "extended_format": true,
+    "timestamp_correction": true,
+    "compression": false,
+    "timeout_ms": 1000,
+    "retry_attempts": 3
+  }
+}

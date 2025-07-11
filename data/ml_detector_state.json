@@ -1,0 +1,19 @@
+{
+  "stats": {
+    "events_processed": 17209,
+    "events_enriched": 17208,
+    "anomalies_detected": 0,
+    "high_risk_events": 0,
+    "geoip_enriched": 0,
+    "handshakes_processed": 0,
+    "start_time": 1752222339.687741,
+    "model_predictions": 16209,
+    "heuristic_predictions": 999,
+    "cache_hits": 0,
+    "processing_errors": 0
+  },
+  "ml_model_trained": true,
+  "training_samples": 1000,
+  "config_file": "lightweight_ml_detector_config.json",
+  "last_saved": 1752231340.041058
+}

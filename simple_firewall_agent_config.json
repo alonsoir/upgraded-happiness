@@ -1,0 +1,60 @@
+{
+  "agent_info": {
+    "name": "simple_firewall_agent",
+    "version": "1.0.0",
+    "description": "Agente de firewall que escucha comandos del dashboard"
+  },
+  "network": {
+    "listen_port": 5561,
+    "response_port": 5560,
+    "bind_address": "*",
+    "zmq_context_threads": 1,
+    "socket_timeout": 5000,
+    "max_connections": 100
+  },
+  "firewall": {
+    "enable_firewall_modifications": false,
+    "nuclear_option": {
+      "enabled": false,
+      "description": "PELIGRO: Permite aplicar cambios reales en el firewall del sistema"
+    },
+    "dry_run_mode": true,
+    "supported_actions": [
+      "block_ip", "unblock_ip", "block_port", "unblock_port",
+      "list_rules", "flush_rules"
+    ],
+    "default_chain": "INPUT",
+    "backup_rules": true,
+    "max_rules_per_request": 100
+  },
+  "security": {
+    "validate_requests": true,
+    "allowed_sources": ["127.0.0.1", "localhost"],
+    "rate_limiting": {
+      "enabled": true,
+      "max_requests_per_minute": 100
+    },
+    "authentication": {
+      "enabled": false,
+      "token_required": false
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/firewall_agent.log",
+    "max_size_mb": 10,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "console_output": true
+  },
+  "monitoring": {
+    "health_check_interval": 30,
+    "metrics_enabled": true,
+    "report_status": true
+  },
+  "persistence": {
+    "save_state": true,
+    "state_file": "data/firewall_agent_state.json",
+    "auto_save_interval": 60
+  }
+}
