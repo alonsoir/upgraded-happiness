@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Lightweight ML Detector para Upgraded-Happiness
+Lightweight ML Detector para Upgraded-Happiness (LIMPIO)
 REFACTORIZADO: Lee TODA la configuración desde JSON
-Usa lightweight_ml_detector_config.json para TODA la configuración
-Puerto configurable (entrada desde promiscuous_agent) - Puerto configurable (salida a dashboard)
+RESPONSABILIDAD ÚNICA: Análisis ML + scoring de eventos
+ELIMINADO: GeoIP logic (ahora en geoip_enricher.py)
 """
 
 import zmq
@@ -48,17 +48,6 @@ try:
 except ImportError:
     ML_AVAILABLE = False
     logger.warning("⚠️  Scikit-learn no disponible - ML deshabilitado")
-
-# Importar geoip
-try:
-    import geoip2.database
-    import geoip2.errors
-
-    GEOIP_AVAILABLE = True
-    logger.info("✅ GeoIP2 disponible")
-except ImportError:
-    GEOIP_AVAILABLE = False
-    logger.warning("⚠️  GeoIP2 no disponible")
 
 
 class SimpleMLModel:
@@ -230,87 +219,8 @@ class SimpleMLModel:
         return min(risk_score, 1.0)
 
 
-class GeoIPEnricher:
-    """Enriquecedor geográfico para IPs configurado desde JSON"""
-
-    def __init__(self, db_path: str = None, geoip_config: Dict = None):
-        """Inicializar GeoIP enricher desde configuración"""
-        self.config = geoip_config or {}
-        self.reader = None
-        self.enabled = False
-
-        # Cache configurado desde JSON
-        self.cache = {}
-        self.cache_max_size = self.config.get('cache_size', 10000)
-        self.cache_ttl = self.config.get('cache_ttl_seconds', 3600)
-
-        if GEOIP_AVAILABLE and db_path:
-            try:
-                self.reader = geoip2.database.Reader(db_path)
-                self.enabled = True
-                logger.info("🌍 GeoIP database cargada: %s", db_path)
-            except Exception as e:
-                logger.warning("⚠️  Error cargando GeoIP database: %s", e)
-        else:
-            logger.warning("⚠️  GeoIP no disponible o sin base de datos")
-
-    def enrich_ip(self, ip: str) -> Tuple[Optional[float], Optional[float]]:
-        """Enriquece IP con coordenadas geográficas usando cache"""
-
-        if not self.enabled or not ip or ip == 'unknown':
-            return None, None
-
-        # Verificar cache
-        if ip in self.cache:
-            cache_entry = self.cache[ip]
-            if time.time() - cache_entry['timestamp'] < self.cache_ttl:
-                return cache_entry['lat'], cache_entry['lon']
-
-        try:
-            response = self.reader.city(ip)
-            latitude = float(response.location.latitude) if response.location.latitude else None
-            longitude = float(response.location.longitude) if response.location.longitude else None
-
-            # Guardar en cache
-            if latitude is not None and longitude is not None:
-                self._cache_result(ip, latitude, longitude)
-
-            return latitude, longitude
-
-        except geoip2.errors.AddressNotFoundError:
-            self._cache_result(ip, None, None)
-            return None, None
-        except Exception as e:
-            logger.debug("Error en GeoIP para %s: %s", ip, e)
-            return None, None
-
-    def _cache_result(self, ip: str, lat: Optional[float], lon: Optional[float]):
-        """Guarda resultado en cache con TTL"""
-        # Limpiar cache si está lleno
-        if len(self.cache) >= self.cache_max_size:
-            # Eliminar entradas más antiguas
-            oldest_entries = sorted(
-                self.cache.items(),
-                key=lambda x: x[1]['timestamp']
-            )[:self.cache_max_size // 2]
-
-            for old_ip, _ in oldest_entries:
-                del self.cache[old_ip]
-
-        self.cache[ip] = {
-            'lat': lat,
-            'lon': lon,
-            'timestamp': time.time()
-        }
-
-    def close(self):
-        """Cierra la base de datos GeoIP"""
-        if self.reader:
-            self.reader.close()
-
-
 class LightweightMLDetector:
-    """Detector ML ligero configurado completamente desde JSON"""
+    """Detector ML ligero configurado completamente desde JSON (SIN GeoIP)"""
 
     def __init__(self, config_file=None):
         """Inicializar detector desde configuración JSON"""
@@ -320,185 +230,125 @@ class LightweightMLDetector:
         # Configurar logging desde JSON PRIMERO
         self._setup_logging()
 
-        # Todas las configuraciones de red desde JSON
-        self.input_port = self.config['network']['listen_port']
-        self.output_port = self.config['network']['publish_port']
-        self.bind_address = self.config['network']['bind_address']
-        self.socket_timeout = self.config['network']['socket_timeout']
+        # Configuraciones de red desde JSON (NUEVA ARQUITECTURA)
+        self.input_port = self.config['zmq']['input_port']  # 5560 desde geoip_enricher
+        self.output_port = self.config['zmq']['output_port']  # 5561 hacia dashboard
+        self.context_threads = self.config['zmq']['context_threads']
+        self.high_water_mark = self.config['zmq']['high_water_mark']
 
-        # Configuración de detección desde JSON
-        self.window_size = self.config['detection']['window_size_seconds']
-        self.batch_size = self.config['detection']['batch_size']
-        self.anomaly_threshold = self.config['detection']['anomaly_threshold']
-        self.alert_cooldown = self.config['detection']['alert_cooldown_seconds']
-        self.min_samples = self.config['detection']['min_samples_for_detection']
+        # Configuración ML desde JSON
+        self.ml_config = self.config.get('ml', {})
+        self.ml_enabled = self.ml_config.get('enabled', True)
+        self.anomaly_threshold = self.ml_config.get('anomaly_threshold', 0.8)
+        self.high_risk_threshold = self.ml_config.get('high_risk_threshold', 0.9)
+        self.buffer_size = self.ml_config.get('buffer_size', 10000)
+        self.batch_size = self.ml_config.get('batch_size', 100)
 
-        # Configuración de performance desde JSON
-        self.max_buffer_size = self.config['data_processing']['max_buffer_size']
-        self.processing_timeout = self.config['performance']['processing_timeout_seconds']
+        # Configuración de processing desde JSON
+        self.processing_config = self.config.get('processing', {})
+        self.enable_heuristics = self.processing_config.get('enable_heuristics', True)
+        self.enable_alerts = self.processing_config.get('enable_alerts', True)
+        self.stats_interval = self.processing_config.get('stats_interval', 45)
+        self.max_processing_time = self.processing_config.get('max_processing_time', 5.0)
 
         self.running = False
 
         # ZeroMQ setup desde configuración
-        zmq_threads = self.config['network']['zmq_context_threads']
-        self.context = zmq.Context(zmq_threads)
+        self.context = zmq.Context(self.context_threads)
         self.input_socket = None
         self.output_socket = None
 
-        # Componentes ML con configuración
-        self.ml_model = SimpleMLModel(self.config.get('ml_model', {}))
+        # Componente ML (ÚNICA responsabilidad)
+        self.ml_model = SimpleMLModel(self.ml_config)
 
-        # GeoIP con configuración
-        geoip_db_path = self.config.get('geoip', {}).get('database_path')
-        self.geoip_enricher = GeoIPEnricher(geoip_db_path, self.config.get('geoip', {}))
-
-        # Estadísticas
+        # Estadísticas (SIN coordenadas, solo ML)
         self.stats = {
             'events_processed': 0,
             'events_enriched': 0,
             'anomalies_detected': 0,
             'high_risk_events': 0,
-            'geoip_enriched': 0,
             'handshakes_processed': 0,
             'start_time': time.time(),
             'model_predictions': 0,
             'heuristic_predictions': 0,
-            'cache_hits': 0,
             'processing_errors': 0
         }
 
         # Buffer para procesamiento configurado desde JSON
-        self.event_buffer = deque(maxlen=self.max_buffer_size)
-
-        # Alertas configuradas desde JSON
-        self.alerts_enabled = self.config['alerts']['enabled']
-        self.alert_levels = self.config['alerts']['severity_levels']
-
-        # Performance monitoring
-        self.performance_config = self.config.get('performance', {})
-        self.max_cpu_usage = self.performance_config.get('max_cpu_usage_percent', 80)
-        self.max_memory_usage = self.performance_config.get('max_memory_usage_mb', 512)
+        self.event_buffer = deque(maxlen=self.buffer_size)
 
         # Persistencia configurada desde JSON
-        if self.config['persistence']['save_predictions']:
-            self.predictions_file = self.config['persistence']['predictions_file']
-            self.auto_save_interval = self.config['persistence']['auto_save_interval']
+        self.persistence_config = self.config.get('persistence', {})
+        if self.persistence_config.get('save_predictions', False):
+            self.predictions_file = self.persistence_config.get('predictions_file', 'data/predictions.jsonl')
+            self.auto_save_interval = self.persistence_config.get('auto_save_interval', 300)
             self._setup_persistence()
 
-        logger.info("🤖 LightweightMLDetector initialized from JSON config")
+        logger.info("🤖 LightweightMLDetector inicializado (LIMPIO - Sin GeoIP)")
         logger.info("Config file: %s", config_file or 'default config')
-        logger.info("📡 Input port: %d", self.input_port)
-        logger.info("📤 Output port: %d", self.output_port)
-        logger.info("🧠 ML disponible: %s", ML_AVAILABLE)
-        logger.info("🌍 GeoIP disponible: %s", GEOIP_AVAILABLE)
+        logger.info("📡 Input port: %d (desde geoip_enricher)", self.input_port)
+        logger.info("📤 Output port: %d (hacia dashboard)", self.output_port)
+        logger.info("🧠 ML enabled: %s", self.ml_enabled)
         logger.info("📦 Protobuf disponible: %s", PROTOBUF_AVAILABLE)
-        logger.info("🎯 Detection threshold: %.2f", self.anomaly_threshold)
+        logger.info("🎯 Anomaly threshold: %.2f", self.anomaly_threshold)
+        logger.info("🧹 LIMPIO: Sin GeoIP - solo análisis ML")
 
     def _load_config(self, config_file):
-        """Cargar configuración desde archivo JSON"""
+        """Cargar configuración desde archivo JSON (SIN sección GeoIP)"""
         default_config = {
             "agent_info": {
                 "name": "lightweight_ml_detector",
                 "version": "1.0.0",
-                "description": "Detector ML ligero para análisis de tráfico de red"
+                "description": "Detector ML ligero para análisis de tráfico (sin GeoIP)"
             },
-            "network": {
-                "listen_port": 5559,
-                "publish_port": 5560,
-                "bind_address": "*",
-                "zmq_context_threads": 1,
-                "socket_timeout": 3000,
-                "max_message_size": 1048576
+            "zmq": {
+                "input_port": 5560,
+                "output_port": 5561,
+                "context_threads": 1,
+                "high_water_mark": 1000
             },
-            "ml_model": {
-                "model_type": "isolation_forest",
-                "model_path": "models/lightweight_detector.pkl",
-                "auto_retrain": True,
-                "retrain_interval_hours": 24,
-                "confidence_threshold": 0.7,
-                "features": [
-                    "packet_size", "packets_per_second", "unique_ips",
-                    "port_diversity", "protocol_distribution", "time_intervals"
-                ],
-                "training": {
-                    "initial_training_required": False,
-                    "validation_split": 0.2,
-                    "auto_update_model": True,
-                    "contamination_rate": 0.1,
-                    "min_training_samples": 1000,
-                    "retrain_interval_samples": 200
-                }
-            },
-            "detection": {
-                "window_size_seconds": 60,
-                "sliding_window": True,
-                "batch_size": 100,
-                "anomaly_threshold": 0.8,
-                "alert_cooldown_seconds": 300,
-                "min_samples_for_detection": 50
-            },
-            "data_processing": {
-                "max_buffer_size": 10000,
-                "preprocessing": {
-                    "normalize_features": True,
-                    "remove_outliers": True,
-                    "outlier_std_threshold": 3.0
-                },
-                "feature_engineering": {
-                    "create_temporal_features": True,
-                    "create_statistical_features": True,
-                    "rolling_window_size": 10
-                }
-            },
-            "alerts": {
+            "ml": {
                 "enabled": True,
-                "severity_levels": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-                "notification_channels": ["zmq", "log"],
-                "alert_aggregation": {
-                    "enabled": True,
-                    "window_minutes": 5,
-                    "max_alerts_per_window": 10
-                }
+                "anomaly_threshold": 0.8,
+                "high_risk_threshold": 0.9,
+                "models": ["IsolationForest"],
+                "buffer_size": 10000,
+                "batch_size": 100,
+                "training_interval": 3600,
+                "training": {
+                    "min_training_samples": 1000,
+                    "retrain_interval_samples": 200,
+                    "contamination_rate": 0.1
+                },
+                "features": [
+                    "packet_size", "dest_port", "src_port",
+                    "hour", "minute", "is_weekend",
+                    "ip_entropy", "port_frequency"
+                ]
             },
-            "performance": {
-                "max_cpu_usage_percent": 80,
-                "max_memory_usage_mb": 512,
-                "processing_timeout_seconds": 30,
-                "parallel_processing": {
-                    "enabled": False,
-                    "max_workers": 2
-                }
+            "processing": {
+                "enable_heuristics": True,
+                "enable_alerts": True,
+                "stats_interval": 45,
+                "max_processing_time": 5.0
             },
             "logging": {
                 "level": "INFO",
                 "file": "logs/ml_detector.log",
-                "max_size_mb": 20,
-                "backup_count": 3,
+                "max_size": "10MB",
+                "backup_count": 5,
                 "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                "console_output": True,
-                "log_predictions": False
+                "console_output": True
             },
-            "monitoring": {
-                "health_check_interval": 45,
-                "metrics_collection": True,
-                "performance_monitoring": True,
-                "model_drift_detection": {
-                    "enabled": True,
-                    "check_interval_hours": 6,
-                    "drift_threshold": 0.1
-                }
+            "protobuf": {
+                "enabled": True,
+                "timeout": 1000,
+                "retry_attempts": 3
             },
             "persistence": {
-                "save_predictions": True,
+                "save_predictions": False,
                 "predictions_file": "data/predictions.jsonl",
-                "save_model_state": True,
-                "state_file": "data/ml_detector_state.json",
                 "auto_save_interval": 300
-            },
-            "geoip": {
-                "database_path": "GeoLite2-City.mmdb",
-                "cache_size": 10000,
-                "cache_ttl_seconds": 3600
             }
         }
 
@@ -564,12 +414,25 @@ class LightweightMLDetector:
             from logging.handlers import RotatingFileHandler
             file_handler = RotatingFileHandler(
                 log_file,
-                maxBytes=log_config.get('max_size_mb', 20) * 1024 * 1024,
-                backupCount=log_config.get('backup_count', 3)
+                maxBytes=self._parse_size(log_config.get('max_size', '10MB')),
+                backupCount=log_config.get('backup_count', 5)
             )
             file_handler.setLevel(level)
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
+
+    def _parse_size(self, size_str: str) -> int:
+        """Parse size string (e.g., '10MB') to bytes"""
+        if isinstance(size_str, int):
+            return size_str
+
+        size_str = size_str.upper()
+        if size_str.endswith('MB'):
+            return int(size_str[:-2]) * 1024 * 1024
+        elif size_str.endswith('KB'):
+            return int(size_str[:-2]) * 1024
+        else:
+            return int(size_str)
 
     def _setup_persistence(self):
         """Configurar persistencia desde JSON"""
@@ -593,38 +456,40 @@ class LightweightMLDetector:
             input_addr = f"tcp://localhost:{self.input_port}"
             self.input_socket.connect(input_addr)
             self.input_socket.setsockopt(zmq.SUBSCRIBE, b"")
-            self.input_socket.setsockopt(zmq.RCVTIMEO, self.socket_timeout)
+            self.input_socket.setsockopt(zmq.RCVTIMEO, 3000)
+            self.input_socket.setsockopt(zmq.RCVHWM, self.high_water_mark)
 
             self.output_socket = self.context.socket(zmq.PUB)
-            output_addr = f"tcp://{self.bind_address}:{self.output_port}"
+            output_addr = f"tcp://*:{self.output_port}"
             self.output_socket.bind(output_addr)
+            self.output_socket.setsockopt(zmq.SNDHWM, self.high_water_mark)
 
             self.running = True
 
-            print(f"\n🤖 Lightweight ML Detector Started (JSON CONFIG)")
+            print(f"\n🤖 Lightweight ML Detector Started (LIMPIO)")
             print(f"📄 Config: {self.config_file or 'default'}")
-            print(f"📡 Input: {input_addr} (from promiscuous_agent)")
-            print(f"📤 Output: {output_addr} (to dashboard)")
+            print(f"📡 Input: {input_addr} (desde geoip_enricher)")
+            print(f"📤 Output: {output_addr} (hacia dashboard)")
             print(f"📦 Protobuf: {'✅ Available' if PROTOBUF_AVAILABLE else '❌ Not available'}")
             print(f"🧠 ML: {'✅ Available' if ML_AVAILABLE else '❌ Heuristics only'}")
-            print(f"🌍 GeoIP: {'✅ Available' if self.geoip_enricher.enabled else '❌ Not available'}")
+            print(f"🧹 GeoIP: ❌ ELIMINADO (responsabilidad del geoip_enricher)")
             print(f"🎯 Anomaly threshold: {self.anomaly_threshold}")
-            print(f"📊 Buffer size: {self.max_buffer_size}")
+            print(f"⚠️ High risk threshold: {self.high_risk_threshold}")
+            print(f"📊 Buffer size: {self.buffer_size}")
             print(f"⚡ Batch size: {self.batch_size}")
-            print(f"🔔 Alerts: {'✅ Enabled' if self.alerts_enabled else '❌ Disabled'}")
+            print(f"🔔 Alerts: {'✅ Enabled' if self.enable_alerts else '❌ Disabled'}")
             print("=" * 70)
 
             # Thread principal de procesamiento
             processing_thread = threading.Thread(target=self._processing_loop, daemon=True)
             processing_thread.start()
 
-            # Thread de estadísticas configurado desde JSON
-            stats_interval = self.config['monitoring']['health_check_interval']
-            stats_thread = threading.Thread(target=self._stats_loop, args=(stats_interval,), daemon=True)
+            # Thread de estadísticas
+            stats_thread = threading.Thread(target=self._stats_loop, args=(self.stats_interval,), daemon=True)
             stats_thread.start()
 
             # Thread de auto-guardado si está habilitado
-            if self.config['persistence']['save_predictions']:
+            if self.persistence_config.get('save_predictions', False):
                 save_thread = threading.Thread(target=self._auto_save_loop, daemon=True)
                 save_thread.start()
 
@@ -643,8 +508,8 @@ class LightweightMLDetector:
             self.cleanup()
 
     def _processing_loop(self):
-        """Loop principal de procesamiento"""
-        logger.info("🔄 Iniciando loop de procesamiento...")
+        """Loop principal de procesamiento (SOLO ML)"""
+        logger.info("🔄 Iniciando loop de procesamiento ML...")
 
         while self.running:
             try:
@@ -652,7 +517,7 @@ class LightweightMLDetector:
                 message = self.input_socket.recv(zmq.NOBLOCK)
                 self.stats['events_processed'] += 1
 
-                # Procesar evento
+                # Procesar evento (SOLO ML)
                 enriched_event = self._process_event(message)
 
                 if enriched_event:
@@ -668,18 +533,18 @@ class LightweightMLDetector:
                 time.sleep(0.1)
 
     def _process_event(self, message: bytes) -> Optional[bytes]:
-        """Procesa un evento individual usando estructuras protobuf reales"""
+        """Procesa un evento individual - SOLO análisis ML"""
 
         if not PROTOBUF_AVAILABLE:
             logger.warning("Protobuf no disponible - no se puede procesar evento")
             return None
 
         try:
-            # Parsear evento protobuf entrante
+            # Parsear evento protobuf entrante (YA CON COORDENADAS del geoip_enricher)
             event = network_event_extended_fixed_pb2.NetworkEvent()
             event.ParseFromString(message)
 
-            # Convertir a diccionario para procesamiento
+            # Convertir a diccionario para procesamiento ML
             event_dict = {
                 'event_id': event.event_id,
                 'source_ip': event.source_ip,
@@ -698,26 +563,24 @@ class LightweightMLDetector:
                 'is_initial_handshake': event.is_initial_handshake
             }
 
-            # Procesar handshake inicial
+            # Procesar handshake inicial (pasar sin ML)
             if event.is_initial_handshake:
                 self.stats['handshakes_processed'] += 1
                 logger.info(f"🤝 Procesando handshake inicial de {event.agent_id} ({event.so_identifier})")
 
-                # Para handshakes, solo pasamos la información sin ML
+                # Para handshakes, solo pasamos la información completa sin ML
                 enriched_event = network_event_extended_fixed_pb2.NetworkEvent()
-                enriched_event.CopyFrom(event)  # Copiar todo el evento original
-
-                # Enriquecer con GeoIP si está disponible
-                if event.source_ip and event.source_ip != 'unknown':
-                    latitude, longitude = self.geoip_enricher.enrich_ip(event.source_ip)
-                    if latitude is not None and longitude is not None:
-                        enriched_event.latitude = latitude
-                        enriched_event.longitude = longitude
-                        self.stats['geoip_enriched'] += 1
+                enriched_event.CopyFrom(event)  # Copiar TODO incluyendo coordenadas
 
                 return enriched_event.SerializeToString()
 
-            # Para eventos normales, aplicar ML
+            # Para eventos normales, aplicar SOLO ML
+            if not self.ml_enabled:
+                # Si ML está deshabilitado, pasar evento sin cambios
+                enriched_event = network_event_extended_fixed_pb2.NetworkEvent()
+                enriched_event.CopyFrom(event)
+                return enriched_event.SerializeToString()
+
             # Extraer features para ML
             features = self.ml_model.extract_features(event_dict)
 
@@ -737,50 +600,21 @@ class LightweightMLDetector:
             if anomaly_score > self.anomaly_threshold:
                 self.stats['anomalies_detected'] += 1
 
-            high_risk_threshold = self.config['detection'].get('high_risk_threshold', 0.8)
-            if risk_score > high_risk_threshold:
+            if risk_score > self.high_risk_threshold:
                 self.stats['high_risk_events'] += 1
 
-            # Enriquecer con GeoIP
-            latitude, longitude = self.geoip_enricher.enrich_ip(event.source_ip)
-            if latitude is not None and longitude is not None:
-                self.stats['geoip_enriched'] += 1
-
-            # Crear evento enriquecido usando toda la estructura protobuf
+            # Crear evento enriquecido PRESERVANDO coordenadas del geoip_enricher
             enriched_event = network_event_extended_fixed_pb2.NetworkEvent()
 
-            # Copiar campos originales
-            enriched_event.event_id = event.event_id
-            enriched_event.timestamp = event.timestamp
-            enriched_event.source_ip = event.source_ip
-            enriched_event.target_ip = event.target_ip
-            enriched_event.packet_size = event.packet_size
-            enriched_event.dest_port = event.dest_port
-            enriched_event.src_port = event.src_port
-            enriched_event.agent_id = event.agent_id
-            enriched_event.event_type = event.event_type
-            enriched_event.description = event.description
+            # Copiar TODOS los campos originales (incluyendo coordenadas)
+            enriched_event.CopyFrom(event)
 
-            # Copiar campos adicionales del protobuf real
-            enriched_event.so_identifier = event.so_identifier
-            enriched_event.node_hostname = event.node_hostname
-            enriched_event.os_version = event.os_version
-            enriched_event.firewall_status = event.firewall_status
-            enriched_event.agent_version = event.agent_version
-            enriched_event.is_initial_handshake = event.is_initial_handshake
-
-            # Agregar enriquecimiento ML
+            # SOLO AÑADIR enriquecimiento ML
             enriched_event.anomaly_score = anomaly_score
             enriched_event.risk_score = risk_score
 
-            # Agregar coordenadas GPS si están disponibles
-            if latitude is not None and longitude is not None:
-                enriched_event.latitude = latitude
-                enriched_event.longitude = longitude
-
-            # Enriquecer descripción según configuración
-            if anomaly_score > self.config['detection'].get('description_threshold', 0.5) or \
-                    risk_score > self.config['detection'].get('description_threshold', 0.5):
+            # Enriquecer descripción con info ML
+            if anomaly_score > 0.5 or risk_score > 0.5:
                 ml_info = f"ML: A:{anomaly_score:.2f} R:{risk_score:.2f}"
                 if event.description:
                     enriched_event.description = f"{ml_info} | {event.description}"
@@ -788,11 +622,10 @@ class LightweightMLDetector:
                     enriched_event.description = ml_info
 
             # Guardar predicción si está configurado
-            if self.config['persistence']['save_predictions'] and \
-                    self.config['logging'].get('log_predictions', False):
+            if self.persistence_config.get('save_predictions', False):
                 self._save_prediction(event_dict, anomaly_score, risk_score)
 
-            logger.debug("📊 Evento enriquecido: %s A:%.2f R:%.2f",
+            logger.debug("📊 Evento ML procesado: %s A:%.2f R:%.2f",
                          event.event_id, anomaly_score, risk_score)
 
             return enriched_event.SerializeToString()
@@ -833,34 +666,8 @@ class LightweightMLDetector:
             try:
                 time.sleep(interval)
                 self._print_stats()
-
-                # Monitoring de performance si está habilitado
-                if self.config['monitoring']['performance_monitoring']:
-                    self._check_performance()
-
             except Exception as e:
                 logger.error("Error en stats loop: %s", e)
-
-    def _check_performance(self):
-        """Verifica performance según configuración"""
-        try:
-            import psutil
-
-            # CPU usage
-            cpu_percent = psutil.cpu_percent()
-            if cpu_percent > self.max_cpu_usage:
-                logger.warning(f"⚠️ Alta CPU usage: {cpu_percent}% (límite: {self.max_cpu_usage}%)")
-
-            # Memory usage
-            process = psutil.Process()
-            memory_mb = process.memory_info().rss / 1024 / 1024
-            if memory_mb > self.max_memory_usage:
-                logger.warning(f"⚠️ Alta memoria usage: {memory_mb:.1f}MB (límite: {self.max_memory_usage}MB)")
-
-        except ImportError:
-            pass  # psutil no disponible
-        except Exception as e:
-            logger.debug(f"Error en performance check: {e}")
 
     def _auto_save_loop(self):
         """Loop de auto-guardado configurado desde JSON"""
@@ -875,11 +682,8 @@ class LightweightMLDetector:
 
     def _save_state(self):
         """Guarda estado según configuración"""
-        if not self.config['persistence']['save_model_state']:
-            return
-
         try:
-            state_file = self.config['persistence']['state_file']
+            state_file = self.persistence_config.get('state_file', 'data/ml_detector_state.json')
 
             # Crear directorio si no existe
             state_dir = os.path.dirname(state_file)
@@ -904,12 +708,11 @@ class LightweightMLDetector:
         """Imprime estadísticas configuradas desde JSON"""
         uptime = time.time() - self.stats['start_time']
 
-        print(f"\n📊 ML Detector Stats (JSON CONFIG) - Uptime: {uptime:.0f}s")
+        print(f"\n📊 ML Detector Stats (LIMPIO) - Uptime: {uptime:.0f}s")
         print(f"📥 Events Processed: {self.stats['events_processed']}")
         print(f"📤 Events Enriched: {self.stats['events_enriched']}")
         print(f"🚨 Anomalies Detected: {self.stats['anomalies_detected']}")
-        print(f"⚠️  High Risk Events: {self.stats['high_risk_events']}")
-        print(f"🌍 GeoIP Enriched: {self.stats['geoip_enriched']}")
+        print(f"⚠️ High Risk Events: {self.stats['high_risk_events']}")
         print(f"🤝 Handshakes Processed: {self.stats['handshakes_processed']}")
         print(f"🤖 ML Model Trained: {self.ml_model.is_trained}")
         print(f"📚 Training Samples: {len(self.ml_model.training_data)}")
@@ -917,6 +720,7 @@ class LightweightMLDetector:
         print(f"🔧 Heuristic Predictions: {self.stats['heuristic_predictions']}")
         print(f"❌ Processing Errors: {self.stats['processing_errors']}")
         print(f"📄 Config: {self.config_file or 'default'}")
+        print(f"🧹 GeoIP: ❌ ELIMINADO - solo ML")
         print("-" * 50)
 
     def get_statistics(self) -> Dict:
@@ -929,7 +733,6 @@ class LightweightMLDetector:
             'events_enriched': self.stats['events_enriched'],
             'anomalies_detected': self.stats['anomalies_detected'],
             'high_risk_events': self.stats['high_risk_events'],
-            'geoip_enriched': self.stats['geoip_enriched'],
             'handshakes_processed': self.stats['handshakes_processed'],
             'ml_model_trained': self.ml_model.is_trained,
             'training_samples': len(self.ml_model.training_data),
@@ -938,22 +741,23 @@ class LightweightMLDetector:
             'processing_errors': self.stats['processing_errors'],
             'protobuf_available': PROTOBUF_AVAILABLE,
             'ml_available': ML_AVAILABLE,
-            'geoip_available': self.geoip_enricher.enabled,
             'config_file': self.config_file,
             'configuration': {
                 'input_port': self.input_port,
                 'output_port': self.output_port,
                 'anomaly_threshold': self.anomaly_threshold,
+                'high_risk_threshold': self.high_risk_threshold,
                 'batch_size': self.batch_size,
-                'buffer_size': self.max_buffer_size,
-                'alerts_enabled': self.alerts_enabled
+                'buffer_size': self.buffer_size,
+                'ml_enabled': self.ml_enabled,
+                'alerts_enabled': self.enable_alerts
             }
         }
 
     def cleanup(self):
         """Limpia recursos y guarda estado final"""
         # Guardar estado final
-        if self.config['persistence']['save_model_state']:
+        if self.persistence_config.get('save_predictions', False):
             self._save_state()
 
         # Cerrar archivo de predicciones
@@ -966,15 +770,13 @@ class LightweightMLDetector:
             self.output_socket.close()
         if self.context:
             self.context.term()
-        if self.geoip_enricher:
-            self.geoip_enricher.close()
 
 
 def main():
     """Función principal con configuración JSON completa"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Lightweight ML Detector (JSON Config)')
+    parser = argparse.ArgumentParser(description='Lightweight ML Detector (LIMPIO - Sin GeoIP)')
     parser.add_argument('config_file', nargs='?',
                         default='lightweight_ml_detector_config.json',
                         help='Archivo de configuración JSON')
@@ -986,11 +788,13 @@ def main():
     if args.test_config:
         try:
             detector = LightweightMLDetector(config_file=args.config_file)
-            print("✅ Configuración JSON válida")
+            print("✅ Configuración JSON válida (LIMPIO)")
             stats = detector.get_statistics()
             print(f"📡 Input port: {stats['configuration']['input_port']}")
             print(f"📤 Output port: {stats['configuration']['output_port']}")
-            print(f"🎯 Threshold: {stats['configuration']['anomaly_threshold']}")
+            print(f"🎯 Anomaly threshold: {stats['configuration']['anomaly_threshold']}")
+            print(f"⚠️ High risk threshold: {stats['configuration']['high_risk_threshold']}")
+            print(f"🧹 GeoIP: ❌ ELIMINADO - responsabilidad del geoip_enricher.py")
             return 0
         except Exception as e:
             print(f"❌ Error en configuración: {e}")
@@ -1004,13 +808,14 @@ def main():
     try:
         detector = LightweightMLDetector(config_file=args.config_file)
 
-        print(f"\n🤖 ML Detector iniciado con configuración JSON:")
+        print(f"\n🤖 ML Detector iniciado (LIMPIO):")
         stats = detector.get_statistics()
         print(f"   📡 Input port: {stats['configuration']['input_port']}")
         print(f"   📤 Output port: {stats['configuration']['output_port']}")
         print(f"   🎯 Anomaly threshold: {stats['configuration']['anomaly_threshold']}")
         print(f"   📊 Buffer size: {stats['configuration']['buffer_size']}")
-        print(f"   🔔 Alerts: {'✅' if stats['configuration']['alerts_enabled'] else '❌'}")
+        print(f"   🧠 ML enabled: {'✅' if stats['configuration']['ml_enabled'] else '❌'}")
+        print(f"   🧹 GeoIP: ❌ ELIMINADO")
 
         detector.start()
 
