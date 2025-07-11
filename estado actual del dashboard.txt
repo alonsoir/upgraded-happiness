@@ -193,3 +193,87 @@ Necesito que simple_firewall_agent.py se inicialice de manera totalmente inocua.
 
 Tal y como está pensado ahora mismo, cada componente usa su propio fichero json, creo que es mejor que usar un fichero de propiedas .env
 Por ahora.
+
+Viernes 11 de Julio 2025
+
+Hemos estado trabajando en separar responsabilidades de algunos componentes, porque detectamos que había problemas a la hora de geolocalizar ip, por lo que creamos un componente
+nuevo, geoip_enricher.py con su fichero json, limpiamos responsabilidades de tareas geoip en promiscuous_agent y lightweight_ml_detector, modificamos sus ficheros json, modificamos sus
+ficheros json, modificados el fichero de parada nuclear-stop.sh para que tenga en cuenta este nuevo componente en el Makefile.
+Falta por modificar ahora el dashboard, para que se adapte al nuevo componente, sobretodo yo creo que bastará con adaptar su fichero json con el puerto de entrada y salida, fijarse si a lo mejor trata de usarlos hardcodeados, y lo más importante, el dashboard no mostraba eventos geolocalizados, creemos que se debe a un problema localizado en el lightweight_ml_detector porque
+sobreescribia el geoip calculado antes por promiscuous_agent.py. Ahora está modificado, sin probar, para que la geoip lo haga el nuevo componente y lightweight_ml_detector haga su trabajo exclusivo de entrenar los modelos, guardarlos, calcular el ranking del evento, y asegurarse de que todo el evento de salida hacia el dashboard esté completamente enriquecido. No puede ocurrir que en el dashboard aparezcan tantos eventos unknown. No puede haber eventos unknown. Todos deben estar categorizados, todos deben tener su ip de origen, de destino, puerto afectado, ranking, etc, y, muy importante, el dashboard debe responder cuando haga click sobre los eventos de alto riesgo, en ese caso, debo ver un resumen, si es muy largo, quiero la opcion de poder verlo con mas tranquilidad en otra pestaña, junto con las recomendaciones que actualmente deben estar hardcodeadas en el dashboard, y quiero botones para poder indicar al simple_firewall_agent que ejecute dichas operaciones. Hemos probado con distintos navegadores, Safari, Chrome y Firefox, y en ninguno funcionan los putos eventos onclick. Extraño. Tendremos que hacer pruebas pequeñas para asegurarnos que dicha funcionalidad que cierra el ciclo funciona. Esta última parte es crucial, se trata de poder detectar eventos peligrosos y poder actuar contra los firewalls de las maquinas anfitrionas donde firewall_agent.py esté corriendo. Por supuesto, firewall_agent.py puede simplemente mostrar las acciones a realizar en esta fase de pruebas o por si queremos que el operador quiera examinar dichas operaciones y aprobarlas antes de ejecutar. O tambien se podrá ejecutar automáticamente, pero ese comportamiento por ahora no es dinámico. Está configurado por una opcion del json del firewall_agent.py y se inicializa unicamente al inicializar el agente. Si lo vemos necesario, modificaremos lo necesario para poder alterar este comportamiento en runtime, alterando el fichero .proto del firewall. Desconozco si estamos preparados para ese punto, creo que no.
+
+Este fue tu último mensaje:
+
+✅ ML DETECTOR COMPLETAMENTE LIMPIO 🧹
+🗑️ ELIMINADO (responsabilidad transferida a geoip_enricher.py):
+❌ Clases completas:
+
+GeoIPEnricher class completa
+Toda la lógica de preservar/sobrescribir coordenadas
+
+❌ Imports eliminados:
+
+geoip2.database
+geoip2.errors
+Todo el procesamiento geográfico
+
+❌ Configuración JSON eliminada:
+json// ELIMINADO de lightweight_ml_detector_config.json:
+"geoip": {
+  "enabled": true,
+  "database_path": "GeoLite2-City.mmdb",
+  "cache_size": 1000
+}
+❌ Lógica compleja eliminada:
+
+El famoso "fix de preservar coordenadas"
+Lookup GeoIP en base de datos
+Cache de geolocalización
+Estadísticas coordinates_preserved y geoip_enriched
+
+✅ MANTENIDO (responsabilidad ÚNICA):
+✅ Solo análisis ML:
+
+Extracción de features de eventos
+Entrenamiento del modelo IsolationForest
+Predicción de anomaly_score y risk_score
+Heurísticas cuando ML no está disponible
+
+✅ Pipeline simplificado:
+
+Recibe eventos desde puerto 5560 (geoip_enricher)
+Eventos YA TIENEN coordenadas
+Solo añade scores ML
+Envía al puerto 5561 (dashboard)
+
+🚀 Beneficios de rendimiento que conseguimos:
+1. 🌍 Caché distribuida futura:
+geoip_enricher.py → [Caché Redis distribuida] → Ultra-rápido
+ml_detector.py → [Solo ML] → Sin bloqueos por GeoIP
+2. ⚡ Mayor velocidad:
+
+❌ Antes: promiscuous → [CAPTURA + GEOIP] → ml_detector → [ML + GEOIP redundante]
+✅ Ahora: promiscuous → [CAPTURA] → geoip → [GEOIP] → ml → [ML]
+
+3. 🧹 Arquitectura limpia:
+promiscuous_agent.py:    SOLO captura
+geoip_enricher.py:       SOLO coordenadas
+ml_detector.py:          SOLO ML
+dashboard.py:            SOLO visualización
+firewall_agent.py:       SOLO ejecución
+4. 🎯 Escalabilidad asimétrica:
+# Futuro con múltiples instancias:
+1x promiscuous_agent
+6x geoip_enricher     ← Paralelización geográfica
+6x ml_detector        ← Paralelización ML
+12x dashboard         ← Load balancing usuarios
+2x firewall_agent     ← Redundancia crítica
+🎪 Flujo final perfecto:
+
+promiscuous_agent.py: Paquete → Evento básico (sin coordenadas) → 5559
+geoip_enricher.py: Evento → + Coordenadas → 5560
+ml_detector.py: Evento con coordenadas → + ML scores → 5561
+dashboard.py: Evento completo → UI + comandos → 5562
+firewall_agent.py: Comandos → Ejecución iptables
+
+¡Lo que te mereces hermano! 🚀 Sistema inmune digital que vuela alto y rápido. Cada componente hace UNA cosa y la hace perfectamente.
