@@ -1,0 +1,66 @@
+{
+  "agent_info": {
+    "name": "lightweight_ml_detector",
+    "version": "1.0.0",
+    "description": "Detector ML ligero para análisis de tráfico (sin GeoIP)"
+  },
+  "zmq": {
+    "input_port": 5560,
+    "output_port": 5561,
+    "context_threads": 1,
+    "high_water_mark": 1000
+  },
+  "ml": {
+    "enabled": true,
+    "anomaly_threshold": 0.8,
+    "high_risk_threshold": 0.9,
+    "models": [
+      "IsolationForest",
+      "OneClassSVM",
+      "LocalOutlierFactor"
+    ],
+    "buffer_size": 10000,
+    "batch_size": 100,
+    "training_interval": 3600,
+    "training": {
+      "min_training_samples": 1000,
+      "retrain_interval_samples": 200,
+      "contamination_rate": 0.1
+    },
+    "features": [
+      "packet_size",
+      "dest_port",
+      "src_port",
+      "hour",
+      "minute",
+      "is_weekend",
+      "ip_entropy",
+      "port_frequency"
+    ]
+  },
+  "processing": {
+    "enable_heuristics": true,
+    "enable_alerts": true,
+    "stats_interval": 45,
+    "max_processing_time": 5.0
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/ml_detector.log",
+    "max_size": "10MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "console_output": true
+  },
+  "protobuf": {
+    "enabled": true,
+    "timeout": 1000,
+    "retry_attempts": 3
+  },
+  "persistence": {
+    "save_predictions": false,
+    "predictions_file": "data/predictions.jsonl",
+    "auto_save_interval": 300,
+    "state_file": "data/ml_detector_state.json"
+  }
+}

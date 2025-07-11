@@ -1,0 +1,56 @@
+{
+  "agent_info": {
+    "name": "enhanced_promiscuous_agent",
+    "version": "1.0.0",
+    "description": "Agente promiscuo para captura de paquetes (sin GeoIP/GPS)"
+  },
+  "capture": {
+    "interface": "any",
+    "promiscuous_mode": true,
+    "buffer_size": 512,
+    "timeout": 1,
+    "max_packets_per_second": 1000
+  },
+  "zmq": {
+    "output_port": 5559,
+    "context_threads": 1,
+    "high_water_mark": 1000,
+    "linger": 0
+  },
+  "filtering": {
+    "protocols": ["tcp", "udp", "icmp"],
+    "exclude_ports": [],
+    "include_ports": [],
+    "max_packet_size": 65535
+  },
+  "handshake": {
+    "enabled": true,
+    "send_initial": true,
+    "interval": 30,
+    "system_info": true
+  },
+  "system_detection": {
+    "detect_firewall": true,
+    "detect_os": true,
+    "include_hardware_info": false
+  },
+  "performance": {
+    "max_memory_mb": 512,
+    "stats_interval": 60,
+    "batch_processing": false
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/promiscuous_agent.log",
+    "max_size": "10MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "console_output": true
+  },
+  "protobuf": {
+    "enabled": true,
+    "extended_format": true,
+    "timestamp_correction": true,
+    "compression": false
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "debug": false,
+    "auto_reload": false
+  },
+  "zmq": {
+    "input_port": 5560,
+    "output_port": 5561,
+    "context_threads": 1,
+    "high_water_mark": 1000,
+    "timeout": 1000
+  },
+  "dashboard": {
+    "max_events_buffer": 300,
+    "auto_refresh_interval": 3000,
+    "map_center_lat": 40.4168,
+    "map_center_lng": -3.7038,
+    "map_zoom_level": 6
+  },
+  "firewall": {
+    "enabled": true,
+    "auto_threat_detection": true,
+    "manual_approval_required": true,
+    "default_block_duration": "1h",
+    "max_pending_commands": 10
+  },
+  "threat_detection": {
+    "enabled": true,
+    "rules": [
+      {"pattern": "brute_force", "threshold": 5, "priority": "high"},
+      {"pattern": "port_scan", "threshold": 10, "priority": "medium"},
+      {"pattern": "dos_attack", "threshold": 100, "priority": "critical"},
+      {"pattern": "malicious_ip", "threshold": 1, "priority": "high"},
+      {"pattern": "suspicious_traffic", "threshold": 20, "priority": "low"}
+    ],
+    "suspicious_ports": [22, 23, 80, 443, 3389, 5432, 3306, 1433, 21, 25, 53, 135],
+    "geo_risk_countries": ["CN", "RU", "KP"],
+    "ml_risk_threshold": 0.8,
+    "anomaly_threshold": 0.7
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/dashboard.log",
+    "max_size": "10MB",
+    "backup_count": 5
+  },
+  "protobuf": {
+    "enabled": true,
+    "timeout": 1000,
+    "retry_attempts": 3
+  },
+  "websocket": {
+    "enabled": true,
+    "ping_interval": 30,
+    "ping_timeout": 10,
+    "max_connections": 100
+  }
+}
