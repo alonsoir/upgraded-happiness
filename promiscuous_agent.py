@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 # Messaging and serialization
 import zmq
-
+import ipaddress
 # Network and packet capture
 from scapy.all import *
 
@@ -441,6 +441,14 @@ class GeoIPEnricher:
         self.fallback_lat = fallback.get('latitude', 0.0)
         self.fallback_lon = fallback.get('longitude', 0.0)
 
+        # NUEVO: Mapeo de redes privadas
+        self.private_network_mapping = self.config.get('private_network_mapping', {
+            '192.168.0.0/16': {'lat': 38.872221, 'lon': -6.977015, 'city': 'Badajoz Local'},
+            '10.0.0.0/8': {'lat': 38.872221, 'lon': -6.977015, 'city': 'Badajoz Docker'},
+            '172.16.0.0/12': {'lat': 38.872221, 'lon': -6.977015, 'city': 'Badajoz VPN'},
+            '127.0.0.0/8': {'lat': 38.872221, 'lon': -6.977015, 'city': 'Badajoz Localhost'}
+        })
+
         self.reader = None
         self.enabled = False
         self.geo_cache = {}
@@ -459,9 +467,39 @@ class GeoIPEnricher:
             else:
                 logger.warning("⚠️  GeoIP no configurado")
 
+    def _is_private_ip(self, ip_address: str) -> bool:
+        """Verificar si una IP es privada"""
+        try:
+            ip = ipaddress.ip_address(ip_address)
+            return ip.is_private
+        except ValueError:
+            return False
+
+    def _get_private_network_coordinates(self, ip_address: str) -> Tuple[float, float, str]:
+        """Obtener coordenadas para IPs de redes privadas"""
+        try:
+            ip = ipaddress.ip_address(ip_address)
+
+            # Buscar en mapeo de redes privadas
+            for network_str, coords in self.private_network_mapping.items():
+                try:
+                    network = ipaddress.ip_network(network_str)
+                    if ip in network:
+                        logger.debug(f"🏠 IP privada {ip_address} mapeada a {coords['city']}")
+                        return coords['lat'], coords['lon'], f"private-{coords['city']}"
+                except ValueError:
+                    continue
+
+            # Fallback para IPs privadas no mapeadas
+            logger.debug(f"🏠 IP privada {ip_address} usando coordenadas por defecto")
+            return self.fallback_lat, self.fallback_lon, "private-default"
+
+        except ValueError:
+            return self.fallback_lat, self.fallback_lon, "invalid-ip"
+
     def get_geolocation(self, packet, ip_address: str) -> Tuple[float, float, str]:
         """
-        Obtener geolocalización híbrida: GPS en paquete + fallback GeoIP
+        Obtener geolocalización híbrida: GPS en paquete + fallback GeoIP + redes privadas
         Retorna: (latitude, longitude, source)
         """
 
@@ -483,8 +521,15 @@ class GeoIPEnricher:
                 self._cache_geolocation(ip_address, lat, lon, source)
                 return lat, lon, source
 
-        # Fallback a base de datos GeoIP
-        if self.enabled and ip_address not in ['127.0.0.1', '::1']:
+        # NUEVO: Verificar si es IP privada y mapearla
+        if self._is_private_ip(ip_address):
+            lat, lon, source = self._get_private_network_coordinates(ip_address)
+            # Guardar en caché
+            self._cache_geolocation(ip_address, lat, lon, source)
+            return lat, lon, source
+
+        # Fallback a base de datos GeoIP para IPs públicas
+        if self.enabled:
             try:
                 response = self.reader.city(ip_address)
 
@@ -494,6 +539,7 @@ class GeoIPEnricher:
 
                 # Guardar en caché
                 self._cache_geolocation(ip_address, lat, lon, source)
+                logger.debug(f"🌍 IP pública {ip_address} geolocalizada: {lat}, {lon}")
                 return lat, lon, source
 
             except geoip2.errors.AddressNotFoundError:
@@ -501,7 +547,7 @@ class GeoIPEnricher:
             except Exception as e:
                 logger.debug(f"🌍 Error en lookup GeoIP para {ip_address}: {e}")
 
-        # Fallback a coordenadas configuradas
+        # Fallback final a coordenadas configuradas
         return self.fallback_lat, self.fallback_lon, "fallback"
 
     def _cache_geolocation(self, ip_address: str, lat: float, lon: float, source: str):
