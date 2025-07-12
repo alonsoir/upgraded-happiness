@@ -6,8 +6,9 @@
     "auto_reload": false
   },
   "zmq": {
-    "input_port": 5560,
-    "output_port": 5561,
+    "events_input_port": 5561,
+    "commands_output_port": 5562,
+    "confirmations_input_port": 5563,
     "context_threads": 1,
     "high_water_mark": 1000,
     "timeout": 1000

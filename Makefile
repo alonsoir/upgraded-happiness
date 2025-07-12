@@ -68,6 +68,9 @@ ML_LOG = $(LOGS_DIR)/ml_detector.log
 DASHBOARD_LOG = $(LOGS_DIR)/dashboard.log
 FIREWALL_LOG = $(LOGS_DIR)/firewall_agent.log
 
+# Nuclear stop script
+NUCLEAR_STOP_SCRIPT = nuclear-stop.sh
+
 # =============================================================================
 # PHONY DECLARATIONS
 # =============================================================================
@@ -76,7 +79,7 @@ FIREWALL_LOG = $(LOGS_DIR)/firewall_agent.log
         status monitor logs \
         setup-perms verify \
         show-dashboard \
-        quick
+        quick check-geoip
 
 # =============================================================================
 # HELP
@@ -95,6 +98,7 @@ help:
 	@echo "  setup                 - Crear entorno virtual"
 	@echo "  install               - Instalar dependencias"
 	@echo "  setup-perms           - Configurar permisos (sudo)"
+	@echo "  check-geoip           - Verificar configuración GeoIP"
 	@echo "  clean                 - Limpiar todo"
 	@echo ""
 	@echo "$(YELLOW)🔄 OPERACIONES:$(NC)"
@@ -132,7 +136,7 @@ install: setup
 	@echo "$(BLUE)📦 Instalando dependencias...$(NC)"
 	@$(ACTIVATE) && $(PIP_VENV) install -r requirements.txt
 	@$(ACTIVATE) && $(PIP_VENV) install joblib scikit-learn xgboost lightgbm
-	@$(ACTIVATE) && $(PIP_VENV) install zmq psutil geoip2 protobuf
+	@$(ACTIVATE) && $(PIP_VENV) install zmq psutil geoip2 protobuf requests
 	@$(ACTIVATE) && $(PIP_VENV) install fastapi uvicorn websockets
 	@echo "$(GREEN)✅ Dependencias instaladas$(NC)"
 
@@ -143,6 +147,21 @@ setup-perms:
 	@sudo chmod 0440 /etc/sudoers.d/$(USER)-iptables
 	@echo "$(GREEN)✅ Permisos configurados$(NC)"
 	@sudo -n iptables -L >/dev/null && echo "$(GREEN)✅ Permisos funcionando$(NC)" || echo "$(RED)❌ Error en permisos$(NC)"
+
+check-geoip:
+	@echo "$(BLUE)🌍 Verificando configuración GeoIP...$(NC)"
+	@if [ -f "GeoLite2-City.mmdb" ]; then \
+		echo "  ✅ Base de datos GeoLite2 encontrada"; \
+		stat -c "%y" GeoLite2-City.mmdb | sed 's/^/  📅 Última modificación: /'; \
+	else \
+		echo "  ⚠️  Base de datos GeoLite2 NO encontrada"; \
+		echo "  💡 Se usará ip-api.com como fallback"; \
+		echo "  💡 Para descargar GeoLite2: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data"; \
+	fi
+	@echo "  🔗 Verificando conectividad con ip-api.com..."
+	@curl -s --connect-timeout 3 "http://ip-api.com/json/8.8.8.8" >/dev/null && \
+		echo "  ✅ ip-api.com accesible" || \
+		echo "  ❌ ip-api.com no accesible"
 
 clean:
 	@echo "$(YELLOW)🧹 Limpiando...$(NC)"
@@ -155,7 +174,7 @@ clean:
 # =============================================================================
 # SISTEMA PRINCIPAL
 # =============================================================================
-start: install verify stop
+start: install verify check-geoip stop
 	@echo "$(GREEN)🚀 Iniciando Upgraded Happiness...$(NC)"
 	@echo "$(CYAN)====================================$(NC)"
 	@echo ""
@@ -195,7 +214,7 @@ start: install verify stop
 	@echo "$(PURPLE)💡 Haz click en eventos de alto riesgo para bloquear IPs$(NC)"
 	@$(MAKE) status
 
-start-bg: install verify stop
+start-bg: install verify check-geoip stop
 	@echo "$(GREEN)🚀 Iniciando sistema (background)...$(NC)"
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
@@ -247,6 +266,15 @@ stop-nuclear:
 		./$(NUCLEAR_STOP_SCRIPT); \
 	else \
 		echo "$(YELLOW)⚠️ nuclear-stop.sh no encontrado, usando parada básica$(NC)"; \
+		pkill -f "python.*upgraded_happiness" 2>/dev/null || true; \
+		pkill -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
+		pkill -f "python.*$(GEOIP_ENRICHER)" 2>/dev/null || true; \
+		pkill -f "python.*$(ML_DETECTOR)" 2>/dev/null || true; \
+		pkill -f "python.*$(DASHBOARD)" 2>/dev/null || true; \
+		pkill -f "python.*$(FIREWALL_AGENT)" 2>/dev/null || true; \
+		sudo pkill -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
+		rm -f $(PIDS_DIR)/*.pid; \
+		echo "$(GREEN)✅ Parada nuclear completada$(NC)"; \
 	fi
 
 restart: stop

@@ -5,8 +5,8 @@
     "description": "Agente de firewall que escucha comandos del dashboard"
   },
   "network": {
-    "listen_port": 5561,
-    "response_port": 5560,
+    "commands_input_port": 5562,
+    "confirmations_output_port": 5563,
     "bind_address": "*",
     "zmq_context_threads": 1,
     "socket_timeout": 5000,
