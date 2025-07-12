@@ -1,8 +1,8 @@
 {
   "agent_info": {
     "name": "geoip_enricher",
-    "version": "1.0.0",
-    "description": "Servicio de enriquecimiento geográfico para eventos de red"
+    "version": "1.1.0",
+    "description": "Servicio de enriquecimiento geográfico para eventos de red con múltiples proveedores"
   },
   "network": {
     "input_port": 5559,
@@ -16,10 +16,109 @@
   },
   "geoip": {
     "enabled": true,
-    "database_path": "GeoLite2-City.mmdb",
-    "cache_size": 10000,
-    "cache_ttl_seconds": 3600,
-    "fallback_enabled": true,
+    "fallback_chain": [
+      {
+        "provider": "local_db",
+        "priority": 1,
+        "enabled": true,
+        "config": {
+          "database_path": "GeoLite2-City.mmdb",
+          "cache_size": 10000,
+          "cache_ttl_seconds": 3600
+        }
+      },
+      {
+        "provider": "ip_api",
+        "priority": 2,
+        "enabled": true,
+        "config": {
+          "base_url": "http://ip-api.com/json",
+          "timeout_seconds": 5.0,
+          "rate_limit": {
+            "requests_per_minute": 45,
+            "burst_limit": 15,
+            "note": "Sin API key: máximo 45 req/min. Con API key: hasta 1000 req/min"
+          },
+          "cache_size": 5000,
+          "cache_ttl_seconds": 1800,
+          "retry_attempts": 2,
+          "retry_delay_seconds": 1.0
+        }
+      },
+      {
+        "provider": "ipinfo",
+        "priority": 3,
+        "enabled": false,
+        "config": {
+          "base_url": "https://ipinfo.io",
+          "api_token": "YOUR_API_TOKEN_HERE",
+          "timeout_seconds": 5.0,
+          "rate_limit": {
+            "requests_per_minute": 1000,
+            "burst_limit": 100,
+            "note": "Token gratuito: 50k req/mes. Sin token: 1k req/día"
+          },
+          "cache_size": 5000,
+          "cache_ttl_seconds": 3600
+        }
+      },
+      {
+        "provider": "ipstack",
+        "priority": 4,
+        "enabled": false,
+        "config": {
+          "base_url": "http://api.ipstack.com",
+          "api_key": "YOUR_API_KEY_HERE",
+          "timeout_seconds": 5.0,
+          "rate_limit": {
+            "requests_per_minute": 1000,
+            "burst_limit": 100,
+            "note": "Plan gratuito: 10k req/mes. Requiere API key obligatoria"
+          },
+          "cache_size": 5000,
+          "cache_ttl_seconds": 3600
+        }
+      },
+      {
+        "provider": "ipgeolocation",
+        "priority": 5,
+        "enabled": false,
+        "config": {
+          "base_url": "https://api.ipgeolocation.io/ipgeo",
+          "api_key": "YOUR_API_KEY_HERE",
+          "timeout_seconds": 5.0,
+          "rate_limit": {
+            "requests_per_minute": 1000,
+            "burst_limit": 100,
+            "note": "Plan gratuito: 1k req/mes. Requiere API key"
+          },
+          "cache_size": 5000,
+          "cache_ttl_seconds": 3600
+        }
+      }
+    ],
+    "auto_update": {
+      "enabled": false,
+      "maxmind_license_key": "YOUR_MAXMIND_LICENSE_KEY",
+      "databases_to_update": ["GeoLite2-City"],
+      "database_directory": ".",
+      "backup_directory": "./backups",
+      "temp_directory": "./temp",
+      "update_frequency_days": 7,
+      "check_on_startup": true,
+      "force_update": false,
+      "periodic_updates": false,
+      "max_backups_to_keep": 5,
+      "download_timeout_seconds": 300,
+      "retry_attempts": 3,
+      "retry_delay_seconds": 5,
+      "notifications": {
+        "log_updates": true,
+        "log_level": "INFO",
+        "notify_on_success": true,
+        "notify_on_failure": true
+      }
+    },
     "private_network_mapping": {
       "192.168.0.0/16": {
         "lat": 38.872221,
@@ -49,13 +148,19 @@
         "country": "ES",
         "region": "Extremadura"
       }
+    },
+    "fallback_strategy": {
+      "max_failures_before_skip": 3,
+      "failure_reset_time_minutes": 10,
+      "circuit_breaker_enabled": true,
+      "partial_data_acceptance": true
     }
   },
   "processing": {
     "max_memory_mb": 512,
     "stats_interval_seconds": 60,
     "batch_processing": false,
-    "max_processing_time_seconds": 5.0,
+    "max_processing_time_seconds": 10.0,
     "parallel_processing": {
       "enabled": false,
       "max_workers": 2
@@ -71,7 +176,13 @@
     "enabled": true,
     "port": 9090,
     "endpoint": "/metrics",
-    "collection_interval_seconds": 15
+    "collection_interval_seconds": 15,
+    "provider_metrics": {
+      "enabled": true,
+      "track_response_times": true,
+      "track_success_rates": true,
+      "track_cache_hits": true
+    }
   },
   "logging": {
     "level": "INFO",
@@ -79,7 +190,12 @@
     "max_size_mb": 10,
     "backup_count": 5,
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "console_output": true
+    "console_output": true,
+    "provider_logging": {
+      "log_fallbacks": true,
+      "log_cache_hits": false,
+      "log_api_errors": true
+    }
   },
   "protobuf": {
     "enabled": true,
