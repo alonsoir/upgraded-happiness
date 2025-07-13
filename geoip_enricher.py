@@ -2,6 +2,7 @@
 """
 GeoIP Enricher con sistema de fallback multi-proveedor
 Enriquece eventos de red con información geográfica usando múltiples fuentes
+VERSIÓN SOLO PROTOBUF - SIN FALLBACK JSON
 """
 
 import zmq
@@ -33,6 +34,8 @@ except ImportError:
     GEOIP2_AVAILABLE = False
 
 try:
+    # Agregar path de protobuf si es necesario
+    sys.path.insert(0, 'src/protocols/protobuf')
     import network_event_extended_fixed_pb2
 
     PROTOBUF_AVAILABLE = True
@@ -826,17 +829,22 @@ class GeoIPFallbackProvider:
 
 
 class GeoIPEnricher:
-    """Enriquecedor GeoIP principal"""
+    """Enriquecedor GeoIP principal - SOLO PROTOBUF"""
 
     def __init__(self, config_file: str):
         self.config_file = config_file
         self.running = False
         self.config = self._load_config()
 
-        # Setup logging
+        # Setup logging PRIMERO
         self._setup_logging()
 
-        # Auto-updater para GeoLite2 (antes de crear el provider)
+        # 🔍 VALIDACIÓN PROTOBUF CRÍTICA AL INICIO
+        if not self._validate_protobuf_environment():
+            self.logger.error("❌ ENTORNO PROTOBUF INVÁLIDO - DETENIENDO")
+            sys.exit(1)
+
+        # Auto-updater para GeoLite2 (después de logging)
         self.updater = None
         if self.config.get('geoip', {}).get('auto_update', {}).get('enabled', False):
             self.logger.info("🔄 Iniciando sistema de auto-actualización GeoLite2...")
@@ -858,6 +866,7 @@ class GeoIPEnricher:
         self.stats = {
             'events_processed': 0,
             'events_enriched': 0,
+            'protobuf_errors': 0,
             'start_time': time.time(),
             'last_event_time': None
         }
@@ -866,6 +875,44 @@ class GeoIPEnricher:
         self.stats_thread = None
 
         self.logger.info(f"🌍 GeoIP Enricher iniciado (v{self.config['agent_info']['version']})")
+
+    def _validate_protobuf_environment(self):
+        """Valida que el entorno protobuf esté correcto"""
+        self.logger.info("🔍 Validando entorno protobuf...")
+
+        if not PROTOBUF_AVAILABLE:
+            self.logger.error("❌ Módulo protobuf NO disponible")
+            self.logger.error("💡 Instalar con: pip install protobuf")
+            return False
+
+        try:
+            # Verificar versión protobuf
+            import google.protobuf
+            pb_version = google.protobuf.__version__
+            self.logger.info(f"📦 Versión protobuf: {pb_version}")
+
+            # Verificar que network_event_extended_fixed_pb2 se puede importar
+            import network_event_extended_fixed_pb2
+            self.logger.info("✅ network_event_extended_fixed_pb2 importado correctamente")
+
+            # Crear evento de prueba
+            test_event = network_event_extended_fixed_pb2.NetworkEvent()
+            test_event.event_id = "test_validation"
+            test_event.timestamp = int(time.time())
+
+            # Serializar y deserializar
+            data = test_event.SerializeToString()
+            parsed_event = network_event_extended_fixed_pb2.NetworkEvent()
+            parsed_event.ParseFromString(data)
+
+            self.logger.info(f"✅ Test protobuf OK: {len(data)} bytes")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error validando protobuf: {e}")
+            import traceback
+            self.logger.error(f"❌ Stack trace:\n{traceback.format_exc()}")
+            return False
 
     def _load_config(self) -> Dict[str, Any]:
         """Carga la configuración desde archivo JSON"""
@@ -922,22 +969,51 @@ class GeoIPEnricher:
         self.output_socket.setsockopt(zmq.SNDHWM, hwm)
 
     def _parse_event(self, data: bytes) -> Optional[Dict[str, Any]]:
-        """Parsea un evento desde bytes"""
-        try:
-            # Intentar protobuf primero
-            if PROTOBUF_AVAILABLE and self.config.get('protobuf', {}).get('enabled', True):
-                try:
-                    event = network_event_extended_fixed_pb2.NetworkEvent()
-                    event.ParseFromString(data)
-                    return self._protobuf_to_dict(event)
-                except:
-                    pass
+        """Parsea un evento desde bytes - SOLO PROTOBUF"""
 
-            # Fallback a JSON
-            return json.loads(data.decode('utf-8'))
+        # ✅ Verificación inicial
+        if not PROTOBUF_AVAILABLE:
+            self.logger.error("❌ PROTOBUF NO DISPONIBLE - GeoIP no puede funcionar")
+            return None
+
+        if not self.config.get('protobuf', {}).get('enabled', True):
+            self.logger.error("❌ PROTOBUF DESACTIVADO EN CONFIG - Pipeline requiere protobuf")
+            return None
+
+        # 🔍 Debug detallado
+        self.logger.debug(f"📦 Datos recibidos: {len(data)} bytes")
+        if len(data) > 0:
+            self.logger.debug(f"📦 Primeros 20 bytes: {data[:20].hex()}")
+        else:
+            self.logger.error("❌ Datos vacíos recibidos")
+            return None
+
+        try:
+            # 🚨 SOLO PROTOBUF - SIN FALLBACK
+            event = network_event_extended_fixed_pb2.NetworkEvent()
+            event.ParseFromString(data)
+
+            self.logger.debug(f"✅ Protobuf parseado correctamente: event_id={getattr(event, 'event_id', 'N/A')}")
+            return self._protobuf_to_dict(event)
 
         except Exception as e:
-            self.logger.error(f"Error parseando evento: {e}")
+            # 🔍 ERROR DETALLADO
+            self.logger.error(f"❌ ERROR PARSING PROTOBUF: {type(e).__name__}: {e}")
+            self.logger.error(f"❌ Datos problemáticos: {len(data)} bytes")
+            self.logger.error(f"❌ Hex dump (primeros 50 bytes): {data[:50].hex()}")
+
+            # Verificar si los datos parecen ser otra cosa
+            try:
+                text = data.decode('utf-8', errors='ignore')[:100]
+                if text.isprintable():
+                    self.logger.error(f"❌ Los datos parecen ser texto: '{text}...'")
+            except:
+                pass
+
+            # Información adicional de debug
+            import traceback
+            self.logger.error(f"❌ Stack trace completo:\n{traceback.format_exc()}")
+
             return None
 
     def _protobuf_to_dict(self, event) -> Dict[str, Any]:
@@ -1022,13 +1098,13 @@ class GeoIPEnricher:
 
         # Campos básicos del evento original
         if 'event_id' in event_dict:
-            event.event_id = event_dict['event_id']
+            event.event_id = str(event_dict['event_id'])
         if 'timestamp' in event_dict:
             event.timestamp = int(event_dict['timestamp'])
         if 'src_ip' in event_dict:
-            event.source_ip = event_dict['src_ip']  # Mapeo: src_ip -> source_ip
+            event.source_ip = str(event_dict['src_ip'])  # Mapeo: src_ip -> source_ip
         if 'dst_ip' in event_dict:
-            event.target_ip = event_dict['dst_ip']  # Mapeo: dst_ip -> target_ip
+            event.target_ip = str(event_dict['dst_ip'])  # Mapeo: dst_ip -> target_ip
         if 'packet_size' in event_dict:
             event.packet_size = int(event_dict['packet_size'])
         if 'dst_port' in event_dict:
@@ -1036,23 +1112,23 @@ class GeoIPEnricher:
         if 'src_port' in event_dict:
             event.src_port = int(event_dict['src_port'])
         if 'agent_id' in event_dict:
-            event.agent_id = event_dict['agent_id']
+            event.agent_id = str(event_dict['agent_id'])
         if 'event_type' in event_dict:
-            event.event_type = event_dict['event_type']
+            event.event_type = str(event_dict['event_type'])
         if 'description' in event_dict:
-            event.description = event_dict['description']
+            event.description = str(event_dict['description'])
 
         # Campos de sistema (si existen)
         if 'so_identifier' in event_dict:
-            event.so_identifier = event_dict['so_identifier']
+            event.so_identifier = str(event_dict['so_identifier'])
         if 'node_hostname' in event_dict:
-            event.node_hostname = event_dict['node_hostname']
+            event.node_hostname = str(event_dict['node_hostname'])
         if 'os_version' in event_dict:
-            event.os_version = event_dict['os_version']
+            event.os_version = str(event_dict['os_version'])
         if 'firewall_status' in event_dict:
-            event.firewall_status = event_dict['firewall_status']
+            event.firewall_status = str(event_dict['firewall_status'])
         if 'agent_version' in event_dict:
-            event.agent_version = event_dict['agent_version']
+            event.agent_version = str(event_dict['agent_version'])
         if 'is_initial_handshake' in event_dict:
             event.is_initial_handshake = bool(event_dict['is_initial_handshake'])
 
@@ -1076,26 +1152,31 @@ class GeoIPEnricher:
             event.longitude = float(dst_geo['lon'])
         # Preservar coordenadas existentes si no hay datos geo nuevos
         elif 'latitude' in event_dict and 'longitude' in event_dict:
-            event.latitude = float(event_dict['latitude'])
-            event.longitude = float(event_dict['longitude'])
+            if event_dict['latitude'] is not None and event_dict['longitude'] is not None:
+                event.latitude = float(event_dict['latitude'])
+                event.longitude = float(event_dict['longitude'])
 
         return event
-        """Envía un evento enriquecido"""
-        try:
-            # Intentar protobuf primero
-            if PROTOBUF_AVAILABLE and self.config.get('protobuf', {}).get('enabled', True):
-                try:
-                    # Aquí iría la conversión a protobuf si tuviéramos el schema extendido
-                    pass
-                except:
-                    pass
 
-            # Enviar como JSON
-            data = json.dumps(event, ensure_ascii=False).encode('utf-8')
+    def _send_event(self, event: Dict[str, Any]):
+        """Envía un evento enriquecido - SOLO PROTOBUF"""
+        try:
+            # ✅ SOLO PROTOBUF - Sin fallback JSON
+            if not PROTOBUF_AVAILABLE:
+                self.logger.error("❌ No se puede enviar - PROTOBUF no disponible")
+                return
+
+            # Convertir a protobuf
+            protobuf_event = self._dict_to_protobuf(event)
+            data = protobuf_event.SerializeToString()
+
+            self.logger.debug(f"📤 Enviando evento protobuf: {len(data)} bytes")
             self.output_socket.send(data, zmq.NOBLOCK)
 
         except Exception as e:
-            self.logger.error(f"Error enviando evento: {e}")
+            self.logger.error(f"❌ Error enviando evento protobuf: {e}")
+            import traceback
+            self.logger.error(f"❌ Stack trace:\n{traceback.format_exc()}")
 
     def _stats_worker(self):
         """Worker thread para estadísticas periódicas"""
@@ -1114,9 +1195,13 @@ class GeoIPEnricher:
         uptime = time.time() - self.stats['start_time']
         events_per_sec = self.stats['events_processed'] / max(uptime, 1)
         enrichment_rate = (self.stats['events_enriched'] / max(self.stats['events_processed'], 1)) * 100
+        error_rate = (self.stats['protobuf_errors'] / max(self.stats['events_processed'], 1)) * 100
 
         self.logger.info(f"📊 Stats: {self.stats['events_processed']} eventos, "
                          f"{events_per_sec:.2f} evt/s, {enrichment_rate:.1f}% enriquecidos")
+
+        if self.stats['protobuf_errors'] > 0:
+            self.logger.warning(f"🚨 Errores protobuf: {self.stats['protobuf_errors']} ({error_rate:.1f}%)")
 
         # Estadísticas de proveedores GeoIP
         provider_stats = self.geoip_provider.get_stats()
@@ -1148,6 +1233,7 @@ class GeoIPEnricher:
                     # Parsear evento
                     event = self._parse_event(data)
                     if not event:
+                        self.stats['protobuf_errors'] += 1
                         continue
 
                     # Enriquecer evento

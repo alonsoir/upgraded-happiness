@@ -4,6 +4,7 @@ Lightweight ML Detector para Upgraded-Happiness (LIMPIO)
 REFACTORIZADO: Lee TODA la configuración desde JSON
 RESPONSABILIDAD ÚNICA: Análisis ML + scoring de eventos
 ELIMINADO: GeoIP logic (ahora en geoip_enricher.py)
+CORREGIDO: ZMQ pattern PULL/PUSH para pipeline secuencial
 """
 
 import zmq
@@ -14,6 +15,7 @@ import numpy as np
 import json
 import os
 import sys
+import math
 from collections import deque, defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -449,27 +451,27 @@ class LightweightMLDetector:
             logger.warning(f"⚠️ No se pudo abrir archivo de predicciones: {e}")
 
     def start(self):
-        """Inicia el detector ML usando configuración JSON"""
+        """Inicia el detector ML usando configuración JSON - ZMQ PULL/PUSH CORREGIDO"""
         try:
-            # Configurar sockets usando configuración
-            self.input_socket = self.context.socket(zmq.SUB)
+            # ✅ CORREGIDO: Configurar sockets con patrón PULL/PUSH para pipeline
+            self.input_socket = self.context.socket(zmq.PULL)  # ← CAMBIO: SUB → PULL
             input_addr = f"tcp://localhost:{self.input_port}"
             self.input_socket.connect(input_addr)
-            self.input_socket.setsockopt(zmq.SUBSCRIBE, b"")
+            # ❌ ELIMINADO: self.input_socket.setsockopt(zmq.SUBSCRIBE, b"")  # No necesario para PULL
             self.input_socket.setsockopt(zmq.RCVTIMEO, 3000)
             self.input_socket.setsockopt(zmq.RCVHWM, self.high_water_mark)
 
-            self.output_socket = self.context.socket(zmq.PUB)
+            self.output_socket = self.context.socket(zmq.PUSH)  # ← CAMBIO: PUB → PUSH
             output_addr = f"tcp://*:{self.output_port}"
             self.output_socket.bind(output_addr)
             self.output_socket.setsockopt(zmq.SNDHWM, self.high_water_mark)
 
             self.running = True
 
-            print(f"\n🤖 Lightweight ML Detector Started (LIMPIO)")
+            print(f"\n🤖 Lightweight ML Detector Started (LIMPIO) - ZMQ PULL/PUSH + TIMEOUT CORREGIDO")
             print(f"📄 Config: {self.config_file or 'default'}")
-            print(f"📡 Input: {input_addr} (desde geoip_enricher)")
-            print(f"📤 Output: {output_addr} (hacia dashboard)")
+            print(f"📡 Input: {input_addr} (desde geoip_enricher) - PULL socket")
+            print(f"📤 Output: {output_addr} (hacia dashboard) - PUSH socket")
             print(f"📦 Protobuf: {'✅ Available' if PROTOBUF_AVAILABLE else '❌ Not available'}")
             print(f"🧠 ML: {'✅ Available' if ML_AVAILABLE else '❌ Heuristics only'}")
             print(f"🧹 GeoIP: ❌ ELIMINADO (responsabilidad del geoip_enricher)")
@@ -478,6 +480,10 @@ class LightweightMLDetector:
             print(f"📊 Buffer size: {self.buffer_size}")
             print(f"⚡ Batch size: {self.batch_size}")
             print(f"🔔 Alerts: {'✅ Enabled' if self.enable_alerts else '❌ Disabled'}")
+            print(f"🔧 ZMQ Pattern: PULL/PUSH (pipeline corregido)")
+            print(f"⏱️ Recv Timeout: 3000ms (bug NOBLOCK corregido)")
+            print(f"🔍 Debug ML Values: ✅ Enabled (logs NaN/inf detection)")
+            print(f"🧹 Value Sanitization: ✅ Enabled (clamp 0-1, clean NaN/inf)")
             print("=" * 70)
 
             # Thread principal de procesamiento
@@ -508,22 +514,25 @@ class LightweightMLDetector:
             self.cleanup()
 
     def _processing_loop(self):
-        """Loop principal de procesamiento (SOLO ML)"""
+        """Loop principal de procesamiento (SOLO ML) - TIMEOUT CORREGIDO"""
         logger.info("🔄 Iniciando loop de procesamiento ML...")
 
         while self.running:
             try:
-                # Recibir evento con timeout configurado
-                message = self.input_socket.recv(zmq.NOBLOCK)
+                # ✅ CORRECCIÓN: Usar timeout en lugar de NOBLOCK
+                message = self.input_socket.recv()  # ← QUITADO zmq.NOBLOCK
                 self.stats['events_processed'] += 1
 
                 # Procesar evento (SOLO ML)
                 enriched_event = self._process_event(message)
 
-                if enriched_event:
+                if enriched_event is not None:  # ← CORREGIDO: usar 'is not None' en lugar de verificación truthy
                     # Enviar evento enriquecido
                     self.output_socket.send(enriched_event)
                     self.stats['events_enriched'] += 1
+                    logger.debug(f"✅ Evento enviado al dashboard: {len(enriched_event)} bytes")
+                else:
+                    logger.warning(f"⚠️ Evento no procesado/enviado - _process_event devolvió None")
 
             except zmq.Again:
                 continue  # Timeout - continuar
@@ -590,6 +599,20 @@ class LightweightMLDetector:
             # Predecir anomalía y riesgo
             anomaly_score, risk_score = self.ml_model.predict_anomaly(features)
 
+            # 🔍 DEBUG: Verificar valores ML antes de asignar
+            logger.debug(f"🔍 Valores ML RAW: anomaly={anomaly_score} (type={type(anomaly_score)})")
+            logger.debug(f"🔍 Valores ML RAW: risk={risk_score} (type={type(risk_score)})")
+            logger.debug(
+                f"🔍 Validez anomaly: nan={math.isnan(anomaly_score) if isinstance(anomaly_score, (int, float)) else 'N/A'}, inf={math.isinf(anomaly_score) if isinstance(anomaly_score, (int, float)) else 'N/A'}")
+            logger.debug(
+                f"🔍 Validez risk: nan={math.isnan(risk_score) if isinstance(risk_score, (int, float)) else 'N/A'}, inf={math.isinf(risk_score) if isinstance(risk_score, (int, float)) else 'N/A'}")
+
+            # Sanitizar valores ML
+            clean_anomaly_score = self._sanitize_float(anomaly_score)
+            clean_risk_score = self._sanitize_float(risk_score)
+
+            logger.debug(f"🔍 Valores ML CLEAN: anomaly={clean_anomaly_score}, risk={clean_risk_score}")
+
             # Actualizar estadísticas según configuración
             if ML_AVAILABLE and self.ml_model.is_trained:
                 self.stats['model_predictions'] += 1
@@ -597,10 +620,10 @@ class LightweightMLDetector:
                 self.stats['heuristic_predictions'] += 1
 
             # Estadísticas según umbrales de configuración
-            if anomaly_score > self.anomaly_threshold:
+            if clean_anomaly_score > self.anomaly_threshold:
                 self.stats['anomalies_detected'] += 1
 
-            if risk_score > self.high_risk_threshold:
+            if clean_risk_score > self.high_risk_threshold:
                 self.stats['high_risk_events'] += 1
 
             # Crear evento enriquecido PRESERVANDO coordenadas del geoip_enricher
@@ -609,13 +632,18 @@ class LightweightMLDetector:
             # Copiar TODOS los campos originales (incluyendo coordenadas)
             enriched_event.CopyFrom(event)
 
-            # SOLO AÑADIR enriquecimiento ML
-            enriched_event.anomaly_score = anomaly_score
-            enriched_event.risk_score = risk_score
+            logger.debug(f"🔍 Evento copiado: event_id={enriched_event.event_id}")
+
+            # SOLO AÑADIR enriquecimiento ML con valores sanitizados
+            enriched_event.anomaly_score = clean_anomaly_score
+            enriched_event.risk_score = clean_risk_score
+
+            logger.debug(
+                f"🔍 Valores ML asignados al protobuf: A={enriched_event.anomaly_score}, R={enriched_event.risk_score}")
 
             # Enriquecer descripción con info ML
-            if anomaly_score > 0.5 or risk_score > 0.5:
-                ml_info = f"ML: A:{anomaly_score:.2f} R:{risk_score:.2f}"
+            if clean_anomaly_score > 0.5 or clean_risk_score > 0.5:
+                ml_info = f"ML: A:{clean_anomaly_score:.2f} R:{clean_risk_score:.2f}"
                 if event.description:
                     enriched_event.description = f"{ml_info} | {event.description}"
                 else:
@@ -623,12 +651,25 @@ class LightweightMLDetector:
 
             # Guardar predicción si está configurado
             if self.persistence_config.get('save_predictions', False):
-                self._save_prediction(event_dict, anomaly_score, risk_score)
+                self._save_prediction(event_dict, clean_anomaly_score, clean_risk_score)
+
+            # 🔍 DEBUG: Verificar serialización
+            try:
+                serialized_data = enriched_event.SerializeToString()
+                logger.debug(f"🔍 Serialización: {len(serialized_data)} bytes")
+                if len(serialized_data) == 0:
+                    logger.error(f"❌ SERIALIZACIÓN VACÍA - evento: {enriched_event}")
+                    return None
+                else:
+                    logger.debug(f"✅ Serialización exitosa: {len(serialized_data)} bytes")
+            except Exception as e:
+                logger.error(f"❌ Error en serialización: {e}")
+                return None
 
             logger.debug("📊 Evento ML procesado: %s A:%.2f R:%.2f",
-                         event.event_id, anomaly_score, risk_score)
+                         event.event_id, clean_anomaly_score, clean_risk_score)
 
-            return enriched_event.SerializeToString()
+            return serialized_data
 
         except Exception as e:
             logger.error("Error procesando evento: %s", e)
@@ -645,8 +686,8 @@ class LightweightMLDetector:
                 'timestamp': time.time(),
                 'event_id': event_dict.get('event_id'),
                 'source_ip': event_dict.get('source_ip'),
-                'anomaly_score': anomaly_score,
-                'risk_score': risk_score,
+                'anomaly_score': float(anomaly_score),  # Asegurar tipo float
+                'risk_score': float(risk_score),  # Asegurar tipo float
                 'features': {
                     'packet_size': event_dict.get('packet_size'),
                     'dest_port': event_dict.get('dest_port'),
@@ -721,6 +762,9 @@ class LightweightMLDetector:
         print(f"❌ Processing Errors: {self.stats['processing_errors']}")
         print(f"📄 Config: {self.config_file or 'default'}")
         print(f"🧹 GeoIP: ❌ ELIMINADO - solo ML")
+        print(f"🔧 ZMQ Pattern: PULL/PUSH (corregido)")
+        print(f"⏱️ Recv Timeout: 3000ms (bug NOBLOCK corregido)")
+        print(f"🔍 Debug ML Values: ✅ (NaN/inf detection)")
         print("-" * 50)
 
     def get_statistics(self) -> Dict:
@@ -771,6 +815,27 @@ class LightweightMLDetector:
         if self.context:
             self.context.term()
 
+    def _sanitize_float(self, value) -> float:
+        """Sanitiza valores float para protobuf (elimina NaN, inf, clamp a 0-1)"""
+        try:
+            if value is None:
+                return 0.0
+
+            # Convertir a float nativo de Python
+            float_val = float(value)
+
+            # Verificar NaN e infinity
+            if math.isnan(float_val) or math.isinf(float_val):
+                logger.warning(f"⚠️ Valor ML problemático detectado: {value} (type={type(value)})")
+                return 0.0
+
+            # Clamp a rango válido 0-1
+            return max(0.0, min(1.0, float_val))
+
+        except (TypeError, ValueError, OverflowError) as e:
+            logger.error(f"❌ Error convirtiendo valor ML: {value} -> {e}")
+            return 0.0
+
 
 def main():
     """Función principal con configuración JSON completa"""
@@ -795,6 +860,9 @@ def main():
             print(f"🎯 Anomaly threshold: {stats['configuration']['anomaly_threshold']}")
             print(f"⚠️ High risk threshold: {stats['configuration']['high_risk_threshold']}")
             print(f"🧹 GeoIP: ❌ ELIMINADO - responsabilidad del geoip_enricher.py")
+            print(f"🔧 ZMQ Pattern: PULL/PUSH (corregido)")
+            print(f"⏱️ Recv Timeout: 3000ms (bug NOBLOCK corregido)")
+            print(f"🔍 Debug ML Values: ✅ (NaN/inf detection)")
             return 0
         except Exception as e:
             print(f"❌ Error en configuración: {e}")
@@ -816,6 +884,9 @@ def main():
         print(f"   📊 Buffer size: {stats['configuration']['buffer_size']}")
         print(f"   🧠 ML enabled: {'✅' if stats['configuration']['ml_enabled'] else '❌'}")
         print(f"   🧹 GeoIP: ❌ ELIMINADO")
+        print(f"   🔧 ZMQ Pattern: PULL/PUSH (corregido)")
+        print(f"   ⏱️ Recv Timeout: 3000ms (bug NOBLOCK corregido)")
+        print(f"   🔍 Debug ML Values: ✅ (NaN/inf detection)")
 
         detector.start()
 

@@ -45,7 +45,7 @@
     "max_processing_time": 5.0
   },
   "logging": {
-    "level": "INFO",
+    "level": "DEBUG",
     "file": "logs/ml_detector.log",
     "max_size": "10MB",
     "backup_count": 5,
