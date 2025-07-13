@@ -4,6 +4,7 @@ Enhanced Promiscuous Agent para Upgraded-Happiness (LIMPIO)
 REFACTORIZADO: Lee TODA la configuración desde JSON
 RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ
 ELIMINADO: GPS detection + geolocalización (ahora en geoip_enricher.py)
+CORREGIDO: PUB → PUSH socket para compatibilidad con pipeline PUSH/PULL
 """
 
 import json
@@ -221,6 +222,7 @@ class EnhancedPromiscuousAgent:
     Agente promiscuo configurado completamente desde JSON
     RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ
     SIN GeoIP/GPS - esa responsabilidad es del geoip_enricher.py
+    CORREGIDO: Usa PUSH socket para compatibilidad con pipeline PUSH/PULL
     """
 
     def __init__(self, config_file: Optional[str] = None):
@@ -443,7 +445,8 @@ class EnhancedPromiscuousAgent:
         try:
             zmq_config = self.config['zmq']
             self.zmq_context = zmq.Context(zmq_config.get('context_threads', 1))
-            self.zmq_socket = self.zmq_context.socket(zmq.PUB)
+            # 🔧 CORREGIDO: PUB → PUSH para compatibilidad con pipeline PUSH/PULL
+            self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
 
             # Configurar opciones de socket
             self.zmq_socket.setsockopt(zmq.SNDHWM, zmq_config.get('high_water_mark', 1000))
@@ -455,7 +458,7 @@ class EnhancedPromiscuousAgent:
             # Dar tiempo para que ZMQ se establezca
             time.sleep(0.1)
 
-            logger.info(f"🔌 ZeroMQ Publisher vinculado a {zmq_address}")
+            logger.info(f"🔌 ZeroMQ PUSH socket vinculado a {zmq_address}")
 
         except Exception as e:
             logger.error(f"❌ Error inicializando ZeroMQ: {e}")
@@ -586,12 +589,12 @@ class EnhancedPromiscuousAgent:
         return event
 
     def send_event(self, event):
-        """Enviar evento via ZeroMQ usando protobuf configurado"""
+        """Enviar evento via ZeroMQ usando PUSH socket para garantizar delivery"""
         try:
-            # Enviar como protobuf binario
+            # Enviar como protobuf binario usando PUSH socket
             data = event.SerializeToString()
 
-            # Envío simple - sin topic para compatibilidad
+            # PUSH socket garantiza delivery a PULL socket
             self.zmq_socket.send(data, zmq.NOBLOCK)
             self.stats['packets_sent'] += 1
 
@@ -661,7 +664,7 @@ class EnhancedPromiscuousAgent:
             if not event:
                 return
 
-            # Enviar via ZeroMQ
+            # Enviar via ZeroMQ usando PUSH socket
             self.send_event(event)
 
             # Log periódico de estadísticas
@@ -712,6 +715,7 @@ class EnhancedPromiscuousAgent:
         print(f"📦 Protobuf: {'✅ Available' if EXTENDED_PROTOBUF else '❌ Not available'}")
         print(f"🧹 LIMPIO: Sin GeoIP/GPS - solo captura + envío")
         print(f"📡 Destino: geoip_enricher.py (puerto {self.zmq_port})")
+        print(f"🔧 CORREGIDO: PUSH socket para compatibilidad PUSH/PULL pipeline")
         print("=" * 70)
 
         try:
@@ -777,14 +781,15 @@ class EnhancedPromiscuousAgent:
                 'handshake_enabled': self.send_handshake,
                 'promiscuous_mode': self.promiscuous_mode,
                 'max_pps': self.max_packets_per_second,
-                'filtering_enabled': len(self.exclude_ports) > 0 or len(self.include_ports) > 0
+                'filtering_enabled': len(self.exclude_ports) > 0 or len(self.include_ports) > 0,
+                'socket_type': 'PUSH'  # Información del tipo de socket
             }
         }
 
 
 def main():
     """Función principal con configuración JSON completa"""
-    parser = argparse.ArgumentParser(description='Enhanced Promiscuous Agent (LIMPIO - Sin GeoIP)')
+    parser = argparse.ArgumentParser(description='Enhanced Promiscuous Agent (LIMPIO - Sin GeoIP, PUSH socket)')
     parser.add_argument('config_file', nargs='?',
                         default='enhanced_agent_config.json',
                         help='Archivo de configuración JSON')
@@ -812,12 +817,14 @@ def main():
         agent = EnhancedPromiscuousAgent(config_file=args.config_file)
 
         if args.test_config:
-            print("✅ Configuración JSON válida para promiscuous agent (LIMPIO)")
+            print("✅ Configuración JSON válida para promiscuous agent (LIMPIO, PUSH)")
             stats = agent.get_statistics()
             print(f"📡 ZMQ Port: {stats['configuration']['zmq_port']}")
             print(f"🔍 Interface: {stats['configuration']['interface']}")
             print(f"🤝 Handshake: {'✅' if stats['configuration']['handshake_enabled'] else '❌'}")
+            print(f"🔌 Socket Type: {stats['configuration']['socket_type']}")
             print(f"🧹 GeoIP/GPS: ❌ Eliminado (responsabilidad del geoip_enricher.py)")
+            print(f"🔧 Pipeline: PUSH → PULL (Corregido)")
             return 0
 
         logger.info("🚀 Iniciando Enhanced Promiscuous Agent (LIMPIO)...")
@@ -845,7 +852,7 @@ def main():
         if agent:
             # Mostrar estadísticas finales
             stats = agent.get_statistics()
-            print(f"\n📊 Estadísticas Finales (LIMPIO):")
+            print(f"\n📊 Estadísticas Finales (LIMPIO, PUSH):")
             print(f"   ⏱️  Uptime: {stats['uptime_seconds']:.1f}s")
             print(f"   📦 Packets captured: {stats['packets_captured']}")
             print(f"   📤 Packets sent: {stats['packets_sent']}")
@@ -853,6 +860,7 @@ def main():
             print(f"   🤝 Handshakes sent: {stats['handshakes_sent']}")
             print(f"   ❌ Errors: {stats['errors']}")
             print(f"   📄 Config: {stats['config_file'] or 'default'}")
+            print(f"   🔌 Socket: {stats['configuration']['socket_type']}")
             print(f"   🧹 GeoIP/GPS: ❌ Eliminado - solo captura")
 
             agent.stop()
