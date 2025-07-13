@@ -27,12 +27,14 @@ import traceback
 try:
     import geoip2.database
     import geoip2.errors
+
     GEOIP2_AVAILABLE = True
 except ImportError:
     GEOIP2_AVAILABLE = False
 
 try:
-    import network_events_pb2
+    import network_event_extended_fixed_pb2
+
     PROTOBUF_AVAILABLE = True
 except ImportError:
     PROTOBUF_AVAILABLE = False
@@ -898,13 +900,13 @@ class GeoIPEnricher:
         """Configura los sockets ZMQ"""
         network_config = self.config['network']
 
-        # Socket de entrada (PULL)
+        # Socket de entrada (PULL) - CONECTAR al Promiscuous Agent
         self.input_socket = self.context.socket(zmq.PULL)
-        input_address = f"tcp://{network_config['bind_address']}:{network_config['input_port']}"
-        self.input_socket.bind(input_address)
-        self.logger.info(f"📥 Escuchando eventos en {input_address}")
+        input_address = f"tcp://localhost:{network_config['input_port']}"
+        self.input_socket.connect(input_address)
+        self.logger.info(f"📥 Conectando a eventos desde {input_address}")
 
-        # Socket de salida (PUSH)
+        # Socket de salida (PUSH) - SERVIR al ML Detector
         self.output_socket = self.context.socket(zmq.PUSH)
         output_address = f"tcp://{network_config['bind_address']}:{network_config['output_port']}"
         self.output_socket.bind(output_address)
@@ -925,7 +927,7 @@ class GeoIPEnricher:
             # Intentar protobuf primero
             if PROTOBUF_AVAILABLE and self.config.get('protobuf', {}).get('enabled', True):
                 try:
-                    event = network_events_pb2.NetworkEvent()
+                    event = network_event_extended_fixed_pb2.NetworkEvent()
                     event.ParseFromString(data)
                     return self._protobuf_to_dict(event)
                 except:
@@ -939,16 +941,28 @@ class GeoIPEnricher:
             return None
 
     def _protobuf_to_dict(self, event) -> Dict[str, Any]:
-        """Convierte evento protobuf a diccionario"""
+        """Convierte evento protobuf a diccionario según network_event_extended_fixed.proto"""
         return {
+            'event_id': event.event_id,
             'timestamp': event.timestamp,
-            'src_ip': event.src_ip,
-            'dst_ip': event.dst_ip,
-            'src_port': event.src_port,
-            'dst_port': event.dst_port,
-            'protocol': event.protocol,
+            'src_ip': event.source_ip,  # Mapeo: source_ip -> src_ip
+            'dst_ip': event.target_ip,  # Mapeo: target_ip -> dst_ip
             'packet_size': event.packet_size,
-            'event_type': event.event_type
+            'dst_port': event.dest_port,  # Mapeo: dest_port -> dst_port
+            'src_port': event.src_port,
+            'agent_id': event.agent_id,
+            'anomaly_score': event.anomaly_score,
+            'latitude': event.latitude,
+            'longitude': event.longitude,
+            'event_type': event.event_type,
+            'risk_score': event.risk_score,
+            'description': event.description,
+            'so_identifier': event.so_identifier,
+            'node_hostname': event.node_hostname,
+            'os_version': event.os_version,
+            'firewall_status': event.firewall_status,
+            'agent_version': event.agent_version,
+            'is_initial_handshake': event.is_initial_handshake
         }
 
     def _enrich_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -963,6 +977,12 @@ class GeoIPEnricher:
                 enriched['src_geo'] = src_geo
                 enriched['src_geoip_provider'] = src_geo.get('provider', 'unknown')
 
+                # 🌍 POBLAMOS LOS CAMPOS PRINCIPALES DEL PROTOBUF
+                # Priorizar IP origen para las coordenadas principales
+                if src_geo.get('lat') is not None and src_geo.get('lon') is not None:
+                    enriched['latitude'] = src_geo['lat']
+                    enriched['longitude'] = src_geo['lon']
+
         # Enriquecer IP destino
         dst_ip = event.get('dst_ip')
         if dst_ip:
@@ -971,13 +991,95 @@ class GeoIPEnricher:
                 enriched['dst_geo'] = dst_geo
                 enriched['dst_geoip_provider'] = dst_geo.get('provider', 'unknown')
 
+                # Si no hay coordenadas del origen, usar las del destino
+                if 'latitude' not in enriched and dst_geo.get('lat') is not None:
+                    if dst_geo.get('lon') is not None:
+                        enriched['latitude'] = dst_geo['lat']
+                        enriched['longitude'] = dst_geo['lon']
+
         # Marcar como enriquecido
         enriched['geoip_enriched'] = True
         enriched['geoip_enriched_at'] = time.time()
 
+        # Actualizar descripción si no existe
+        if 'description' not in enriched or not enriched['description']:
+            geo_info = []
+            if 'src_geo' in enriched:
+                src_location = f"{enriched['src_geo'].get('city', 'Unknown')}, {enriched['src_geo'].get('country', 'XX')}"
+                geo_info.append(f"Src: {src_location}")
+            if 'dst_geo' in enriched:
+                dst_location = f"{enriched['dst_geo'].get('city', 'Unknown')}, {enriched['dst_geo'].get('country', 'XX')}"
+                geo_info.append(f"Dst: {dst_location}")
+
+            if geo_info:
+                enriched['description'] = f"GeoIP: {' | '.join(geo_info)}"
+
         return enriched
 
-    def _send_event(self, event: Dict[str, Any]):
+    def _dict_to_protobuf(self, event_dict: Dict[str, Any]):
+        """Convierte diccionario enriquecido a protobuf según network_event_extended_fixed.proto"""
+        event = network_event_extended_fixed_pb2.NetworkEvent()
+
+        # Campos básicos del evento original
+        if 'event_id' in event_dict:
+            event.event_id = event_dict['event_id']
+        if 'timestamp' in event_dict:
+            event.timestamp = int(event_dict['timestamp'])
+        if 'src_ip' in event_dict:
+            event.source_ip = event_dict['src_ip']  # Mapeo: src_ip -> source_ip
+        if 'dst_ip' in event_dict:
+            event.target_ip = event_dict['dst_ip']  # Mapeo: dst_ip -> target_ip
+        if 'packet_size' in event_dict:
+            event.packet_size = int(event_dict['packet_size'])
+        if 'dst_port' in event_dict:
+            event.dest_port = int(event_dict['dst_port'])  # Mapeo: dst_port -> dest_port
+        if 'src_port' in event_dict:
+            event.src_port = int(event_dict['src_port'])
+        if 'agent_id' in event_dict:
+            event.agent_id = event_dict['agent_id']
+        if 'event_type' in event_dict:
+            event.event_type = event_dict['event_type']
+        if 'description' in event_dict:
+            event.description = event_dict['description']
+
+        # Campos de sistema (si existen)
+        if 'so_identifier' in event_dict:
+            event.so_identifier = event_dict['so_identifier']
+        if 'node_hostname' in event_dict:
+            event.node_hostname = event_dict['node_hostname']
+        if 'os_version' in event_dict:
+            event.os_version = event_dict['os_version']
+        if 'firewall_status' in event_dict:
+            event.firewall_status = event_dict['firewall_status']
+        if 'agent_version' in event_dict:
+            event.agent_version = event_dict['agent_version']
+        if 'is_initial_handshake' in event_dict:
+            event.is_initial_handshake = bool(event_dict['is_initial_handshake'])
+
+        # Campos ML (preservar si ya existen)
+        if 'anomaly_score' in event_dict:
+            event.anomaly_score = float(event_dict['anomaly_score'])
+        if 'risk_score' in event_dict:
+            event.risk_score = float(event_dict['risk_score'])
+
+        # 🌍 CAMPOS GEO - ENRIQUECIDOS POR ESTE COMPONENTE
+        # Priorizar datos de src_geo y dst_geo si existen
+        src_geo = event_dict.get('src_geo', {})
+        dst_geo = event_dict.get('dst_geo', {})
+
+        # Usar coordenadas del IP origen preferentemente
+        if src_geo.get('lat') is not None and src_geo.get('lon') is not None:
+            event.latitude = float(src_geo['lat'])
+            event.longitude = float(src_geo['lon'])
+        elif dst_geo.get('lat') is not None and dst_geo.get('lon') is not None:
+            event.latitude = float(dst_geo['lat'])
+            event.longitude = float(dst_geo['lon'])
+        # Preservar coordenadas existentes si no hay datos geo nuevos
+        elif 'latitude' in event_dict and 'longitude' in event_dict:
+            event.latitude = float(event_dict['latitude'])
+            event.longitude = float(event_dict['longitude'])
+
+        return event
         """Envía un evento enriquecido"""
         try:
             # Intentar protobuf primero
