@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+simple_firewall_agent.py
 Simple Firewall Agent para Upgraded-Happiness
 ACTUALIZADO: Arquitectura 3 puertos compatible con dashboard
 Puerto 5562: Comandos del dashboard → firewall

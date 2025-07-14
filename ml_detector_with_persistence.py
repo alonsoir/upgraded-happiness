@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+ml_detector_with_persistence.py
 🤖 Enhanced ML Detector con Sistema de Persistencia y ZeroMQ
 - Escucha eventos ZeroMQ 5559 (raw del Enhanced Promiscuous Agent)
 - Aplica 6 algoritmos ML en tiempo real
