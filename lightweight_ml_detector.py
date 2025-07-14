@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+lightweight_ml_detector.py
 Lightweight ML Detector para Upgraded-Happiness (LIMPIO)
 REFACTORIZADO: Lee TODA la configuración desde JSON
 RESPONSABILIDAD ÚNICA: Análisis ML + scoring de eventos
