@@ -61,7 +61,7 @@ def load_dashboard_config(config_file="dashboard_config.json"):
             "auto_reload": False
         },
         "zmq": {
-            "events_input_port": 5561,
+            "events_input_port": 5560,
             "commands_output_port": 5562,
             "confirmations_input_port": 5563,
             "context_threads": 1,
@@ -489,7 +489,7 @@ class FirewallConfirmationListener:
 
 
 class ZeroMQEventsListener:
-    """Listener ZMQ para eventos del ML (puerto 5561)"""
+    """Listener ZMQ para eventos del ML (puerto 5560)"""
 
     def __init__(self, dashboard_handler, config: Dict):
         self.dashboard_handler = dashboard_handler
@@ -1299,7 +1299,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 this.setupEventHandlers();
 
                 console.log('🛡️ Dashboard 3 Puertos inicializado');
-                console.log('📡 Puerto 5561: Eventos del ML');
+                console.log('📡 Puerto 5560: Eventos del ML');
                 console.log('🔥 Puerto 5562: Comandos al Firewall');
                 console.log('✅ Puerto 5563: Confirmaciones del Firewall');
             }}
@@ -1380,7 +1380,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     return;
                 }}
 
-                // Estado eventos (puerto 5561)
+                // Estado eventos (puerto 5560)
                 if (stats.total_events > 0) {{
                     eventsStatus.className = 'status-dot online';
                 }} else {{
@@ -1722,7 +1722,7 @@ def main():
     print(f"📄 Config: {args.config}")
     print(f"🎯 HTTP: {config['server']['host']}:{config['server']['port']}")
     zmq_config = config.get('zmq', {})
-    print(f"📡 Puerto 5561: Eventos del ML → Dashboard")
+    print(f"📡 Puerto 5560: Eventos del ML → Dashboard")
     print(f"🔥 Puerto 5562: Dashboard → Comandos Firewall")
     print(f"✅ Puerto 5563: Firewall → Confirmaciones Dashboard")
     print(f"🛡️ Firewall: {'✅ Enabled' if config['firewall']['enabled'] else '❌ Disabled'}")
@@ -1750,7 +1750,7 @@ def main():
 
         # Inicializar listeners ZMQ
         if ZMQ_AVAILABLE:
-            # Listener de eventos (puerto 5561)
+            # Listener de eventos (puerto 5560)
             events_listener = ZeroMQEventsListener(DashboardHandler, config)
             DashboardHandler.shared_data['events_listener'] = events_listener
             events_listener.start()
