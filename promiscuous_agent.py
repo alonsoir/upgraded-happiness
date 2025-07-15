@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Enhanced Promiscuous Agent para Upgraded-Happiness (LIMPIO)
-REFACTORIZADO: Lee TODA la configuración desde JSON
-RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ
-ELIMINADO: GPS detection + geolocalización (ahora en geoip_enricher.py)
-CORREGIDO: PUB → PUSH socket para compatibilidad con pipeline PUSH/PULL
+Enhanced Promiscuous Agent para Upgraded-Happiness (REFACTORIZADO DISTRIBUIDO)
+RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ distribuido
+NUEVA ARQUITECTURA: NetworkManager para distribución automática
+SOCKET PATTERNS: Explícitos en JSON (socket_type + connection_mode)
 """
 
 import json
@@ -50,6 +49,17 @@ except ImportError:
     except ImportError:
         EXTENDED_PROTOBUF = False
         logger.error("❌ Protobuf extendido no disponible")
+
+# Importar NetworkManager
+try:
+    from networkManagerPromiscuousAgent import DistributedNetworkManager
+
+    NETWORK_MANAGER_AVAILABLE = True
+    logger.info("✅ NetworkManager importado correctamente")
+except ImportError as e:
+    NETWORK_MANAGER_AVAILABLE = False
+    logger.warning(f"⚠️ NetworkManager no disponible: {e}")
+    logger.info("💡 Funcionará solo en modo local")
 
 
 class SimpleSystemDetector:
@@ -134,7 +144,7 @@ class SimpleSystemDetector:
                     'node_hostname': socket.gethostname(),
                     'os_version': f"{platform.system()} {platform.release()}",
                     'firewall_status': firewall_status,
-                    'agent_version': '1.0.0'
+                    'agent_version': '2.0.0'  # ← ACTUALIZADO
                 }
 
                 # Información adicional de hardware si está configurado
@@ -154,7 +164,7 @@ class SimpleSystemDetector:
                     'node_hostname': 'unknown',
                     'os_version': 'unknown',
                     'firewall_status': 'unknown',
-                    'agent_version': '1.0.0'
+                    'agent_version': '2.0.0'
                 }
 
         return self._node_info
@@ -219,10 +229,9 @@ class SimpleSystemDetector:
 
 class EnhancedPromiscuousAgent:
     """
-    Agente promiscuo configurado completamente desde JSON
-    RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ
-    SIN GeoIP/GPS - esa responsabilidad es del geoip_enricher.py
-    CORREGIDO: Usa PUSH socket para compatibilidad con pipeline PUSH/PULL
+    Agente promiscuo configurado completamente desde JSON con NetworkManager distribuido
+    RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ distribuido
+    NUEVA ARQUITECTURA: NetworkManager para load balancing automático
     """
 
     def __init__(self, config_file: Optional[str] = None):
@@ -237,8 +246,7 @@ class EnhancedPromiscuousAgent:
         self.agent_id = f"agent_{socket.gethostname()}_{int(time.time())}"
         self.hostname = socket.gethostname()
 
-        # Configuración de red desde JSON
-        self.zmq_port = self.config['zmq']['output_port']
+        # Configuración de captura desde JSON
         self.interface = self.config['capture']['interface']
         self.promiscuous_mode = self.config['capture']['promiscuous_mode']
         self.buffer_size = self.config['capture']['buffer_size']
@@ -263,10 +271,10 @@ class EnhancedPromiscuousAgent:
         self.max_memory_mb = self.performance_config.get('max_memory_mb', 512)
         self.stats_interval = self.performance_config.get('stats_interval', 60)
 
-        # Inicializar componentes
-        self.zmq_context = None
-        self.zmq_socket = None
+        # Estado interno
         self.running = False
+        self.zmq_context = None
+        self.network_manager = None
 
         # Sistema detector configurado desde JSON
         self.system_detector = SimpleSystemDetector(self.config.get('system_detection', {}))
@@ -278,6 +286,7 @@ class EnhancedPromiscuousAgent:
             'packets_filtered': 0,
             'handshakes_sent': 0,
             'errors': 0,
+            'network_errors': 0,
             'start_time': time.time(),
             'last_handshake': 0
         }
@@ -285,27 +294,29 @@ class EnhancedPromiscuousAgent:
         # Rate limiting
         self.packet_times = deque(maxlen=100)
 
-        # Inicializar servicios
-        self._init_zmq()
+        # NUEVA ARQUITECTURA: Inicializar NetworkManager distribuido
+        self._init_network()
 
         self.so_identifier = self.system_detector.get_so_identifier()
 
-        logger.info(f"🚀 Enhanced Promiscuous Agent inicializado (LIMPIO)")
+        logger.info(f"🚀 Enhanced Promiscuous Agent inicializado (REFACTORIZADO DISTRIBUIDO)")
         logger.info(f"Config file: {config_file or 'default config'}")
         logger.info(f"Agent ID: {self.agent_id}")
         logger.info(f"🖥️  SO detectado: {self.so_identifier}")
-        logger.info(f"📡 ZMQ output: localhost:{self.zmq_port}")
-        logger.info(f"🔍 Interface: {self.interface}")
-        logger.info(f"🤝 Handshake: {self.send_handshake}")
         logger.info(f"📦 Protobuf: {'✅' if EXTENDED_PROTOBUF else '❌'}")
+        logger.info(f"🌐 NetworkManager: {'✅' if NETWORK_MANAGER_AVAILABLE else '❌ (solo local)'}")
 
     def _load_config(self, config_file):
-        """Cargar configuración desde archivo JSON (SIN secciones GeoIP/GPS)"""
+        """Cargar configuración desde archivo JSON con soporte distribuido"""
         default_config = {
             "agent_info": {
                 "name": "enhanced_promiscuous_agent",
-                "version": "1.0.0",
-                "description": "Agente promiscuo para captura de paquetes (sin GeoIP)"
+                "version": "2.0.0",
+                "description": "Agente promiscuo distribuido para captura de paquetes",
+                "mode": "local",
+                "node_id": f"node_{socket.gethostname()}",
+                "region": "local",
+                "datacenter": "local"
             },
             "capture": {
                 "interface": "any",
@@ -314,11 +325,23 @@ class EnhancedPromiscuousAgent:
                 "timeout": 1,
                 "max_packets_per_second": 1000
             },
-            "zmq": {
-                "output_port": 5559,
-                "context_threads": 1,
-                "high_water_mark": 1000,
-                "linger": 0
+            "network": {
+                "mode": "local",
+                "socket_type": "PUSH",
+                "connection_mode": "bind",
+                "backward_compatibility": {
+                    "local_mode": {
+                        "enabled": True,
+                        "output_port": 5559,
+                        "bind_address": "*"
+                    }
+                },
+                "connection_management": {
+                    "context_threads": 1,
+                    "high_water_mark": 1000,
+                    "linger_ms": 1000,
+                    "send_timeout_ms": 5000
+                }
             },
             "filtering": {
                 "protocols": ["tcp", "udp", "icmp"],
@@ -347,7 +370,7 @@ class EnhancedPromiscuousAgent:
                 "file": "logs/promiscuous_agent.log",
                 "max_size": "10MB",
                 "backup_count": 5,
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                "format": "%(asctime)s - %(name)s - %(levelname)s - [%(node_id)s] - %(message)s",
                 "console_output": True
             },
             "protobuf": {
@@ -398,9 +421,13 @@ class EnhancedPromiscuousAgent:
             logger.removeHandler(handler)
 
         # Formatter desde configuración
-        formatter = logging.Formatter(
-            log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        )
+        formatter_string = log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        # Añadir node_id al contexto de logging
+        node_id = self.config.get('agent_info', {}).get('node_id', 'unknown')
+        formatter_string = formatter_string.replace('%(node_id)s', node_id)
+
+        formatter = logging.Formatter(formatter_string)
 
         # Console handler si está habilitado
         if log_config.get('console_output', True):
@@ -440,28 +467,51 @@ class EnhancedPromiscuousAgent:
         else:
             return int(size_str)
 
-    def _init_zmq(self):
-        """Inicializar conexión ZeroMQ usando configuración"""
+    def _init_network(self):
+        """NUEVA ARQUITECTURA: Inicializar NetworkManager distribuido"""
         try:
-            zmq_config = self.config['zmq']
-            self.zmq_context = zmq.Context(zmq_config.get('context_threads', 1))
-            # 🔧 CORREGIDO: PUB → PUSH para compatibilidad con pipeline PUSH/PULL
-            self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
+            # Configurar ZMQ context
+            network_config = self.config.get('network', {})
+            connection_config = network_config.get('connection_management', {})
 
-            # Configurar opciones de socket
-            self.zmq_socket.setsockopt(zmq.SNDHWM, zmq_config.get('high_water_mark', 1000))
-            self.zmq_socket.setsockopt(zmq.LINGER, zmq_config.get('linger', 0))
+            self.zmq_context = zmq.Context(connection_config.get('context_threads', 1))
 
-            zmq_address = f"tcp://*:{self.zmq_port}"
-            self.zmq_socket.bind(zmq_address)
-
-            # Dar tiempo para que ZMQ se establezca
-            time.sleep(0.1)
-
-            logger.info(f"🔌 ZeroMQ PUSH socket vinculado a {zmq_address}")
+            # Intentar usar NetworkManager distribuido
+            if NETWORK_MANAGER_AVAILABLE and network_config.get('mode') == 'distributed':
+                logger.info("🌐 Inicializando NetworkManager distribuido")
+                self.network_manager = DistributedNetworkManager(network_config, self.zmq_context)
+            else:
+                # Fallback a modo local
+                logger.info("🏠 Inicializando modo local (fallback)")
+                self._init_local_fallback(network_config)
 
         except Exception as e:
-            logger.error(f"❌ Error inicializando ZeroMQ: {e}")
+            logger.error(f"❌ Error inicializando network: {e}")
+            logger.info("🔄 Fallback a modo local")
+            self._init_local_fallback(self.config.get('network', {}))
+
+    def _init_local_fallback(self, network_config):
+        """Fallback a modo local si NetworkManager no está disponible"""
+        try:
+            # Usar configuración backward compatibility
+            legacy_config = network_config.get('backward_compatibility', {}).get('local_mode', {})
+            connection_config = network_config.get('connection_management', {})
+
+            port = legacy_config.get('output_port', 5559)
+            address = legacy_config.get('bind_address', '*')
+
+            # Crear socket tradicional
+            self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
+            self.zmq_socket.setsockopt(zmq.SNDHWM, connection_config.get('high_water_mark', 1000))
+            self.zmq_socket.setsockopt(zmq.LINGER, connection_config.get('linger_ms', 1000))
+
+            bind_address = f"tcp://{address}:{port}"
+            self.zmq_socket.bind(bind_address)
+
+            logger.info(f"🔌 Socket local PUSH BIND en {bind_address}")
+
+        except Exception as e:
+            logger.error(f"❌ Error en fallback local: {e}")
             raise
 
     def _should_filter_packet(self, packet) -> bool:
@@ -589,17 +639,31 @@ class EnhancedPromiscuousAgent:
         return event
 
     def send_event(self, event):
-        """Enviar evento via ZeroMQ usando PUSH socket para garantizar delivery"""
+        """NUEVA ARQUITECTURA: Enviar evento via NetworkManager o fallback local"""
         try:
-            # Enviar como protobuf binario usando PUSH socket
+            # Serializar evento
             data = event.SerializeToString()
 
-            # PUSH socket garantiza delivery a PULL socket
-            self.zmq_socket.send(data, zmq.NOBLOCK)
-            self.stats['packets_sent'] += 1
+            # Usar NetworkManager distribuido si está disponible
+            if self.network_manager:
+                success = self.network_manager.send_event(data)
+                if success:
+                    self.stats['packets_sent'] += 1
+                else:
+                    logger.warning("⚠️ NetworkManager falló - evento no enviado")
+                    self.stats['network_errors'] += 1
+
+            # Fallback a socket local
+            elif hasattr(self, 'zmq_socket'):
+                self.zmq_socket.send(data, zmq.NOBLOCK)
+                self.stats['packets_sent'] += 1
+            else:
+                logger.error("❌ No hay método de envío disponible")
+                self.stats['errors'] += 1
 
         except zmq.Again:
             logger.warning("⚠️ ZMQ buffer lleno - evento descartado")
+            self.stats['errors'] += 1
         except Exception as e:
             logger.error(f"❌ Error enviando evento: {e}")
             self.stats['errors'] += 1
@@ -664,7 +728,7 @@ class EnhancedPromiscuousAgent:
             if not event:
                 return
 
-            # Enviar via ZeroMQ usando PUSH socket
+            # Enviar via NetworkManager o fallback local
             self.send_event(event)
 
             # Log periódico de estadísticas
@@ -683,18 +747,25 @@ class EnhancedPromiscuousAgent:
         stats = self.stats
         filter_rate = (stats['packets_filtered'] / max(stats['packets_captured'] + stats['packets_filtered'], 1)) * 100
 
+        network_info = ""
+        if self.network_manager:
+            net_stats = self.network_manager.get_statistics()
+            network_info = f" | Net: {net_stats['mode']} ({net_stats['healthy_targets']}/{net_stats['total_targets']} targets)"
+
         logger.info(
             f"📊 Stats: {stats['packets_captured']} capturados, "
             f"{stats['packets_sent']} enviados, "
             f"{stats['packets_filtered']} filtrados ({filter_rate:.1f}%), "
             f"{stats['handshakes_sent']} handshakes, "
-            f"{stats['errors']} errores"
+            f"{stats['errors']} errores, "
+            f"{stats['network_errors']} net_errors{network_info}"
         )
 
     def start(self):
         """Iniciar captura de paquetes usando configuración completa"""
-        if not self.zmq_socket:
-            raise RuntimeError("ZeroMQ no inicializado")
+        # Verificar que tengamos método de envío
+        if not self.network_manager and not hasattr(self, 'zmq_socket'):
+            raise RuntimeError("No hay método de envío disponible (NetworkManager o socket local)")
 
         # Verificar permisos
         if os.geteuid() != 0:
@@ -704,18 +775,28 @@ class EnhancedPromiscuousAgent:
 
         self.running = True
 
-        print(f"\n🎯 Enhanced Promiscuous Agent Started (LIMPIO)")
+        # Información de modo
+        network_mode = self.config.get('network', {}).get('mode', 'local')
+        socket_info = ""
+
+        if self.network_manager:
+            net_stats = self.network_manager.get_statistics()
+            socket_info = f"{net_stats['socket_type']} {net_stats['connection_mode']} | {net_stats['total_targets']} targets"
+        else:
+            socket_info = "PUSH BIND (local fallback)"
+
+        print(f"\n🎯 Enhanced Promiscuous Agent Started (REFACTORIZADO)")
         print(f"📄 Config: {self.config_file or 'default'}")
-        print(f"🔌 ZMQ Output: localhost:{self.zmq_port}")
+        print(f"🌐 Network Mode: {network_mode}")
+        print(f"🔌 Socket Info: {socket_info}")
         print(f"📡 Interface: {self.interface}")
         print(f"🔒 Promiscuous: {'✅ Enabled' if self.promiscuous_mode else '❌ Disabled'}")
         print(f"🤝 Handshake: {'✅ Enabled' if self.send_handshake else '❌ Disabled'}")
         print(f"⚡ Performance: max {self.max_packets_per_second} pps, {self.max_memory_mb}MB")
         print(f"🎯 Filtering: {len(self.protocols)} protocols, exclude {len(self.exclude_ports)} ports")
         print(f"📦 Protobuf: {'✅ Available' if EXTENDED_PROTOBUF else '❌ Not available'}")
-        print(f"🧹 LIMPIO: Sin GeoIP/GPS - solo captura + envío")
-        print(f"📡 Destino: geoip_enricher.py (puerto {self.zmq_port})")
-        print(f"🔧 CORREGIDO: PUSH socket para compatibilidad PUSH/PULL pipeline")
+        print(f"🌐 NetworkManager: {'✅ Available' if NETWORK_MANAGER_AVAILABLE else '❌ Local only'}")
+        print(f"🧹 LIMPIO: Sin GeoIP/GPS - solo captura + envío distribuido")
         print("=" * 70)
 
         try:
@@ -732,7 +813,7 @@ class EnhancedPromiscuousAgent:
                 conf.bufsize = self.buffer_size
 
             logger.info(f"🎯 Iniciando captura en interfaz: {self.interface}")
-            logger.info(f"📡 Enviando eventos a puerto {self.zmq_port} (geoip_enricher.py)")
+            logger.info(f"📡 Modo de red: {network_mode}")
             logger.info(f"🧹 LIMPIO: Solo captura - SIN procesamiento GeoIP/GPS")
 
             # Captura en modo configurado
@@ -740,7 +821,7 @@ class EnhancedPromiscuousAgent:
 
         except PermissionError:
             logger.error("❌ Error: Se requieren privilegios de root para captura promiscua")
-            logger.info("💡 Ejecutar con: sudo python promiscuous_agent.py enhanced_agent_config.json")
+            logger.info("💡 Ejecutar con: sudo python promiscuous_agent.py config.json")
             raise
         except Exception as e:
             logger.error(f"❌ Error en captura: {e}")
@@ -751,9 +832,15 @@ class EnhancedPromiscuousAgent:
         logger.info("🛑 Deteniendo agente promiscuo...")
         self.running = False
 
-        # Cerrar conexiones
-        if self.zmq_socket:
+        # Limpiar NetworkManager
+        if self.network_manager:
+            self.network_manager.cleanup()
+
+        # Limpiar socket local
+        if hasattr(self, 'zmq_socket'):
             self.zmq_socket.close()
+
+        # Limpiar contexto ZMQ
         if self.zmq_context:
             self.zmq_context.term()
 
@@ -762,36 +849,48 @@ class EnhancedPromiscuousAgent:
         logger.info(f"✅ Agente {self.agent_id} detenido correctamente")
 
     def get_statistics(self) -> Dict:
-        """Retorna estadísticas completas"""
+        """Retorna estadísticas completas incluyendo NetworkManager"""
         uptime = time.time() - self.stats['start_time']
 
-        return {
+        base_stats = {
             'uptime_seconds': uptime,
             'packets_captured': self.stats['packets_captured'],
             'packets_sent': self.stats['packets_sent'],
             'packets_filtered': self.stats['packets_filtered'],
             'handshakes_sent': self.stats['handshakes_sent'],
             'errors': self.stats['errors'],
+            'network_errors': self.stats['network_errors'],
             'agent_id': self.agent_id,
             'so_identifier': self.so_identifier,
             'config_file': self.config_file,
             'configuration': {
-                'zmq_port': self.zmq_port,
                 'interface': self.interface,
                 'handshake_enabled': self.send_handshake,
                 'promiscuous_mode': self.promiscuous_mode,
                 'max_pps': self.max_packets_per_second,
                 'filtering_enabled': len(self.exclude_ports) > 0 or len(self.include_ports) > 0,
-                'socket_type': 'PUSH'  # Información del tipo de socket
+                'network_manager_available': NETWORK_MANAGER_AVAILABLE
             }
         }
+
+        # Añadir estadísticas de NetworkManager si está disponible
+        if self.network_manager:
+            base_stats['network'] = self.network_manager.get_statistics()
+        else:
+            base_stats['network'] = {
+                'mode': 'local_fallback',
+                'socket_type': 'PUSH',
+                'connection_mode': 'bind'
+            }
+
+        return base_stats
 
 
 def main():
     """Función principal con configuración JSON completa"""
-    parser = argparse.ArgumentParser(description='Enhanced Promiscuous Agent (LIMPIO - Sin GeoIP, PUSH socket)')
+    parser = argparse.ArgumentParser(description='Enhanced Promiscuous Agent (REFACTORIZADO DISTRIBUIDO)')
     parser.add_argument('config_file', nargs='?',
-                        default='enhanced_agent_config.json',
+                        default='enhanced_promiscuous_agent_config.json',
                         help='Archivo de configuración JSON')
     parser.add_argument('--test-config', action='store_true',
                         help='Validar configuración y salir')
@@ -817,19 +916,20 @@ def main():
         agent = EnhancedPromiscuousAgent(config_file=args.config_file)
 
         if args.test_config:
-            print("✅ Configuración JSON válida para promiscuous agent (LIMPIO, PUSH)")
+            print("✅ Configuración JSON válida para promiscuous agent (REFACTORIZADO)")
             stats = agent.get_statistics()
-            print(f"📡 ZMQ Port: {stats['configuration']['zmq_port']}")
+            print(f"🌐 Network Mode: {stats['network']['mode']}")
+            print(f"🔌 Socket Type: {stats['network']['socket_type']}")
+            print(f"📡 Connection Mode: {stats['network']['connection_mode']}")
             print(f"🔍 Interface: {stats['configuration']['interface']}")
             print(f"🤝 Handshake: {'✅' if stats['configuration']['handshake_enabled'] else '❌'}")
-            print(f"🔌 Socket Type: {stats['configuration']['socket_type']}")
+            print(f"🌐 NetworkManager: {'✅' if stats['configuration']['network_manager_available'] else '❌'}")
             print(f"🧹 GeoIP/GPS: ❌ Eliminado (responsabilidad del geoip_enricher.py)")
-            print(f"🔧 Pipeline: PUSH → PULL (Corregido)")
             return 0
 
-        logger.info("🚀 Iniciando Enhanced Promiscuous Agent (LIMPIO)...")
-        logger.info("📡 Solo captura + envío ZeroMQ - SIN procesamiento GeoIP/GPS")
-        logger.info("🎯 Destino: geoip_enricher.py para enriquecimiento geográfico")
+        logger.info("🚀 Iniciando Enhanced Promiscuous Agent (REFACTORIZADO)...")
+        logger.info("📡 Arquitectura distribuida con NetworkManager")
+        logger.info("🎯 Solo captura + envío ZeroMQ - SIN procesamiento GeoIP/GPS")
         logger.info("⚡ Presiona Ctrl+C para detener")
 
         # Thread de estadísticas si está solicitado
@@ -852,16 +952,18 @@ def main():
         if agent:
             # Mostrar estadísticas finales
             stats = agent.get_statistics()
-            print(f"\n📊 Estadísticas Finales (LIMPIO, PUSH):")
+            print(f"\n📊 Estadísticas Finales (REFACTORIZADO):")
             print(f"   ⏱️  Uptime: {stats['uptime_seconds']:.1f}s")
             print(f"   📦 Packets captured: {stats['packets_captured']}")
             print(f"   📤 Packets sent: {stats['packets_sent']}")
             print(f"   🔍 Packets filtered: {stats['packets_filtered']}")
             print(f"   🤝 Handshakes sent: {stats['handshakes_sent']}")
             print(f"   ❌ Errors: {stats['errors']}")
+            print(f"   🌐 Network errors: {stats['network_errors']}")
             print(f"   📄 Config: {stats['config_file'] or 'default'}")
-            print(f"   🔌 Socket: {stats['configuration']['socket_type']}")
-            print(f"   🧹 GeoIP/GPS: ❌ Eliminado - solo captura")
+            print(
+                f"   🔌 Network: {stats['network']['mode']} ({stats['network']['socket_type']} {stats['network']['connection_mode']})")
+            print(f"   🧹 GeoIP/GPS: ❌ Eliminado - solo captura distribuida")
 
             agent.stop()
 
@@ -872,6 +974,6 @@ if __name__ == "__main__":
     # Verificar que se ejecuta con privilegios suficientes
     if os.geteuid() != 0:
         print("⚠️  ADVERTENCIA: Se requieren privilegios de root para captura promiscua")
-        print("💡 Ejecutar: sudo python promiscuous_agent.py enhanced_agent_config.json")
+        print("💡 Ejecutar: sudo python enhanced_promiscuous_agent.py config.json")
 
     sys.exit(main())
