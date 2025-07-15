@@ -1,7 +1,22 @@
 {
+  "component": {
+    "name": "promiscuous_agent",
+    "version": "2.0.0",
+    "mode": "distributed"
+  },
   "node_id": "promiscuous_agent_default_001",
   "version": "2.0.0",
   "agent_version": "2.0.0-distributed",
+
+  "network": {
+    "output_socket": {
+      "address": "localhost",
+      "port": 5559,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos protobuf al geoip_enricher"
+    }
+  },
 
   "zmq": {
     "output_port": 5559,

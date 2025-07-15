@@ -1,66 +1,249 @@
 {
-  "agent_info": {
+  "component": {
     "name": "lightweight_ml_detector",
-    "version": "1.0.0",
-    "description": "Detector ML ligero para análisis de tráfico (sin GeoIP)"
+    "version": "2.0.0",
+    "mode": "distributed"
   },
+  "node_id": "ml_detector_distributed_001",
+  "version": "2.0.0",
+  "component_type": "ml_detector",
+
+  "network": {
+    "input_socket": {
+      "address": "localhost",
+      "port": 5560,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "description": "Recibe eventos enriquecidos del geoip_enricher"
+    },
+    "output_socket": {
+      "address": "localhost",
+      "port": 5570,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos con ML scores al dashboard"
+    }
+  },
+
   "zmq": {
     "input_port": 5560,
-    "output_port": 5561,
-    "context_threads": 1,
-    "high_water_mark": 1000
+    "output_port": 5570,
+    "rcvhwm": 2000,
+    "sndhwm": 2000,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 100,
+    "linger_ms": 1000,
+    "vertical_scaling_optimizations": {
+      "io_threads": 1,
+      "max_sockets": 128,
+      "tcp_keepalive": true,
+      "tcp_keepalive_idle": 600,
+      "immediate": true
+    }
   },
+
+  "backpressure": {
+    "enabled": true,
+    "max_retries": 3,
+    "retry_delays_ms": [1, 2, 5, 10],
+    "drop_threshold_percent": 15.0,
+    "activation_threshold": 50,
+    "queue_full_strategy": "drop_oldest"
+  },
+
+  "processing": {
+    "threads": 3,
+    "send_threads": 1,
+    "internal_queue_size": 1000,
+    "protobuf_queue_size": 500,
+    "queue_timeout_seconds": 1.0,
+    "performance_mode": "conservative_i9",
+    "enable_heuristics": true,
+    "enable_alerts": true,
+    "max_processing_time": 5.0,
+    "vertical_scaling": {
+      "optimized_for_i9_8cores": true,
+      "memory_buffer_multiplier": 1.0,
+      "cpu_intensive_operations": false,
+      "leave_cores_for_system": 4,
+      "processing_batch_optimization": false
+    },
+    "queue_overflow_handling": {
+      "strategy": "backpressure_and_drop",
+      "max_queue_wait_ms": 50,
+      "emergency_drop_threshold_percent": 80.0,
+      "log_drops": true
+    },
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 10,
+      "max_wait_ms": 100
+    }
+  },
+
   "ml": {
     "enabled": true,
     "anomaly_threshold": 0.8,
     "high_risk_threshold": 0.9,
-    "models": [
-      "IsolationForest",
-      "OneClassSVM",
-      "LocalOutlierFactor"
-    ],
-    "buffer_size": 10000,
-    "batch_size": 100,
-    "training_interval": 3600,
+    "confidence_threshold": 0.7,
+    "models": {
+      "isolation_forest": {
+        "enabled": true,
+        "contamination": 0.1,
+        "n_estimators": 100,
+        "random_state": 42
+      },
+      "one_class_svm": {
+        "enabled": true,
+        "nu": 0.1,
+        "kernel": "rbf"
+      },
+      "local_outlier_factor": {
+        "enabled": true,
+        "n_neighbors": 20,
+        "contamination": 0.1
+      },
+      "dbscan": {
+        "enabled": true,
+        "eps": 0.5,
+        "min_samples": 5
+      },
+      "kmeans": {
+        "enabled": true,
+        "n_clusters": 5,
+        "random_state": 42,
+        "n_init": 10
+      },
+      "random_forest": {
+        "enabled": true,
+        "n_estimators": 100,
+        "random_state": 42,
+        "max_depth": 10
+      }
+    },
     "training": {
       "min_training_samples": 1000,
       "retrain_interval_samples": 200,
-      "contamination_rate": 0.1
+      "contamination_rate": 0.1,
+      "auto_retrain": true,
+      "retrain_interval_minutes": 5
     },
     "features": [
-      "packet_size",
-      "dest_port",
-      "src_port",
-      "hour",
-      "minute",
-      "is_weekend",
-      "ip_entropy",
-      "port_frequency"
-    ]
+      "packet_size", "dest_port", "src_port", "protocol_numeric",
+      "hour", "minute", "is_weekend", "ip_entropy_src", "ip_entropy_dst",
+      "port_frequency_src", "port_frequency_dst", "has_geoip",
+      "latitude_abs", "longitude_abs", "distance_from_origin",
+      "is_common_port", "event_id_hash"
+    ],
+    "feature_engineering": {
+      "total_features": 17,
+      "enable_port_analysis": true,
+      "enable_temporal_features": true,
+      "enable_ip_analysis": true,
+      "enable_geoip_features": true,
+      "enable_mismatch_detection": true,
+      "auto_retrain_on_mismatch": true
+    }
   },
-  "processing": {
-    "enable_heuristics": true,
-    "enable_alerts": true,
-    "stats_interval": 45,
-    "max_processing_time": 5.0
-  },
-  "logging": {
-    "level": "DEBUG",
-    "file": "logs/ml_detector.log",
-    "max_size": "10MB",
-    "backup_count": 5,
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "console_output": true
-  },
-  "protobuf": {
-    "enabled": true,
-    "timeout": 1000,
-    "retry_attempts": 3
-  },
+
   "persistence": {
-    "save_predictions": false,
+    "enabled": true,
+    "models_dir": "ml_models",
+    "save_predictions": true,
     "predictions_file": "data/predictions.jsonl",
     "auto_save_interval": 300,
-    "state_file": "data/ml_detector_state.json"
+    "state_file": "data/ml_detector_state.json",
+    "backup_models": true,
+    "model_versioning": true,
+    "evaluation_enabled": true
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
+    "file": null,
+    "max_file_size_mb": 100,
+    "backup_count": 5,
+    "performance_logging": {
+      "enabled": true,
+      "log_slow_requests": true,
+      "slow_request_threshold_ms": 50
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 15,
+    "detailed_metrics": true,
+    "component_health_check": {
+      "enabled": true,
+      "check_interval_seconds": 30,
+      "memory_threshold_mb": 512,
+      "cpu_threshold_percent": 80.0
+    },
+    "alerts": {
+      "max_queue_usage_percent": 60.0,
+      "max_ml_failure_rate_percent": 20.0,
+      "max_processing_latency_ms": 100.0,
+      "max_backpressure_activations": 20,
+      "max_drop_rate_percent": 5.0,
+      "min_model_accuracy_percent": 60.0,
+      "max_buffer_full_errors": 10
+    },
+    "metrics_export": {
+      "enabled": false,
+      "prometheus_port": 9091,
+      "export_interval_seconds": 60
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "ml_detector",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10
+    },
+    "load_balancing": {
+      "strategy": "round_robin",
+      "health_check_enabled": true,
+      "failover_timeout_ms": 5000
+    },
+    "scaling": {
+      "auto_scale_enabled": false,
+      "min_instances": 1,
+      "max_instances": 3,
+      "scale_up_threshold_percent": 80.0,
+      "scale_down_threshold_percent": 30.0,
+      "cooldown_period_seconds": 300
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 1048576,
+      "validate_protobuf_schema": true,
+      "sanitize_ml_scores": true
+    },
+    "rate_limiting": {
+      "enabled": false,
+      "max_events_per_second": 1000,
+      "burst_capacity": 2000,
+      "penalty_duration_seconds": 60
+    }
+  },
+
+  "debug": {
+    "enabled": false,
+    "sample_events": false,
+    "sample_rate_percent": 1.0,
+    "log_protobuf_details": false,
+    "profile_performance": false,
+    "log_ml_predictions": true,
+    "log_feature_extraction": false
   }
 }
