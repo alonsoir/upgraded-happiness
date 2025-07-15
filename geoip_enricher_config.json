@@ -1,9 +1,13 @@
 {
-  "node_id": "geoip_enricher_default_001",
+  "node_id": "geoip_enricher_distributed_001",
+  "version": "2.0.0",
+  "component_type": "geoip_enricher",
 
   "zmq": {
     "input_port": 5559,
     "output_port": 5560,
+    "rcvhwm": 5000,
+    "sndhwm": 5000,
     "recv_timeout_ms": 1000,
     "send_timeout_ms": 100,
     "linger_ms": 5000
@@ -11,51 +15,139 @@
 
   "backpressure": {
     "enabled": true,
-    "max_retries": 2,
-    "retry_delays_ms": [1, 5]
+    "max_retries": 3,
+    "retry_delays_ms": [1, 2, 5, 10]
   },
 
   "processing": {
-    "threads": 2,
-    "internal_queue_size": 1000,
-    "queue_put_timeout_seconds": 0.1,
-    "queue_get_timeout_seconds": 1.0,
-    "serialization": {
-      "format": "json",
-      "encoding": "utf-8"
+    "threads": 4,
+    "send_threads": 2,
+    "internal_queue_size": 2000,
+    "protobuf_queue_size": 1000,
+    "queue_timeout_seconds": 1.0,
+    "performance_mode": "high_throughput",
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 10,
+      "max_wait_ms": 100
     }
   },
 
   "geoip": {
     "lookup_method": "mock",
+    "performance_mode": "fast",
+    "cache_enabled": true,
+    "cache_size": 10000,
+    "cache_ttl_seconds": 3600,
     "mock_coordinates": [40.4168, -3.7038],
     "use_default_coordinates_on_failure": true,
     "default_coordinates": [40.4168, -3.7038],
-    "cache_size": 10000,
-    "cache_ttl_seconds": 3600,
     "maxmind": {
-      "database_path": "/path/to/GeoLite2-City.mmdb",
-      "enabled": false
+      "database_path": "/opt/geoip/GeoLite2-City.mmdb",
+      "enabled": false,
+      "auto_update": false,
+      "fallback_to_country": true
     },
     "api": {
-      "url": "https://api.example.com/geoip/{ip}",
+      "url": "https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}",
       "timeout_seconds": 2.0,
       "api_key": null,
-      "enabled": false
+      "enabled": false,
+      "rate_limit_per_minute": 1000,
+      "retry_failed_requests": true
+    },
+    "precision": {
+      "coordinate_precision": 4,
+      "validate_coordinates": true,
+      "min_latitude": -90.0,
+      "max_latitude": 90.0,
+      "min_longitude": -180.0,
+      "max_longitude": 180.0
     }
   },
 
   "logging": {
     "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] - %(message)s",
-    "file": null
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
+    "file": null,
+    "max_file_size_mb": 100,
+    "backup_count": 5,
+    "performance_logging": {
+      "enabled": true,
+      "log_slow_requests": true,
+      "slow_request_threshold_ms": 100
+    }
   },
 
   "monitoring": {
     "stats_interval_seconds": 15,
+    "detailed_metrics": true,
+    "component_health_check": {
+      "enabled": true,
+      "check_interval_seconds": 30,
+      "memory_threshold_mb": 512,
+      "cpu_threshold_percent": 80.0
+    },
     "alerts": {
       "max_queue_usage_percent": 80.0,
-      "max_geoip_failure_rate_percent": 20.0
+      "max_geoip_failure_rate_percent": 15.0,
+      "max_processing_latency_ms": 50.0,
+      "max_backpressure_activations": 100,
+      "min_cache_hit_rate_percent": 60.0
+    },
+    "metrics_export": {
+      "enabled": false,
+      "prometheus_port": 9090,
+      "export_interval_seconds": 60
     }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "enricher",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10
+    },
+    "load_balancing": {
+      "strategy": "round_robin",
+      "health_check_enabled": true,
+      "failover_timeout_ms": 5000
+    },
+    "scaling": {
+      "auto_scale_enabled": false,
+      "min_instances": 1,
+      "max_instances": 5,
+      "scale_up_threshold_percent": 80.0,
+      "scale_down_threshold_percent": 30.0,
+      "cooldown_period_seconds": 300
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 1048576,
+      "validate_protobuf_schema": true,
+      "sanitize_ip_addresses": true
+    },
+    "rate_limiting": {
+      "enabled": false,
+      "max_events_per_second": 1000,
+      "burst_capacity": 2000,
+      "penalty_duration_seconds": 60
+    }
+  },
+
+  "debug": {
+    "enabled": false,
+    "sample_events": false,
+    "sample_rate_percent": 1.0,
+    "log_protobuf_details": false,
+    "profile_performance": false
   }
 }

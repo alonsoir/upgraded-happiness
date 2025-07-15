@@ -1,4 +1,4 @@
-# promiscuous_agent.py - Completamente configurable desde JSON con backpressure
+# promiscuous_agent.py - Agente distribuido con captura real y protobuf
 
 import zmq
 import time
@@ -7,15 +7,43 @@ import logging
 import threading
 import socket
 import uuid
-from threading import Event
-from typing import Dict, Any, Optional
+import os
 import sys
+import platform
+import psutil
+from threading import Event
+from typing import Dict, Any, Optional, List
+from queue import Queue, Empty
+
+# 📦 Dependencias para captura de paquetes
+try:
+    from scapy.all import sniff, Ether, IP, TCP, UDP
+
+    SCAPY_AVAILABLE = True
+except ImportError:
+    print("⚠️ Scapy no disponible - usando modo simulación")
+    SCAPY_AVAILABLE = False
+
+# 📦 Protobuf - asume que ya se generó el código Python
+try:
+    # Importar el protobuf generado
+    # protoc --python_out=. network_event_extended_v2.proto
+    import src.protocols.protobuf.network_event_extended_v2_pb2 as NetworkEventProto
+
+    PROTOBUF_AVAILABLE = True
+except ImportError:
+    print("⚠️ Protobuf no disponible - generar con: protoc --python_out=. network_event_extended_v2.proto")
+    PROTOBUF_AVAILABLE = False
 
 
-class ConfigurablePromiscuousAgent:
+class DistributedPromiscuousAgent:
     """
-    Promiscuous Agent completamente configurable desde JSON
-    Sin valores por defecto hardcodeados - todo viene del archivo de configuración
+    Agente promiscuo distribuido completamente configurable desde JSON
+    - Captura real de paquetes de red
+    - Serialización protobuf
+    - node_id y PID para gestión distribuida
+    - Backpressure configurable
+    - Sin valores hardcodeados
     """
 
     def __init__(self, config_file: str):
@@ -23,8 +51,17 @@ class ConfigurablePromiscuousAgent:
         self.config = self._load_config_strict(config_file)
         self.config_file = config_file
 
-        # 🏷️ node_id desde configuración
+        # 🏷️ Identidad distribuida
         self.node_id = self.config["node_id"]
+        self.process_id = os.getpid()
+        self.container_id = self._get_container_id()
+        self.start_time = time.time()
+
+        # 🖥️ Información del sistema
+        self.system_info = self._gather_system_info()
+
+        # 📝 Setup logging desde configuración (PRIMERO para usar en otros métodos)
+        self.setup_logging()
 
         # 🔌 Setup ZeroMQ desde configuración
         self.context = zmq.Context()
@@ -34,15 +71,21 @@ class ConfigurablePromiscuousAgent:
         # 🔄 Backpressure desde configuración
         self.backpressure_config = self.config["backpressure"]
 
+        # 📦 Queue interno para procesamiento asíncrono
+        queue_size = self.config["processing"]["internal_queue_size"]
+        self.packet_queue = Queue(maxsize=queue_size)
+
         # 📊 Métricas
         self.stats = {
             'captured': 0,
+            'processed': 0,
             'sent': 0,
             'dropped': 0,
             'filtered': 0,
             'buffer_full_errors': 0,
-            'send_timeouts': 0,
             'backpressure_activations': 0,
+            'queue_overflows': 0,
+            'protobuf_errors': 0,
             'start_time': time.time(),
             'last_stats_time': time.time()
         }
@@ -50,18 +93,18 @@ class ConfigurablePromiscuousAgent:
         # 🎛️ Control
         self.stop_event = Event()
         self.running = True
+        self.handshake_sent = False
 
-        # 📝 Setup logging desde configuración
-        self.setup_logging()
+        # ✅ Verificar dependencias críticas
+        self._verify_dependencies()
 
-        self.logger.info(f"🚀 Promiscuous Agent inicializado - node_id: {self.node_id}")
-        self.logger.info(f"📄 Config: {config_file}")
+        self.logger.info(f"🚀 Distributed Promiscuous Agent inicializado")
+        self.logger.info(f"   🏷️ Node ID: {self.node_id}")
+        self.logger.info(f"   🔢 PID: {self.process_id}")
+        self.logger.info(f"   📄 Config: {config_file}")
 
     def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
-        """
-        Carga configuración SIN proporcionar defaults
-        Si falta algo crítico, falla rápido
-        """
+        """Carga configuración SIN proporcionar defaults"""
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
@@ -70,42 +113,81 @@ class ConfigurablePromiscuousAgent:
         except json.JSONDecodeError as e:
             raise RuntimeError(f"❌ Error parseando JSON: {e}")
 
-        # ✅ Validar campos críticos - SIN proporcionar defaults
+        # ✅ Validar campos críticos
         required_fields = [
-            "node_id",
-            "zmq",
-            "backpressure",
-            "capture",
-            "logging",
-            "monitoring"
+            "node_id", "zmq", "backpressure", "capture",
+            "processing", "protobuf", "logging", "monitoring"
         ]
 
         for field in required_fields:
             if field not in config:
                 raise RuntimeError(f"❌ Campo requerido faltante en config: {field}")
 
-        # ✅ Validar subcampos ZMQ
-        zmq_required = ["output_port", "linger_ms", "send_timeout_ms", "sndhwm"]
-        for field in zmq_required:
-            if field not in config["zmq"]:
-                raise RuntimeError(f"❌ Campo ZMQ requerido faltante: zmq.{field}")
+        # ✅ Validar subcampos críticos
+        self._validate_config_structure(config)
 
-        # ✅ Validar subcampos backpressure
-        bp_required = ["enabled", "max_retries", "retry_delays_ms", "drop_threshold_percent", "activation_threshold"]
-        for field in bp_required:
-            if field not in config["backpressure"]:
-                raise RuntimeError(f"❌ Campo backpressure requerido faltante: backpressure.{field}")
-
-        self._log_config_loaded(config)
         return config
 
-    def _log_config_loaded(self, config: Dict[str, Any]):
-        """Log de configuración cargada"""
-        print(f"✅ Configuración cargada:")
-        print(f"   🏷️ Node ID: {config['node_id']}")
-        print(f"   🔌 Puerto ZMQ: {config['zmq']['output_port']}")
-        print(f"   🔄 Backpressure: {'✅' if config['backpressure']['enabled'] else '❌'}")
-        print(f"   📡 Interface: {config['capture']['interface']}")
+    def _validate_config_structure(self, config: Dict[str, Any]):
+        """Valida estructura de configuración"""
+        # ZMQ fields
+        zmq_required = ["output_port", "sndhwm", "linger_ms", "send_timeout_ms"]
+        for field in zmq_required:
+            if field not in config["zmq"]:
+                raise RuntimeError(f"❌ Campo ZMQ faltante: zmq.{field}")
+
+        # Processing fields
+        proc_required = ["internal_queue_size", "processing_threads", "queue_timeout_seconds"]
+        for field in proc_required:
+            if field not in config["processing"]:
+                raise RuntimeError(f"❌ Campo processing faltante: processing.{field}")
+
+        # Capture fields
+        cap_required = ["interface", "filter_expression", "buffer_size", "promiscuous_mode"]
+        for field in cap_required:
+            if field not in config["capture"]:
+                raise RuntimeError(f"❌ Campo capture faltante: capture.{field}")
+
+    def _get_container_id(self) -> Optional[str]:
+        """Obtiene ID del contenedor si está ejecutándose en uno"""
+        try:
+            # Intentar leer cgroup para Docker
+            with open('/proc/self/cgroup', 'r') as f:
+                content = f.read()
+                for line in content.split('\n'):
+                    if 'docker' in line:
+                        return line.split('/')[-1][:12]  # Primeros 12 chars del container ID
+            return None
+        except:
+            return None
+
+    def _gather_system_info(self) -> Dict[str, Any]:
+        """Recolecta información del sistema"""
+        return {
+            'hostname': socket.gethostname(),
+            'os_name': platform.system(),
+            'os_version': platform.release(),
+            'architecture': platform.machine(),
+            'python_version': platform.python_version(),
+            'cpu_count': psutil.cpu_count(),
+            'memory_total_gb': round(psutil.virtual_memory().total / (1024 ** 3), 2)
+        }
+
+    def _verify_dependencies(self):
+        """Verifica que las dependencias críticas estén disponibles"""
+        issues = []
+
+        if not SCAPY_AVAILABLE:
+            if self.config["capture"]["mode"] == "real":
+                issues.append("❌ Scapy requerido para captura real - pip install scapy")
+
+        if not PROTOBUF_AVAILABLE:
+            issues.append("❌ Protobuf no generado - ejecutar: protoc --python_out=. network_event_extended_v2.proto")
+
+        if issues:
+            for issue in issues:
+                print(issue)
+            raise RuntimeError("❌ Dependencias críticas faltantes")
 
     def setup_socket(self):
         """Configuración ZMQ desde archivo de configuración"""
@@ -113,31 +195,37 @@ class ConfigurablePromiscuousAgent:
 
         self.socket = self.context.socket(zmq.PUSH)
 
-        # 🔧 Configurar ZMQ desde JSON
-        self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
-        self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
-        self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
+        try:
+            # 🔧 Configurar opciones ZMQ
+            self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
+            self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
+            self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
 
-        # 🔌 BIND del socket
-        port = zmq_config["output_port"]
-        bind_address = f"tcp://*:{port}"
-        self.socket.bind(bind_address)
+            # 🔌 BIND del socket
+            port = zmq_config["output_port"]
+            bind_address = f"tcp://*:{port}"
+            self.socket.bind(bind_address)
 
-        print(f"🔌 Socket ZMQ configurado:")
-        print(f"   📡 Bind: {bind_address}")
-        print(f"   ⏱️ Timeout: {zmq_config['send_timeout_ms']}ms")
+            self.logger.info(f"🔌 Socket ZMQ configurado:")
+            self.logger.info(f"   📡 Bind: {bind_address}")
+            self.logger.info(f"   🌊 SNDHWM: {zmq_config['sndhwm']}")
+
+        except Exception as e:
+            raise RuntimeError(f"❌ Error configurando ZMQ: {e}")
 
     def setup_logging(self):
-        """Setup logging desde configuración"""
+        """Setup logging desde configuración con node_id"""
         log_config = self.config["logging"]
 
         # 📝 Configurar nivel
         level = getattr(logging, log_config["level"].upper())
 
-        # 🏷️ Formato con node_id
-        formatter = logging.Formatter(
-            log_config["format"].format(node_id=self.node_id)
+        # 🏷️ Formato con node_id y PID
+        log_format = log_config["format"].format(
+            node_id=self.node_id,
+            pid=self.process_id
         )
+        formatter = logging.Formatter(log_format)
 
         # 🔧 Configurar handler
         if log_config.get("file"):
@@ -151,73 +239,274 @@ class ConfigurablePromiscuousAgent:
         self.logger = logging.getLogger(f"promiscuous_agent_{self.node_id}")
         self.logger.setLevel(level)
         self.logger.addHandler(handler)
-
-        # 🔇 Evitar duplicados
         self.logger.propagate = False
 
-    def apply_backpressure(self, attempt: int) -> bool:
-        """
-        Aplica backpressure según configuración
-        Returns: True si debe continuar reintentando, False si debe descartar
-        """
-        bp_config = self.backpressure_config
+    def create_network_event(self, packet_data: Dict[str, Any], is_handshake: bool = False) -> bytes:
+        """Crea evento protobuf desde datos de paquete"""
+        if not PROTOBUF_AVAILABLE:
+            raise RuntimeError("❌ Protobuf no disponible")
 
-        if not bp_config["enabled"]:
-            # Sin backpressure - descartar inmediatamente
-            return False
+        try:
+            # 📦 Crear evento protobuf
+            event = NetworkEventProto.NetworkEvent()
 
-        if attempt >= bp_config["max_retries"]:
-            # Máximo de reintentos alcanzado
-            self.stats['dropped'] += 1
-            return False
+            # 🆔 Identificación única
+            event.event_id = str(uuid.uuid4())
+            event.timestamp = int(time.time() * 1000)  # Milliseconds
 
-        # 🔄 Aplicar delay configurado
-        delays = bp_config["retry_delays_ms"]
-        if attempt < len(delays):
-            delay_ms = delays[attempt]
+            # 🌐 Datos de red
+            event.source_ip = packet_data.get('src_ip', 'unknown')
+            event.target_ip = packet_data.get('dst_ip', 'unknown')
+            event.packet_size = packet_data.get('size', 0)
+            event.dest_port = packet_data.get('dst_port', 0)
+            event.src_port = packet_data.get('src_port', 0)
+            event.protocol = packet_data.get('protocol', 'unknown')
+
+            # 🤖 Identificación del agente (legacy)
+            event.agent_id = f"agent_{self.node_id}"
+
+            # 🆔 CAMPOS DISTRIBUIDOS CRÍTICOS
+            event.node_id = self.node_id
+            event.process_id = self.process_id
+            if self.container_id:
+                event.container_id = self.container_id
+
+            # 🔄 Estado del componente
+            event.component_status = "healthy"  # TODO: calcular basado en métricas
+            event.uptime_seconds = int(time.time() - self.start_time)
+
+            # 📈 Métricas de performance
+            event.queue_depth = self.packet_queue.qsize()
+            try:
+                process = psutil.Process(self.process_id)
+                event.cpu_usage_percent = process.cpu_percent()
+                event.memory_usage_mb = process.memory_info().rss / (1024 * 1024)
+            except:
+                pass  # Ignorar errores de psutil
+
+            # 🔧 Configuración
+            event.config_version = self.config.get("version", "unknown")
+            event.config_timestamp = int(time.time())
+
+            # 🏠 Información del nodo (solo en handshake)
+            if is_handshake:
+                event.is_initial_handshake = True
+                event.node_hostname = self.system_info['hostname']
+                event.os_version = f"{self.system_info['os_name']} {self.system_info['os_version']}"
+                event.agent_version = self.config.get("agent_version", "1.0.0")
+                event.so_identifier = self._get_so_identifier()
+                event.firewall_status = "unknown"  # TODO: detectar estado del firewall
+
+                # 📊 Descripción de handshake
+                event.description = f"Initial handshake from {self.node_id}"
+                event.event_type = "handshake"
+            else:
+                event.is_initial_handshake = False
+                event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
+                event.event_type = "network_traffic"
+
+            # 🔄 Serializar a bytes
+            return event.SerializeToString()
+
+        except Exception as e:
+            self.stats['protobuf_errors'] += 1
+            self.logger.error(f"❌ Error creando evento protobuf: {e}")
+            raise
+
+    def _get_so_identifier(self) -> str:
+        """Identifica el sistema operativo y su firewall"""
+        os_name = self.system_info['os_name'].lower()
+
+        if 'linux' in os_name:
+            # TODO: detectar si usa ufw, iptables, etc.
+            return "linux_iptables"
+        elif 'darwin' in os_name:
+            return "darwin_pf"
+        elif 'windows' in os_name:
+            return "windows_firewall"
         else:
-            # Usar último delay si se excede la lista
-            delay_ms = delays[-1]
+            return "unknown"
 
-        time.sleep(delay_ms / 1000.0)  # Convertir a segundos
+    def packet_capture_callback(self, packet):
+        """Callback para captura de paquetes con Scapy"""
+        try:
+            # 📊 Extraer información del paquete
+            packet_data = self._extract_packet_info(packet)
 
-        self.stats['backpressure_activations'] += 1
+            if packet_data and self._should_process_packet(packet_data):
+                # 📋 Añadir a queue para procesamiento asíncrono
+                try:
+                    queue_timeout = self.config["processing"]["queue_timeout_seconds"]
+                    self.packet_queue.put(packet_data, timeout=queue_timeout)
+                    self.stats['captured'] += 1
+                except:
+                    self.stats['queue_overflows'] += 1
+
+        except Exception as e:
+            self.logger.error(f"❌ Error en callback de captura: {e}")
+
+    def _extract_packet_info(self, packet) -> Optional[Dict[str, Any]]:
+        """Extrae información relevante del paquete"""
+        try:
+            info = {}
+
+            # 📦 Información básica
+            info['size'] = len(packet)
+            info['timestamp'] = time.time()
+
+            # 🌐 Capa IP
+            if packet.haslayer(IP):
+                ip_layer = packet[IP]
+                info['src_ip'] = ip_layer.src
+                info['dst_ip'] = ip_layer.dst
+                info['protocol'] = ip_layer.proto
+
+                # 🚪 Puertos para TCP/UDP
+                if packet.haslayer(TCP):
+                    tcp_layer = packet[TCP]
+                    info['src_port'] = tcp_layer.sport
+                    info['dst_port'] = tcp_layer.dport
+                    info['protocol'] = 'tcp'
+                elif packet.haslayer(UDP):
+                    udp_layer = packet[UDP]
+                    info['src_port'] = udp_layer.sport
+                    info['dst_port'] = udp_layer.dport
+                    info['protocol'] = 'udp'
+                else:
+                    info['src_port'] = 0
+                    info['dst_port'] = 0
+                    info['protocol'] = 'other'
+            else:
+                # Sin capa IP
+                info['src_ip'] = 'unknown'
+                info['dst_ip'] = 'unknown'
+                info['src_port'] = 0
+                info['dst_port'] = 0
+                info['protocol'] = 'non-ip'
+
+            return info
+
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo info de paquete: {e}")
+            return None
+
+    def _should_process_packet(self, packet_data: Dict[str, Any]) -> bool:
+        """Determina si el paquete debe ser procesado según filtros"""
+        capture_config = self.config["capture"]
+
+        # 📏 Filtro por tamaño mínimo
+        if packet_data['size'] < capture_config.get("min_packet_size", 0):
+            self.stats['filtered'] += 1
+            return False
+
+        # 🚪 Filtro por puertos excluidos
+        excluded_ports = capture_config.get("excluded_ports", [])
+        if (packet_data.get('src_port') in excluded_ports or
+                packet_data.get('dst_port') in excluded_ports):
+            self.stats['filtered'] += 1
+            return False
+
+        # 📝 Filtro por protocolos incluidos
+        included_protocols = capture_config.get("included_protocols", [])
+        if included_protocols and packet_data.get('protocol') not in included_protocols:
+            self.stats['filtered'] += 1
+            return False
+
         return True
 
-    def should_activate_backpressure(self) -> bool:
-        """
-        Determina si activar backpressure basado en métricas
-        """
-        bp_config = self.backpressure_config
+    def start_packet_capture(self):
+        """Inicia captura de paquetes"""
+        capture_config = self.config["capture"]
 
-        if not bp_config["enabled"]:
-            return False
+        if not SCAPY_AVAILABLE:
+            self.logger.error("❌ Scapy no disponible - no se puede capturar paquetes")
+            return
 
-        # 📊 Calcular tasa de errores de buffer
-        total_attempts = self.stats['sent'] + self.stats['buffer_full_errors']
-        if total_attempts == 0:
-            return False
+        interface = capture_config["interface"]
+        filter_expr = capture_config.get("filter_expression", "")
 
-        error_rate = (self.stats['buffer_full_errors'] / total_attempts) * 100
+        self.logger.info(f"🎯 Iniciando captura de paquetes:")
+        self.logger.info(f"   📡 Interface: {interface}")
+        self.logger.info(f"   🔍 Filtro: {filter_expr or 'sin filtro'}")
+        self.logger.info(f"   🎭 Promiscuo: {capture_config['promiscuous_mode']}")
 
-        # 🚨 Activar si excede threshold
-        if error_rate >= bp_config["drop_threshold_percent"]:
-            return True
+        try:
+            # 🎣 Iniciar captura con Scapy
+            sniff(
+                iface=interface if interface != "any" else None,
+                filter=filter_expr,
+                prn=self.packet_capture_callback,
+                store=0,  # No almacenar paquetes en memoria
+                stop_filter=lambda x: not self.running
+            )
+        except Exception as e:
+            self.logger.error(f"❌ Error en captura de paquetes: {e}")
+            self.logger.error("💡 Tip: ejecutar con sudo para captura promiscua")
 
-        # 🔢 Activar si muchos errores absolutos
-        if self.stats['buffer_full_errors'] >= bp_config["activation_threshold"]:
-            return True
+    def process_packets(self):
+        """Thread para procesar paquetes de la cola"""
+        queue_timeout = self.config["processing"]["queue_timeout_seconds"]
 
-        return False
+        self.logger.info("⚙️ Iniciando thread de procesamiento de paquetes")
+
+        while self.running:
+            try:
+                # 📋 Obtener paquete de la cola
+                packet_data = self.packet_queue.get(timeout=queue_timeout)
+
+                # 📦 Crear evento protobuf
+                protobuf_data = self.create_network_event(packet_data)
+
+                # 📤 Enviar con backpressure
+                success = self.send_event_with_backpressure(protobuf_data)
+
+                if success:
+                    self.stats['processed'] += 1
+
+                self.packet_queue.task_done()
+
+            except Empty:
+                # Timeout normal - continuar
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Error procesando paquete: {e}")
+
+    def send_handshake(self):
+        """Envía handshake inicial del nodo"""
+        if self.handshake_sent:
+            return
+
+        try:
+            # 📦 Crear evento handshake
+            handshake_data = {
+                'src_ip': 'handshake',
+                'dst_ip': 'handshake',
+                'size': 0,
+                'src_port': 0,
+                'dst_port': 0,
+                'protocol': 'handshake'
+            }
+
+            protobuf_data = self.create_network_event(handshake_data, is_handshake=True)
+
+            # 📤 Enviar handshake
+            success = self.send_event_with_backpressure(protobuf_data)
+
+            if success:
+                self.handshake_sent = True
+                self.logger.info(f"🤝 Handshake enviado exitosamente")
+            else:
+                self.logger.warning(f"⚠️ Error enviando handshake")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error creando handshake: {e}")
 
     def send_event_with_backpressure(self, event_data: bytes) -> bool:
-        """
-        Envío con backpressure configurable
-        """
+        """Envío con backpressure configurable"""
         bp_config = self.backpressure_config
         max_retries = bp_config["max_retries"]
 
-        for attempt in range(max_retries + 1):  # +1 para incluir intento inicial
+        for attempt in range(max_retries + 1):
             try:
                 # 🚀 Intento de envío
                 self.socket.send(event_data, zmq.NOBLOCK)
@@ -229,13 +518,12 @@ class ConfigurablePromiscuousAgent:
                 self.stats['buffer_full_errors'] += 1
 
                 if attempt == max_retries:
-                    # 🗑️ Último intento fallido - descartar
+                    # 🗑️ Último intento fallido
                     self.stats['dropped'] += 1
-                    self.logger.warning(f"⚠️ Evento descartado tras {max_retries} intentos")
                     return False
 
                 # 🔄 Aplicar backpressure
-                if not self.apply_backpressure(attempt):
+                if not self._apply_backpressure(attempt):
                     return False
 
                 continue
@@ -247,134 +535,80 @@ class ConfigurablePromiscuousAgent:
 
         return False
 
-    def capture_and_send_packet(self, packet_data: bytes):
-        """
-        Simula captura y envío de paquete
-        En implementación real, aquí iría la lógica de captura de red
-        """
-        self.stats['captured'] += 1
+    def _apply_backpressure(self, attempt: int) -> bool:
+        """Aplica backpressure según configuración"""
+        bp_config = self.backpressure_config
 
-        # 🎯 Aplicar filtros desde configuración
-        if self.should_filter_packet(packet_data):
-            self.stats['filtered'] += 1
-            return
+        if not bp_config["enabled"]:
+            return False
 
-        # 📤 Enviar con backpressure
-        success = self.send_event_with_backpressure(packet_data)
+        if attempt >= bp_config["max_retries"]:
+            self.stats['dropped'] += 1
+            return False
 
-        if not success:
-            # Log solo si backpressure está habilitado y falló
-            if self.backpressure_config["enabled"]:
-                self.logger.warning("⚠️ Backpressure activo - evento descartado")
+        # 🔄 Aplicar delay configurado
+        delays = bp_config["retry_delays_ms"]
+        delay_ms = delays[attempt] if attempt < len(delays) else delays[-1]
 
-    def should_filter_packet(self, packet_data: bytes) -> bool:
-        """
-        Aplica filtros desde configuración
-        """
-        capture_config = self.config["capture"]
-
-        # 🎯 Aplicar filtros configurados
-        # En implementación real, aquí iría lógica de filtrado basada en:
-        # - capture_config["excluded_ports"]
-        # - capture_config["included_protocols"]
-        # - capture_config["filter_rules"]
-
-        # Por ahora, filtro simulado
-        return len(packet_data) < capture_config.get("min_packet_size", 0)
+        time.sleep(delay_ms / 1000.0)
+        self.stats['backpressure_activations'] += 1
+        return True
 
     def monitor_performance(self):
-        """
-        Thread de monitoreo de performance
-        """
+        """Thread de monitoreo de performance"""
         monitoring_config = self.config["monitoring"]
         interval = monitoring_config["stats_interval_seconds"]
 
         while self.running:
             time.sleep(interval)
-
             if not self.running:
                 break
 
-            self.log_performance_stats()
-            self.check_performance_alerts()
+            self._log_performance_stats()
+            self._check_performance_alerts()
 
-    def log_performance_stats(self):
-        """
-        Log de estadísticas de performance
-        """
+    def _log_performance_stats(self):
+        """Log de estadísticas de performance"""
         now = time.time()
         interval = now - self.stats['last_stats_time']
 
         # 📊 Calcular rates
         capture_rate = self.stats['captured'] / interval if interval > 0 else 0
+        process_rate = self.stats['processed'] / interval if interval > 0 else 0
         send_rate = self.stats['sent'] / interval if interval > 0 else 0
-        drop_rate = self.stats['dropped'] / interval if interval > 0 else 0
 
         self.logger.info(f"📊 Performance Stats:")
         self.logger.info(f"   📡 Capturados: {self.stats['captured']} ({capture_rate:.1f}/s)")
+        self.logger.info(f"   ⚙️ Procesados: {self.stats['processed']} ({process_rate:.1f}/s)")
         self.logger.info(f"   📤 Enviados: {self.stats['sent']} ({send_rate:.1f}/s)")
-        self.logger.info(f"   🗑️ Descartados: {self.stats['dropped']} ({drop_rate:.1f}/s)")
-        self.logger.info(f"   🔄 Backpressure: {self.stats['backpressure_activations']} activaciones")
-        self.logger.info(f"   🚫 Filtrados: {self.stats['filtered']}")
+        self.logger.info(f"   🗑️ Descartados: {self.stats['dropped']}")
+        self.logger.info(f"   📋 Cola: {self.packet_queue.qsize()}")
+        self.logger.info(f"   🔄 Backpressure: {self.stats['backpressure_activations']}")
 
-        # 🔄 Reset stats for next interval
-        for key in ['captured', 'sent', 'dropped', 'filtered', 'backpressure_activations']:
+        # 🔄 Reset stats para próximo intervalo
+        for key in ['captured', 'processed', 'sent', 'dropped', 'backpressure_activations']:
             self.stats[key] = 0
 
         self.stats['last_stats_time'] = now
 
-    def check_performance_alerts(self):
-        """
-        Verifica alertas de performance desde configuración
-        """
+    def _check_performance_alerts(self):
+        """Verifica alertas de performance"""
         monitoring_config = self.config["monitoring"]
         alerts = monitoring_config.get("alerts", {})
 
-        # 🚨 Alert de drop rate alto
-        total_events = self.stats['sent'] + self.stats['dropped']
-        if total_events > 0:
-            drop_percentage = (self.stats['dropped'] / total_events) * 100
+        # 🚨 Alert de cola llena
+        queue_usage = self.packet_queue.qsize() / self.config["processing"]["internal_queue_size"]
+        max_queue_usage = alerts.get("max_queue_usage_percent", 100) / 100.0
 
-            max_drop_rate = alerts.get("max_drop_rate_percent", 100)  # Sin alerta por defecto
-            if drop_percentage > max_drop_rate:
-                self.logger.warning(f"🚨 ALERTA: Drop rate alto ({drop_percentage:.1f}% > {max_drop_rate}%)")
-
-        # 🚨 Alert de backpressure frecuente
-        max_bp_activations = alerts.get("max_backpressure_activations", float('inf'))
-        if self.stats['backpressure_activations'] > max_bp_activations:
-            self.logger.warning(
-                f"🚨 ALERTA: Backpressure muy frecuente ({self.stats['backpressure_activations']} > {max_bp_activations})")
-
-    def simulate_packet_capture(self):
-        """
-        Simula captura de paquetes para testing
-        En implementación real, esto sería reemplazado por captura real de red
-        """
-        capture_config = self.config["capture"]
-        max_pps = capture_config["max_packets_per_second"]
-
-        packet_interval = 1.0 / max_pps if max_pps > 0 else 0.1
-
-        self.logger.info(f"🎯 Iniciando simulación de captura - {max_pps} pps")
-
-        packet_count = 0
-        while self.running:
-            # 📦 Simular packet data
-            packet_data = f"packet_{packet_count}_{self.node_id}".encode('utf-8')
-
-            # 📡 Procesar packet
-            self.capture_and_send_packet(packet_data)
-
-            packet_count += 1
-
-            # ⏱️ Rate limiting
-            time.sleep(packet_interval)
+        if queue_usage > max_queue_usage:
+            self.logger.warning(f"🚨 ALERTA: Cola interna llena ({queue_usage * 100:.1f}%)")
 
     def run(self):
-        """
-        Ejecutar el agent
-        """
-        self.logger.info("🚀 Iniciando Enhanced Promiscuous Agent...")
+        """Ejecutar el agente distribuido"""
+        self.logger.info("🚀 Iniciando Distributed Promiscuous Agent...")
+
+        # 🤝 Enviar handshake inicial
+        self.send_handshake()
 
         # 🧵 Iniciar threads
         threads = []
@@ -384,15 +618,22 @@ class ConfigurablePromiscuousAgent:
         monitor_thread.start()
         threads.append(monitor_thread)
 
-        # Thread de captura (simulada)
-        capture_thread = threading.Thread(target=self.simulate_packet_capture, name="Capture")
+        # Threads de procesamiento
+        num_processing_threads = self.config["processing"]["processing_threads"]
+        for i in range(num_processing_threads):
+            proc_thread = threading.Thread(target=self.process_packets, name=f"Processor-{i}")
+            proc_thread.start()
+            threads.append(proc_thread)
+
+        # Thread de captura (debe ser último para bloquear)
+        capture_thread = threading.Thread(target=self.start_packet_capture, name="Capture")
         capture_thread.start()
         threads.append(capture_thread)
 
         self.logger.info(f"✅ Agent iniciado con {len(threads)} threads")
 
         try:
-            # 🔄 Mantener vivo
+            # 🔄 Mantener vivo el proceso principal
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
@@ -402,9 +643,7 @@ class ConfigurablePromiscuousAgent:
         self.shutdown(threads)
 
     def shutdown(self, threads):
-        """
-        Cierre graceful
-        """
+        """Cierre graceful del agente"""
         self.running = False
         self.stop_event.set()
 
@@ -419,22 +658,22 @@ class ConfigurablePromiscuousAgent:
         # 🔌 Cerrar socket
         if self.socket:
             self.socket.close()
-
         self.context.term()
 
-        self.logger.info("✅ Promiscuous Agent cerrado correctamente")
+        self.logger.info("✅ Distributed Promiscuous Agent cerrado correctamente")
 
 
 # 🚀 Main
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("❌ Uso: python promiscuous_agent.py <config.json>")
+        print("💡 Ejemplo: python promiscuous_agent.py enhanced_agent_config.json")
         sys.exit(1)
 
     config_file = sys.argv[1]
 
     try:
-        agent = ConfigurablePromiscuousAgent(config_file)
+        agent = DistributedPromiscuousAgent(config_file)
         agent.run()
     except Exception as e:
         print(f"❌ Error fatal: {e}")
