@@ -1,139 +1,61 @@
 {
-  "agent_info": {
-    "name": "geoip_enricher",
-    "version": "2.0.0",
-    "description": "Enriquecedor geográfico para eventos de red",
-    "mode": "distributed",
-    "node_id": "geoip_enricher_001",
-    "region": "eu-west-1",
-    "datacenter": "dc-madrid"
+  "node_id": "geoip_enricher_default_001",
+
+  "zmq": {
+    "input_port": 5559,
+    "output_port": 5560,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 100,
+    "linger_ms": 5000
   },
-  "network": {
-    "input": {
-      "socket_type": "PULL",
-      "connection_mode": "bind",
-      "port": 5559,
-      "bind_address": "*",
-      "description": "Recibe eventos de promiscuous_agents",
-      "high_water_mark": 1000,
-      "timeout_ms": 5000
-    },
-    "output": {
-      "mode": "distributed",
-      "socket_type": "PUSH",
-      "connection_mode": "connect",
-      "targets": {
-        "ml_detectors": [
-          {
-            "id": "ml_detector_001",
-            "address": "localhost",
-            "port": 5560,
-            "weight": 100,
-            "priority": 1,
-            "enabled": true
-          },
-          {
-            "id": "ml_detector_002",
-            "address": "ml-detector-002.internal",
-            "port": 5560,
-            "weight": 100,
-            "priority": 1,
-            "enabled": false
-          }
-        ]
-      },
-      "load_balancing": {
-        "strategy": "round_robin",
-        "sticky_sessions": false,
-        "failover_enabled": true,
-        "retry_attempts": 3,
-        "retry_delay_ms": 1000
-      },
-      "health_check": {
-        "enabled": true,
-        "interval_seconds": 30,
-        "timeout_ms": 5000,
-        "failure_threshold": 3
-      },
-      "connection_management": {
-        "context_threads": 1,
-        "high_water_mark": 1000,
-        "linger_ms": 1000,
-        "send_timeout_ms": 5000
-      }
-    },
-    "backward_compatibility": {
-      "local_mode": {
-        "enabled": true,
-        "output_socket_type": "PUSH",
-        "output_connection_mode": "bind",
-        "output_port": 5560,
-        "bind_address": "*"
-      }
+
+  "backpressure": {
+    "enabled": true,
+    "max_retries": 2,
+    "retry_delays_ms": [1, 5]
+  },
+
+  "processing": {
+    "threads": 2,
+    "internal_queue_size": 1000,
+    "queue_put_timeout_seconds": 0.1,
+    "queue_get_timeout_seconds": 1.0,
+    "serialization": {
+      "format": "json",
+      "encoding": "utf-8"
     }
   },
+
   "geoip": {
-    "provider": "maxmind",
-    "database_path": "data/GeoLite2-City.mmdb",
-    "enabled": true,
-    "cache_enabled": true,
+    "lookup_method": "mock",
+    "mock_coordinates": [40.4168, -3.7038],
+    "use_default_coordinates_on_failure": true,
+    "default_coordinates": [40.4168, -3.7038],
     "cache_size": 10000,
     "cache_ttl_seconds": 3600,
-    "fallback_coordinates": {
-      "latitude": 0.0,
-      "longitude": 0.0,
-      "country": "Unknown",
-      "city": "Unknown"
+    "maxmind": {
+      "database_path": "/path/to/GeoLite2-City.mmdb",
+      "enabled": false
     },
-    "private_ip_handling": {
-      "use_fallback": true,
-      "custom_mapping": {
-        "192.168.0.0/16": {"latitude": 40.4168, "longitude": -3.7038, "city": "Madrid", "country": "ES"},
-        "10.0.0.0/8": {"latitude": 40.4168, "longitude": -3.7038, "city": "Madrid", "country": "ES"}
-      }
+    "api": {
+      "url": "https://api.example.com/geoip/{ip}",
+      "timeout_seconds": 2.0,
+      "api_key": null,
+      "enabled": false
     }
   },
-  "processing": {
-    "batch_processing": false,
-    "batch_size": 10,
-    "max_events_per_second": 1000,
-    "stats_interval": 60,
-    "enable_enrichment_validation": true,
-    "preserve_original_fields": true
-  },
-  "performance": {
-    "max_memory_mb": 512,
-    "worker_threads": 1,
-    "io_threads": 1,
-    "prefetch_count": 100
-  },
-  "monitoring": {
-    "metrics": {
-      "enabled": false,
-      "prometheus_port": 9091
-    },
-    "alerting": {
-      "enabled": false,
-      "thresholds": {
-        "geoip_lookup_errors": 50,
-        "processing_latency_ms": 100
-      }
-    }
-  },
+
   "logging": {
     "level": "INFO",
-    "file": "logs/geoip_enricher.log",
-    "max_size": "10MB",
-    "backup_count": 5,
-    "format": "%(asctime)s - %(name)s - %(levelname)s - [%(node_id)s] - %(message)s",
-    "console_output": true
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] - %(message)s",
+    "file": null
   },
-  "protobuf": {
-    "enabled": true,
-    "extended_format": true,
-    "validation": {
-      "enabled": true,
-      "strict_mode": false
+
+  "monitoring": {
+    "stats_interval_seconds": 15,
+    "alerts": {
+      "max_queue_usage_percent": 80.0,
+      "max_geoip_failure_rate_percent": 20.0
     }
   }
 }

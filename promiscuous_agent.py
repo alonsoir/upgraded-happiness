@@ -1,979 +1,441 @@
-#!/usr/bin/env python3
-"""
-Enhanced Promiscuous Agent para Upgraded-Happiness (REFACTORIZADO DISTRIBUIDO)
-RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ distribuido
-NUEVA ARQUITECTURA: NetworkManager para distribución automática
-SOCKET PATTERNS: Explícitos en JSON (socket_type + connection_mode)
-"""
+# promiscuous_agent.py - Completamente configurable desde JSON con backpressure
 
-import json
+import zmq
 import time
+import json
 import logging
-import os
-import sys
+import threading
 import socket
 import uuid
-import argparse
-import threading
-import signal
-from typing import Dict, List, Optional, Tuple, Any
-from collections import deque
-
-# Messaging and serialization
-import zmq
-
-# Network and packet capture
-from scapy.all import *
-
-# System detection
-import platform
-import subprocess
-import shutil
-
-# Configurar logging básico (se reconfigurará desde JSON)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Importar protobuf
-try:
-    from src.protocols.protobuf import network_event_extended_fixed_pb2
-
-    EXTENDED_PROTOBUF = True
-    logger.info("✅ Protobuf extendido importado desde src.protocols.protobuf")
-except ImportError:
-    try:
-        import network_event_extended_fixed_pb2
-
-        EXTENDED_PROTOBUF = True
-        logger.info("✅ Protobuf extendido importado desde directorio local")
-    except ImportError:
-        EXTENDED_PROTOBUF = False
-        logger.error("❌ Protobuf extendido no disponible")
-
-# Importar NetworkManager
-try:
-    from networkManagerPromiscuousAgent import DistributedNetworkManager
-
-    NETWORK_MANAGER_AVAILABLE = True
-    logger.info("✅ NetworkManager importado correctamente")
-except ImportError as e:
-    NETWORK_MANAGER_AVAILABLE = False
-    logger.warning(f"⚠️ NetworkManager no disponible: {e}")
-    logger.info("💡 Funcionará solo en modo local")
+from threading import Event
+from typing import Dict, Any, Optional
+import sys
 
 
-class SimpleSystemDetector:
-    """Detector ligero de SO y firewall configurado desde JSON"""
-
-    def __init__(self, system_config: Dict = None):
-        """Inicializar detector con configuración"""
-        self.config = system_config or {}
-        self._so_identifier = None
-        self._node_info = None
-        self._is_first_event = True
-        self._detect_firewall = self.config.get('detect_firewall', True)
-        self._detect_os = self.config.get('detect_os', True)
-        self._include_hardware_info = self.config.get('include_hardware_info', False)
-
-    def get_so_identifier(self) -> str:
-        """Retorna identificador único del SO y firewall"""
-        if self._so_identifier is None:
-            self._so_identifier = self._detect_so_identifier()
-        return self._so_identifier
-
-    def _detect_so_identifier(self) -> str:
-        """Detecta SO y firewall, retorna identificador compacto"""
-        if not self._detect_os:
-            return "unknown_unknown"
-
-        os_name = platform.system().lower()
-
-        if os_name == "linux":
-            firewall = self._detect_linux_firewall() if self._detect_firewall else "unknown"
-            return f"linux_{firewall}"
-        elif os_name == "windows":
-            return "windows_firewall" if self._detect_firewall else "windows_unknown"
-        elif os_name == "darwin":
-            return "darwin_pf" if self._detect_firewall else "darwin_unknown"
-        else:
-            return "unknown_unknown"
-
-    def _detect_linux_firewall(self) -> str:
-        """Detecta tipo de firewall en Linux"""
-        # Orden de prioridad: ufw -> firewalld -> iptables
-        if shutil.which('ufw'):
-            try:
-                result = subprocess.run(['ufw', 'status'],
-                                        capture_output=True, text=True, timeout=3)
-                if result.returncode == 0:
-                    return 'ufw'
-            except:
-                pass
-
-        if shutil.which('firewall-cmd'):
-            try:
-                result = subprocess.run(['systemctl', 'is-active', 'firewalld'],
-                                        capture_output=True, text=True, timeout=3)
-                if result.returncode == 0:
-                    return 'firewalld'
-            except:
-                pass
-
-        if shutil.which('iptables'):
-            return 'iptables'
-
-        return 'unknown'
-
-    def get_node_info_for_handshake(self) -> dict:
-        """Retorna información completa del nodo para el primer evento"""
-        if self._node_info is None:
-            try:
-                # Detectar estado del firewall
-                firewall_status = "unknown"
-                os_name = platform.system().lower()
-
-                if self._detect_firewall:
-                    if os_name == "linux":
-                        firewall_status = self._get_linux_firewall_status()
-                    elif os_name == "windows":
-                        firewall_status = self._get_windows_firewall_status()
-                    elif os_name == "darwin":
-                        firewall_status = self._get_macos_firewall_status()
-
-                node_info = {
-                    'node_hostname': socket.gethostname(),
-                    'os_version': f"{platform.system()} {platform.release()}",
-                    'firewall_status': firewall_status,
-                    'agent_version': '2.0.0'  # ← ACTUALIZADO
-                }
-
-                # Información adicional de hardware si está configurado
-                if self._include_hardware_info:
-                    try:
-                        node_info['architecture'] = platform.machine()
-                        node_info['processor'] = platform.processor()
-                        node_info['python_version'] = platform.python_version()
-                    except:
-                        pass
-
-                self._node_info = node_info
-
-            except Exception as e:
-                logger.warning(f"Error detectando información del sistema: {e}")
-                self._node_info = {
-                    'node_hostname': 'unknown',
-                    'os_version': 'unknown',
-                    'firewall_status': 'unknown',
-                    'agent_version': '2.0.0'
-                }
-
-        return self._node_info
-
-    def _get_linux_firewall_status(self) -> str:
-        """Obtiene estado del firewall en Linux"""
-        try:
-            if shutil.which('ufw'):
-                result = subprocess.run(['ufw', 'status'], capture_output=True, text=True, timeout=3)
-                if 'Status: active' in result.stdout:
-                    return 'active'
-                else:
-                    return 'inactive'
-        except:
-            pass
-        return 'unknown'
-
-    def _get_windows_firewall_status(self) -> str:
-        """Obtiene estado del firewall en Windows"""
-        try:
-            result = subprocess.run(['netsh', 'advfirewall', 'show', 'allprofiles', 'state'],
-                                    capture_output=True, text=True, timeout=5)
-            if 'State                                 ON' in result.stdout:
-                return 'active'
-            else:
-                return 'inactive'
-        except:
-            pass
-        return 'unknown'
-
-    def _get_macos_firewall_status(self) -> str:
-        """Obtiene estado del firewall en macOS"""
-        try:
-            result = subprocess.run(['pfctl', '-s', 'info'],
-                                    capture_output=True, text=True, timeout=3)
-            if 'Status: Enabled' in result.stdout:
-                return 'active'
-            else:
-                return 'inactive'
-        except:
-            pass
-        return 'unknown'
-
-    def is_first_event(self) -> bool:
-        """Retorna True solo para el primer evento (handshake)"""
-        if self._is_first_event:
-            self._is_first_event = False
-            return True
-        return False
-
-    def get_system_summary(self) -> dict:
-        """Retorna resumen del sistema"""
-        return {
-            'node_id': socket.gethostname(),
-            'so_identifier': self.get_so_identifier(),
-            'os_name': platform.system(),
-            'os_version': platform.release(),
-            'firewall_type': self.get_so_identifier().split('_')[-1] if '_' in self.get_so_identifier() else 'unknown',
-            'firewall_status': self.get_node_info_for_handshake()['firewall_status']
-        }
-
-
-class EnhancedPromiscuousAgent:
+class ConfigurablePromiscuousAgent:
     """
-    Agente promiscuo configurado completamente desde JSON con NetworkManager distribuido
-    RESPONSABILIDAD ÚNICA: Captura de paquetes + envío ZeroMQ distribuido
-    NUEVA ARQUITECTURA: NetworkManager para load balancing automático
+    Promiscuous Agent completamente configurable desde JSON
+    Sin valores por defecto hardcodeados - todo viene del archivo de configuración
     """
 
-    def __init__(self, config_file: Optional[str] = None):
-        """Inicializar agente con configuración JSON completa"""
-        self.config = self._load_config(config_file)
+    def __init__(self, config_file: str):
+        # 📄 Cargar configuración - SIN defaults hardcodeados
+        self.config = self._load_config_strict(config_file)
         self.config_file = config_file
 
-        # Configurar logging desde JSON PRIMERO
-        self._setup_logging()
+        # 🏷️ node_id desde configuración
+        self.node_id = self.config["node_id"]
 
-        # Configuración básica desde JSON
-        self.agent_id = f"agent_{socket.gethostname()}_{int(time.time())}"
-        self.hostname = socket.gethostname()
+        # 🔌 Setup ZeroMQ desde configuración
+        self.context = zmq.Context()
+        self.socket = None
+        self.setup_socket()
 
-        # Configuración de captura desde JSON
-        self.interface = self.config['capture']['interface']
-        self.promiscuous_mode = self.config['capture']['promiscuous_mode']
-        self.buffer_size = self.config['capture']['buffer_size']
-        self.timeout = self.config['capture']['timeout']
-        self.max_packets_per_second = self.config['capture']['max_packets_per_second']
+        # 🔄 Backpressure desde configuración
+        self.backpressure_config = self.config["backpressure"]
 
-        # Configuración de filtrado desde JSON
-        self.filtering_config = self.config.get('filtering', {})
-        self.protocols = self.filtering_config.get('protocols', ['tcp', 'udp', 'icmp'])
-        self.exclude_ports = set(self.filtering_config.get('exclude_ports', []))
-        self.include_ports = set(self.filtering_config.get('include_ports', []))
-        self.max_packet_size = self.filtering_config.get('max_packet_size', 65535)
-
-        # Configuración de handshake desde JSON
-        self.handshake_config = self.config.get('handshake', {})
-        self.send_handshake = self.handshake_config.get('enabled', True)
-        self.send_initial = self.handshake_config.get('send_initial', True)
-        self.handshake_interval = self.handshake_config.get('interval', 30)
-
-        # Configuración de performance desde JSON
-        self.performance_config = self.config.get('performance', {})
-        self.max_memory_mb = self.performance_config.get('max_memory_mb', 512)
-        self.stats_interval = self.performance_config.get('stats_interval', 60)
-
-        # Estado interno
-        self.running = False
-        self.zmq_context = None
-        self.network_manager = None
-
-        # Sistema detector configurado desde JSON
-        self.system_detector = SimpleSystemDetector(self.config.get('system_detection', {}))
-
-        # Estadísticas
+        # 📊 Métricas
         self.stats = {
-            'packets_captured': 0,
-            'packets_sent': 0,
-            'packets_filtered': 0,
-            'handshakes_sent': 0,
-            'errors': 0,
-            'network_errors': 0,
+            'captured': 0,
+            'sent': 0,
+            'dropped': 0,
+            'filtered': 0,
+            'buffer_full_errors': 0,
+            'send_timeouts': 0,
+            'backpressure_activations': 0,
             'start_time': time.time(),
-            'last_handshake': 0
+            'last_stats_time': time.time()
         }
 
-        # Rate limiting
-        self.packet_times = deque(maxlen=100)
+        # 🎛️ Control
+        self.stop_event = Event()
+        self.running = True
 
-        # NUEVA ARQUITECTURA: Inicializar NetworkManager distribuido
-        self._init_network()
+        # 📝 Setup logging desde configuración
+        self.setup_logging()
 
-        self.so_identifier = self.system_detector.get_so_identifier()
+        self.logger.info(f"🚀 Promiscuous Agent inicializado - node_id: {self.node_id}")
+        self.logger.info(f"📄 Config: {config_file}")
 
-        logger.info(f"🚀 Enhanced Promiscuous Agent inicializado (REFACTORIZADO DISTRIBUIDO)")
-        logger.info(f"Config file: {config_file or 'default config'}")
-        logger.info(f"Agent ID: {self.agent_id}")
-        logger.info(f"🖥️  SO detectado: {self.so_identifier}")
-        logger.info(f"📦 Protobuf: {'✅' if EXTENDED_PROTOBUF else '❌'}")
-        logger.info(f"🌐 NetworkManager: {'✅' if NETWORK_MANAGER_AVAILABLE else '❌ (solo local)'}")
-
-    def _load_config(self, config_file):
-        """Cargar configuración desde archivo JSON con soporte distribuido"""
-        default_config = {
-            "agent_info": {
-                "name": "enhanced_promiscuous_agent",
-                "version": "2.0.0",
-                "description": "Agente promiscuo distribuido para captura de paquetes",
-                "mode": "local",
-                "node_id": f"node_{socket.gethostname()}",
-                "region": "local",
-                "datacenter": "local"
-            },
-            "capture": {
-                "interface": "any",
-                "promiscuous_mode": True,
-                "buffer_size": 512,
-                "timeout": 1,
-                "max_packets_per_second": 1000
-            },
-            "network": {
-                "mode": "local",
-                "socket_type": "PUSH",
-                "connection_mode": "bind",
-                "backward_compatibility": {
-                    "local_mode": {
-                        "enabled": True,
-                        "output_port": 5559,
-                        "bind_address": "*"
-                    }
-                },
-                "connection_management": {
-                    "context_threads": 1,
-                    "high_water_mark": 1000,
-                    "linger_ms": 1000,
-                    "send_timeout_ms": 5000
-                }
-            },
-            "filtering": {
-                "protocols": ["tcp", "udp", "icmp"],
-                "exclude_ports": [],
-                "include_ports": [],
-                "max_packet_size": 65535
-            },
-            "handshake": {
-                "enabled": True,
-                "send_initial": True,
-                "interval": 30,
-                "system_info": True
-            },
-            "system_detection": {
-                "detect_firewall": True,
-                "detect_os": True,
-                "include_hardware_info": False
-            },
-            "performance": {
-                "max_memory_mb": 512,
-                "stats_interval": 60,
-                "batch_processing": False
-            },
-            "logging": {
-                "level": "INFO",
-                "file": "logs/promiscuous_agent.log",
-                "max_size": "10MB",
-                "backup_count": 5,
-                "format": "%(asctime)s - %(name)s - %(levelname)s - [%(node_id)s] - %(message)s",
-                "console_output": True
-            },
-            "protobuf": {
-                "enabled": True,
-                "extended_format": True,
-                "timestamp_correction": True,
-                "compression": False
-            }
-        }
-
-        if config_file and os.path.exists(config_file):
-            try:
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    user_config = json.load(f)
-
-                # Merge recursivo de configuraciones
-                self._merge_config(default_config, user_config)
-                logger.info(f"📄 Configuración promiscuous agent cargada desde {config_file}")
-
-            except Exception as e:
-                logger.error(f"❌ Error cargando configuración promiscuous agent: {e}")
-                logger.info("⚠️ Usando configuración por defecto")
-        else:
-            if config_file:
-                logger.warning(f"⚠️ Archivo de configuración promiscuous agent no encontrado: {config_file}")
-            logger.info("⚠️ Usando configuración promiscuous agent por defecto")
-
-        return default_config
-
-    def _merge_config(self, base, update):
-        """Merge recursivo de configuraciones"""
-        for key, value in update.items():
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                self._merge_config(base[key], value)
-            else:
-                base[key] = value
-
-    def _setup_logging(self):
-        """Configurar logging desde configuración JSON"""
-        log_config = self.config.get('logging', {})
-
-        # Configurar nivel
-        level = getattr(logging, log_config.get('level', 'INFO').upper())
-        logger.setLevel(level)
-
-        # Limpiar handlers existentes
-        for handler in logger.handlers[:]:
-            logger.removeHandler(handler)
-
-        # Formatter desde configuración
-        formatter_string = log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-        # Añadir node_id al contexto de logging
-        node_id = self.config.get('agent_info', {}).get('node_id', 'unknown')
-        formatter_string = formatter_string.replace('%(node_id)s', node_id)
-
-        formatter = logging.Formatter(formatter_string)
-
-        # Console handler si está habilitado
-        if log_config.get('console_output', True):
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(level)
-            console_handler.setFormatter(formatter)
-            logger.addHandler(console_handler)
-
-        # File handler si se especifica archivo
-        if log_config.get('file'):
-            # Crear directorio si no existe
-            log_file = log_config['file']
-            log_dir = os.path.dirname(log_file)
-            if log_dir and not os.path.exists(log_dir):
-                os.makedirs(log_dir, exist_ok=True)
-
-            from logging.handlers import RotatingFileHandler
-            file_handler = RotatingFileHandler(
-                log_file,
-                maxBytes=self._parse_size(log_config.get('max_size', '10MB')),
-                backupCount=log_config.get('backup_count', 5)
-            )
-            file_handler.setLevel(level)
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-
-    def _parse_size(self, size_str: str) -> int:
-        """Parse size string (e.g., '10MB') to bytes"""
-        if isinstance(size_str, int):
-            return size_str
-
-        size_str = size_str.upper()
-        if size_str.endswith('MB'):
-            return int(size_str[:-2]) * 1024 * 1024
-        elif size_str.endswith('KB'):
-            return int(size_str[:-2]) * 1024
-        else:
-            return int(size_str)
-
-    def _init_network(self):
-        """NUEVA ARQUITECTURA: Inicializar NetworkManager distribuido"""
+    def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
+        """
+        Carga configuración SIN proporcionar defaults
+        Si falta algo crítico, falla rápido
+        """
         try:
-            # Configurar ZMQ context
-            network_config = self.config.get('network', {})
-            connection_config = network_config.get('connection_management', {})
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(f"❌ Archivo de configuración no encontrado: {config_file}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"❌ Error parseando JSON: {e}")
 
-            self.zmq_context = zmq.Context(connection_config.get('context_threads', 1))
+        # ✅ Validar campos críticos - SIN proporcionar defaults
+        required_fields = [
+            "node_id",
+            "zmq",
+            "backpressure",
+            "capture",
+            "logging",
+            "monitoring"
+        ]
 
-            # Intentar usar NetworkManager distribuido
-            if NETWORK_MANAGER_AVAILABLE and network_config.get('mode') == 'distributed':
-                logger.info("🌐 Inicializando NetworkManager distribuido")
-                self.network_manager = DistributedNetworkManager(network_config, self.zmq_context)
-            else:
-                # Fallback a modo local
-                logger.info("🏠 Inicializando modo local (fallback)")
-                self._init_local_fallback(network_config)
+        for field in required_fields:
+            if field not in config:
+                raise RuntimeError(f"❌ Campo requerido faltante en config: {field}")
 
-        except Exception as e:
-            logger.error(f"❌ Error inicializando network: {e}")
-            logger.info("🔄 Fallback a modo local")
-            self._init_local_fallback(self.config.get('network', {}))
+        # ✅ Validar subcampos ZMQ
+        zmq_required = ["output_port", "linger_ms", "send_timeout_ms", "sndhwm"]
+        for field in zmq_required:
+            if field not in config["zmq"]:
+                raise RuntimeError(f"❌ Campo ZMQ requerido faltante: zmq.{field}")
 
-    def _init_local_fallback(self, network_config):
-        """Fallback a modo local si NetworkManager no está disponible"""
-        try:
-            # Usar configuración backward compatibility
-            legacy_config = network_config.get('backward_compatibility', {}).get('local_mode', {})
-            connection_config = network_config.get('connection_management', {})
+        # ✅ Validar subcampos backpressure
+        bp_required = ["enabled", "max_retries", "retry_delays_ms", "drop_threshold_percent", "activation_threshold"]
+        for field in bp_required:
+            if field not in config["backpressure"]:
+                raise RuntimeError(f"❌ Campo backpressure requerido faltante: backpressure.{field}")
 
-            port = legacy_config.get('output_port', 5559)
-            address = legacy_config.get('bind_address', '*')
+        self._log_config_loaded(config)
+        return config
 
-            # Crear socket tradicional
-            self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
-            self.zmq_socket.setsockopt(zmq.SNDHWM, connection_config.get('high_water_mark', 1000))
-            self.zmq_socket.setsockopt(zmq.LINGER, connection_config.get('linger_ms', 1000))
+    def _log_config_loaded(self, config: Dict[str, Any]):
+        """Log de configuración cargada"""
+        print(f"✅ Configuración cargada:")
+        print(f"   🏷️ Node ID: {config['node_id']}")
+        print(f"   🔌 Puerto ZMQ: {config['zmq']['output_port']}")
+        print(f"   🔄 Backpressure: {'✅' if config['backpressure']['enabled'] else '❌'}")
+        print(f"   📡 Interface: {config['capture']['interface']}")
 
-            bind_address = f"tcp://{address}:{port}"
-            self.zmq_socket.bind(bind_address)
+    def setup_socket(self):
+        """Configuración ZMQ desde archivo de configuración"""
+        zmq_config = self.config["zmq"]
 
-            logger.info(f"🔌 Socket local PUSH BIND en {bind_address}")
+        self.socket = self.context.socket(zmq.PUSH)
 
-        except Exception as e:
-            logger.error(f"❌ Error en fallback local: {e}")
-            raise
+        # 🔧 Configurar ZMQ desde JSON
+        self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
+        self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
+        self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
 
-    def _should_filter_packet(self, packet) -> bool:
-        """Determina si un paquete debe ser filtrado basado en configuración"""
+        # 🔌 BIND del socket
+        port = zmq_config["output_port"]
+        bind_address = f"tcp://*:{port}"
+        self.socket.bind(bind_address)
 
-        # Filtro por tamaño
-        packet_size = len(packet)
-        if packet_size > self.max_packet_size:
+        print(f"🔌 Socket ZMQ configurado:")
+        print(f"   📡 Bind: {bind_address}")
+        print(f"   ⏱️ Timeout: {zmq_config['send_timeout_ms']}ms")
+
+    def setup_logging(self):
+        """Setup logging desde configuración"""
+        log_config = self.config["logging"]
+
+        # 📝 Configurar nivel
+        level = getattr(logging, log_config["level"].upper())
+
+        # 🏷️ Formato con node_id
+        formatter = logging.Formatter(
+            log_config["format"].format(node_id=self.node_id)
+        )
+
+        # 🔧 Configurar handler
+        if log_config.get("file"):
+            handler = logging.FileHandler(log_config["file"])
+        else:
+            handler = logging.StreamHandler()
+
+        handler.setFormatter(formatter)
+
+        # 📋 Setup logger
+        self.logger = logging.getLogger(f"promiscuous_agent_{self.node_id}")
+        self.logger.setLevel(level)
+        self.logger.addHandler(handler)
+
+        # 🔇 Evitar duplicados
+        self.logger.propagate = False
+
+    def apply_backpressure(self, attempt: int) -> bool:
+        """
+        Aplica backpressure según configuración
+        Returns: True si debe continuar reintentando, False si debe descartar
+        """
+        bp_config = self.backpressure_config
+
+        if not bp_config["enabled"]:
+            # Sin backpressure - descartar inmediatamente
+            return False
+
+        if attempt >= bp_config["max_retries"]:
+            # Máximo de reintentos alcanzado
+            self.stats['dropped'] += 1
+            return False
+
+        # 🔄 Aplicar delay configurado
+        delays = bp_config["retry_delays_ms"]
+        if attempt < len(delays):
+            delay_ms = delays[attempt]
+        else:
+            # Usar último delay si se excede la lista
+            delay_ms = delays[-1]
+
+        time.sleep(delay_ms / 1000.0)  # Convertir a segundos
+
+        self.stats['backpressure_activations'] += 1
+        return True
+
+    def should_activate_backpressure(self) -> bool:
+        """
+        Determina si activar backpressure basado en métricas
+        """
+        bp_config = self.backpressure_config
+
+        if not bp_config["enabled"]:
+            return False
+
+        # 📊 Calcular tasa de errores de buffer
+        total_attempts = self.stats['sent'] + self.stats['buffer_full_errors']
+        if total_attempts == 0:
+            return False
+
+        error_rate = (self.stats['buffer_full_errors'] / total_attempts) * 100
+
+        # 🚨 Activar si excede threshold
+        if error_rate >= bp_config["drop_threshold_percent"]:
             return True
 
-        # Filtro de puertos
-        if TCP in packet or UDP in packet:
-            src_port = packet[TCP].sport if TCP in packet else packet[UDP].sport
-            dst_port = packet[TCP].dport if TCP in packet else packet[UDP].dport
-
-            # Excluir puertos específicos
-            if src_port in self.exclude_ports or dst_port in self.exclude_ports:
-                return True
-
-            # Incluir solo puertos específicos (si está configurado)
-            if self.include_ports and src_port not in self.include_ports and dst_port not in self.include_ports:
-                return True
-
-        # Filtro de protocolo
-        protocol = None
-        if TCP in packet:
-            protocol = 'tcp'
-        elif UDP in packet:
-            protocol = 'udp'
-        elif ICMP in packet:
-            protocol = 'icmp'
-
-        if protocol and protocol not in self.protocols:
+        # 🔢 Activar si muchos errores absolutos
+        if self.stats['buffer_full_errors'] >= bp_config["activation_threshold"]:
             return True
 
         return False
 
-    def _check_rate_limit(self) -> bool:
-        """Verificar rate limiting de paquetes"""
-        now = time.time()
-        self.packet_times.append(now)
-
-        # Limpiar tiempos antiguos (más de 1 segundo)
-        while self.packet_times and now - self.packet_times[0] > 1.0:
-            self.packet_times.popleft()
-
-        # Verificar si excedemos el límite por segundo
-        if len(self.packet_times) > self.max_packets_per_second:
-            return False
-
-        return True
-
-    def create_network_event(self, packet) -> 'NetworkEvent':
+    def send_event_with_backpressure(self, event_data: bytes) -> bool:
         """
-        Crear evento usando el protobuf configurado
-        SIN COORDENADAS - esa responsabilidad es del geoip_enricher.py
+        Envío con backpressure configurable
         """
+        bp_config = self.backpressure_config
+        max_retries = bp_config["max_retries"]
 
-        if not EXTENDED_PROTOBUF:
-            logger.warning("Protobuf extendido no disponible")
-            return None
+        for attempt in range(max_retries + 1):  # +1 para incluir intento inicial
+            try:
+                # 🚀 Intento de envío
+                self.socket.send(event_data, zmq.NOBLOCK)
+                self.stats['sent'] += 1
+                return True
 
-        # Crear evento
-        event = network_event_extended_fixed_pb2.NetworkEvent()
+            except zmq.Again:
+                # 🔴 Buffer lleno
+                self.stats['buffer_full_errors'] += 1
 
-        # Campos básicos
-        event.event_id = str(uuid.uuid4())
-        event.timestamp = int(time.time())  # Timestamp corregido: segundos Unix
-        event.agent_id = self.agent_id
+                if attempt == max_retries:
+                    # 🗑️ Último intento fallido - descartar
+                    self.stats['dropped'] += 1
+                    self.logger.warning(f"⚠️ Evento descartado tras {max_retries} intentos")
+                    return False
 
-        # Información de red básica
-        if IP in packet:
-            event.source_ip = packet[IP].src
-            event.target_ip = packet[IP].dst
-        else:
-            event.source_ip = "unknown"
-            event.target_ip = "unknown"
+                # 🔄 Aplicar backpressure
+                if not self.apply_backpressure(attempt):
+                    return False
 
-        # Puertos
-        if TCP in packet:
-            event.src_port = packet[TCP].sport
-            event.dest_port = packet[TCP].dport
-        elif UDP in packet:
-            event.src_port = packet[UDP].sport
-            event.dest_port = packet[UDP].dport
-        else:
-            event.src_port = 0
-            event.dest_port = 0
+                continue
 
-        # Campos adicionales básicos
-        event.packet_size = len(packet)
-        event.event_type = "network_capture"
-        event.anomaly_score = 0.0
-        event.risk_score = 0.0
-        event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
+            except zmq.ZMQError as e:
+                self.logger.error(f"❌ Error ZMQ: {e}")
+                self.stats['dropped'] += 1
+                return False
 
-        # SIN COORDENADAS - se añadirán en geoip_enricher.py
-        event.latitude = 0.0
-        event.longitude = 0.0
+        return False
 
-        # Información del sistema
-        event.so_identifier = self.system_detector.get_so_identifier()
+    def capture_and_send_packet(self, packet_data: bytes):
+        """
+        Simula captura y envío de paquete
+        En implementación real, aquí iría la lógica de captura de red
+        """
+        self.stats['captured'] += 1
 
-        # Solo en el primer evento, añadir información completa
-        if self.send_handshake and self.system_detector.is_first_event():
-            node_info = self.system_detector.get_node_info_for_handshake()
-            event.is_initial_handshake = True
-            event.node_hostname = node_info['node_hostname']
-            event.os_version = node_info['os_version']
-            event.firewall_status = node_info['firewall_status']
-            event.agent_version = node_info['agent_version']
-
-            self.stats['handshakes_sent'] += 1
-            self.stats['last_handshake'] = time.time()
-
-            logger.info(f"📤 Enviando handshake inicial con SO: {event.so_identifier}")
-        else:
-            event.is_initial_handshake = False
-            event.node_hostname = ""
-            event.os_version = ""
-            event.firewall_status = ""
-            event.agent_version = ""
-
-        self.stats['packets_captured'] += 1
-        return event
-
-    def send_event(self, event):
-        """NUEVA ARQUITECTURA: Enviar evento via NetworkManager o fallback local"""
-        try:
-            # Serializar evento
-            data = event.SerializeToString()
-
-            # Usar NetworkManager distribuido si está disponible
-            if self.network_manager:
-                success = self.network_manager.send_event(data)
-                if success:
-                    self.stats['packets_sent'] += 1
-                else:
-                    logger.warning("⚠️ NetworkManager falló - evento no enviado")
-                    self.stats['network_errors'] += 1
-
-            # Fallback a socket local
-            elif hasattr(self, 'zmq_socket'):
-                self.zmq_socket.send(data, zmq.NOBLOCK)
-                self.stats['packets_sent'] += 1
-            else:
-                logger.error("❌ No hay método de envío disponible")
-                self.stats['errors'] += 1
-
-        except zmq.Again:
-            logger.warning("⚠️ ZMQ buffer lleno - evento descartado")
-            self.stats['errors'] += 1
-        except Exception as e:
-            logger.error(f"❌ Error enviando evento: {e}")
-            self.stats['errors'] += 1
-
-    def send_periodic_handshake(self):
-        """Envía handshake periódico según configuración"""
-        if not self.send_handshake:
+        # 🎯 Aplicar filtros desde configuración
+        if self.should_filter_packet(packet_data):
+            self.stats['filtered'] += 1
             return
 
+        # 📤 Enviar con backpressure
+        success = self.send_event_with_backpressure(packet_data)
+
+        if not success:
+            # Log solo si backpressure está habilitado y falló
+            if self.backpressure_config["enabled"]:
+                self.logger.warning("⚠️ Backpressure activo - evento descartado")
+
+    def should_filter_packet(self, packet_data: bytes) -> bool:
+        """
+        Aplica filtros desde configuración
+        """
+        capture_config = self.config["capture"]
+
+        # 🎯 Aplicar filtros configurados
+        # En implementación real, aquí iría lógica de filtrado basada en:
+        # - capture_config["excluded_ports"]
+        # - capture_config["included_protocols"]
+        # - capture_config["filter_rules"]
+
+        # Por ahora, filtro simulado
+        return len(packet_data) < capture_config.get("min_packet_size", 0)
+
+    def monitor_performance(self):
+        """
+        Thread de monitoreo de performance
+        """
+        monitoring_config = self.config["monitoring"]
+        interval = monitoring_config["stats_interval_seconds"]
+
+        while self.running:
+            time.sleep(interval)
+
+            if not self.running:
+                break
+
+            self.log_performance_stats()
+            self.check_performance_alerts()
+
+    def log_performance_stats(self):
+        """
+        Log de estadísticas de performance
+        """
         now = time.time()
-        if now - self.stats['last_handshake'] >= self.handshake_interval:
-            # Crear evento de handshake
-            if EXTENDED_PROTOBUF:
-                event = network_event_extended_fixed_pb2.NetworkEvent()
+        interval = now - self.stats['last_stats_time']
 
-                event.event_id = str(uuid.uuid4())
-                event.timestamp = int(now)
-                event.agent_id = self.agent_id
-                event.source_ip = "127.0.0.1"
-                event.target_ip = "127.0.0.1"
-                event.packet_size = 0
-                event.src_port = 0
-                event.dest_port = 0
-                event.event_type = "periodic_handshake"
-                event.anomaly_score = 0.0
-                event.risk_score = 0.0
-                event.description = "Periodic agent handshake"
+        # 📊 Calcular rates
+        capture_rate = self.stats['captured'] / interval if interval > 0 else 0
+        send_rate = self.stats['sent'] / interval if interval > 0 else 0
+        drop_rate = self.stats['dropped'] / interval if interval > 0 else 0
 
-                # SIN COORDENADAS
-                event.latitude = 0.0
-                event.longitude = 0.0
+        self.logger.info(f"📊 Performance Stats:")
+        self.logger.info(f"   📡 Capturados: {self.stats['captured']} ({capture_rate:.1f}/s)")
+        self.logger.info(f"   📤 Enviados: {self.stats['sent']} ({send_rate:.1f}/s)")
+        self.logger.info(f"   🗑️ Descartados: {self.stats['dropped']} ({drop_rate:.1f}/s)")
+        self.logger.info(f"   🔄 Backpressure: {self.stats['backpressure_activations']} activaciones")
+        self.logger.info(f"   🚫 Filtrados: {self.stats['filtered']}")
 
-                # Información del sistema
-                event.so_identifier = self.system_detector.get_so_identifier()
-                node_info = self.system_detector.get_node_info_for_handshake()
-                event.is_initial_handshake = False
-                event.node_hostname = node_info['node_hostname']
-                event.os_version = node_info['os_version']
-                event.firewall_status = node_info['firewall_status']
-                event.agent_version = node_info['agent_version']
+        # 🔄 Reset stats for next interval
+        for key in ['captured', 'sent', 'dropped', 'filtered', 'backpressure_activations']:
+            self.stats[key] = 0
 
-                self.send_event(event)
-                self.stats['last_handshake'] = now
-                self.stats['handshakes_sent'] += 1
+        self.stats['last_stats_time'] = now
 
-                logger.debug(f"📤 Handshake periódico enviado")
+    def check_performance_alerts(self):
+        """
+        Verifica alertas de performance desde configuración
+        """
+        monitoring_config = self.config["monitoring"]
+        alerts = monitoring_config.get("alerts", {})
 
-    def packet_handler(self, packet):
-        """Handler principal para procesar paquetes capturados"""
-        try:
-            # Verificar rate limiting
-            if not self._check_rate_limit():
-                return
+        # 🚨 Alert de drop rate alto
+        total_events = self.stats['sent'] + self.stats['dropped']
+        if total_events > 0:
+            drop_percentage = (self.stats['dropped'] / total_events) * 100
 
-            # Aplicar filtros configurados
-            if self._should_filter_packet(packet):
-                self.stats['packets_filtered'] += 1
-                return
+            max_drop_rate = alerts.get("max_drop_rate_percent", 100)  # Sin alerta por defecto
+            if drop_percentage > max_drop_rate:
+                self.logger.warning(f"🚨 ALERTA: Drop rate alto ({drop_percentage:.1f}% > {max_drop_rate}%)")
 
-            # Crear evento de red básico (SIN coordenadas)
-            event = self.create_network_event(packet)
-            if not event:
-                return
+        # 🚨 Alert de backpressure frecuente
+        max_bp_activations = alerts.get("max_backpressure_activations", float('inf'))
+        if self.stats['backpressure_activations'] > max_bp_activations:
+            self.logger.warning(
+                f"🚨 ALERTA: Backpressure muy frecuente ({self.stats['backpressure_activations']} > {max_bp_activations})")
 
-            # Enviar via NetworkManager o fallback local
-            self.send_event(event)
+    def simulate_packet_capture(self):
+        """
+        Simula captura de paquetes para testing
+        En implementación real, esto sería reemplazado por captura real de red
+        """
+        capture_config = self.config["capture"]
+        max_pps = capture_config["max_packets_per_second"]
 
-            # Log periódico de estadísticas
-            if self.stats['packets_captured'] % 100 == 0:
-                self._log_stats()
+        packet_interval = 1.0 / max_pps if max_pps > 0 else 0.1
 
-            # Enviar handshake periódico
-            self.send_periodic_handshake()
+        self.logger.info(f"🎯 Iniciando simulación de captura - {max_pps} pps")
 
-        except Exception as e:
-            logger.error(f"❌ Error procesando paquete: {e}")
-            self.stats['errors'] += 1
+        packet_count = 0
+        while self.running:
+            # 📦 Simular packet data
+            packet_data = f"packet_{packet_count}_{self.node_id}".encode('utf-8')
 
-    def _log_stats(self):
-        """Log de estadísticas del agente"""
-        stats = self.stats
-        filter_rate = (stats['packets_filtered'] / max(stats['packets_captured'] + stats['packets_filtered'], 1)) * 100
+            # 📡 Procesar packet
+            self.capture_and_send_packet(packet_data)
 
-        network_info = ""
-        if self.network_manager:
-            net_stats = self.network_manager.get_statistics()
-            network_info = f" | Net: {net_stats['mode']} ({net_stats['healthy_targets']}/{net_stats['total_targets']} targets)"
+            packet_count += 1
 
-        logger.info(
-            f"📊 Stats: {stats['packets_captured']} capturados, "
-            f"{stats['packets_sent']} enviados, "
-            f"{stats['packets_filtered']} filtrados ({filter_rate:.1f}%), "
-            f"{stats['handshakes_sent']} handshakes, "
-            f"{stats['errors']} errores, "
-            f"{stats['network_errors']} net_errors{network_info}"
-        )
+            # ⏱️ Rate limiting
+            time.sleep(packet_interval)
 
-    def start(self):
-        """Iniciar captura de paquetes usando configuración completa"""
-        # Verificar que tengamos método de envío
-        if not self.network_manager and not hasattr(self, 'zmq_socket'):
-            raise RuntimeError("No hay método de envío disponible (NetworkManager o socket local)")
+    def run(self):
+        """
+        Ejecutar el agent
+        """
+        self.logger.info("🚀 Iniciando Enhanced Promiscuous Agent...")
 
-        # Verificar permisos
-        if os.geteuid() != 0:
-            logger.error("❌ Se requieren privilegios de root para captura promiscua")
-            logger.info("💡 Ejecutar con: sudo python promiscuous_agent.py")
-            raise PermissionError("Root privileges required")
+        # 🧵 Iniciar threads
+        threads = []
 
-        self.running = True
+        # Thread de monitoreo
+        monitor_thread = threading.Thread(target=self.monitor_performance, name="Monitor")
+        monitor_thread.start()
+        threads.append(monitor_thread)
 
-        # Información de modo
-        network_mode = self.config.get('network', {}).get('mode', 'local')
-        socket_info = ""
+        # Thread de captura (simulada)
+        capture_thread = threading.Thread(target=self.simulate_packet_capture, name="Capture")
+        capture_thread.start()
+        threads.append(capture_thread)
 
-        if self.network_manager:
-            net_stats = self.network_manager.get_statistics()
-            socket_info = f"{net_stats['socket_type']} {net_stats['connection_mode']} | {net_stats['total_targets']} targets"
-        else:
-            socket_info = "PUSH BIND (local fallback)"
-
-        print(f"\n🎯 Enhanced Promiscuous Agent Started (REFACTORIZADO)")
-        print(f"📄 Config: {self.config_file or 'default'}")
-        print(f"🌐 Network Mode: {network_mode}")
-        print(f"🔌 Socket Info: {socket_info}")
-        print(f"📡 Interface: {self.interface}")
-        print(f"🔒 Promiscuous: {'✅ Enabled' if self.promiscuous_mode else '❌ Disabled'}")
-        print(f"🤝 Handshake: {'✅ Enabled' if self.send_handshake else '❌ Disabled'}")
-        print(f"⚡ Performance: max {self.max_packets_per_second} pps, {self.max_memory_mb}MB")
-        print(f"🎯 Filtering: {len(self.protocols)} protocols, exclude {len(self.exclude_ports)} ports")
-        print(f"📦 Protobuf: {'✅ Available' if EXTENDED_PROTOBUF else '❌ Not available'}")
-        print(f"🌐 NetworkManager: {'✅ Available' if NETWORK_MANAGER_AVAILABLE else '❌ Local only'}")
-        print(f"🧹 LIMPIO: Sin GeoIP/GPS - solo captura + envío distribuido")
-        print("=" * 70)
+        self.logger.info(f"✅ Agent iniciado con {len(threads)} threads")
 
         try:
-            # Configurar parámetros de captura desde JSON
-            capture_kwargs = {
-                'iface': self.interface if self.interface != 'any' else None,
-                'prn': self.packet_handler,
-                'store': 0,
-                'stop_filter': lambda x: not self.running
-            }
+            # 🔄 Mantener vivo
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Deteniendo Agent...")
 
-            # Configuración adicional de captura
-            if hasattr(conf, 'bufsize'):
-                conf.bufsize = self.buffer_size
+        # 🛑 Cierre graceful
+        self.shutdown(threads)
 
-            logger.info(f"🎯 Iniciando captura en interfaz: {self.interface}")
-            logger.info(f"📡 Modo de red: {network_mode}")
-            logger.info(f"🧹 LIMPIO: Solo captura - SIN procesamiento GeoIP/GPS")
-
-            # Captura en modo configurado
-            sniff(**capture_kwargs)
-
-        except PermissionError:
-            logger.error("❌ Error: Se requieren privilegios de root para captura promiscua")
-            logger.info("💡 Ejecutar con: sudo python promiscuous_agent.py config.json")
-            raise
-        except Exception as e:
-            logger.error(f"❌ Error en captura: {e}")
-            raise
-
-    def stop(self):
-        """Detener agente limpiamente"""
-        logger.info("🛑 Deteniendo agente promiscuo...")
+    def shutdown(self, threads):
+        """
+        Cierre graceful
+        """
         self.running = False
+        self.stop_event.set()
 
-        # Limpiar NetworkManager
-        if self.network_manager:
-            self.network_manager.cleanup()
+        # 📊 Stats finales
+        runtime = time.time() - self.stats['start_time']
+        self.logger.info(f"📊 Stats finales - Runtime: {runtime:.1f}s")
 
-        # Limpiar socket local
-        if hasattr(self, 'zmq_socket'):
-            self.zmq_socket.close()
+        # 🧵 Esperar threads
+        for thread in threads:
+            thread.join(timeout=5)
 
-        # Limpiar contexto ZMQ
-        if self.zmq_context:
-            self.zmq_context.term()
+        # 🔌 Cerrar socket
+        if self.socket:
+            self.socket.close()
 
-        # Log final de estadísticas
-        self._log_stats()
-        logger.info(f"✅ Agente {self.agent_id} detenido correctamente")
+        self.context.term()
 
-    def get_statistics(self) -> Dict:
-        """Retorna estadísticas completas incluyendo NetworkManager"""
-        uptime = time.time() - self.stats['start_time']
-
-        base_stats = {
-            'uptime_seconds': uptime,
-            'packets_captured': self.stats['packets_captured'],
-            'packets_sent': self.stats['packets_sent'],
-            'packets_filtered': self.stats['packets_filtered'],
-            'handshakes_sent': self.stats['handshakes_sent'],
-            'errors': self.stats['errors'],
-            'network_errors': self.stats['network_errors'],
-            'agent_id': self.agent_id,
-            'so_identifier': self.so_identifier,
-            'config_file': self.config_file,
-            'configuration': {
-                'interface': self.interface,
-                'handshake_enabled': self.send_handshake,
-                'promiscuous_mode': self.promiscuous_mode,
-                'max_pps': self.max_packets_per_second,
-                'filtering_enabled': len(self.exclude_ports) > 0 or len(self.include_ports) > 0,
-                'network_manager_available': NETWORK_MANAGER_AVAILABLE
-            }
-        }
-
-        # Añadir estadísticas de NetworkManager si está disponible
-        if self.network_manager:
-            base_stats['network'] = self.network_manager.get_statistics()
-        else:
-            base_stats['network'] = {
-                'mode': 'local_fallback',
-                'socket_type': 'PUSH',
-                'connection_mode': 'bind'
-            }
-
-        return base_stats
+        self.logger.info("✅ Promiscuous Agent cerrado correctamente")
 
 
-def main():
-    """Función principal con configuración JSON completa"""
-    parser = argparse.ArgumentParser(description='Enhanced Promiscuous Agent (REFACTORIZADO DISTRIBUIDO)')
-    parser.add_argument('config_file', nargs='?',
-                        default='enhanced_promiscuous_agent_config.json',
-                        help='Archivo de configuración JSON')
-    parser.add_argument('--test-config', action='store_true',
-                        help='Validar configuración y salir')
-    parser.add_argument('--stats', action='store_true',
-                        help='Mostrar estadísticas cada 10 segundos')
+# 🚀 Main
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("❌ Uso: python promiscuous_agent.py <config.json>")
+        sys.exit(1)
 
-    args = parser.parse_args()
-
-    # Configurar manejo de señales para parada limpia
-    agent = None
-
-    def signal_handler(signum, frame):
-        logger.info(f"📡 Señal {signum} recibida")
-        if agent:
-            agent.stop()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    config_file = sys.argv[1]
 
     try:
-        # Crear agente
-        agent = EnhancedPromiscuousAgent(config_file=args.config_file)
-
-        if args.test_config:
-            print("✅ Configuración JSON válida para promiscuous agent (REFACTORIZADO)")
-            stats = agent.get_statistics()
-            print(f"🌐 Network Mode: {stats['network']['mode']}")
-            print(f"🔌 Socket Type: {stats['network']['socket_type']}")
-            print(f"📡 Connection Mode: {stats['network']['connection_mode']}")
-            print(f"🔍 Interface: {stats['configuration']['interface']}")
-            print(f"🤝 Handshake: {'✅' if stats['configuration']['handshake_enabled'] else '❌'}")
-            print(f"🌐 NetworkManager: {'✅' if stats['configuration']['network_manager_available'] else '❌'}")
-            print(f"🧹 GeoIP/GPS: ❌ Eliminado (responsabilidad del geoip_enricher.py)")
-            return 0
-
-        logger.info("🚀 Iniciando Enhanced Promiscuous Agent (REFACTORIZADO)...")
-        logger.info("📡 Arquitectura distribuida con NetworkManager")
-        logger.info("🎯 Solo captura + envío ZeroMQ - SIN procesamiento GeoIP/GPS")
-        logger.info("⚡ Presiona Ctrl+C para detener")
-
-        # Thread de estadísticas si está solicitado
-        if args.stats:
-            def stats_thread():
-                while agent.running:
-                    time.sleep(10)
-                    agent._log_stats()
-
-            threading.Thread(target=stats_thread, daemon=True).start()
-
-        agent.start()
-
-    except KeyboardInterrupt:
-        logger.info("🛑 Interrupción por teclado")
+        agent = ConfigurablePromiscuousAgent(config_file)
+        agent.run()
     except Exception as e:
-        logger.error(f"❌ Error fatal: {e}")
-        return 1
-    finally:
-        if agent:
-            # Mostrar estadísticas finales
-            stats = agent.get_statistics()
-            print(f"\n📊 Estadísticas Finales (REFACTORIZADO):")
-            print(f"   ⏱️  Uptime: {stats['uptime_seconds']:.1f}s")
-            print(f"   📦 Packets captured: {stats['packets_captured']}")
-            print(f"   📤 Packets sent: {stats['packets_sent']}")
-            print(f"   🔍 Packets filtered: {stats['packets_filtered']}")
-            print(f"   🤝 Handshakes sent: {stats['handshakes_sent']}")
-            print(f"   ❌ Errors: {stats['errors']}")
-            print(f"   🌐 Network errors: {stats['network_errors']}")
-            print(f"   📄 Config: {stats['config_file'] or 'default'}")
-            print(
-                f"   🔌 Network: {stats['network']['mode']} ({stats['network']['socket_type']} {stats['network']['connection_mode']})")
-            print(f"   🧹 GeoIP/GPS: ❌ Eliminado - solo captura distribuida")
-
-            agent.stop()
-
-    return 0
-
-
-if __name__ == "__main__":
-    # Verificar que se ejecuta con privilegios suficientes
-    if os.geteuid() != 0:
-        print("⚠️  ADVERTENCIA: Se requieren privilegios de root para captura promiscua")
-        print("💡 Ejecutar: sudo python enhanced_promiscuous_agent.py config.json")
-
-    sys.exit(main())
+        print(f"❌ Error fatal: {e}")
+        sys.exit(1)

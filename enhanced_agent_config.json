@@ -1,68 +1,42 @@
 {
-  "agent_info": {
-    "name": "enhanced_promiscuous_agent",
-    "version": "2.0.0",
-    "mode": "local",
-    "node_id": "test_node_001"
+  "node_id": "promiscuous_agent_default_001",
+
+  "zmq": {
+    "output_port": 5559,
+    "sndhwm": 2000,
+    "linger_ms": 5000,
+    "send_timeout_ms": 100
   },
-  "network": {
-    "mode": "local",
-    "socket_type": "PUSH",
-    "connection_mode": "bind",
-    "backward_compatibility": {
-      "local_mode": {
-        "enabled": true,
-        "output_port": 5559,
-        "bind_address": "*"
-      }
-    },
-    "connection_management": {
-      "context_threads": 1,
-      "high_water_mark": 1000,
-      "linger_ms": 1000
-    }
+
+  "backpressure": {
+    "enabled": true,
+    "max_retries": 3,
+    "retry_delays_ms": [1, 2, 5],
+    "drop_threshold_percent": 15.0,
+    "activation_threshold": 50
   },
+
   "capture": {
     "interface": "any",
     "promiscuous_mode": true,
-    "buffer_size": 256,
-    "timeout": 1,
-    "max_packets_per_second": 100
+    "max_packets_per_second": 100,
+    "min_packet_size": 20,
+    "excluded_ports": [22, 80, 443],
+    "included_protocols": ["tcp", "udp"],
+    "filter_rules": []
   },
-  "filtering": {
-    "protocols": ["tcp", "udp"],
-    "exclude_ports": [22, 443, 53],
-    "include_ports": [],
-    "max_packet_size": 1500
-  },
-  "handshake": {
-    "enabled": true,
-    "send_initial": true,
-    "interval": 30,
-    "system_info": true
-  },
-  "system_detection": {
-    "detect_firewall": true,
-    "detect_os": true,
-    "include_hardware_info": false
-  },
-  "performance": {
-    "max_memory_mb": 256,
-    "stats_interval": 30,
-    "batch_processing": false
-  },
+
   "logging": {
     "level": "INFO",
-    "file": "logs/promiscuous_agent.log",
-    "max_size": "5MB",
-    "backup_count": 3,
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "console_output": true
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] - %(message)s",
+    "file": null
   },
-  "protobuf": {
-    "enabled": false,
-    "extended_format": true,
-    "timestamp_correction": true,
-    "compression": false
+
+  "monitoring": {
+    "stats_interval_seconds": 30,
+    "alerts": {
+      "max_drop_rate_percent": 10.0,
+      "max_backpressure_activations": 100
+    }
   }
 }
