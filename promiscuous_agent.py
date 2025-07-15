@@ -129,20 +129,45 @@ class DistributedPromiscuousAgent:
         return config
 
     def _validate_config_structure(self, config: Dict[str, Any]):
-        """Valida estructura de configuración"""
-        # ZMQ fields
-        zmq_required = ["output_port", "sndhwm", "linger_ms", "send_timeout_ms"]
-        for field in zmq_required:
-            if field not in config["zmq"]:
-                raise RuntimeError(f"❌ Campo ZMQ faltante: zmq.{field}")
+        """Valida estructura de configuración - actualizada para network"""
 
-        # Processing fields
+        # 🆕 Validar nueva estructura "network" si existe
+        if "network" in config:
+            network_config = config["network"]
+            if "output_socket" in network_config:
+                output_socket = network_config["output_socket"]
+                required_network_fields = ["address", "port", "mode", "socket_type"]
+                for field in required_network_fields:
+                    if field not in output_socket:
+                        raise RuntimeError(f"❌ Campo network.output_socket faltante: {field}")
+
+                # Validar valores específicos
+                valid_modes = ["bind", "connect"]
+                if output_socket["mode"].lower() not in valid_modes:
+                    raise RuntimeError(f"❌ Modo inválido: {output_socket['mode']}. Válidos: {valid_modes}")
+
+                valid_socket_types = ["PUSH", "PULL", "PUB", "SUB"]
+                if output_socket["socket_type"] not in valid_socket_types:
+                    raise RuntimeError(
+                        f"❌ Tipo de socket inválido: {output_socket['socket_type']}. Válidos: {valid_socket_types}")
+
+        # ✅ Validar campos ZMQ (mantener para opciones técnicas)
+        if "zmq" in config:
+            zmq_required = ["sndhwm", "linger_ms", "send_timeout_ms"]
+            # Si no hay network config, también requerir output_port
+            if "network" not in config or "output_socket" not in config.get("network", {}):
+                zmq_required.append("output_port")
+
+            for field in zmq_required:
+                if field not in config["zmq"]:
+                    raise RuntimeError(f"❌ Campo ZMQ faltante: zmq.{field}")
+
+        # Resto de validaciones...
         proc_required = ["internal_queue_size", "processing_threads", "queue_timeout_seconds"]
         for field in proc_required:
             if field not in config["processing"]:
                 raise RuntimeError(f"❌ Campo processing faltante: processing.{field}")
 
-        # Capture fields
         cap_required = ["interface", "filter_expression", "buffer_size", "promiscuous_mode"]
         for field in cap_required:
             if field not in config["capture"]:
@@ -190,28 +215,72 @@ class DistributedPromiscuousAgent:
             raise RuntimeError("❌ Dependencias críticas faltantes")
 
     def setup_socket(self):
-        """Configuración ZMQ desde archivo de configuración"""
-        zmq_config = self.config["zmq"]
+        """Configuración ZMQ desde archivo usando nueva estructura network"""
+        # 🆕 Leer desde la nueva sección "network"
+        network_config = self.config.get("network", {})
+        output_socket_config = network_config.get("output_socket", {})
 
-        self.socket = self.context.socket(zmq.PUSH)
+        # 🔄 Fallback a configuración legacy "zmq" si no existe "network"
+        if not output_socket_config:
+            self.logger.warning("⚠️ Usando configuración legacy 'zmq' - considera migrar a 'network'")
+            zmq_config = self.config["zmq"]
 
-        try:
-            # 🔧 Configurar opciones ZMQ
+            self.socket = self.context.socket(zmq.PUSH)
+
+            # Configuración legacy
             self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
             self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
             self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
 
-            # 🔌 BIND del socket
             port = zmq_config["output_port"]
             bind_address = f"tcp://*:{port}"
             self.socket.bind(bind_address)
 
-            self.logger.info(f"🔌 Socket ZMQ configurado:")
+            self.logger.info(f"🔌 Socket ZMQ configurado (legacy):")
             self.logger.info(f"   📡 Bind: {bind_address}")
             self.logger.info(f"   🌊 SNDHWM: {zmq_config['sndhwm']}")
+            return
+
+        # 🆕 Nueva configuración desde "network"
+        zmq_config = self.config["zmq"]  # Mantenemos zmq para opciones técnicas
+
+        try:
+            # 🔧 Determinar tipo de socket desde configuración
+            socket_type_str = output_socket_config.get("socket_type", "PUSH")
+            socket_type = getattr(zmq, socket_type_str)
+            self.socket = self.context.socket(socket_type)
+
+            # 🔧 Configurar opciones ZMQ (desde sección zmq)
+            self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
+            self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
+            self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
+
+            # 🔌 Configurar dirección desde "network"
+            address = output_socket_config["address"]
+            port = output_socket_config["port"]
+            mode = output_socket_config["mode"].lower()
+
+            if mode == "bind":
+                # BIND para actuar como servidor
+                bind_address = f"tcp://*:{port}"
+                self.socket.bind(bind_address)
+                connection_info = f"BIND on {bind_address}"
+            elif mode == "connect":
+                # CONNECT para actuar como cliente
+                connect_address = f"tcp://{address}:{port}"
+                self.socket.connect(connect_address)
+                connection_info = f"CONNECT to {connect_address}"
+            else:
+                raise ValueError(f"❌ Modo de socket desconocido: {mode}. Use 'bind' o 'connect'")
+
+            self.logger.info(f"🔌 Socket ZMQ configurado:")
+            self.logger.info(f"   📡 {connection_info}")
+            self.logger.info(f"   🔌 Tipo: {socket_type_str}")
+            self.logger.info(f"   🌊 SNDHWM: {zmq_config['sndhwm']}")
+            self.logger.info(f"   📝 Descripción: {output_socket_config.get('description', 'N/A')}")
 
         except Exception as e:
-            raise RuntimeError(f"❌ Error configurando ZMQ: {e}")
+            raise RuntimeError(f"❌ Error configurando socket ZMQ: {e}")
 
     def setup_logging(self):
         """Setup logging desde configuración con node_id"""
