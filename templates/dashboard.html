@@ -1,0 +1,337 @@
+      <!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCADA Dashboard - Arquitectura 3 Puertos</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>SCADA Dashboard - Arquitectura 3 Puertos</span>
+            </div>
+            <div class="status-indicators">
+                <div class="status-indicator" onclick="showConnectionDetails('connecting')">
+                    <div class="status-dot connecting" id="status-connecting"></div>
+                    <span>Connecting...</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('ml-detector')">
+                    <div class="status-dot connected" id="status-ml-detector"></div>
+                    <span>ML Detector</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('firewall')">
+                    <div class="status-dot connected" id="status-firewall"></div>
+                    <span>Firewall</span>
+                </div>
+                <div class="status-indicator" onclick="showSystemInfo()">
+                    <span id="current-time"></span>
+                </div>
+                <div class="status-indicator" onclick="showEventsSummary()">
+                    <span>Events: <span id="events-counter">0</span></span>
+                </div>
+                <div class="status-indicator" onclick="showConfirmationsSummary()">
+                    <span>Conf: <span id="confirmations-counter">0</span></span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="map-controls">
+                <button class="map-control-btn" onclick="clearAllMarkers()" title="Limpiar todos los marcadores del mapa">
+                    <i class="fas fa-eraser"></i> Clear Map
+                </button>
+                <button class="map-control-btn" onclick="centerMap()" title="Centrar mapa en España">
+                    <i class="fas fa-crosshairs"></i> Center
+                </button>
+                <button class="map-control-btn" onclick="toggleHeatmap()" title="Activar/desactivar mapa de calor">
+                    <i class="fas fa-fire"></i> Heatmap
+                </button>
+                <button class="map-control-btn" onclick="showMapLegend()" title="Mostrar leyenda del mapa">
+                    <i class="fas fa-info-circle"></i> Legend
+                </button>
+            </div>
+            <div id="map"></div>
+        </main>
+
+        <aside class="sidebar">
+            <!-- Información de Arquitectura -->
+            <div class="architecture-panel" onclick="showArchitectureDetails()">
+                <div class="architecture-title">🏗️ Arquitectura 3 Puertos:</div>
+                <div class="architecture-info">
+                    <div>Eventos: <span id="events-count" class="clickable-counter" onclick="showEventsDetail(event)">0</span> |
+                         Comandos: <span id="commands-count" class="clickable-counter" onclick="showCommandsDetail(event)">0</span> |
+                         Confirmaciones: <span id="confirmations-count" class="clickable-counter" onclick="showConfirmationsDetail(event)">0</span></div>
+                    <div class="port-info events" onclick="showPortDetails(5570, event)">
+                        <span class="port-number">Puerto 5570:</span> ml_detector → dashboard
+                    </div>
+                    <div class="port-info commands" onclick="showPortDetails(5580, event)">
+                        <span class="port-number">Puerto 5580:</span> dashboard → firewall_agent
+                    </div>
+                    <div class="port-info confirmations" onclick="showPortDetails(5581, event)">
+                        <span class="port-number">Puerto 5581:</span> firewall_agent → dashboard
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contadores Reactivos -->
+            <div class="counters-section">
+                <div class="counter events" onclick="showEventsPerMinuteDetail()">
+                    <span class="number" id="events-per-min">0</span>
+                    <span class="label">Eventos/min</span>
+                </div>
+                <div class="counter commands" onclick="showHighRiskEventsDetail()">
+                    <span class="number" id="high-risk-count">0</span>
+                    <span class="label">Alto Riesgo</span>
+                </div>
+                <div class="counter confirmations" onclick="showSuccessRateDetail()">
+                    <span class="number" id="success-rate">0</span>
+                    <span class="label">Éxito</span>
+                </div>
+                <div class="counter failures" onclick="showFailuresDetail()">
+                    <span class="number" id="failure-count">0</span>
+                    <span class="label">Fallos</span>
+                </div>
+            </div>
+
+            <!-- Estado ZeroMQ Reactivo -->
+            <div class="zmq-status-section">
+                <div class="section-title" onclick="showZMQTopologyDetail()">
+                    🔌 Conexiones ZeroMQ <i class="fas fa-info-circle clickable-icon"></i>
+                </div>
+
+                <!-- Topología de conexión clickeable -->
+                <div class="connection-topology">
+                    <div class="topology-line active" onclick="showTopologyLineDetail('ml-events')">
+                        <strong>ML Events:</strong> PULL:CONNECT → :5570
+                        <span class="topology-status" id="topology-ml-status">●</span>
+                    </div>
+                    <div class="topology-line active" onclick="showTopologyLineDetail('fw-commands')">
+                        <strong>FW Commands:</strong> PUB:BIND → :5580
+                        <span class="topology-status" id="topology-fw-cmd-status">●</span>
+                    </div>
+                    <div class="topology-line active" onclick="showTopologyLineDetail('fw-responses')">
+                        <strong>FW Responses:</strong> PULL:BIND → :5581
+                        <span class="topology-status" id="topology-fw-resp-status">●</span>
+                    </div>
+                </div>
+
+                <!-- Conexión ML Events clickeable -->
+                <div class="zmq-connection active" id="zmq-ml-events" onclick="showZMQConnectionDetail('ml-events')">
+                    <div class="connection-header">
+                        <span class="connection-name">📡 ML Events Input</span>
+                        <span class="connection-status active" id="ml-events-status">CONNECTED</span>
+                    </div>
+                    <div class="connection-details">
+                        Endpoint: <span id="ml-events-endpoint">tcp://localhost:5570</span><br>
+                        Type: <span id="ml-events-type">PULL</span> | Mode: <span id="ml-events-mode">CONNECT</span><br>
+                        HWM: <span id="ml-hwm">10000</span>
+                    </div>
+                    <div class="connection-stats">
+                        <div class="stat-item" onclick="showStatDetail('ml-messages', event)">
+                            Messages: <span id="ml-messages">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('ml-bytes', event)">
+                            Bytes: <span id="ml-bytes">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('ml-last-activity', event)">
+                            Last: <span id="ml-last-activity">-</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('ml-queue-size', event)">
+                            Queue: <span id="ml-queue-size">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conexión Firewall Commands clickeable -->
+                <div class="zmq-connection active" id="zmq-fw-commands" onclick="showZMQConnectionDetail('fw-commands')">
+                    <div class="connection-header">
+                        <span class="connection-name">🔥 Firewall Commands</span>
+                        <span class="connection-status active" id="fw-commands-status">BOUND</span>
+                    </div>
+                    <div class="connection-details">
+                        Endpoint: <span id="fw-commands-endpoint">tcp://*:5580</span><br>
+                        Type: <span id="fw-commands-type">PUB</span> | Mode: <span id="fw-commands-mode">BIND</span><br>
+                        HWM: <span id="fw-cmd-hwm">5000</span>
+                    </div>
+                    <div class="connection-stats">
+                        <div class="stat-item" onclick="showStatDetail('fw-cmd-count', event)">
+                            Commands: <span id="fw-cmd-count">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('fw-cmd-bytes', event)">
+                            Bytes: <span id="fw-cmd-bytes">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('fw-subscribers', event)">
+                            Subscribers: <span id="fw-subscribers">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('fw-cmd-queue', event)">
+                            Queue: <span id="fw-cmd-queue">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conexión Firewall Responses clickeable -->
+                <div class="zmq-connection active" id="zmq-fw-responses" onclick="showZMQConnectionDetail('fw-responses')">
+                    <div class="connection-header">
+                        <span class="connection-name">📥 Firewall Responses</span>
+                        <span class="connection-status active" id="fw-responses-status">BOUND</span>
+                    </div>
+                    <div class="connection-details">
+                        Endpoint: <span id="fw-responses-endpoint">tcp://*:5581</span><br>
+                        Type: <span id="fw-responses-type">PULL</span> | Mode: <span id="fw-responses-mode">BIND</span><br>
+                        HWM: <span id="fw-resp-hwm">5000</span>
+                    </div>
+                    <div class="connection-stats">
+                        <div class="stat-item" onclick="showStatDetail('fw-resp-count', event)">
+                            Responses: <span id="fw-resp-count">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('fw-resp-bytes', event)">
+                            Bytes: <span id="fw-resp-bytes">0</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('fw-success-rate', event)">
+                            Success: <span id="fw-success-rate">0%</span>
+                        </div>
+                        <div class="stat-item" onclick="showStatDetail('fw-latency', event)">
+                            Latency: <span id="fw-latency">0ms</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estado de Componentes Reactivo -->
+            <div class="component-status-section">
+                <div class="section-title" onclick="showComponentsOverview()">
+                    🔧 Estado de Componentes <i class="fas fa-cogs clickable-icon"></i>
+                </div>
+
+                <div class="component-item ml-detector" onclick="showComponentDetail('ml-detector')">
+                    <div class="component-header">
+                        <span class="component-name">ML Detector</span>
+                        <span class="component-health healthy" id="ml-detector-health">HEALTHY</span>
+                    </div>
+                    <div class="component-metrics">
+                        <div onclick="showComponentMetric('ml-detector-node', event)">
+                            Node: <span id="ml-detector-node">ml_detector_distributed_001</span>
+                        </div>
+                        <div onclick="showComponentMetric('ml-detector-latency', event)">
+                            Latency: <span id="ml-detector-latency">0ms</span>
+                        </div>
+                        <div onclick="showComponentMetric('ml-detector-processed', event)">
+                            Processed: <span id="ml-detector-processed">0</span>
+                        </div>
+                        <div onclick="showComponentMetric('ml-detector-backpressure', event)">
+                            Backpressure: <span id="ml-detector-backpressure">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="component-item firewall-agent" onclick="showComponentDetail('firewall-agent')">
+                    <div class="component-header">
+                        <span class="component-name">Firewall Agent</span>
+                        <span class="component-health healthy" id="firewall-agent-health">HEALTHY</span>
+                    </div>
+                    <div class="component-metrics">
+                        <div onclick="showComponentMetric('firewall-agent-node', event)">
+                            Node: <span id="firewall-agent-node">firewall_agent_001</span>
+                        </div>
+                        <div onclick="showComponentMetric('firewall-active-rules', event)">
+                            Rules: <span id="firewall-active-rules">0</span>
+                        </div>
+                        <div onclick="showComponentMetric('firewall-applied', event)">
+                            Applied: <span id="firewall-applied">0</span>
+                        </div>
+                        <div onclick="showComponentMetric('firewall-failed', event)">
+                            Failed: <span id="firewall-failed">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="component-item dashboard" onclick="showComponentDetail('dashboard')">
+                    <div class="component-header">
+                        <span class="component-name">Dashboard</span>
+                        <span class="component-health healthy" id="dashboard-health">HEALTHY</span>
+                    </div>
+                    <div class="component-metrics">
+                        <div onclick="showComponentMetric('dashboard-node', event)">
+                            Node: <span id="dashboard-node">dashboard_distributed_001</span>
+                        </div>
+                        <div onclick="showComponentMetric('dashboard-uptime', event)">
+                            Uptime: <span id="dashboard-uptime">0s</span>
+                        </div>
+                        <div onclick="showComponentMetric('dashboard-memory', event)">
+                            Memory: <span id="dashboard-memory">0MB</span>
+                        </div>
+                        <div onclick="showComponentMetric('dashboard-cpu', event)">
+                            CPU: <span id="dashboard-cpu">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debug Log Interactivo -->
+            <div class="debug-section">
+                <div class="section-title" onclick="showDebugOptions()">
+                    🐛 Debug Log <i class="fas fa-terminal clickable-icon"></i>
+                </div>
+                <div class="debug-log" id="debug-log" onclick="showDebugLogDetail()">
+                    <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado</div>
+                    <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] ZeroMQ context creado</div>
+                    <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del ML Detector...</div>
+                </div>
+            </div>
+
+            <!-- Botones de Acción Reactivos -->
+            <div class="action-buttons">
+                <button class="btn update" onclick="refreshDashboard()" title="Actualizar todas las métricas">
+                    <i class="fas fa-sync"></i> Actualizar
+                </button>
+                <button class="btn clear" onclick="clearDebugLog()" title="Limpiar log de debug">
+                    <i class="fas fa-trash"></i> Limpiar
+                </button>
+                <button class="btn confirmations" onclick="showConfirmations()" title="Ver confirmaciones de firewall">
+                    <i class="fas fa-check"></i> Confirmaciones
+                </button>
+                <button class="btn test" onclick="testConnections()" title="Probar conectividad de los 3 puertos">
+                    <i class="fas fa-plug"></i> Test 3 Puertos
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Modal para mostrar detalles -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal()"></div>
+    <div class="detail-modal" id="detail-modal">
+        <div class="modal-header">
+            <h3 id="modal-title">Detalles</h3>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-content" id="modal-content">
+            <!-- El contenido se cargará dinámicamente -->
+        </div>
+        <div class="modal-actions" id="modal-actions">
+            <!-- Los botones se cargarán dinámicamente -->
+        </div>
+    </div>
+
+    <!-- Indicador de amenaza -->
+    <div class="threat-indicator" id="threat-indicator">
+        ⚠️ Nueva amenaza detectada!
+    </div>
+
+    <!-- Notificaciones toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Inicialización del dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+        });
+    </script>
+</body>
+</html>

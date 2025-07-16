@@ -3,7 +3,8 @@
     "name": "real_zmq_dashboard_with_firewall",
     "version": "2.0.0",
     "mode": "distributed_orchestrator",
-    "role": "dashboard_coordinator"
+    "role": "dashboard_coordinator",
+    "description": "Dashboard de seguridad con mapa geolocalizado y control de firewall"
   },
   "node_id": "dashboard_distributed_001",
   "version": "2.0.0",
@@ -13,7 +14,7 @@
     "ml_events_input": {
       "address": "localhost",
       "port": 5570,
-      "mode": "bind",
+      "mode": "connect",
       "socket_type": "PULL",
       "description": "Recibe eventos enriquecidos de todos los lightweight_ml_detector",
       "high_water_mark": 10000,
@@ -38,7 +39,7 @@
       "expected_publishers": 500
     },
     "admin_interface": {
-      "address": "localhost",
+      "address": "0.0.0.0",
       "port": 8080,
       "mode": "bind",
       "socket_type": "HTTP",
@@ -240,6 +241,8 @@
   "distributed": {
     "cluster_name": "upgraded-happiness-cluster",
     "component_role": "dashboard_orchestrator",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
     "service_discovery": {
       "enabled": true,
       "etcd_endpoints": ["localhost:2379"],
@@ -273,13 +276,23 @@
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
-    "file": null,
-    "max_file_size_mb": 100,
-    "backup_count": 5,
-    "structured_logging": {
-      "enabled": true,
-      "format": "json",
-      "include_event_metadata": true
+    "handlers": {
+      "file": {
+        "enabled": true,
+        "path": "./logs/dashboard.log",
+        "max_size_mb": 100,
+        "backup_count": 5,
+        "rotation": "size"
+      },
+      "console": {
+        "enabled": true,
+        "colored": true
+      },
+      "syslog": {
+        "enabled": false,
+        "facility": "local0",
+        "address": "localhost:514"
+      }
     }
   },
 
@@ -342,6 +355,20 @@
       "rotation_interval_seconds": 7200,
       "entropy_sources": ["pid", "random_bytes"],
       "aad_includes": ["node_id", "embedding_batch_id"]
+    }
+  },
+
+  "protobuf": {
+    "schema_path": "./protocols/protobuf/",
+    "message_types": {
+      "security_event": "SecurityEvent",
+      "firewall_command": "FirewallCommand",
+      "firewall_response": "FirewallResponse"
+    },
+    "serialization": {
+      "compression": "gzip",
+      "validate_schema": true,
+      "backwards_compatibility": true
     }
   },
 
