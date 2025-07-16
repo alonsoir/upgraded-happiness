@@ -28,14 +28,14 @@
   "zmq": {
     "input_port": 5560,
     "output_port": 5570,
-    "rcvhwm": 2000,
-    "sndhwm": 2000,
+    "rcvhwm": 1000,
+    "sndhwm": 1000,
     "recv_timeout_ms": 1000,
     "send_timeout_ms": 100,
     "linger_ms": 1000,
     "vertical_scaling_optimizations": {
       "io_threads": 1,
-      "max_sockets": 128,
+      "max_sockets": 64,
       "tcp_keepalive": true,
       "tcp_keepalive_idle": 600,
       "immediate": true
@@ -46,87 +46,89 @@
     "enabled": true,
     "max_retries": 3,
     "retry_delays_ms": [1, 2, 5, 10],
-    "drop_threshold_percent": 15.0,
-    "activation_threshold": 50,
+    "drop_threshold_percent": 10.0,
+    "activation_threshold": 30,
     "queue_full_strategy": "drop_oldest"
   },
 
   "processing": {
-    "threads": 3,
+    "threads": 2,
     "send_threads": 1,
-    "internal_queue_size": 1000,
-    "protobuf_queue_size": 500,
-    "queue_timeout_seconds": 1.0,
-    "performance_mode": "conservative_i9",
+    "internal_queue_size": 500,
+    "protobuf_queue_size": 250,
+    "queue_timeout_seconds": 0.5,
+    "performance_mode": "ultra_conservative_i9",
     "enable_heuristics": true,
     "enable_alerts": true,
-    "max_processing_time": 5.0,
+    "max_processing_time": 2.0,
     "vertical_scaling": {
       "optimized_for_i9_8cores": true,
-      "memory_buffer_multiplier": 1.0,
+      "memory_buffer_multiplier": 0.5,
       "cpu_intensive_operations": false,
-      "leave_cores_for_system": 4,
+      "leave_cores_for_system": 6,
       "processing_batch_optimization": false
     },
     "queue_overflow_handling": {
       "strategy": "backpressure_and_drop",
-      "max_queue_wait_ms": 50,
-      "emergency_drop_threshold_percent": 80.0,
+      "max_queue_wait_ms": 25,
+      "emergency_drop_threshold_percent": 70.0,
       "log_drops": true
     },
     "batch_processing": {
       "enabled": false,
-      "batch_size": 10,
-      "max_wait_ms": 100
+      "batch_size": 5,
+      "max_wait_ms": 50
     }
   },
 
   "ml": {
     "enabled": true,
-    "anomaly_threshold": 0.8,
-    "high_risk_threshold": 0.9,
-    "confidence_threshold": 0.7,
+    "anomaly_threshold": 0.7,
+    "high_risk_threshold": 0.85,
+    "confidence_threshold": 0.6,
     "models": {
       "isolation_forest": {
         "enabled": true,
         "contamination": 0.1,
-        "n_estimators": 100,
-        "random_state": 42
+        "n_estimators": 25,
+        "random_state": 42,
+        "n_jobs": 1
       },
       "one_class_svm": {
-        "enabled": true,
+        "enabled": false,
         "nu": 0.1,
         "kernel": "rbf"
       },
       "local_outlier_factor": {
-        "enabled": true,
+        "enabled": false,
         "n_neighbors": 20,
         "contamination": 0.1
       },
       "dbscan": {
-        "enabled": true,
+        "enabled": false,
         "eps": 0.5,
         "min_samples": 5
       },
       "kmeans": {
-        "enabled": true,
+        "enabled": false,
         "n_clusters": 5,
         "random_state": 42,
-        "n_init": 10
+        "n_init": 3
       },
       "random_forest": {
-        "enabled": true,
-        "n_estimators": 100,
+        "enabled": false,
+        "n_estimators": 50,
         "random_state": 42,
-        "max_depth": 10
+        "max_depth": 8,
+        "n_jobs": 1
       }
     },
     "training": {
-      "min_training_samples": 1000,
-      "retrain_interval_samples": 200,
+      "min_training_samples": 500,
+      "retrain_interval_samples": 500,
       "contamination_rate": 0.1,
-      "auto_retrain": true,
-      "retrain_interval_minutes": 5
+      "auto_retrain": false,
+      "retrain_interval_minutes": 30
     },
     "features": [
       "packet_size", "dest_port", "src_port", "protocol_numeric",
@@ -141,21 +143,21 @@
       "enable_temporal_features": true,
       "enable_ip_analysis": true,
       "enable_geoip_features": true,
-      "enable_mismatch_detection": true,
-      "auto_retrain_on_mismatch": true
+      "enable_mismatch_detection": false,
+      "auto_retrain_on_mismatch": false
     }
   },
 
   "persistence": {
     "enabled": true,
     "models_dir": "ml_models",
-    "save_predictions": true,
+    "save_predictions": false,
     "predictions_file": "data/predictions.jsonl",
-    "auto_save_interval": 300,
+    "auto_save_interval": 600,
     "state_file": "data/ml_detector_state.json",
-    "backup_models": true,
-    "model_versioning": true,
-    "evaluation_enabled": true
+    "backup_models": false,
+    "model_versioning": false,
+    "evaluation_enabled": false
   },
 
   "logging": {
@@ -167,27 +169,27 @@
     "performance_logging": {
       "enabled": true,
       "log_slow_requests": true,
-      "slow_request_threshold_ms": 50
+      "slow_request_threshold_ms": 25
     }
   },
 
   "monitoring": {
-    "stats_interval_seconds": 15,
+    "stats_interval_seconds": 30,
     "detailed_metrics": true,
     "component_health_check": {
       "enabled": true,
-      "check_interval_seconds": 30,
-      "memory_threshold_mb": 512,
-      "cpu_threshold_percent": 80.0
+      "check_interval_seconds": 60,
+      "memory_threshold_mb": 256,
+      "cpu_threshold_percent": 60.0
     },
     "alerts": {
-      "max_queue_usage_percent": 60.0,
-      "max_ml_failure_rate_percent": 20.0,
-      "max_processing_latency_ms": 100.0,
-      "max_backpressure_activations": 20,
-      "max_drop_rate_percent": 5.0,
-      "min_model_accuracy_percent": 60.0,
-      "max_buffer_full_errors": 10
+      "max_queue_usage_percent": 50.0,
+      "max_ml_failure_rate_percent": 15.0,
+      "max_processing_latency_ms": 50.0,
+      "max_backpressure_activations": 10,
+      "max_drop_rate_percent": 3.0,
+      "min_model_accuracy_percent": 70.0,
+      "max_buffer_full_errors": 5
     },
     "metrics_export": {
       "enabled": false,
@@ -215,24 +217,24 @@
     "scaling": {
       "auto_scale_enabled": false,
       "min_instances": 1,
-      "max_instances": 3,
-      "scale_up_threshold_percent": 80.0,
-      "scale_down_threshold_percent": 30.0,
-      "cooldown_period_seconds": 300
+      "max_instances": 2,
+      "scale_up_threshold_percent": 70.0,
+      "scale_down_threshold_percent": 20.0,
+      "cooldown_period_seconds": 600
     }
   },
 
   "security": {
     "input_validation": {
       "enabled": true,
-      "max_event_size_bytes": 1048576,
+      "max_event_size_bytes": 524288,
       "validate_protobuf_schema": true,
       "sanitize_ml_scores": true
     },
     "rate_limiting": {
       "enabled": false,
-      "max_events_per_second": 1000,
-      "burst_capacity": 2000,
+      "max_events_per_second": 500,
+      "burst_capacity": 1000,
       "penalty_duration_seconds": 60
     }
   },
@@ -240,10 +242,10 @@
   "debug": {
     "enabled": false,
     "sample_events": false,
-    "sample_rate_percent": 1.0,
+    "sample_rate_percent": 0.5,
     "log_protobuf_details": false,
     "profile_performance": false,
-    "log_ml_predictions": true,
+    "log_ml_predictions": false,
     "log_feature_extraction": false
   }
 }
