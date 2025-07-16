@@ -1,60 +1,179 @@
 {
-  "agent_info": {
+  "component": {
     "name": "simple_firewall_agent",
-    "version": "1.0.0",
-    "description": "Agente de firewall que escucha comandos del dashboard"
+    "version": "2.0.0",
+    "mode": "distributed",
+    "description": "Distributed firewall agent with protobuf support"
   },
+  "node_id": "simple_firewall_agent_001",
+  "version": "2.0.0",
+  "component_type": "firewall_agent",
+
   "network": {
-    "commands_input_port": 5562,
-    "confirmations_output_port": 5563,
-    "bind_address": "*",
-    "zmq_context_threads": 1,
-    "socket_timeout": 5000,
-    "max_connections": 100
-  },
-  "firewall": {
-    "enable_firewall_modifications": false,
-    "nuclear_option": {
-      "enabled": false,
-      "description": "PELIGRO: Permite aplicar cambios reales en el firewall del sistema"
+    "commands_input": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "description": "Receives firewall commands from dashboard",
+      "high_water_mark": 1000,
+      "connection_timeout": 5000
     },
-    "dry_run_mode": true,
-    "supported_actions": [
-      "block_ip", "unblock_ip", "block_port", "unblock_port",
-      "list_rules", "flush_rules"
-    ],
-    "default_chain": "INPUT",
-    "backup_rules": true,
-    "max_rules_per_request": 100
-  },
-  "security": {
-    "validate_requests": true,
-    "allowed_sources": ["127.0.0.1", "localhost"],
-    "rate_limiting": {
-      "enabled": true,
-      "max_requests_per_minute": 100
-    },
-    "authentication": {
-      "enabled": false,
-      "token_required": false
+    "responses_output": {
+      "address": "localhost",
+      "port": 5581,
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "description": "Sends firewall responses to dashboard",
+      "high_water_mark": 1000,
+      "connection_timeout": 5000
     }
   },
+
+  "zmq": {
+    "context_io_threads": 1,
+    "max_sockets": 64,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": true,
+    "linger_ms": 1000,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 1000
+  },
+
+  "compression": {
+    "enabled": false,
+    "algorithm": "lz4",
+    "compression_level": 6,
+    "min_size_threshold": 100,
+    "max_size_threshold": 1048576,
+    "adaptive_algorithm": false
+  },
+
+  "encryption": {
+    "enabled": false,
+    "algorithm": "AES-256-GCM",
+    "key_system": "hierarchical",
+    "local_entropy_config": {
+      "entropy_sources": [
+        "pid",
+        "boot_time",
+        "random_bytes",
+        "cpu_temperature"
+      ]
+    },
+    "aad_includes": [
+      "node_id",
+      "component_name",
+      "agent_id",
+      "timestamp"
+    ]
+  },
+
+  "firewall": {
+    "auto_detect_type": true,
+    "preferred_type": "iptables",
+    "sudo_enabled": true,
+    "dry_run": false,
+    "backup_rules": true,
+    "rule_timeout_default": 3600,
+    "max_rules_per_ip": 10,
+    "supported_actions": ["BLOCK", "ALLOW", "RATE_LIMIT"],
+    "platform_specific": {
+      "linux": {
+        "firewall_type": "iptables",
+        "check_commands": ["iptables --version", "ufw --version"],
+        "flush_on_startup": false
+      },
+      "darwin": {
+        "firewall_type": "pfctl",
+        "check_commands": ["pfctl -s info"],
+        "flush_on_startup": false
+      },
+      "windows": {
+        "firewall_type": "netsh",
+        "check_commands": ["netsh advfirewall show allprofiles"],
+        "flush_on_startup": false
+      }
+    }
+  },
+
+  "processing": {
+    "threads": 2,
+    "command_queue_size": 500,
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 10,
+      "max_wait_time_ms": 100
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "max_commands_per_minute": 60,
+      "burst_capacity": 10
+    },
+    "command_timeout_seconds": 30,
+    "max_concurrent_commands": 5
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 30,
+    "detailed_metrics": true,
+    "health_check": {
+      "enabled": true,
+      "check_interval_seconds": 60,
+      "firewall_connectivity_test": true,
+      "rule_application_test": false
+    },
+    "alerts": {
+      "max_error_rate_percent": 10.0,
+      "max_response_time_ms": 5000.0,
+      "max_queue_usage_percent": 80.0,
+      "min_success_rate_percent": 95.0
+    },
+    "log_applied_rules": true,
+    "log_failed_commands": true
+  },
+
+  "persistence": {
+    "enabled": true,
+    "rules_history_file": "data/firewall_rules_history.jsonl",
+    "max_history_entries": 10000,
+    "backup_interval_seconds": 300,
+    "state_file": "data/firewall_agent_state.json"
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "validate_ip_addresses": true,
+      "validate_port_ranges": true,
+      "max_rule_duration_seconds": 86400,
+      "blocked_ip_ranges": ["127.0.0.0/8", "::1/128"],
+      "allowed_actions": ["BLOCK", "ALLOW", "RATE_LIMIT"]
+    },
+    "command_authentication": {
+      "enabled": false,
+      "require_signed_commands": false,
+      "trusted_dashboard_ids": []
+    }
+  },
+
   "logging": {
     "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:%(node_id)s] [agent_id:%(agent_id)s] - %(message)s",
     "file": "logs/firewall_agent.log",
-    "max_size_mb": 10,
+    "max_file_size_mb": 100,
     "backup_count": 5,
-    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    "console_output": true
+    "log_firewall_commands": true,
+    "log_system_commands": true
   },
-  "monitoring": {
-    "health_check_interval": 30,
-    "metrics_enabled": true,
-    "report_status": true
-  },
-  "persistence": {
-    "save_state": true,
-    "state_file": "data/firewall_agent_state.json",
-    "auto_save_interval": 60
+
+  "debug": {
+    "enabled": false,
+    "sample_commands": false,
+    "sample_rate_percent": 5.0,
+    "log_protobuf_details": false,
+    "simulate_command_failures": false,
+    "failure_rate_percent": 0.0
   }
 }
