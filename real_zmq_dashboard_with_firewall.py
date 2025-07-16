@@ -1,679 +1,1031 @@
-# real_zmq_dashboard_refactored.py - Core Pipeline Focus
-import json
-import time
-import threading
-import queue
+#!/usr/bin/env python3
+"""
+Dashboard de Seguridad con ZeroMQ - Backend Principal v2.1
+CONFIGURACIÓN ESTRICTA: Todo debe leerse del JSON, sin defaults hardcodeados
+Archivos separados: templates/dashboard.html, static/css/dashboard.css
+"""
+
 import zmq
+import json
+import threading
+import time
 import logging
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, Response
-from flask_socketio import SocketIO, emit
-import sys
+import queue
 import os
+import signal
+import sys
+import psutil
+from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Any, Set
+from datetime import datetime, timedelta
+from pathlib import Path
+import http.server
+import socketserver
+from urllib.parse import urlparse
+import mimetypes
+from collections import defaultdict, deque
 
-# Add src to path for protobuf imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-try:
-    from src.protocols.protobuf import network_event_extended_v2_pb2 as network_event_pb2
-    from src.protocols.protobuf import firewall_commands_pb2
+class ConfigurationError(Exception):
+    """Error de configuración del dashboard"""
+    pass
 
-    print("✅ Protobuf imports successful")
-except ImportError as e:
-    print(f"❌ Protobuf import failed: {e}")
-    print("📁 Please ensure protobuf files are generated")
-    sys.exit(1)
 
-# Import our crypto/compression utils (when ready)
-try:
-    from crypto_utils import SecureEnvelope
-    from compression_utils import CompressionEngine
+class DashboardLogger:
+    def __init__(self, node_id: str, log_config: dict):
+        self.logger = logging.getLogger(f"dashboard_{node_id}")
+        self.node_id = node_id
 
-    CRYPTO_AVAILABLE = True
-except ImportError:
-    print("⚠️ Crypto utils not available, running without encryption")
-    CRYPTO_AVAILABLE = False
+        # Configurar logging según JSON
+        log_level = getattr(logging, log_config.get('level', 'INFO').upper())
+        log_format = log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-logger = logging.getLogger(__name__)
+        # Crear formatter
+        formatter = logging.Formatter(log_format)
+
+        # Limpiar handlers existentes
+        self.logger.handlers.clear()
+        self.logger.setLevel(log_level)
+
+        # Handler de consola
+        console_config = log_config.get('handlers', {}).get('console', {})
+        if console_config.get('enabled', True):
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
+
+        # Handler de archivo
+        file_config = log_config.get('handlers', {}).get('file', {})
+        if file_config.get('enabled', False):
+            file_path = file_config.get('path')
+            if file_path:
+                # Crear directorio si no existe
+                Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+                file_handler = logging.FileHandler(file_path)
+                file_handler.setFormatter(formatter)
+                self.logger.addHandler(file_handler)
+
+        # Añadir node_id al contexto
+        old_factory = logging.getLogRecordFactory()
+
+        def record_factory(*args, **kwargs):
+            record = old_factory(*args, **kwargs)
+            record.node_id = self.node_id
+            record.pid = os.getpid()
+            return record
+
+        logging.setLogRecordFactory(record_factory)
+
+    def info(self, msg, *args, **kwargs):
+        self.logger.info(f"[node_id:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+
+    def warning(self, msg, *args, **kwargs):
+        self.logger.warning(f"[node_id:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+
+    def error(self, msg, *args, **kwargs):
+        self.logger.error(f"[node_id:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+
+    def debug(self, msg, *args, **kwargs):
+        self.logger.debug(f"[node_id:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
 
 
 @dataclass
-class MLEvent:
-    """Data class for ML detector events"""
-    event_id: str
-    timestamp: float
-    src_ip: str
-    dst_ip: str
-    dst_port: int
-    protocol: str
-    packet_size: int
-    src_country: str
-    dst_country: str
+class SecurityEvent:
+    id: str
+    source_ip: str
+    target_ip: str
+    risk_score: float
     anomaly_score: float
-    risk_level: str
-    ml_prediction: str
-    pipeline_latency: float
-    component_path: List[str]
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    timestamp: str = None
+    attack_type: Optional[str] = None
+    location: Optional[str] = None
+    packets: int = 0
+    bytes: int = 0
+    port: Optional[int] = None
+    protocol: Optional[str] = None
+    ml_models_scores: Optional[Dict] = None
+    # Campos adicionales del protobuf
+    protobuf_data: Optional[Dict] = None
 
-    @classmethod
-    def from_protobuf(cls, pb_event) -> 'MLEvent':
-        """Create MLEvent from protobuf"""
-        return cls(
-            event_id=pb_event.event_id,
-            timestamp=pb_event.timestamp,
-            src_ip=pb_event.src_ip,
-            dst_ip=pb_event.dst_ip,
-            dst_port=pb_event.dst_port,
-            protocol=pb_event.protocol,
-            packet_size=pb_event.packet_size,
-            src_country=pb_event.src_country,
-            dst_country=pb_event.dst_country,
-            anomaly_score=pb_event.anomaly_score,
-            risk_level=pb_event.risk_level,
-            ml_prediction=pb_event.ml_prediction,
-            pipeline_latency=pb_event.pipeline_latency,
-            component_path=list(pb_event.component_path)
-        )
-
-    def to_dict(self) -> Dict:
-        """Convert to dictionary for JSON serialization"""
-        data = asdict(self)
-        data['timestamp_human'] = datetime.fromtimestamp(self.timestamp).isoformat()
-        return data
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = datetime.now().isoformat()
 
 
 @dataclass
 class FirewallCommand:
-    """Data class for firewall commands"""
-    command_id: str
-    timestamp: float
-    action: str  # "BLOCK", "ALLOW", "RATE_LIMIT"
+    action: str
     target_ip: str
-    target_port: Optional[int]
-    duration_seconds: Optional[int]
+    duration: str
     reason: str
-    priority: int
-    source_event_id: str
-
-    def to_protobuf(self) -> firewall_commands_pb2.FirewallCommand:
-        """Convert to protobuf"""
-        pb_command = firewall_commands_pb2.FirewallCommand()
-        pb_command.command_id = self.command_id
-        pb_command.timestamp = self.timestamp
-        pb_command.action = self.action
-        pb_command.target_ip = self.target_ip
-        if self.target_port:
-            pb_command.target_port = self.target_port
-        if self.duration_seconds:
-            pb_command.duration_seconds = self.duration_seconds
-        pb_command.reason = self.reason
-        pb_command.priority = self.priority
-        pb_command.source_event_id = self.source_event_id
-        return pb_command
+    risk_score: float
+    timestamp: str
+    event_id: str
+    rule_type: str = "iptables"
+    port: Optional[int] = None
+    protocol: Optional[str] = None
 
 
-class DashboardCore:
-    """Core dashboard functionality - ML events → Firewall commands"""
+@dataclass
+class ComponentStatus:
+    node_id: str
+    component_type: str
+    status: str
+    last_seen: datetime
+    address: str
+    port: int
+    socket_type: str
+    mode: str
+    events_received: int = 0
+    events_sent: int = 0
+    latency_ms: float = 0.0
+    error_count: int = 0
 
-    def __init__(self, config_path: str):
-        # Load configuration
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
 
-        self.node_id = self.config["node_id"]
-        self.component_name = self.config["component"]["name"]
+@dataclass
+class ZMQConnectionInfo:
+    socket_id: str
+    socket_type: str
+    endpoint: str
+    mode: str
+    status: str
+    high_water_mark: int
+    queue_size: int
+    total_messages: int
+    bytes_transferred: int
+    last_activity: datetime
+    connected_peers: List[str]
 
-        # Initialize crypto/compression if available
-        self.crypto_engine = None
-        self.compression_engine = None
 
-        if CRYPTO_AVAILABLE:
-            if self.config.get("encryption", {}).get("enabled", False):
-                self.crypto_engine = SecureEnvelope(self.config["encryption"])
-            if self.config.get("compression", {}).get("enabled", False):
-                self.compression_engine = CompressionEngine(self.config["compression"])
+class DashboardConfig:
+    """Configuración estricta del dashboard - TODO desde JSON"""
 
-        # ZMQ setup
-        self.zmq_context = zmq.Context()
-        self.ml_input_socket = None
-        self.firewall_output_socket = None
-        self.firewall_response_socket = None
+    def __init__(self, config_file: str):
+        self.config_file = config_file
+        self.config = None
+        self.load_and_validate_config()
 
-        # Event storage
-        self.recent_events = queue.Queue(maxsize=1000)
-        self.event_history = []
-        self.pending_commands = {}
+    def load_and_validate_config(self):
+        """Cargar y validar configuración - FALLA si hay errores"""
+        if not Path(self.config_file).exists():
+            raise ConfigurationError(f"❌ Archivo de configuración {self.config_file} no encontrado")
 
-        # Threading
-        self.running = False
-        self.threads = []
+        try:
+            with open(self.config_file, 'r') as f:
+                self.config = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ConfigurationError(f"❌ Error parseando JSON en {self.config_file}: {e}")
+        except Exception as e:
+            raise ConfigurationError(f"❌ Error leyendo {self.config_file}: {e}")
 
-        # Metrics
-        self.metrics = {
-            "events_received": 0,
-            "events_processed": 0,
-            "commands_sent": 0,
-            "responses_received": 0,
-            "errors": 0,
-            "uptime_start": time.time()
+        # Validar campos requeridos
+        self._validate_required_fields()
+
+        # Extraer valores validados
+        self._extract_config_values()
+
+        print(f"✅ Configuración cargada y validada desde {self.config_file}")
+
+    def _validate_required_fields(self):
+        """Validar que todos los campos requeridos existan"""
+        required_paths = [
+            'node_id',
+            'component.name',
+            'component.version',
+            'network.ml_events_input.port',
+            'network.ml_events_input.address',
+            'network.ml_events_input.mode',
+            'network.ml_events_input.socket_type',
+            'network.firewall_commands_output.port',
+            'network.firewall_commands_output.address',
+            'network.firewall_commands_output.mode',
+            'network.firewall_commands_output.socket_type',
+            'network.firewall_responses_input.port',
+            'network.firewall_responses_input.address',
+            'network.firewall_responses_input.mode',
+            'network.firewall_responses_input.socket_type',
+            'network.admin_interface.address',
+            'network.admin_interface.port',
+            'zmq.context_io_threads',
+            'processing.threads.ml_events_consumers',
+            'processing.threads.firewall_command_producers',
+            'processing.internal_queues.ml_events_queue_size',
+            'processing.internal_queues.firewall_commands_queue_size',
+            'monitoring.stats_interval_seconds',
+            'logging.level',
+            'logging.format'
+        ]
+
+        for path in required_paths:
+            if not self._get_nested_value(path):
+                raise ConfigurationError(f"❌ Campo requerido faltante en configuración: {path}")
+
+    def _get_nested_value(self, path: str):
+        """Obtener valor anidado usando notación de punto"""
+        keys = path.split('.')
+        value = self.config
+
+        for key in keys:
+            if isinstance(value, dict) and key in value:
+                value = value[key]
+            else:
+                return None
+
+        return value
+
+    def _extract_config_values(self):
+        """Extraer todos los valores de configuración"""
+        # Node ID y component info
+        self.node_id = self.config['node_id']
+        component = self.config['component']
+        self.component_name = component['name']
+        self.version = component['version']
+        self.mode = component.get('mode', 'distributed_orchestrator')
+        self.role = component.get('role', 'dashboard_coordinator')
+
+        # Network configuration
+        network = self.config['network']
+
+        # ML Events Input
+        ml_events = network['ml_events_input']
+        self.ml_detector_address = ml_events['address']
+        self.ml_detector_port = ml_events['port']
+        self.ml_detector_mode = ml_events['mode']
+        self.ml_detector_socket_type = ml_events['socket_type']
+        self.ml_detector_hwm = ml_events.get('high_water_mark', 10000)
+        self.ml_detector_expected_publishers = ml_events.get('expected_publishers', 1)
+
+        # Firewall Commands Output
+        fw_commands = network['firewall_commands_output']
+        self.firewall_commands_address = fw_commands['address']
+        self.firewall_commands_port = fw_commands['port']
+        self.firewall_commands_mode = fw_commands['mode']
+        self.firewall_commands_socket_type = fw_commands['socket_type']
+        self.firewall_commands_hwm = fw_commands.get('high_water_mark', 5000)
+        self.firewall_commands_expected_subscribers = fw_commands.get('expected_subscribers', 1)
+
+        # Firewall Responses Input
+        fw_responses = network['firewall_responses_input']
+        self.firewall_responses_address = fw_responses['address']
+        self.firewall_responses_port = fw_responses['port']
+        self.firewall_responses_mode = fw_responses['mode']
+        self.firewall_responses_socket_type = fw_responses['socket_type']
+        self.firewall_responses_hwm = fw_responses.get('high_water_mark', 5000)
+        self.firewall_responses_expected_publishers = fw_responses.get('expected_publishers', 1)
+
+        # Admin Interface
+        admin_interface = network['admin_interface']
+        self.web_host = admin_interface['address']
+        self.web_port = admin_interface['port']
+
+        # ZMQ Configuration
+        zmq_config = self.config['zmq']
+        self.zmq_io_threads = zmq_config['context_io_threads']
+        self.zmq_max_sockets = zmq_config.get('max_sockets', 1024)
+        self.zmq_tcp_keepalive = zmq_config.get('tcp_keepalive', True)
+        self.zmq_tcp_keepalive_idle = zmq_config.get('tcp_keepalive_idle', 300)
+        self.zmq_immediate = zmq_config.get('immediate', True)
+
+        # Processing Configuration
+        processing = self.config['processing']
+        threads = processing['threads']
+        self.ml_events_consumers = threads['ml_events_consumers']
+        self.firewall_command_producers = threads['firewall_command_producers']
+        self.firewall_response_consumers = threads.get('firewall_response_consumers', 2)
+
+        queues = processing['internal_queues']
+        self.ml_events_queue_size = queues['ml_events_queue_size']
+        self.firewall_commands_queue_size = queues['firewall_commands_queue_size']
+        self.firewall_responses_queue_size = queues.get('firewall_responses_queue_size', 2000)
+
+        # Monitoring
+        monitoring = self.config['monitoring']
+        self.stats_interval = monitoring['stats_interval_seconds']
+        self.detailed_metrics = monitoring.get('detailed_metrics', True)
+
+        # Logging configuration
+        self.logging_config = self.config['logging']
+
+        # Security
+        self.security_config = self.config.get('security', {})
+
+        # Web interface
+        self.web_interface_config = self.config.get('web_interface', {})
+
+
+class SecurityDashboard:
+    """Dashboard principal de seguridad con configuración estricta"""
+
+    def __init__(self, config: DashboardConfig):
+        self.config = config
+        self.logger = DashboardLogger(config.node_id, config.logging_config)
+
+        # Crear contexto ZMQ con configuración del JSON
+        self.context = zmq.Context(io_threads=config.zmq_io_threads)
+
+        # Estado del dashboard
+        self.events: List[SecurityEvent] = []
+        self.firewall_commands: List[FirewallCommand] = []
+        self.component_status: Dict[str, ComponentStatus] = {}
+        self.zmq_connections: Dict[str, ZMQConnectionInfo] = {}
+
+        # Colas de procesamiento con tamaños del JSON
+        self.ml_events_queue = queue.Queue(maxsize=config.ml_events_queue_size)
+        self.firewall_commands_queue = queue.Queue(maxsize=config.firewall_commands_queue_size)
+        self.firewall_responses_queue = queue.Queue(maxsize=config.firewall_responses_queue_size)
+
+        # WebSocket clients
+        self.websocket_clients = set()
+
+        # Estadísticas
+        self.stats = {
+            'events_received': 0,
+            'events_processed': 0,
+            'commands_sent': 0,
+            'threats_blocked': 0,
+            'events_per_minute': 0,
+            'high_risk_events': 0,
+            'geographic_distribution': 0,
+            'active_firewall_agents': 0,
+            'ml_detector_latency': 0.0,
+            'last_update': datetime.now().isoformat(),
+            'uptime_seconds': 0,
+            'memory_usage_mb': 0,
+            'cpu_usage_percent': 0.0
         }
 
-        # Initialize components
-        self._setup_zmq_sockets()
-        self._setup_web_interface()
-
-        logger.info(f"Dashboard Core initialized: {self.node_id}")
-
-    def _setup_zmq_sockets(self):
-        """Setup ZMQ sockets based on configuration"""
-        network_config = self.config.get("network", {})
-
-        # ML Events Input (from ml_detector)
-        if "ml_events_input" in network_config:
-            ml_config = network_config["ml_events_input"]
-            self.ml_input_socket = self.zmq_context.socket(zmq.PULL)
-
-            # Configure socket
-            if "high_water_mark" in ml_config:
-                self.ml_input_socket.set_hwm(ml_config["high_water_mark"])
-
-            # Bind to receive events
-            ml_address = f"tcp://{ml_config['address']}:{ml_config['port']}"
-            self.ml_input_socket.bind(ml_address)
-
-            logger.info(f"ML Events Input bound to: {ml_address}")
-
-        # Firewall Commands Output (to firewall_agent)
-        if "firewall_commands_output" in network_config:
-            fw_config = network_config["firewall_commands_output"]
-            self.firewall_output_socket = self.zmq_context.socket(zmq.PUSH)
-
-            # Configure socket
-            if "high_water_mark" in fw_config:
-                self.firewall_output_socket.set_hwm(fw_config["high_water_mark"])
-
-            # Bind for firewall agents to connect
-            fw_address = f"tcp://{fw_config['address']}:{fw_config['port']}"
-            self.firewall_output_socket.bind(fw_address)
-
-            logger.info(f"Firewall Commands Output bound to: {fw_address}")
-
-        # Firewall Responses Input (from firewall_agent)
-        if "firewall_responses_input" in network_config:
-            resp_config = network_config["firewall_responses_input"]
-            self.firewall_response_socket = self.zmq_context.socket(zmq.PULL)
-
-            # Configure socket
-            if "high_water_mark" in resp_config:
-                self.firewall_response_socket.set_hwm(resp_config["high_water_mark"])
-
-            # Bind for firewall agents to connect
-            resp_address = f"tcp://{resp_config['address']}:{resp_config['port']}"
-            self.firewall_response_socket.bind(resp_address)
-
-            logger.info(f"Firewall Responses Input bound to: {resp_address}")
-
-    def _setup_web_interface(self):
-        """Setup Flask web interface"""
-        self.app = Flask(__name__)
-        self.app.config['SECRET_KEY'] = 'upgraded-happiness-dashboard'
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
-
-        # Register routes
-        self._register_routes()
-        self._register_socketio_handlers()
-
-        logger.info("Web interface configured")
-
-    def _register_routes(self):
-        """Register Flask routes"""
-
-        @self.app.route('/')
-        def index():
-            return render_template('dashboard.html')
-
-        @self.app.route('/api/status')
-        def status():
-            return jsonify({
-                "node_id": self.node_id,
-                "component_name": self.component_name,
-                "running": self.running,
-                "metrics": self.metrics,
-                "uptime_seconds": time.time() - self.metrics["uptime_start"]
-            })
-
-        @self.app.route('/api/events')
-        def get_events():
-            """Get recent events"""
-            limit = request.args.get('limit', 100, type=int)
-            events = self.event_history[-limit:] if self.event_history else []
-            return jsonify(events)
-
-        @self.app.route('/api/metrics')
-        def get_metrics():
-            """Get dashboard metrics"""
-            return jsonify(self.metrics)
-
-        @self.app.route('/api/firewall/block', methods=['POST'])
-        def block_ip():
-            """Block an IP address"""
-            data = request.json
-
-            command = FirewallCommand(
-                command_id=f"block_{int(time.time() * 1000)}",
-                timestamp=time.time(),
-                action="BLOCK",
-                target_ip=data['ip'],
-                target_port=data.get('port'),
-                duration_seconds=data.get('duration', 3600),
-                reason=data.get('reason', 'Manual block from dashboard'),
-                priority=data.get('priority', 5),
-                source_event_id=data.get('event_id', 'manual')
-            )
-
-            success = self._send_firewall_command(command)
-            return jsonify({"success": success, "command_id": command.command_id})
-
-        @self.app.route('/api/firewall/allow', methods=['POST'])
-        def allow_ip():
-            """Allow an IP address"""
-            data = request.json
-
-            command = FirewallCommand(
-                command_id=f"allow_{int(time.time() * 1000)}",
-                timestamp=time.time(),
-                action="ALLOW",
-                target_ip=data['ip'],
-                target_port=data.get('port'),
-                duration_seconds=data.get('duration'),
-                reason=data.get('reason', 'Manual allow from dashboard'),
-                priority=data.get('priority', 5),
-                source_event_id=data.get('event_id', 'manual')
-            )
-
-            success = self._send_firewall_command(command)
-            return jsonify({"success": success, "command_id": command.command_id})
-
-    def _register_socketio_handlers(self):
-        """Register SocketIO handlers for real-time updates"""
-
-        @self.socketio.on('connect')
-        def handle_connect():
-            logger.info("Client connected to dashboard")
-            emit('status', {'connected': True})
-
-        @self.socketio.on('disconnect')
-        def handle_disconnect():
-            logger.info("Client disconnected from dashboard")
-
-        @self.socketio.on('request_events')
-        def handle_request_events(data):
-            """Send recent events to client"""
-            limit = data.get('limit', 50)
-            events = self.event_history[-limit:] if self.event_history else []
-            emit('events_update', events)
-
-    def _decrypt_and_decompress(self, data: bytes) -> bytes:
-        """Decrypt and decompress data if crypto is enabled"""
-        if not data:
-            return data
-
-        try:
-            # Decrypt if crypto is enabled
-            if self.crypto_engine:
-                data = self.crypto_engine.decrypt(data)
-
-            # Decompress if compression is enabled
-            if self.compression_engine:
-                data = self.compression_engine.decompress(data)
-
-            return data
-
-        except Exception as e:
-            logger.error(f"Failed to decrypt/decompress data: {e}")
-            return data  # Return original data if decryption fails
-
-    def _compress_and_encrypt(self, data: bytes) -> bytes:
-        """Compress and encrypt data if crypto is enabled"""
-        if not data:
-            return data
-
-        try:
-            # Compress if compression is enabled
-            if self.compression_engine:
-                result = self.compression_engine.compress(data)
-                data = result.compressed_data if hasattr(result, 'compressed_data') else result
-
-            # Encrypt if crypto is enabled
-            if self.crypto_engine:
-                data = self.crypto_engine.encrypt(data)
-
-            return data
-
-        except Exception as e:
-            logger.error(f"Failed to compress/encrypt data: {e}")
-            return data  # Return original data if encryption fails
-
-    def _ml_events_consumer(self):
-        """Consumer thread for ML detector events"""
-        logger.info("ML Events consumer thread started")
-
-        while self.running:
-            try:
-                if self.ml_input_socket:
-                    # Receive event with timeout
-                    try:
-                        raw_data = self.ml_input_socket.recv(zmq.NOBLOCK)
-
-                        # Decrypt and decompress
-                        decrypted_data = self._decrypt_and_decompress(raw_data)
-
-                        # Parse protobuf
-                        pb_event = network_event_pb2.NetworkEvent()
-                        pb_event.ParseFromString(decrypted_data)
-
-                        # Convert to internal format
-                        ml_event = MLEvent.from_protobuf(pb_event)
-
-                        # Process event
-                        self._process_ml_event(ml_event)
-
-                        self.metrics["events_received"] += 1
-
-                    except zmq.Again:
-                        # No message available, continue
-                        pass
-                    except Exception as e:
-                        logger.error(f"Error processing ML event: {e}")
-                        self.metrics["errors"] += 1
-
-                time.sleep(0.001)  # Small delay to prevent busy waiting
-
-            except Exception as e:
-                logger.error(f"ML Events consumer error: {e}")
-                self.metrics["errors"] += 1
-                time.sleep(1)
-
-    def _process_ml_event(self, event: MLEvent):
-        """Process ML detector event and decide on actions"""
-        try:
-            # Add to event history
-            self.event_history.append(event.to_dict())
-
-            # Keep only last 1000 events
-            if len(self.event_history) > 1000:
-                self.event_history.pop(0)
-
-            # Add to recent events queue
-            try:
-                self.recent_events.put_nowait(event)
-            except queue.Full:
-                # Remove oldest event if queue is full
-                try:
-                    self.recent_events.get_nowait()
-                    self.recent_events.put_nowait(event)
-                except queue.Empty:
-                    pass
-
-            # Real-time update to web clients
-            self.socketio.emit('new_event', event.to_dict())
-
-            # Automatic threat response based on ML score
-            self._evaluate_automatic_response(event)
-
-            self.metrics["events_processed"] += 1
-
-            logger.debug(f"Processed ML event: {event.event_id} - Score: {event.anomaly_score}")
-
-        except Exception as e:
-            logger.error(f"Error processing ML event: {e}")
-            self.metrics["errors"] += 1
-
-    def _evaluate_automatic_response(self, event: MLEvent):
-        """Evaluate if automatic firewall response is needed"""
-        try:
-            # Get thresholds from config
-            ml_config = self.config.get("ml_processing", {})
-            auto_block_threshold = ml_config.get("auto_block_threshold", 0.9)
-            auto_rate_limit_threshold = ml_config.get("auto_rate_limit_threshold", 0.7)
-
-            # High risk - automatic block
-            if event.anomaly_score >= auto_block_threshold:
-                command = FirewallCommand(
-                    command_id=f"auto_block_{event.event_id}",
-                    timestamp=time.time(),
-                    action="BLOCK",
-                    target_ip=event.src_ip,
-                    target_port=None,
-                    duration_seconds=3600,  # 1 hour
-                    reason=f"Automatic block - ML score: {event.anomaly_score:.2f}",
-                    priority=1,  # High priority
-                    source_event_id=event.event_id
-                )
-
-                self._send_firewall_command(command)
-
-                # Emit alert to web clients
-                self.socketio.emit('security_alert', {
-                    'type': 'auto_block',
-                    'event': event.to_dict(),
-                    'command': asdict(command)
-                })
-
-                logger.info(f"Automatic block triggered for {event.src_ip} - Score: {event.anomaly_score}")
-
-            # Medium risk - rate limiting
-            elif event.anomaly_score >= auto_rate_limit_threshold:
-                command = FirewallCommand(
-                    command_id=f"auto_rate_limit_{event.event_id}",
-                    timestamp=time.time(),
-                    action="RATE_LIMIT",
-                    target_ip=event.src_ip,
-                    target_port=event.dst_port,
-                    duration_seconds=1800,  # 30 minutes
-                    reason=f"Automatic rate limit - ML score: {event.anomaly_score:.2f}",
-                    priority=3,  # Medium priority
-                    source_event_id=event.event_id
-                )
-
-                self._send_firewall_command(command)
-
-                # Emit alert to web clients
-                self.socketio.emit('security_alert', {
-                    'type': 'auto_rate_limit',
-                    'event': event.to_dict(),
-                    'command': asdict(command)
-                })
-
-                logger.info(f"Automatic rate limit triggered for {event.src_ip} - Score: {event.anomaly_score}")
-
-        except Exception as e:
-            logger.error(f"Error in automatic response evaluation: {e}")
-
-    def _send_firewall_command(self, command: FirewallCommand) -> bool:
-        """Send firewall command to firewall agents"""
-        try:
-            if not self.firewall_output_socket:
-                logger.error("Firewall output socket not configured")
-                return False
-
-            # Convert to protobuf
-            pb_command = command.to_protobuf()
-
-            # Serialize
-            serialized_data = pb_command.SerializeToString()
-
-            # Compress and encrypt
-            encrypted_data = self._compress_and_encrypt(serialized_data)
-
-            # Send to firewall agents
-            self.firewall_output_socket.send(encrypted_data, zmq.NOBLOCK)
-
-            # Track pending command
-            self.pending_commands[command.command_id] = {
-                'command': command,
-                'sent_at': time.time(),
-                'responses': []
+        # Métricas detalladas
+        self.detailed_metrics = {
+            'zmq_connections': {},
+            'component_health': {},
+            'processing_queues': {},
+            'network_topology': {},
+            'performance_metrics': {
+                'events_per_second_history': deque(maxlen=60),
+                'latency_history': deque(maxlen=60),
+                'error_rate_history': deque(maxlen=60)
             }
-
-            self.metrics["commands_sent"] += 1
-
-            logger.info(f"Firewall command sent: {command.command_id} - {command.action} {command.target_ip}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error sending firewall command: {e}")
-            self.metrics["errors"] += 1
-            return False
-
-    def _firewall_responses_consumer(self):
-        """Consumer thread for firewall responses"""
-        logger.info("Firewall Responses consumer thread started")
-
-        while self.running:
-            try:
-                if self.firewall_response_socket:
-                    try:
-                        # Receive response with timeout
-                        raw_data = self.firewall_response_socket.recv(zmq.NOBLOCK)
-
-                        # Decrypt and decompress
-                        decrypted_data = self._decrypt_and_decompress(raw_data)
-
-                        # Parse protobuf response
-                        pb_response = firewall_commands_pb2.FirewallResponse()
-                        pb_response.ParseFromString(decrypted_data)
-
-                        # Process response
-                        self._process_firewall_response(pb_response)
-
-                        self.metrics["responses_received"] += 1
-
-                    except zmq.Again:
-                        # No message available, continue
-                        pass
-                    except Exception as e:
-                        logger.error(f"Error processing firewall response: {e}")
-                        self.metrics["errors"] += 1
-
-                time.sleep(0.001)  # Small delay to prevent busy waiting
-
-            except Exception as e:
-                logger.error(f"Firewall Responses consumer error: {e}")
-                self.metrics["errors"] += 1
-                time.sleep(1)
-
-    def _process_firewall_response(self, pb_response):
-        """Process firewall response"""
-        try:
-            command_id = pb_response.command_id
-
-            # Find pending command
-            if command_id in self.pending_commands:
-                pending = self.pending_commands[command_id]
-
-                # Add response to pending command
-                response_data = {
-                    'agent_id': pb_response.agent_id,
-                    'success': pb_response.success,
-                    'message': pb_response.message,
-                    'timestamp': pb_response.timestamp
-                }
-
-                pending['responses'].append(response_data)
-
-                # Emit response to web clients
-                self.socketio.emit('firewall_response', {
-                    'command_id': command_id,
-                    'response': response_data,
-                    'total_responses': len(pending['responses'])
-                })
-
-                logger.info(
-                    f"Firewall response received: {command_id} - {pb_response.agent_id} - Success: {pb_response.success}")
-
-        except Exception as e:
-            logger.error(f"Error processing firewall response: {e}")
-
-    def start(self):
-        """Start the dashboard"""
-        logger.info("Starting Dashboard Core...")
-
-        self.running = True
-
-        # Start consumer threads
-        if self.ml_input_socket:
-            ml_thread = threading.Thread(target=self._ml_events_consumer, daemon=True)
-            ml_thread.start()
-            self.threads.append(ml_thread)
-
-        if self.firewall_response_socket:
-            fw_thread = threading.Thread(target=self._firewall_responses_consumer, daemon=True)
-            fw_thread.start()
-            self.threads.append(fw_thread)
-
-        # Start web interface
-        web_config = self.config.get("web_interface", {})
-        host = web_config.get("host", "0.0.0.0")
-        port = web_config.get("port", 8080)
-        debug = web_config.get("debug", False)
-
-        logger.info(f"Starting web interface on {host}:{port}")
-
-        try:
-            self.socketio.run(self.app, host=host, port=port, debug=debug)
-        except Exception as e:
-            logger.error(f"Web interface error: {e}")
-
-    def stop(self):
-        """Stop the dashboard"""
-        logger.info("Stopping Dashboard Core...")
+        }
 
         self.running = False
+        self.start_time = time.time()
 
-        # Close ZMQ sockets
-        if self.ml_input_socket:
-            self.ml_input_socket.close()
-        if self.firewall_output_socket:
-            self.firewall_output_socket.close()
-        if self.firewall_response_socket:
-            self.firewall_response_socket.close()
+        # Verificar archivos requeridos
+        self._verify_required_files()
 
-        # Close ZMQ context
-        self.zmq_context.term()
+        # Configurar sockets ZeroMQ
+        self.setup_zmq_sockets()
 
-        logger.info("Dashboard Core stopped")
+    def _verify_required_files(self):
+        """Verificar que existan los archivos requeridos"""
+        required_files = [
+            'templates/dashboard.html',
+            'static/css/dashboard.css'
+        ]
+
+        for file_path in required_files:
+            if not Path(file_path).exists():
+                raise ConfigurationError(f"❌ Archivo requerido no encontrado: {file_path}")
+
+        self.logger.info("✅ Archivos requeridos verificados")
+
+    def setup_zmq_sockets(self):
+        """Configurar sockets ZeroMQ según configuración JSON"""
+        self.logger.info("🔧 Configurando sockets ZeroMQ desde configuración JSON...")
+
+        try:
+            # ML Events Input Socket
+            self.logger.info(f"📡 Configurando ML Events socket...")
+            socket_type = getattr(zmq, self.config.ml_detector_socket_type)
+            self.ml_socket = self.context.socket(socket_type)
+
+            # Configurar opciones desde JSON
+            self.ml_socket.setsockopt(zmq.RCVHWM, self.config.ml_detector_hwm)
+            self.ml_socket.setsockopt(zmq.LINGER, 1000)
+            self.ml_socket.setsockopt(zmq.RCVTIMEO, 1000)
+
+            if self.config.zmq_tcp_keepalive:
+                self.ml_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                self.ml_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, self.config.zmq_tcp_keepalive_idle)
+
+            if self.config.zmq_immediate:
+                self.ml_socket.setsockopt(zmq.IMMEDIATE, 1)
+
+            ml_endpoint = f"tcp://{self.config.ml_detector_address}:{self.config.ml_detector_port}"
+
+            if self.config.ml_detector_mode == 'bind':
+                self.ml_socket.bind(ml_endpoint)
+                self.logger.info(f"🟢 ML Events socket BIND en {ml_endpoint}")
+            elif self.config.ml_detector_mode == 'connect':
+                self.ml_socket.connect(ml_endpoint)
+                self.logger.info(f"🟢 ML Events socket CONNECT a {ml_endpoint}")
+            else:
+                raise ConfigurationError(f"❌ Modo ZMQ inválido para ML Events: {self.config.ml_detector_mode}")
+
+            # Registrar conexión
+            self.zmq_connections['ml_events'] = ZMQConnectionInfo(
+                socket_id='ml_events',
+                socket_type=self.config.ml_detector_socket_type,
+                endpoint=ml_endpoint,
+                mode=self.config.ml_detector_mode,
+                status='active',
+                high_water_mark=self.config.ml_detector_hwm,
+                queue_size=0,
+                total_messages=0,
+                bytes_transferred=0,
+                last_activity=datetime.now(),
+                connected_peers=[]
+            )
+
+            # Firewall Commands Output Socket
+            self.logger.info(f"🔥 Configurando Firewall Commands socket...")
+            socket_type = getattr(zmq, self.config.firewall_commands_socket_type)
+            self.firewall_commands_socket = self.context.socket(socket_type)
+
+            self.firewall_commands_socket.setsockopt(zmq.SNDHWM, self.config.firewall_commands_hwm)
+            self.firewall_commands_socket.setsockopt(zmq.LINGER, 1000)
+
+            if self.config.zmq_tcp_keepalive:
+                self.firewall_commands_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                self.firewall_commands_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, self.config.zmq_tcp_keepalive_idle)
+
+            fw_commands_endpoint = f"tcp://{self.config.firewall_commands_address}:{self.config.firewall_commands_port}"
+
+            if self.config.firewall_commands_mode == 'bind':
+                self.firewall_commands_socket.bind(fw_commands_endpoint)
+                self.logger.info(f"🟢 Firewall Commands socket BIND en {fw_commands_endpoint}")
+            elif self.config.firewall_commands_mode == 'connect':
+                self.firewall_commands_socket.connect(fw_commands_endpoint)
+                self.logger.info(f"🟢 Firewall Commands socket CONNECT a {fw_commands_endpoint}")
+            else:
+                raise ConfigurationError(
+                    f"❌ Modo ZMQ inválido para Firewall Commands: {self.config.firewall_commands_mode}")
+
+            # Registrar conexión
+            self.zmq_connections['firewall_commands'] = ZMQConnectionInfo(
+                socket_id='firewall_commands',
+                socket_type=self.config.firewall_commands_socket_type,
+                endpoint=fw_commands_endpoint,
+                mode=self.config.firewall_commands_mode,
+                status='active',
+                high_water_mark=self.config.firewall_commands_hwm,
+                queue_size=0,
+                total_messages=0,
+                bytes_transferred=0,
+                last_activity=datetime.now(),
+                connected_peers=[]
+            )
+
+            # Firewall Responses Input Socket
+            self.logger.info(f"📥 Configurando Firewall Responses socket...")
+            socket_type = getattr(zmq, self.config.firewall_responses_socket_type)
+            self.firewall_responses_socket = self.context.socket(socket_type)
+
+            self.firewall_responses_socket.setsockopt(zmq.RCVHWM, self.config.firewall_responses_hwm)
+            self.firewall_responses_socket.setsockopt(zmq.LINGER, 1000)
+            self.firewall_responses_socket.setsockopt(zmq.RCVTIMEO, 1000)
+
+            if self.config.zmq_tcp_keepalive:
+                self.firewall_responses_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                self.firewall_responses_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, self.config.zmq_tcp_keepalive_idle)
+
+            fw_responses_endpoint = f"tcp://{self.config.firewall_responses_address}:{self.config.firewall_responses_port}"
+
+            if self.config.firewall_responses_mode == 'bind':
+                self.firewall_responses_socket.bind(fw_responses_endpoint)
+                self.logger.info(f"🟢 Firewall Responses socket BIND en {fw_responses_endpoint}")
+            elif self.config.firewall_responses_mode == 'connect':
+                self.firewall_responses_socket.connect(fw_responses_endpoint)
+                self.logger.info(f"🟢 Firewall Responses socket CONNECT a {fw_responses_endpoint}")
+            else:
+                raise ConfigurationError(
+                    f"❌ Modo ZMQ inválido para Firewall Responses: {self.config.firewall_responses_mode}")
+
+            # Registrar conexión
+            self.zmq_connections['firewall_responses'] = ZMQConnectionInfo(
+                socket_id='firewall_responses',
+                socket_type=self.config.firewall_responses_socket_type,
+                endpoint=fw_responses_endpoint,
+                mode=self.config.firewall_responses_mode,
+                status='active',
+                high_water_mark=self.config.firewall_responses_hwm,
+                queue_size=0,
+                total_messages=0,
+                bytes_transferred=0,
+                last_activity=datetime.now(),
+                connected_peers=[]
+            )
+
+            self.logger.info("✅ Todos los sockets ZeroMQ configurados correctamente")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error configurando sockets ZeroMQ: {e}")
+            raise ConfigurationError(f"Error en configuración ZeroMQ: {e}")
+
+    def start(self):
+        """Iniciar el dashboard"""
+        self.running = True
+        self.logger.info(f"🚀 Iniciando Dashboard de Seguridad...")
+        self.logger.info(f"📋 Node ID: {self.config.node_id}")
+        self.logger.info(f"🏗️ Component: {self.config.component_name} v{self.config.version}")
+        self.logger.info(f"🔧 Mode: {self.config.mode}")
+        self.logger.info(f"🎭 Role: {self.config.role}")
+        self.logger.info(f"🖥️ Sistema: {os.uname().sysname} {os.uname().release}")
+        self.logger.info(f"🐍 Python: {sys.version.split()[0]}")
+        self.logger.info(f"💾 PID: {os.getpid()}")
+
+        # Mostrar configuración de red
+        self.log_network_configuration()
+
+        # Iniciar hilos de procesamiento
+        self.start_processing_threads()
+
+        # Iniciar servidor web
+        self.start_web_server()
+
+        # Iniciar actualizaciones periódicas
+        self.start_periodic_updates()
+
+        self.logger.info("🎯 Dashboard iniciado correctamente")
+        self.logger.info(f"🌐 Interfaz web disponible en: http://{self.config.web_host}:{self.config.web_port}")
+
+        # Mantener el programa ejecutándose
+        try:
+            while self.running:
+                time.sleep(1)
+                self.update_system_metrics()
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Recibida señal de interrupción")
+            self.stop()
+
+    def log_network_configuration(self):
+        """Mostrar configuración de red detallada"""
+        self.logger.info("🌐 Configuración de Red ZeroMQ:")
+        self.logger.info("=" * 60)
+
+        # ML Events
+        self.logger.info(f"📡 ML Events Input:")
+        self.logger.info(f"   └── Puerto: {self.config.ml_detector_port}")
+        self.logger.info(f"   └── Modo: {self.config.ml_detector_mode.upper()}")
+        self.logger.info(f"   └── Tipo: {self.config.ml_detector_socket_type}")
+        self.logger.info(f"   └── HWM: {self.config.ml_detector_hwm}")
+        self.logger.info(f"   └── Expected Publishers: {self.config.ml_detector_expected_publishers}")
+        self.logger.info(f"   └── Endpoint: tcp://{self.config.ml_detector_address}:{self.config.ml_detector_port}")
+
+        # Firewall Commands
+        self.logger.info(f"🔥 Firewall Commands Output:")
+        self.logger.info(f"   └── Puerto: {self.config.firewall_commands_port}")
+        self.logger.info(f"   └── Modo: {self.config.firewall_commands_mode.upper()}")
+        self.logger.info(f"   └── Tipo: {self.config.firewall_commands_socket_type}")
+        self.logger.info(f"   └── HWM: {self.config.firewall_commands_hwm}")
+        self.logger.info(f"   └── Expected Subscribers: {self.config.firewall_commands_expected_subscribers}")
+        self.logger.info(
+            f"   └── Endpoint: tcp://{self.config.firewall_commands_address}:{self.config.firewall_commands_port}")
+
+        # Firewall Responses
+        self.logger.info(f"📥 Firewall Responses Input:")
+        self.logger.info(f"   └── Puerto: {self.config.firewall_responses_port}")
+        self.logger.info(f"   └── Modo: {self.config.firewall_responses_mode.upper()}")
+        self.logger.info(f"   └── Tipo: {self.config.firewall_responses_socket_type}")
+        self.logger.info(f"   └── HWM: {self.config.firewall_responses_hwm}")
+        self.logger.info(f"   └── Expected Publishers: {self.config.firewall_responses_expected_publishers}")
+        self.logger.info(
+            f"   └── Endpoint: tcp://{self.config.firewall_responses_address}:{self.config.firewall_responses_port}")
+
+        # Web Interface
+        self.logger.info(f"🌐 Web Interface:")
+        self.logger.info(f"   └── Host: {self.config.web_host}")
+        self.logger.info(f"   └── Puerto: {self.config.web_port}")
+
+        # ZMQ Context
+        self.logger.info(f"⚙️ ZMQ Context:")
+        self.logger.info(f"   └── IO Threads: {self.config.zmq_io_threads}")
+        self.logger.info(f"   └── Max Sockets: {self.config.zmq_max_sockets}")
+        self.logger.info(f"   └── TCP Keepalive: {self.config.zmq_tcp_keepalive}")
+
+        self.logger.info("=" * 60)
+
+    def start_processing_threads(self):
+        """Iniciar hilos de procesamiento según configuración JSON"""
+        self.logger.info("🧵 Iniciando hilos de procesamiento...")
+
+        # ML Events Consumers
+        for i in range(self.config.ml_events_consumers):
+            thread = threading.Thread(target=self.ml_events_receiver, args=(i,))
+            thread.daemon = True
+            thread.start()
+            self.logger.info(f"   ✅ ML Events Consumer {i} iniciado")
+
+        # Firewall Command Producers
+        for i in range(self.config.firewall_command_producers):
+            thread = threading.Thread(target=self.firewall_commands_processor, args=(i,))
+            thread.daemon = True
+            thread.start()
+            self.logger.info(f"   ✅ Firewall Commands Producer {i} iniciado")
+
+        # Firewall Response Consumers
+        for i in range(self.config.firewall_response_consumers):
+            thread = threading.Thread(target=self.firewall_responses_receiver, args=(i,))
+            thread.daemon = True
+            thread.start()
+            self.logger.info(f"   ✅ Firewall Responses Consumer {i} iniciado")
+
+        self.logger.info(
+            f"✅ Total hilos iniciados: {self.config.ml_events_consumers + self.config.firewall_command_producers + self.config.firewall_response_consumers}")
+
+    def ml_events_receiver(self, worker_id: int):
+        """Recibir eventos del ML Detector"""
+        self.logger.info(f"📡 ML Events Receiver {worker_id} iniciado")
+
+        while self.running:
+            try:
+                # Recibir mensaje
+                message = self.ml_socket.recv_string(zmq.NOBLOCK)
+
+                # Actualizar estadísticas de conexión
+                conn_info = self.zmq_connections['ml_events']
+                conn_info.total_messages += 1
+                conn_info.bytes_transferred += len(message.encode('utf-8'))
+                conn_info.last_activity = datetime.now()
+
+                # Parsear evento
+                event_data = json.loads(message)
+                event = self.parse_security_event(event_data)
+
+                # Añadir a cola de procesamiento
+                if not self.ml_events_queue.full():
+                    self.ml_events_queue.put(event)
+                    self.stats['events_received'] += 1
+
+                    self.logger.debug(
+                        f"📨 Worker {worker_id} - Evento recibido: {event.source_ip} -> {event.target_ip} (riesgo: {event.risk_score:.2f})")
+                else:
+                    self.logger.warning(f"⚠️ Worker {worker_id} - Cola ML events llena, descartando evento")
+
+            except zmq.Again:
+                # Timeout, continuar
+                continue
+            except json.JSONDecodeError as e:
+                self.logger.error(f"❌ Worker {worker_id} - Error parseando JSON: {e}")
+            except Exception as e:
+                self.logger.error(f"❌ Worker {worker_id} - Error en ML events receiver: {e}")
+                time.sleep(0.1)
+
+    def parse_security_event(self, data: Dict) -> SecurityEvent:
+        """Parsear datos de evento a SecurityEvent incluyendo datos protobuf"""
+        return SecurityEvent(
+            id=data.get('id', str(int(time.time() * 1000000))),
+            source_ip=data.get('source_ip', data.get('src_ip', '')),
+            target_ip=data.get('target_ip', data.get('dst_ip', '')),
+            risk_score=float(data.get('risk_score', data.get('anomaly_score', 0.0))),
+            anomaly_score=float(data.get('anomaly_score', 0.0)),
+            latitude=data.get('latitude'),
+            longitude=data.get('longitude'),
+            timestamp=data.get('timestamp'),
+            attack_type=data.get('attack_type'),
+            location=data.get('location'),
+            packets=int(data.get('packets', 0)),
+            bytes=int(data.get('bytes', 0)),
+            port=data.get('port', data.get('dst_port')),
+            protocol=data.get('protocol'),
+            ml_models_scores=data.get('ml_models_scores'),
+            protobuf_data=data  # Guardar todos los datos del protobuf
+        )
+
+    def firewall_commands_processor(self, worker_id: int):
+        """Procesar y enviar comandos de firewall"""
+        self.logger.info(f"🔥 Firewall Commands Processor {worker_id} iniciado")
+
+        while self.running:
+            try:
+                # Obtener comando de la cola
+                command = self.firewall_commands_queue.get(timeout=1)
+
+                # Enviar comando
+                command_json = json.dumps(asdict(command))
+                self.firewall_commands_socket.send_string(command_json)
+
+                # Actualizar estadísticas
+                conn_info = self.zmq_connections['firewall_commands']
+                conn_info.total_messages += 1
+                conn_info.bytes_transferred += len(command_json.encode('utf-8'))
+                conn_info.last_activity = datetime.now()
+
+                self.stats['commands_sent'] += 1
+                self.firewall_commands.append(command)
+
+                self.logger.info(f"🔥 Worker {worker_id} - Comando enviado: {command.action} para {command.target_ip}")
+
+                # Marcar tarea como completada
+                self.firewall_commands_queue.task_done()
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Worker {worker_id} - Error en firewall commands processor: {e}")
+
+    def firewall_responses_receiver(self, worker_id: int):
+        """Recibir respuestas del Firewall Agent"""
+        self.logger.info(f"📥 Firewall Responses Receiver {worker_id} iniciado")
+
+        while self.running:
+            try:
+                # Recibir respuesta
+                response = self.firewall_responses_socket.recv_string(zmq.NOBLOCK)
+
+                # Actualizar estadísticas
+                conn_info = self.zmq_connections['firewall_responses']
+                conn_info.total_messages += 1
+                conn_info.bytes_transferred += len(response.encode('utf-8'))
+                conn_info.last_activity = datetime.now()
+
+                # Parsear respuesta
+                response_data = json.loads(response)
+
+                self.logger.info(
+                    f"📥 Worker {worker_id} - Respuesta firewall: {response_data.get('status', 'unknown')} para {response_data.get('target_ip', 'unknown')}")
+
+                # Actualizar estadísticas si es exitoso
+                if response_data.get('status') == 'applied':
+                    self.stats['threats_blocked'] += 1
+
+            except zmq.Again:
+                continue
+            except json.JSONDecodeError as e:
+                self.logger.error(f"❌ Worker {worker_id} - Error parseando respuesta firewall: {e}")
+            except Exception as e:
+                self.logger.error(f"❌ Worker {worker_id} - Error en firewall responses receiver: {e}")
+                time.sleep(0.1)
+
+    def start_web_server(self):
+        """Iniciar servidor web para servir archivos estáticos y API"""
+        self.logger.info(f"🌐 Iniciando servidor web en {self.config.web_host}:{self.config.web_port}")
+
+        class DashboardHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+            def __init__(self, *args, dashboard=None, **kwargs):
+                self.dashboard = dashboard
+                super().__init__(*args, **kwargs)
+
+            def do_GET(self):
+                if self.path == '/' or self.path == '/index.html':
+                    self.serve_dashboard_html()
+                elif self.path == '/api/metrics':
+                    self.serve_metrics_api()
+                elif self.path.startswith('/static/'):
+                    self.serve_static_file()
+                else:
+                    self.send_error(404, "Página no encontrada")
+
+            def serve_dashboard_html(self):
+                try:
+                    with open('templates/dashboard.html', 'r', encoding='utf-8') as f:
+                        html_content = f.read()
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html; charset=utf-8')
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.end_headers()
+                    self.wfile.write(html_content.encode('utf-8'))
+
+                except FileNotFoundError:
+                    self.send_error(404, "Dashboard HTML no encontrado")
+                except Exception as e:
+                    self.dashboard.logger.error(f"Error sirviendo dashboard HTML: {e}")
+                    self.send_error(500, "Error interno del servidor")
+
+            def serve_static_file(self):
+                try:
+                    file_path = self.path[1:]  # Remover '/' inicial
+
+                    if not Path(file_path).exists():
+                        self.send_error(404, "Archivo no encontrado")
+                        return
+
+                    # Determinar tipo MIME
+                    mime_type, _ = mimetypes.guess_type(file_path)
+                    if mime_type is None:
+                        mime_type = 'application/octet-stream'
+
+                    with open(file_path, 'rb') as f:
+                        content = f.read()
+
+                    self.send_response(200)
+                    self.send_header('Content-type', mime_type)
+                    self.send_header('Cache-Control', 'public, max-age=3600')  # Cache por 1 hora
+                    self.end_headers()
+                    self.wfile.write(content)
+
+                except Exception as e:
+                    self.dashboard.logger.error(f"Error sirviendo archivo estático {self.path}: {e}")
+                    self.send_error(500, "Error interno del servidor")
+
+            def serve_metrics_api(self):
+                try:
+                    metrics = self.dashboard.get_dashboard_metrics()
+                    metrics_json = json.dumps(metrics, default=str)
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(metrics_json.encode('utf-8'))
+
+                except Exception as e:
+                    self.dashboard.logger.error(f"Error sirviendo métricas: {e}")
+                    self.send_error(500, "Error generando métricas")
+
+        def handler_factory(*args, **kwargs):
+            return DashboardHTTPRequestHandler(*args, dashboard=self, **kwargs)
+
+        # Iniciar servidor en hilo separado
+        def run_server():
+            try:
+                with socketserver.TCPServer((self.config.web_host, self.config.web_port), handler_factory) as httpd:
+                    self.logger.info(f"✅ Servidor web iniciado correctamente")
+                    httpd.serve_forever()
+            except Exception as e:
+                self.logger.error(f"❌ Error en servidor web: {e}")
+
+        web_thread = threading.Thread(target=run_server)
+        web_thread.daemon = True
+        web_thread.start()
+
+    def start_periodic_updates(self):
+        """Iniciar actualizaciones periódicas según configuración JSON"""
+
+        def update_stats():
+            while self.running:
+                try:
+                    self.update_statistics()
+                    self.update_zmq_connection_stats()
+                    self.check_component_health()
+                    time.sleep(self.config.stats_interval)
+                except Exception as e:
+                    self.logger.error(f"❌ Error en actualizaciones periódicas: {e}")
+                    time.sleep(self.config.stats_interval)
+
+        stats_thread = threading.Thread(target=update_stats)
+        stats_thread.daemon = True
+        stats_thread.start()
+        self.logger.info(f"✅ Actualizaciones periódicas iniciadas (intervalo: {self.config.stats_interval}s)")
+
+    def update_statistics(self):
+        """Actualizar estadísticas del dashboard"""
+        # Calcular eventos por minuto
+        current_time = time.time()
+        events_in_last_minute = len([e for e in self.events
+                                     if (current_time - time.mktime(
+                time.strptime(e.timestamp[:19], '%Y-%m-%dT%H:%M:%S'))) < 60])
+
+        self.stats['events_per_minute'] = events_in_last_minute
+        self.stats['high_risk_events'] = len([e for e in self.events if e.risk_score > 0.8])
+        self.stats['geographic_distribution'] = len(set(e.location for e in self.events if e.location))
+        self.stats['uptime_seconds'] = int(time.time() - self.start_time)
+        self.stats['last_update'] = datetime.now().isoformat()
+
+        # Procesar eventos de la cola
+        events_processed = 0
+        while not self.ml_events_queue.empty() and events_processed < 100:
+            try:
+                event = self.ml_events_queue.get_nowait()
+                self.events.append(event)
+                events_processed += 1
+                self.stats['events_processed'] += 1
+
+                # Mantener solo los últimos 1000 eventos
+                if len(self.events) > 1000:
+                    self.events = self.events[-1000:]
+
+            except queue.Empty:
+                break
+
+    def update_zmq_connection_stats(self):
+        """Actualizar estadísticas de conexiones ZeroMQ"""
+        for conn_id, conn_info in self.zmq_connections.items():
+            time_since_activity = (datetime.now() - conn_info.last_activity).total_seconds()
+
+            if time_since_activity > 60:
+                conn_info.status = 'inactive'
+            elif time_since_activity > 300:
+                conn_info.status = 'disconnected'
+            else:
+                conn_info.status = 'active'
+
+            # Actualizar métricas detalladas
+            self.detailed_metrics['zmq_connections'][conn_id] = {
+                'status': conn_info.status,
+                'total_messages': conn_info.total_messages,
+                'bytes_transferred': conn_info.bytes_transferred,
+                'last_activity': conn_info.last_activity.isoformat(),
+                'endpoint': conn_info.endpoint,
+                'socket_type': conn_info.socket_type,
+                'mode': conn_info.mode,
+                'high_water_mark': conn_info.high_water_mark
+            }
+
+    def update_system_metrics(self):
+        """Actualizar métricas del sistema"""
+        try:
+            process = psutil.Process()
+            self.stats['memory_usage_mb'] = process.memory_info().rss / 1024 / 1024
+            self.stats['cpu_usage_percent'] = process.cpu_percent()
+        except:
+            pass
+
+    def check_component_health(self):
+        """Verificar salud de componentes conectados"""
+        # Implementar checks específicos basados en configuración
+        pass
+
+    def get_dashboard_metrics(self):
+        """Obtener métricas completas para API"""
+        return {
+            'basic_stats': self.stats,
+            'detailed_metrics': self.detailed_metrics,
+            'zmq_connections': {k: asdict(v) if hasattr(v, '__dict__') else v
+                                for k, v in self.zmq_connections.items()},
+            'component_status': {k: asdict(v) for k, v in self.component_status.items()},
+            'recent_events': [asdict(e) for e in self.events[-50:]],
+            'recent_commands': [asdict(c) for c in self.firewall_commands[-20:]],
+            'node_info': {
+                'node_id': self.config.node_id,
+                'component_name': self.config.component_name,
+                'version': self.config.version,
+                'mode': self.config.mode,
+                'role': self.config.role,
+                'uptime_seconds': self.stats['uptime_seconds'],
+                'pid': os.getpid()
+            },
+            'configuration': {
+                'ml_events_queue_size': self.config.ml_events_queue_size,
+                'ml_events_consumers': self.config.ml_events_consumers,
+                'firewall_commands_queue_size': self.config.firewall_commands_queue_size,
+                'firewall_command_producers': self.config.firewall_command_producers,
+                'stats_interval': self.config.stats_interval
+            }
+        }
+
+    def stop(self):
+        """Detener el dashboard"""
+        self.logger.info("🛑 Deteniendo Dashboard de Seguridad...")
+        self.running = False
+
+        # Cerrar sockets
+        try:
+            self.ml_socket.close()
+            self.firewall_commands_socket.close()
+            self.firewall_responses_socket.close()
+        except:
+            pass
+
+        # Cerrar contexto ZeroMQ
+        self.context.term()
+        self.logger.info("✅ Dashboard detenido correctamente")
+
+
+def signal_handler(sig, frame):
+    """Manejar señales del sistema"""
+    print("\n🛑 Recibida señal de terminación")
+    sys.exit(0)
 
 
 def main():
-    """Main function"""
-    import argparse
+    """Función principal con configuración estricta"""
+    # Configurar manejo de señales
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
-    parser = argparse.ArgumentParser(description="Dashboard Core - ML Events → Firewall Commands")
-    parser.add_argument("config", help="Configuration file path")
-    parser.add_argument("--log-level", default="INFO", help="Log level")
+    # Verificar archivo de configuración
+    if len(sys.argv) != 2:
+        print("❌ Uso: python real_zmq_dashboard_with_firewall.py <config.json>")
+        sys.exit(1)
 
-    args = parser.parse_args()
-
-    # Setup logging
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper()),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-
-    # Initialize and start dashboard
-    dashboard = DashboardCore(args.config)
+    config_file = sys.argv[1]
 
     try:
+        # Cargar configuración (FALLA si hay errores)
+        config = DashboardConfig(config_file)
+
+        # Crear directorios necesarios
+        Path("logs").mkdir(exist_ok=True)
+        Path("data").mkdir(exist_ok=True)
+        Path("templates").mkdir(exist_ok=True)
+        Path("static/css").mkdir(parents=True, exist_ok=True)
+        Path("static/js").mkdir(parents=True, exist_ok=True)
+
+        # Crear y iniciar dashboard
+        dashboard = SecurityDashboard(config)
         dashboard.start()
-    except KeyboardInterrupt:
-        print("\n🛑 Shutdown requested by user")
+
+    except ConfigurationError as e:
+        print(f"💥 ERROR DE CONFIGURACIÓN: {e}")
+        print("🔧 Verificar archivo JSON y campos requeridos")
+        sys.exit(1)
     except Exception as e:
-        logger.error(f"Dashboard error: {e}")
-    finally:
-        dashboard.stop()
+        print(f"💥 ERROR FATAL: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
