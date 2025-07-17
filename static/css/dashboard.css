@@ -1677,3 +1677,528 @@ body {
 .diagnostic-content::-webkit-scrollbar-thumb:hover {
     background: #ff6666;
 }
+
+/* Añadir estos estilos al CSS existente */
+
+/* ============================================================================
+   MEJORAS PARA EL MAPA - CONTORNOS VERDES VISIBLES
+   ============================================================================ */
+
+#map {
+    height: 100%;
+    width: 100%;
+    /* Filtros mejorados para mejor visibilidad */
+    filter: hue-rotate(200deg) saturate(1.2) brightness(0.8) contrast(1.4);
+}
+
+/* Personalización específica para los tiles del mapa */
+.leaflet-tile {
+    filter: brightness(0.6) contrast(1.8) !important;
+}
+
+/* Mejorar contraste de controles del mapa */
+.leaflet-control-zoom a {
+    background-color: rgba(0, 0, 0, 0.9) !important;
+    color: #00ff00 !important;
+    border: 1px solid #00ff00 !important;
+}
+
+.leaflet-control-attribution {
+    background-color: rgba(0, 0, 0, 0.8) !important;
+    color: #00ff00 !important;
+}
+
+/* Personalizar popup del mapa */
+.leaflet-popup-content-wrapper {
+    background: rgba(10, 10, 10, 0.95) !important;
+    color: #00ff00 !important;
+    border: 1px solid #00ff00 !important;
+    border-radius: 4px !important;
+}
+
+.leaflet-popup-tip {
+    background: rgba(10, 10, 10, 0.95) !important;
+    border: 1px solid #00ff00 !important;
+}
+
+/* ============================================================================
+   CAJAS MINIMIZABLES - SECCIONES COLAPSABLES
+   ============================================================================ */
+
+.collapsible-section {
+    margin-bottom: 8px;
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+    background: rgba(0, 20, 0, 0.3);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.collapsible-section:hover {
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.section-header {
+    padding: 10px 15px;
+    background: rgba(0, 80, 0, 0.4);
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.section-header:hover {
+    background: rgba(0, 100, 0, 0.6);
+}
+
+.section-content {
+    padding: 15px;
+    max-height: 1000px;
+    overflow: hidden;
+    transition: all 0.4s ease;
+}
+
+.section-content.collapsed {
+    max-height: 0;
+    padding: 0 15px;
+    opacity: 0;
+}
+
+.toggle-icon {
+    transition: transform 0.3s ease;
+    color: #00ff88;
+    font-size: 12px;
+}
+
+.toggle-icon.rotated {
+    transform: rotate(180deg);
+}
+
+/* ============================================================================
+   SECCIÓN DE EVENTOS ENTRANTES
+   ============================================================================ */
+
+.events-section {
+    background: rgba(40, 0, 0, 0.3);
+    border-color: #ff4444;
+}
+
+.event-count-badge {
+    background: #ff4444;
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 9px;
+    font-weight: bold;
+    margin-left: 10px;
+    min-width: 20px;
+    text-align: center;
+    animation: eventBadgePulse 2s infinite;
+}
+
+@keyframes eventBadgePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.events-controls {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 4px;
+    border: 1px solid #333;
+}
+
+.mini-btn {
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 10px;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+    min-width: 30px;
+}
+
+.mini-btn:hover {
+    background: rgba(0, 255, 0, 0.2);
+    transform: scale(1.05);
+}
+
+.mini-btn.paused {
+    color: #ffaa00;
+    border-color: #ffaa00;
+}
+
+.mini-select {
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 4px 8px;
+    font-size: 10px;
+    border-radius: 3px;
+    font-family: inherit;
+}
+
+.events-list {
+    max-height: 300px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+.no-events-placeholder {
+    text-align: center;
+    padding: 30px 20px;
+    color: #666;
+}
+
+.no-events-placeholder i {
+    font-size: 24px;
+    margin-bottom: 10px;
+    opacity: 0.5;
+}
+
+.no-events-placeholder p {
+    margin: 10px 0;
+    font-size: 11px;
+}
+
+.event-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #222;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-left: 3px solid transparent;
+    animation: eventSlideIn 0.3s ease;
+}
+
+@keyframes eventSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.event-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateX(3px);
+}
+
+.event-item:last-child {
+    border-bottom: none;
+}
+
+.event-item.risk-high {
+    border-left-color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+}
+
+.event-item.risk-medium {
+    border-left-color: #ffaa00;
+    background: rgba(255, 170, 0, 0.1);
+}
+
+.event-item.risk-low {
+    border-left-color: #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+}
+
+.event-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 10px;
+}
+
+.event-time {
+    color: #00ffff;
+    font-weight: bold;
+}
+
+.event-risk {
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+.event-risk.high {
+    background: rgba(255, 68, 68, 0.3);
+    color: #ff4444;
+}
+
+.event-risk.medium {
+    background: rgba(255, 170, 0, 0.3);
+    color: #ffaa00;
+}
+
+.event-risk.low {
+    background: rgba(0, 255, 0, 0.3);
+    color: #00ff00;
+}
+
+.event-details {
+    font-size: 9px;
+    color: #cccccc;
+    line-height: 1.3;
+}
+
+.event-source {
+    color: #ff4444;
+    font-weight: bold;
+}
+
+.event-target {
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.event-type {
+    color: #ffaa00;
+    font-style: italic;
+}
+
+.event-actions {
+    margin-top: 4px;
+    display: none;
+    gap: 4px;
+}
+
+.event-item:hover .event-actions {
+    display: flex;
+}
+
+.event-action-btn {
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid currentColor;
+    color: inherit;
+    padding: 2px 6px;
+    font-size: 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.event-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+}
+
+.event-action-btn.block {
+    color: #ff4444;
+}
+
+.event-action-btn.details {
+    color: #00ffff;
+}
+
+.event-action-btn.map {
+    color: #00ff88;
+}
+
+/* ============================================================================
+   MEJORAS EN CONEXIONES ZMQ
+   ============================================================================ */
+
+.zmq-connections-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    margin-bottom: 2px;
+}
+
+.detail-row span:first-child {
+    color: #cccccc;
+}
+
+.detail-row span:last-child {
+    color: #00ffff;
+    font-weight: bold;
+}
+
+/* ============================================================================
+   MEJORAS GENERALES
+   ============================================================================ */
+
+/* Mejorar sidebar scrolling */
+.sidebar {
+    background: rgba(0, 0, 0, 0.98);
+    border: 1px solid #00ff00;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.1);
+    padding: 5px;
+}
+
+/* Mejorar scrollbar para la lista de eventos */
+.events-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.events-list::-webkit-scrollbar-track {
+    background: #222;
+    border-radius: 3px;
+}
+
+.events-list::-webkit-scrollbar-thumb {
+    background: #ff4444;
+    border-radius: 3px;
+    box-shadow: 0 0 3px rgba(255, 68, 68, 0.3);
+}
+
+.events-list::-webkit-scrollbar-thumb:hover {
+    background: #ff6666;
+}
+
+/* Mejorar arquitectura panel */
+.architecture-panel {
+    /* Ya no es necesario, se convierte en collapsible-section */
+}
+
+.architecture-title {
+    color: #00ff88;
+    font-weight: bold;
+    font-size: 13px;
+    text-shadow: 0 0 5px #00ff88;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+/* Ajustes para pantallas pequeñas */
+@media (max-width: 1200px) {
+    .events-list {
+        max-height: 200px;
+    }
+
+    .section-content {
+        padding: 10px;
+    }
+
+    .event-item {
+        padding: 6px 10px;
+    }
+}
+
+@media (max-width: 900px) {
+    .events-controls {
+        flex-wrap: wrap;
+    }
+
+    .mini-btn, .mini-select {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+
+    .events-list {
+        max-height: 150px;
+    }
+}
+
+/* ============================================================================
+   ANIMACIONES Y EFECTOS ESPECIALES
+   ============================================================================ */
+
+/* Efecto de carga para eventos */
+.events-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #666;
+}
+
+.events-loading::after {
+    content: '...';
+    animation: eventsDots 1.5s infinite;
+}
+
+@keyframes eventsDots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+/* Efecto para eventos nuevos */
+.event-item.new-event {
+    animation: newEventGlow 2s ease-out;
+}
+
+@keyframes newEventGlow {
+    0% {
+        background: rgba(0, 255, 0, 0.3);
+        transform: scale(1.02);
+    }
+    100% {
+        background: transparent;
+        transform: scale(1);
+    }
+}
+
+/* Efecto para secciones expandidas */
+.collapsible-section.expanded {
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+}
+
+.collapsible-section.expanded .section-header {
+    background: rgba(0, 120, 0, 0.6);
+}
+
+/* Mejorar los controles del mapa */
+.map-control-btn {
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 10px;
+    border-radius: 3px;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    font-weight: bold;
+    text-shadow: 0 0 3px #00ff00;
+}
+
+.map-control-btn:hover {
+    background: rgba(0, 255, 0, 0.2);
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+    transform: translateY(-1px);
+}
+
+.map-control-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+/* Botón especial para Test FW */
+.map-control-btn:last-child {
+    background: rgba(255, 68, 68, 0.8);
+    border-color: #ff4444;
+    color: #ffffff;
+}
+
+.map-control-btn:last-child:hover {
+    background: rgba(255, 68, 68, 1);
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+}
