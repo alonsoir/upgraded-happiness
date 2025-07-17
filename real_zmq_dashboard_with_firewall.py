@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Dashboard de Seguridad con ZeroMQ - Backend Principal v2.1
-CONFIGURACIÓN ESTRICTA: Todo debe leerse del JSON, sin defaults hardcodeados
-Archivos separados: templates/dashboard.html, static/css/dashboard.css
+Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2
+INTEGRADO: UTF-8 + Monitoreo de Errores + Conectividad Detallada
 """
-
+from typing import Dict, List, Optional, Any, Set
 import zmq
 import json
 import threading
@@ -15,8 +14,8 @@ import os
 import signal
 import sys
 import psutil
+import hashlib
 from dataclasses import dataclass, asdict
-from typing import Dict, List, Optional, Any, Set
 from datetime import datetime, timedelta
 from pathlib import Path
 import http.server
@@ -29,6 +28,239 @@ from collections import defaultdict, deque
 class ConfigurationError(Exception):
     """Error de configuración del dashboard"""
     pass
+
+
+@dataclass
+class EncodingError:
+    """Información detallada de errores de encoding"""
+    timestamp: str
+    worker_id: int
+    error_type: str
+    message_length: int
+    first_bytes_hex: str
+    encoding_attempted: str
+    position: int
+    byte_value: str
+    error_message: str
+    suggested_fix: str
+
+
+@dataclass
+class WorkerStats:
+    """Estadísticas por worker"""
+    worker_id: int
+    worker_type: str  # ml_events, firewall_responses, etc.
+    messages_received: int = 0
+    messages_successful: int = 0
+    encoding_errors: int = 0
+    last_activity: Optional[datetime] = None
+    last_error: Optional[EncodingError] = None
+    error_rate: float = 0.0
+    status: str = "idle"  # idle, active, error
+
+
+@dataclass
+class ConnectionInfo:
+    """Información detallada de conexiones activas"""
+    connection_id: str
+    node_id: Optional[str] = None
+    component_type: str = "unknown"
+    endpoint: str = ""
+    socket_type: str = ""
+    mode: str = ""
+    status: str = "disconnected"
+    last_seen: Optional[datetime] = None
+    remote_ip: Optional[str] = None
+    remote_port: Optional[int] = None
+    version: Optional[str] = None
+    handshake_completed: bool = False
+    messages_exchanged: int = 0
+
+
+class EncodingMonitor:
+    """Monitor de errores de encoding en tiempo real"""
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.encoding_errors: List[EncodingError] = []
+        self.worker_stats: Dict[str, WorkerStats] = {}
+        self.connection_info: Dict[str, ConnectionInfo] = {}
+        self.error_patterns: Dict[str, int] = defaultdict(int)
+        self.encoding_suggestions: Dict[str, str] = {
+            'utf-8': 'Datos UTF-8 válidos',
+            'latin-1': 'Posible texto con caracteres especiales',
+            'protobuf': 'Datos binarios protobuf detectados',
+            'binary': 'Datos binarios sin estructura conocida',
+            'corrupted': 'Datos corruptos o fragmentados'
+        }
+
+    def detect_encoding_type(self, data: bytes) -> str:
+        """Detectar tipo de encoding de los datos"""
+        if len(data) == 0:
+            return 'empty'
+
+        # Verificar UTF-8 válido
+        try:
+            data.decode('utf-8')
+            return 'utf-8'
+        except UnicodeDecodeError:
+            pass
+
+        # Verificar si parece protobuf
+        if self._looks_like_protobuf(data):
+            return 'protobuf'
+
+        # Verificar si es texto en otra codificación
+        try:
+            decoded = data.decode('latin-1')
+            if decoded.isprintable() and '{' in decoded:
+                return 'latin-1'
+        except:
+            pass
+
+        # Verificar otros formatos binarios
+        if data.startswith(b'\x00') or data.startswith(b'\xff'):
+            return 'binary'
+
+        return 'corrupted'
+
+    def _looks_like_protobuf(self, data: bytes) -> bool:
+        """Detectar si los datos parecen ser protobuf"""
+        if len(data) < 2:
+            return False
+
+        # Patrones típicos de protobuf
+        protobuf_patterns = [
+            b'\x08', b'\x0a', b'\x10', b'\x12', b'\x18', b'\x1a',
+            b'\x20', b'\x22', b'\x28', b'\x2a'
+        ]
+
+        return any(data.startswith(pattern) for pattern in protobuf_patterns)
+
+    def log_encoding_error(self, worker_id: int, worker_type: str,
+                           data: bytes, error: Exception, encoding_attempted: str):
+        """Registrar error de encoding con detalles"""
+
+        # Crear información del error
+        encoding_error = EncodingError(
+            timestamp=datetime.now().isoformat(),
+            worker_id=worker_id,
+            error_type=type(error).__name__,
+            message_length=len(data),
+            first_bytes_hex=data[:20].hex() if len(data) >= 20 else data.hex(),
+            encoding_attempted=encoding_attempted,
+            position=getattr(error, 'start', 0),
+            byte_value=f"0x{data[getattr(error, 'start', 0)]:02x}" if data else "0x00",
+            error_message=str(error),
+            suggested_fix=self._get_encoding_suggestion(data)
+        )
+
+        # Añadir a la lista de errores
+        self.encoding_errors.append(encoding_error)
+
+        # Mantener solo los últimos 100 errores
+        if len(self.encoding_errors) > 100:
+            self.encoding_errors = self.encoding_errors[-100:]
+
+        # Actualizar estadísticas del worker
+        worker_key = f"{worker_type}_{worker_id}"
+        if worker_key not in self.worker_stats:
+            self.worker_stats[worker_key] = WorkerStats(
+                worker_id=worker_id,
+                worker_type=worker_type
+            )
+
+        stats = self.worker_stats[worker_key]
+        stats.encoding_errors += 1
+        stats.last_error = encoding_error
+        stats.last_activity = datetime.now()
+        stats.status = "error"
+        stats.error_rate = stats.encoding_errors / max(stats.messages_received, 1) * 100
+
+        # Actualizar patrones de error
+        detected_type = self.detect_encoding_type(data)
+        self.error_patterns[detected_type] += 1
+
+        self.logger.error(
+            f"🔍 Worker {worker_id} ({worker_type}) - Error encoding: "
+            f"{encoding_error.error_type} at pos {encoding_error.position}, "
+            f"byte {encoding_error.byte_value}, suggested: {encoding_error.suggested_fix}"
+        )
+
+    def log_successful_message(self, worker_id: int, worker_type: str,
+                               message_length: int, encoding_used: str):
+        """Registrar mensaje procesado exitosamente"""
+        worker_key = f"{worker_type}_{worker_id}"
+        if worker_key not in self.worker_stats:
+            self.worker_stats[worker_key] = WorkerStats(
+                worker_id=worker_id,
+                worker_type=worker_type
+            )
+
+        stats = self.worker_stats[worker_key]
+        stats.messages_received += 1
+        stats.messages_successful += 1
+        stats.last_activity = datetime.now()
+        stats.status = "active"
+        stats.error_rate = stats.encoding_errors / max(stats.messages_received, 1) * 100
+
+    def _get_encoding_suggestion(self, data: bytes) -> str:
+        """Obtener sugerencia basada en el análisis de los datos"""
+        detected_type = self.detect_encoding_type(data)
+        return self.encoding_suggestions.get(detected_type, 'Tipo desconocido')
+
+    def register_connection(self, connection_id: str, endpoint: str,
+                            socket_type: str, mode: str):
+        """Registrar nueva conexión"""
+        self.connection_info[connection_id] = ConnectionInfo(
+            connection_id=connection_id,
+            endpoint=endpoint,
+            socket_type=socket_type,
+            mode=mode,
+            status="connecting",
+            last_seen=datetime.now()
+        )
+
+    def update_connection_info(self, connection_id: str, node_id: str = None,
+                               component_type: str = None, version: str = None,
+                               remote_ip: str = None, remote_port: int = None):
+        """Actualizar información de conexión"""
+        if connection_id in self.connection_info:
+            conn = self.connection_info[connection_id]
+            if node_id:
+                conn.node_id = node_id
+            if component_type:
+                conn.component_type = component_type
+            if version:
+                conn.version = version
+            if remote_ip:
+                conn.remote_ip = remote_ip
+            if remote_port:
+                conn.remote_port = remote_port
+            conn.last_seen = datetime.now()
+            conn.status = "connected"
+            conn.handshake_completed = True
+            conn.messages_exchanged += 1
+
+    def get_monitoring_data(self) -> Dict:
+        """Obtener todos los datos de monitoreo"""
+        return {
+            'encoding_errors': [asdict(error) for error in self.encoding_errors[-20:]],
+            'worker_stats': {k: asdict(v) for k, v in self.worker_stats.items()},
+            'connection_info': {k: asdict(v) for k, v in self.connection_info.items()},
+            'error_patterns': dict(self.error_patterns),
+            'summary': {
+                'total_errors': len(self.encoding_errors),
+                'active_workers': len([s for s in self.worker_stats.values()
+                                       if s.status == "active"]),
+                'error_workers': len([s for s in self.worker_stats.values()
+                                      if s.status == "error"]),
+                'connected_components': len([c for c in self.connection_info.values()
+                                             if c.status == "connected"]),
+                'most_common_error': max(self.error_patterns.items(),
+                                         key=lambda x: x[1])[0] if self.error_patterns else 'none'
+            }
+        }
 
 
 class DashboardLogger:
@@ -316,11 +548,14 @@ class DashboardConfig:
 
 
 class SecurityDashboard:
-    """Dashboard principal de seguridad con configuración estricta"""
+    """Dashboard principal de seguridad con monitoreo integrado"""
 
     def __init__(self, config: DashboardConfig):
         self.config = config
         self.logger = DashboardLogger(config.node_id, config.logging_config)
+
+        # Inicializar monitor de encoding
+        self.encoding_monitor = EncodingMonitor(self.logger)
 
         # Crear contexto ZMQ con configuración del JSON
         self.context = zmq.Context(io_threads=config.zmq_io_threads)
@@ -339,7 +574,7 @@ class SecurityDashboard:
         # WebSocket clients
         self.websocket_clients = set()
 
-        # Estadísticas
+        # Estadísticas mejoradas
         self.stats = {
             'events_received': 0,
             'events_processed': 0,
@@ -353,7 +588,12 @@ class SecurityDashboard:
             'last_update': datetime.now().isoformat(),
             'uptime_seconds': 0,
             'memory_usage_mb': 0,
-            'cpu_usage_percent': 0.0
+            'cpu_usage_percent': 0.0,
+            # Nuevas estadísticas de encoding
+            'encoding_errors_total': 0,
+            'encoding_errors_rate': 0.0,
+            'active_workers': 0,
+            'problematic_workers': 0
         }
 
         # Métricas detalladas
@@ -375,8 +615,8 @@ class SecurityDashboard:
         # Verificar archivos requeridos
         self._verify_required_files()
 
-        # Configurar sockets ZeroMQ
-        self.setup_zmq_sockets()
+        # Configurar sockets ZeroMQ con monitoreo
+        self.setup_zmq_sockets_with_monitoring()
 
     def _verify_required_files(self):
         """Verificar que existan los archivos requeridos"""
@@ -391,9 +631,9 @@ class SecurityDashboard:
 
         self.logger.info("✅ Archivos requeridos verificados")
 
-    def setup_zmq_sockets(self):
-        """Configurar sockets ZeroMQ según configuración JSON"""
-        self.logger.info("🔧 Configurando sockets ZeroMQ desde configuración JSON...")
+    def setup_zmq_sockets_with_monitoring(self):
+        """Configurar sockets ZeroMQ con monitoreo integrado"""
+        self.logger.info("🔧 Configurando sockets ZeroMQ con monitoreo de errores...")
 
         try:
             # ML Events Input Socket
@@ -424,7 +664,14 @@ class SecurityDashboard:
             else:
                 raise ConfigurationError(f"❌ Modo ZMQ inválido para ML Events: {self.config.ml_detector_mode}")
 
-            # Registrar conexión
+            # Registrar conexión en el monitor
+            self.encoding_monitor.register_connection(
+                'ml_events', ml_endpoint,
+                self.config.ml_detector_socket_type,
+                self.config.ml_detector_mode
+            )
+
+            # Registrar conexión en ZMQ info
             self.zmq_connections['ml_events'] = ZMQConnectionInfo(
                 socket_id='ml_events',
                 socket_type=self.config.ml_detector_socket_type,
@@ -464,6 +711,12 @@ class SecurityDashboard:
                     f"❌ Modo ZMQ inválido para Firewall Commands: {self.config.firewall_commands_mode}")
 
             # Registrar conexión
+            self.encoding_monitor.register_connection(
+                'firewall_commands', fw_commands_endpoint,
+                self.config.firewall_commands_socket_type,
+                self.config.firewall_commands_mode
+            )
+
             self.zmq_connections['firewall_commands'] = ZMQConnectionInfo(
                 socket_id='firewall_commands',
                 socket_type=self.config.firewall_commands_socket_type,
@@ -504,6 +757,12 @@ class SecurityDashboard:
                     f"❌ Modo ZMQ inválido para Firewall Responses: {self.config.firewall_responses_mode}")
 
             # Registrar conexión
+            self.encoding_monitor.register_connection(
+                'firewall_responses', fw_responses_endpoint,
+                self.config.firewall_responses_socket_type,
+                self.config.firewall_responses_mode
+            )
+
             self.zmq_connections['firewall_responses'] = ZMQConnectionInfo(
                 socket_id='firewall_responses',
                 socket_type=self.config.firewall_responses_socket_type,
@@ -518,7 +777,7 @@ class SecurityDashboard:
                 connected_peers=[]
             )
 
-            self.logger.info("✅ Todos los sockets ZeroMQ configurados correctamente")
+            self.logger.info("✅ Todos los sockets ZeroMQ configurados con monitoreo")
 
         except Exception as e:
             self.logger.error(f"❌ Error configurando sockets ZeroMQ: {e}")
@@ -611,11 +870,12 @@ class SecurityDashboard:
         """Iniciar hilos de procesamiento según configuración JSON"""
         self.logger.info("🧵 Iniciando hilos de procesamiento...")
 
-        # ML Events Consumers
+        # ML Events Consumers con monitoreo
         for i in range(self.config.ml_events_consumers):
-            thread = threading.Thread(target=self.ml_events_receiver, args=(i,))
+            thread = threading.Thread(target=self.ml_events_receiver_with_monitoring, args=(i,))
             thread.daemon = True
             thread.start()
+            self.logger.info(f"📡 ML Events Receiver {i} iniciado")
             self.logger.info(f"   ✅ ML Events Consumer {i} iniciado")
 
         # Firewall Command Producers
@@ -623,35 +883,63 @@ class SecurityDashboard:
             thread = threading.Thread(target=self.firewall_commands_processor, args=(i,))
             thread.daemon = True
             thread.start()
+            self.logger.info(f"🔥 Firewall Commands Processor {i} iniciado")
             self.logger.info(f"   ✅ Firewall Commands Producer {i} iniciado")
 
-        # Firewall Response Consumers
+        # Firewall Response Consumers con monitoreo
         for i in range(self.config.firewall_response_consumers):
-            thread = threading.Thread(target=self.firewall_responses_receiver, args=(i,))
+            thread = threading.Thread(target=self.firewall_responses_receiver_with_monitoring, args=(i,))
             thread.daemon = True
             thread.start()
+            self.logger.info(f"📥 Firewall Responses Receiver {i} iniciado")
             self.logger.info(f"   ✅ Firewall Responses Consumer {i} iniciado")
 
         self.logger.info(
             f"✅ Total hilos iniciados: {self.config.ml_events_consumers + self.config.firewall_command_producers + self.config.firewall_response_consumers}")
 
-    def ml_events_receiver(self, worker_id: int):
-        """Recibir eventos del ML Detector"""
-        self.logger.info(f"📡 ML Events Receiver {worker_id} iniciado")
+    def ml_events_receiver_with_monitoring(self, worker_id: int):
+        """Recibir eventos del ML Detector con monitoreo completo"""
+        self.logger.info(f"📡 ML Events Receiver {worker_id} iniciado con monitoreo")
 
         while self.running:
             try:
-                # Recibir mensaje
-                message = self.ml_socket.recv_string(zmq.NOBLOCK)
+                # Recibir mensaje como bytes
+                message_bytes = self.ml_socket.recv(zmq.NOBLOCK)
+
+                # Intentar decodificar con monitoreo
+                message_text, encoding_used = self.decode_message_with_monitoring(
+                    message_bytes, worker_id, 'ml_events'
+                )
+
+                if message_text is None:
+                    continue  # Error ya registrado en monitoring
+
+                # Registrar mensaje exitoso
+                self.encoding_monitor.log_successful_message(
+                    worker_id, 'ml_events', len(message_bytes), encoding_used
+                )
+
+                # Intentar extraer información del remitente
+                try:
+                    event_data = json.loads(message_text)
+                    if 'node_id' in event_data:
+                        self.encoding_monitor.update_connection_info(
+                            'ml_events',
+                            node_id=event_data.get('node_id'),
+                            component_type='ml_detector',
+                            version=event_data.get('version'),
+                            remote_ip=event_data.get('source_ip')  # IP del componente
+                        )
+                except:
+                    pass  # Información opcional
 
                 # Actualizar estadísticas de conexión
                 conn_info = self.zmq_connections['ml_events']
                 conn_info.total_messages += 1
-                conn_info.bytes_transferred += len(message.encode('utf-8'))
+                conn_info.bytes_transferred += len(message_bytes)
                 conn_info.last_activity = datetime.now()
 
-                # Parsear evento
-                event_data = json.loads(message)
+                # Parsear y procesar evento
                 event = self.parse_security_event(event_data)
 
                 # Añadir a cola de procesamiento
@@ -670,8 +958,97 @@ class SecurityDashboard:
             except json.JSONDecodeError as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error parseando JSON: {e}")
             except Exception as e:
-                self.logger.error(f"❌ Worker {worker_id} - Error en ML events receiver: {e}")
+                self.logger.error(f"❌ Worker {worker_id} - Error general: {e}")
                 time.sleep(0.1)
+
+    def decode_message_with_monitoring(self, message_bytes: bytes, worker_id: int,
+                                       worker_type: str) -> tuple[Optional[str], str]:
+        """Decodificar mensaje con monitoreo completo de errores"""
+
+        # 1. Intentar UTF-8 directo
+        try:
+            decoded = message_bytes.decode('utf-8')
+            return decoded, 'utf-8'
+        except UnicodeDecodeError as e:
+            self.encoding_monitor.log_encoding_error(
+                worker_id, worker_type, message_bytes, e, 'utf-8'
+            )
+
+        # 2. Detectar tipo de datos
+        detected_type = self.encoding_monitor.detect_encoding_type(message_bytes)
+
+        # 3. Intentar decodificación específica según el tipo
+        if detected_type == 'protobuf':
+            parsed = self.parse_protobuf_with_monitoring(message_bytes, worker_id)
+            if parsed:
+                return json.dumps(parsed), 'protobuf'
+
+        elif detected_type == 'latin-1':
+            try:
+                decoded = message_bytes.decode('latin-1')
+                if decoded.strip().startswith('{'):
+                    return decoded, 'latin-1'
+            except Exception as e:
+                self.encoding_monitor.log_encoding_error(
+                    worker_id, worker_type, message_bytes, e, 'latin-1'
+                )
+
+        # 4. Último recurso - ignorar errores
+        try:
+            cleaned = message_bytes.decode('utf-8', errors='ignore')
+            if len(cleaned.strip()) > 0 and '{' in cleaned:
+                return cleaned, 'utf-8-cleaned'
+        except Exception as e:
+            self.encoding_monitor.log_encoding_error(
+                worker_id, worker_type, message_bytes, e, 'utf-8-ignore'
+            )
+
+        # 5. Falló todo
+        self.encoding_monitor.log_encoding_error(
+            worker_id, worker_type, message_bytes,
+            Exception("All decoding methods failed"), 'all-failed'
+        )
+        return None, 'failed'
+
+    def parse_protobuf_with_monitoring(self, data: bytes, worker_id: int) -> Optional[Dict]:
+        """Parsear protobuf con monitoreo"""
+        try:
+            # Crear evento básico desde protobuf
+            event = {
+                'id': str(int(time.time() * 1000000)),
+                'source_ip': '0.0.0.0',
+                'target_ip': '0.0.0.0',
+                'risk_score': 0.5,
+                'timestamp': datetime.now().isoformat(),
+                'raw_protobuf_length': len(data),
+                'parsing_method': 'protobuf_basic',
+                'worker_id': worker_id
+            }
+
+            self.logger.info(f"📦 Worker {worker_id} - Parseado protobuf ({len(data)} bytes)")
+            return event
+
+        except Exception as e:
+            self.encoding_monitor.log_encoding_error(
+                worker_id, 'protobuf_parser', data, e, 'protobuf'
+            )
+            return None
+
+    # Mantener métodos existentes de decodificación como fallback
+    def looks_like_protobuf(self, data: bytes) -> bool:
+        """Detectar si los datos parecen ser protobuf"""
+        if len(data) < 4:
+            return False
+
+        protobuf_patterns = [
+            b'\x08', b'\x0a', b'\x10', b'\x12', b'\x18', b'\x1a',
+        ]
+
+        return any(data.startswith(pattern) for pattern in protobuf_patterns)
+
+    def parse_protobuf_message(self, data: bytes, worker_id: int) -> Optional[Dict]:
+        """Método legacy de parseo protobuf"""
+        return self.parse_protobuf_with_monitoring(data, worker_id)
 
     def parse_security_event(self, data: Dict) -> SecurityEvent:
         """Parsear datos de evento a SecurityEvent incluyendo datos protobuf"""
@@ -726,23 +1103,44 @@ class SecurityDashboard:
             except Exception as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error en firewall commands processor: {e}")
 
-    def firewall_responses_receiver(self, worker_id: int):
-        """Recibir respuestas del Firewall Agent"""
-        self.logger.info(f"📥 Firewall Responses Receiver {worker_id} iniciado")
+    def firewall_responses_receiver_with_monitoring(self, worker_id: int):
+        """Recibir respuestas del Firewall Agent con monitoreo robusto"""
+        self.logger.info(f"📥 Firewall Responses Receiver {worker_id} iniciado con monitoreo")
 
         while self.running:
             try:
-                # Recibir respuesta
-                response = self.firewall_responses_socket.recv_string(zmq.NOBLOCK)
+                # Recibir respuesta como bytes primero
+                response_bytes = self.firewall_responses_socket.recv(zmq.NOBLOCK)
+
+                # Decodificar de manera segura
+                response_text, encoding_used = self.decode_message_with_monitoring(
+                    response_bytes, worker_id, 'firewall_responses'
+                )
+                if response_text is None:
+                    continue
+
+                # Registrar mensaje exitoso
+                self.encoding_monitor.log_successful_message(
+                    worker_id, 'firewall_responses', len(response_bytes), encoding_used
+                )
 
                 # Actualizar estadísticas
                 conn_info = self.zmq_connections['firewall_responses']
                 conn_info.total_messages += 1
-                conn_info.bytes_transferred += len(response.encode('utf-8'))
+                conn_info.bytes_transferred += len(response_bytes)
                 conn_info.last_activity = datetime.now()
 
                 # Parsear respuesta
-                response_data = json.loads(response)
+                response_data = json.loads(response_text)
+
+                # Actualizar información de conexión si tenemos datos del remitente
+                if 'node_id' in response_data:
+                    self.encoding_monitor.update_connection_info(
+                        'firewall_responses',
+                        node_id=response_data.get('node_id'),
+                        component_type='firewall_agent',
+                        version=response_data.get('version')
+                    )
 
                 self.logger.info(
                     f"📥 Worker {worker_id} - Respuesta firewall: {response_data.get('status', 'unknown')} para {response_data.get('target_ip', 'unknown')}")
@@ -885,6 +1283,17 @@ class SecurityDashboard:
         self.stats['uptime_seconds'] = int(time.time() - self.start_time)
         self.stats['last_update'] = datetime.now().isoformat()
 
+        # Actualizar estadísticas de encoding
+        monitoring_data = self.encoding_monitor.get_monitoring_data()
+
+        self.stats.update({
+            'encoding_errors_total': monitoring_data['summary']['total_errors'],
+            'active_workers': monitoring_data['summary']['active_workers'],
+            'problematic_workers': monitoring_data['summary']['error_workers'],
+            'encoding_errors_rate': sum(s.error_rate for s in monitoring_data['worker_stats'].values()) / max(
+                len(monitoring_data['worker_stats']), 1)
+        })
+
         # Procesar eventos de la cola
         events_processed = 0
         while not self.ml_events_queue.empty() and events_processed < 100:
@@ -940,7 +1349,11 @@ class SecurityDashboard:
         pass
 
     def get_dashboard_metrics(self):
-        """Obtener métricas completas para API"""
+        """Obtener métricas completas incluyendo monitoreo de errores"""
+
+        # Obtener datos de monitoreo
+        monitoring_data = self.encoding_monitor.get_monitoring_data()
+
         return {
             'basic_stats': self.stats,
             'detailed_metrics': self.detailed_metrics,
@@ -964,7 +1377,34 @@ class SecurityDashboard:
                 'firewall_commands_queue_size': self.config.firewall_commands_queue_size,
                 'firewall_command_producers': self.config.firewall_command_producers,
                 'stats_interval': self.config.stats_interval
+            },
+            # NUEVO: Datos de monitoreo de errores
+            'encoding_monitoring': monitoring_data,
+            # NUEVO: Información de conectividad detallada
+            'connectivity_info': {
+                'ml_detector': self._get_component_connectivity('ml_events'),
+                'firewall_agent': self._get_component_connectivity('firewall_commands'),
+                'firewall_responses': self._get_component_connectivity('firewall_responses')
             }
+        }
+
+    def _get_component_connectivity(self, connection_id: str) -> Dict:
+        """Obtener información de conectividad para un componente"""
+        conn_info = self.encoding_monitor.connection_info.get(connection_id)
+        if not conn_info:
+            return {'status': 'unknown', 'details': 'No connection info'}
+
+        return {
+            'status': conn_info.status,
+            'node_id': conn_info.node_id or 'unknown',
+            'component_type': conn_info.component_type,
+            'endpoint': conn_info.endpoint,
+            'remote_ip': conn_info.remote_ip,
+            'remote_port': conn_info.remote_port,
+            'version': conn_info.version,
+            'last_seen': conn_info.last_seen.isoformat() if conn_info.last_seen else None,
+            'messages_exchanged': conn_info.messages_exchanged,
+            'handshake_completed': conn_info.handshake_completed
         }
 
     def stop(self):
