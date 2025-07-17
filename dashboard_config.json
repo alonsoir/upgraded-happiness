@@ -1,390 +1,198 @@
 {
+  "node_id": "dashboard_distributed_001",
   "component": {
     "name": "real_zmq_dashboard_with_firewall",
-    "version": "2.0.0",
+    "version": "2.2.0",
     "mode": "distributed_orchestrator",
     "role": "dashboard_coordinator",
-    "description": "Dashboard de seguridad con mapa geolocalizado y control de firewall"
+    "description": "Dashboard principal con monitoreo de errores UTF-8 y conectividad detallada"
   },
-  "node_id": "dashboard_distributed_001",
-  "version": "2.0.0",
-  "component_type": "dashboard",
-
   "network": {
     "ml_events_input": {
       "address": "localhost",
       "port": 5570,
-      "mode": "connect",
       "socket_type": "PULL",
-      "description": "Recibe eventos enriquecidos de todos los lightweight_ml_detector",
-      "high_water_mark": 10000,
-      "expected_publishers": 50
+      "mode": "connect",
+      "high_water_mark": 5000,
+      "expected_publishers": 1,
+      "timeout_ms": 1000,
+      "description": "Recibe eventos enriquecidos del lightweight_ml_detector"
     },
     "firewall_commands_output": {
-      "address": "localhost",
+      "address": "*",
       "port": 5580,
-      "mode": "bind",
       "socket_type": "PUB",
-      "description": "Envía comandos firewall a todos los simple_firewall_agent",
-      "high_water_mark": 5000,
-      "expected_subscribers": 500
+      "mode": "bind",
+      "high_water_mark": 2000,
+      "expected_subscribers": 10,
+      "timeout_ms": 1000,
+      "description": "Envía comandos de firewall al simple_firewall_agent"
     },
     "firewall_responses_input": {
-      "address": "localhost",
+      "address": "*",
       "port": 5581,
-      "mode": "bind",
       "socket_type": "PULL",
-      "description": "Recibe respuestas de todos los simple_firewall_agent",
-      "high_water_mark": 5000,
-      "expected_publishers": 500
+      "mode": "bind",
+      "high_water_mark": 2000,
+      "expected_publishers": 10,
+      "timeout_ms": 1000,
+      "description": "Recibe respuestas del simple_firewall_agent"
     },
     "admin_interface": {
       "address": "0.0.0.0",
       "port": 8080,
-      "mode": "bind",
-      "socket_type": "HTTP",
-      "description": "Interface web para administración y monitoring"
-    },
-    "metrics_export": {
-      "address": "localhost",
-      "port": 5590,
-      "mode": "bind",
-      "socket_type": "PUB",
-      "description": "Exporta métricas agregadas para otros dashboards"
+      "description": "Interfaz web del dashboard"
     }
   },
-
   "zmq": {
-    "context_io_threads": 4,
-    "max_sockets": 1024,
+    "context_io_threads": 2,
+    "max_sockets": 512,
     "tcp_keepalive": true,
     "tcp_keepalive_idle": 300,
+    "tcp_keepalive_interval": 60,
+    "tcp_keepalive_count": 3,
     "immediate": true,
-    "router_mandatory": true,
-    "curve_security": {
-      "enabled": false,
-      "server_key": null,
-      "client_keys_dir": null
-    }
+    "linger_ms": 1000,
+    "reconnect_interval_ms": 5000,
+    "max_reconnect_interval_ms": 30000
   },
-
-  "backpressure": {
-    "enabled": true,
-    "global_strategy": "adaptive_load_balancing",
-    "ml_events_handling": {
-      "max_retries": 5,
-      "retry_delays_ms": [1, 2, 5, 10, 25],
-      "drop_threshold_percent": 5.0,
-      "queue_full_strategy": "drop_oldest_events",
-      "priority_classification": true
-    },
-    "firewall_commands_handling": {
-      "max_retries": 10,
-      "retry_delays_ms": [1, 2, 5, 10, 25, 50],
-      "drop_threshold_percent": 1.0,
-      "queue_full_strategy": "backpressure_and_queue",
-      "critical_commands_priority": true
-    },
-    "firewall_responses_handling": {
-      "max_retries": 3,
-      "retry_delays_ms": [5, 10, 25],
-      "drop_threshold_percent": 10.0,
-      "queue_full_strategy": "drop_oldest_responses",
-      "timeout_handling": "mark_as_failed"
-    }
-  },
-
   "processing": {
     "threads": {
-      "ml_events_consumers": 3,
-      "firewall_command_producers": 2,
-      "firewall_response_consumers": 2,
-      "event_correlation_workers": 2,
-      "metrics_aggregation_workers": 1,
-      "web_interface_workers": 2
+      "ml_events_consumers": 2,
+      "firewall_command_producers": 1,
+      "firewall_response_consumers": 1,
+      "description": "Número de hilos de procesamiento para cada tipo de tarea"
     },
     "internal_queues": {
-      "ml_events_queue_size": 5000,
-      "firewall_commands_queue_size": 2000,
-      "firewall_responses_queue_size": 2000,
-      "event_correlation_queue_size": 1000,
-      "metrics_queue_size": 500
+      "ml_events_queue_size": 1000,
+      "firewall_commands_queue_size": 500,
+      "firewall_responses_queue_size": 500,
+      "max_event_history": 2000,
+      "max_command_history": 1000,
+      "description": "Tamaños de colas internas para buffers"
     },
-    "performance_mode": "high_throughput_i9",
-    "vertical_scaling": {
-      "optimized_for_i9_16cores": true,
-      "leave_cores_for_system": 4,
-      "memory_buffer_multiplier": 2.0,
-      "batch_processing_enabled": true,
-      "batch_sizes": {
-        "ml_events": 50,
-        "firewall_commands": 20,
-        "metrics_aggregation": 100
-      }
-    }
-  },
-
-  "event_lifecycle": {
-    "proto_event_handling": {
-      "track_full_pipeline": true,
-      "collect_component_metadata": true,
-      "measure_pipeline_latency": true,
-      "store_completed_events": true
-    },
-    "completed_events_storage": {
-      "enabled": true,
-      "storage_strategy": "time_series_database",
-      "retention_policy": {
-        "high_priority_events": "30_days",
-        "normal_events": "7_days",
-        "low_priority_events": "24_hours"
-      },
-      "export_formats": ["jsonl", "parquet", "proto_binary"],
-      "export_destinations": {
-        "etcd_coordination": {
-          "enabled": true,
-          "endpoint": "localhost:2379",
-          "key_prefix": "/upgraded-happiness/events"
-        },
-        "analytics_pipeline": {
-          "enabled": true,
-          "kafka_topic": "security-events-completed",
-          "kafka_brokers": ["localhost:9092"]
-        },
-        "long_term_storage": {
-          "enabled": true,
-          "s3_bucket": "security-analytics-archive",
-          "compression": "gzip"
-        }
-      }
-    }
-  },
-
-  "firewall_orchestration": {
-    "command_generation": {
-      "ml_score_thresholds": {
-        "auto_block_threshold": 0.9,
-        "investigation_threshold": 0.7,
-        "whitelist_threshold": 0.1
-      },
-      "rule_templates": {
-        "ip_block": "block ip {src_ip} from any to any",
-        "port_restrict": "restrict port {port} from {src_ip}",
-        "rate_limit": "rate-limit {src_ip} to {max_conn_per_min} conn/min"
-      },
-      "batch_commands": true,
-      "command_deduplication": true
-    },
-    "agent_management": {
-      "heartbeat_interval_seconds": 30,
-      "health_check_timeout_seconds": 10,
-      "max_failed_heartbeats": 3,
-      "agent_auto_discovery": true,
-      "load_balancing_strategy": "least_loaded_agent"
-    }
-  },
-
-  "ml_processing": {
-    "auto_block_threshold": 0.9,
-    "auto_rate_limit_threshold": 0.7,
-    "auto_allow_threshold": 0.3,
-    "decision_confidence_threshold": 0.6,
-    "batch_processing": {
-      "enabled": true,
+    "performance": {
       "batch_size": 10,
-      "max_wait_time_seconds": 5
+      "max_processing_time_ms": 100,
+      "backpressure_threshold": 0.8,
+      "memory_threshold_mb": 512,
+      "enable_flow_control": true
     }
   },
-
-  "web_interface": {
-    "enabled": true,
-    "host": "0.0.0.0",
-    "port": 8080,
-    "debug": false,
-    "real_time_updates": {
-      "enabled": true,
-      "max_events_in_memory": 1000,
-      "update_interval_ms": 1000
-    },
-    "authentication": {
-      "enabled": false,
-      "method": "basic_auth",
-      "username": "admin",
-      "password": "{{ ADMIN_SECRET }}"
-    }
-  },
-
   "monitoring": {
     "stats_interval_seconds": 10,
     "detailed_metrics": true,
-    "component_health_check": {
+    "encoding_monitoring": {
       "enabled": true,
-      "check_interval_seconds": 15,
-      "memory_threshold_mb": 1024,
-      "cpu_threshold_percent": 70.0
+      "max_error_history": 100,
+      "error_rate_threshold": 0.1,
+      "alert_on_encoding_errors": true
     },
-    "alerts": {
-      "max_queue_usage_percent": 70.0,
-      "max_event_processing_latency_ms": 500.0,
-      "max_firewall_agent_failures": 10,
-      "min_active_firewall_agents": 5,
-      "max_ml_detector_lag_seconds": 30.0
+    "connectivity_monitoring": {
+      "enabled": true,
+      "heartbeat_interval_seconds": 30,
+      "connection_timeout_seconds": 60,
+      "max_connection_failures": 5
     },
-    "metrics_aggregation": {
-      "pipeline_latency_percentiles": [50, 95, 99],
-      "firewall_response_times": true,
-      "event_classification_stats": true,
-      "system_resource_usage": true
+    "performance_monitoring": {
+      "enabled": true,
+      "latency_threshold_ms": 100,
+      "memory_check_interval_seconds": 30,
+      "cpu_check_interval_seconds": 15
     }
   },
-
-  "distributed": {
-    "cluster_name": "upgraded-happiness-cluster",
-    "component_role": "dashboard_orchestrator",
-    "enable_container_detection": true,
-    "enable_system_info_collection": true,
-    "service_discovery": {
-      "enabled": true,
-      "etcd_endpoints": ["localhost:2379"],
-      "registration_ttl_seconds": 30,
-      "service_key_prefix": "/services/dashboard"
-    },
-    "horizontal_scaling": {
-      "enabled": false,
-      "max_dashboard_instances": 3,
-      "load_balancing_strategy": "regional_routing",
-      "coordination_mechanism": "etcd_leader_election"
-    }
-  },
-
-  "security": {
-    "input_validation": {
-      "enabled": true,
-      "max_event_size_bytes": 2097152,
-      "validate_protobuf_schema": true,
-      "sanitize_firewall_commands": true,
-      "rate_limit_per_source": 1000
-    },
-    "firewall_command_security": {
-      "command_whitelist": ["block", "allow", "rate-limit"],
-      "ip_validation": true,
-      "port_range_validation": true,
-      "command_signing": false
-    }
-  },
-
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
     "handlers": {
-      "file": {
-        "enabled": true,
-        "path": "./logs/dashboard.log",
-        "max_size_mb": 100,
-        "backup_count": 5,
-        "rotation": "size"
-      },
       "console": {
         "enabled": true,
-        "colored": true
+        "level": "INFO"
       },
-      "syslog": {
-        "enabled": false,
-        "facility": "local0",
-        "address": "localhost:514"
+      "file": {
+        "enabled": true,
+        "path": "logs/dashboard.log",
+        "level": "DEBUG",
+        "max_size_mb": 100,
+        "backup_count": 5,
+        "rotation": "time"
       }
     }
   },
-
-  "encryption": {
-    "enabled": true,
-    "algorithm": "AES-256-GCM",
-    "rotation_interval_seconds": 3600,
-    "key_derivation_method": "HKDF",
-    "entropy_sources": ["pid", "boot_time", "random_bytes"],
-    "aad_includes": ["node_id", "component_name"],
-    "compression": {
-      "enabled": true,
-      "algorithm": "lz4",
-      "compression_level": 6
-    }
-  },
-
-  "neural_training_export": {
-    "enabled": true,
-    "export_socket": {
-      "address": "localhost",
-      "port": 5600,
-      "mode": "connect",
-      "socket_type": "PUSH",
-      "description": "Envía eventos procesados al neural trainer"
-    },
-    "export_strategy": {
-      "batch_size": 1000,
-      "max_wait_time_seconds": 60,
-      "memory_pressure_threshold": 80,
-      "priority_events": ["high_risk", "anomaly_detected"]
-    },
-    "encryption": {
-      "enabled": true,
-      "algorithm": "AES-256-GCM",
-      "rotation_interval_seconds": 1800,
-      "entropy_sources": ["pid", "random_bytes"],
-      "aad_includes": ["node_id", "export_batch_id"]
-    }
-  },
-
-  "rag_export": {
-    "enabled": true,
-    "export_socket": {
-      "address": "localhost",
-      "port": 5620,
-      "mode": "connect",
-      "socket_type": "PUSH",
-      "description": "Envía eventos para embedding generation"
-    },
-    "export_strategy": {
-      "batch_size": 50,
-      "max_wait_time_seconds": 30,
-      "enrichment_level": "full_context",
-      "text_template": "Security event from {src_ip} ({src_country}) to {dst_ip}:{dst_port} at {timestamp}. ML score: {anomaly_score}. Action: {firewall_action}. Latency: {pipeline_latency}ms."
+  "security": {
+    "enable_authentication": false,
+    "allowed_origins": ["*"],
+    "rate_limiting": {
+      "enabled": false,
+      "requests_per_minute": 1000
     },
     "encryption": {
       "enabled": false,
-      "algorithm": "AES-256-GCM",
-      "rotation_interval_seconds": 7200,
-      "entropy_sources": ["pid", "random_bytes"],
-      "aad_includes": ["node_id", "embedding_batch_id"]
+      "curve_keys": null
     }
   },
-
-  "protobuf": {
-    "schema_path": "./protocols/protobuf/",
-    "message_types": {
-      "security_event": "SecurityEvent",
-      "firewall_command": "FirewallCommand",
-      "firewall_response": "FirewallResponse"
+  "web_interface": {
+    "enable_compression": true,
+    "cache_static_files": true,
+    "websocket_enabled": false,
+    "real_time_updates": true,
+    "max_connections": 100
+  },
+  "features": {
+    "firewall_testing": {
+      "enabled": true,
+      "test_command_timeout_seconds": 30,
+      "max_test_frequency_seconds": 10
     },
-    "serialization": {
-      "compression": "gzip",
-      "validate_schema": true,
-      "backwards_compatibility": true
+    "geolocation": {
+      "enabled": true,
+      "default_location": {
+        "latitude": 40.4168,
+        "longitude": -3.7038,
+        "city": "Madrid",
+        "country": "ES",
+        "description": "Ubicación por defecto del nodo dashboard"
+      }
+    },
+    "map_visualization": {
+      "enabled": true,
+      "max_markers": 100,
+      "marker_cleanup_interval_seconds": 300,
+      "heatmap_enabled": false
+    },
+    "encoding_diagnostics": {
+      "enabled": true,
+      "auto_detection": true,
+      "fallback_strategies": [
+        "utf-8",
+        "protobuf",
+        "latin-1",
+        "ascii_clean"
+      ]
     }
   },
-
-  "debug": {
-    "enabled": false,
-    "sample_events": false,
-    "sample_rate_percent": 1.0,
-    "log_firewall_commands": true,
-    "log_agent_responses": true,
-    "performance_profiling": false,
-    "encryption_benchmarks": {
+  "error_handling": {
+    "max_retries": 3,
+    "retry_delay_seconds": 1,
+    "circuit_breaker": {
+      "enabled": true,
+      "failure_threshold": 5,
+      "timeout_seconds": 60,
+      "half_open_max_calls": 3
+    },
+    "graceful_shutdown": {
+      "enabled": true,
+      "timeout_seconds": 30,
+      "force_shutdown_after_seconds": 60
+    }
+  },
+  "development": {
+    "debug_mode": false,
+    "mock_data": false,
+    "simulation": {
       "enabled": false,
-      "benchmark_interval_seconds": 300,
-      "measure_latency": true,
-      "measure_throughput": true,
-      "compression_comparison": true
+      "event_generation_rate": 1.0,
+      "max_simulated_events": 1000
     }
   }
 }

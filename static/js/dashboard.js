@@ -3,6 +3,9 @@
  * Maneja toda la interactividad del dashboard con datos protobuf
  */
 
+// Variable para el marcador del nodo local
+let localNodeMarker = null;
+
 // Variables globales del dashboard
 let dashboardState = {
     map: null,
@@ -70,7 +73,122 @@ function initializeMap() {
         maxZoom: 19
     }).addTo(dashboardState.map);
 
+    // NUEVO: Añadir marcador del nodo local inmediatamente
+    addLocalNodeMarker();
+
     addDebugLog('info', `Mapa inicializado en ${DASHBOARD_CONFIG.MAP_CENTER.join(', ')}`);
+}
+
+function addLocalNodeMarker() {
+    const nodePosition = [40.4168, -3.7038]; // Madrid, España
+
+    // Crear icono personalizado para el nodo local
+    const nodeIcon = L.divIcon({
+        html: `
+            <div style="
+                background: #0088ff;
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                border: 3px solid #fff;
+                box-shadow: 0 0 10px rgba(0, 136, 255, 0.8);
+                position: relative;
+                animation: nodeGlow 2s infinite;
+            ">
+                <div style="
+                    position: absolute;
+                    top: -2px;
+                    left: -2px;
+                    width: 24px;
+                    height: 24px;
+                    border: 2px solid #0088ff;
+                    border-radius: 50%;
+                    opacity: 0.6;
+                    animation: nodePulse 2s infinite;
+                "></div>
+            </div>
+            <style>
+                @keyframes nodeGlow {
+                    0%, 100% { box-shadow: 0 0 10px rgba(0, 136, 255, 0.8); }
+                    50% { box-shadow: 0 0 20px rgba(0, 136, 255, 1); }
+                }
+                @keyframes nodePulse {
+                    0% { transform: scale(1); opacity: 0.6; }
+                    50% { transform: scale(1.5); opacity: 0.3; }
+                    100% { transform: scale(2); opacity: 0; }
+                }
+            </style>
+        `,
+        className: 'local-node-marker',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    });
+
+    // Añadir marcador al mapa
+    localNodeMarker = L.marker(nodePosition, {
+        icon: nodeIcon,
+        zIndexOffset: 1000 // Asegurar que esté encima de otros marcadores
+    }).addTo(dashboardState.map);
+
+    // Popup detallado del nodo local
+    localNodeMarker.bindPopup(`
+        <div style="color: #000; font-size: 12px; font-family: Consolas, monospace; min-width: 200px;">
+            <strong>🏠 Nodo Local - Dashboard</strong><br>
+            <strong>Ubicación:</strong> Madrid, España<br>
+            <strong>Coordenadas:</strong> ${nodePosition[0]}, ${nodePosition[1]}<br>
+            <strong>Node ID:</strong> dashboard_distributed_001<br>
+            <strong>Componentes Activos:</strong><br>
+            • Dashboard (Puerto 8080)<br>
+            • ML Events Receiver (Puerto 5570)<br>
+            • Firewall Commands (Puerto 5580)<br>
+            • Firewall Responses (Puerto 5581)<br>
+            <br>
+            <button onclick="showNodeDetailsModal()"
+                    style="background: #0088ff; color: white; border: none; padding: 6px 12px;
+                           border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 5px;">
+                🔍 Detalles Completos
+            </button>
+            <button onclick="testAllConnections()"
+                    style="background: #00ff00; color: black; border: none; padding: 6px 12px;
+                           border-radius: 3px; cursor: pointer; font-size: 11px;">
+                🧪 Probar Conexiones
+            </button>
+        </div>
+    `);
+
+    addDebugLog('info', `Marcador del nodo local añadido en ${nodePosition.join(', ')}`);
+}
+
+function updateLocalNodeMarker(localNodeData) {
+    if (!localNodeData || !localNodeMarker) return;
+
+    // Actualizar popup con datos reales
+    const popup = `
+        <div style="color: #000; font-size: 12px; font-family: Consolas, monospace; min-width: 200px;">
+            <strong>🏠 ${localNodeData.node_id || 'Nodo Local'}</strong><br>
+            <strong>Estado:</strong> <span style="color: green;">ONLINE</span><br>
+            <strong>Ubicación:</strong> ${localNodeData.location || 'Madrid, España'}<br>
+            <strong>Coordenadas:</strong> ${localNodeData.latitude}, ${localNodeData.longitude}<br>
+            <strong>Tipo:</strong> ${localNodeData.component_type || 'dashboard'}<br>
+            <strong>Última Actualización:</strong> ${formatTime(localNodeData.timestamp)}<br>
+            <br>
+            <strong>🔌 Conexiones Activas:</strong><br>
+            ${getConnectionStatusSummary()}<br>
+            <br>
+            <button onclick="showNodeDetailsModal()"
+                    style="background: #0088ff; color: white; border: none; padding: 6px 12px;
+                           border-radius: 3px; cursor: pointer; font-size: 11px; margin-right: 5px;">
+                🔍 Detalles
+            </button>
+            <button onclick="testAllConnections()"
+                    style="background: #00ff00; color: black; border: none; padding: 6px 12px;
+                           border-radius: 3px; cursor: pointer; font-size: 11px;">
+                🧪 Test
+            </button>
+        </div>
+    `;
+
+    localNodeMarker.setPopupContent(popup);
 }
 
 /**
@@ -159,6 +277,11 @@ async function fetchAndUpdateMetrics() {
         updateZMQConnections(data.zmq_connections || {});
         updateComponentStatus(data.component_status || {}, data.node_info || {});
         updateEvents(data.recent_events || []);
+
+        // NUEVO: Actualizar marcador del nodo local
+        if (data.local_node_position) {
+            updateLocalNodeMarker(data.local_node_position);
+        }
 
         // Log de debug ocasional
         if (Math.random() < 0.1) { // 10% de probabilidad
@@ -780,9 +903,13 @@ function clearAllMarkers() {
  * Centrar mapa
  */
 function centerMap() {
-    dashboardState.map.setView(DASHBOARD_CONFIG.MAP_CENTER, DASHBOARD_CONFIG.MAP_ZOOM);
-    addDebugLog('info', 'Mapa centrado en España');
-    showToast('Mapa centrado', 'info');
+    if (localNodeMarker) {
+        centerMapOnLocalNode();
+    } else {
+        dashboardState.map.setView(DASHBOARD_CONFIG.MAP_CENTER, DASHBOARD_CONFIG.MAP_ZOOM);
+        addDebugLog('info', 'Mapa centrado en vista por defecto');
+        showToast('Mapa centrado', 'info');
+    }
 }
 
 /**
@@ -1021,6 +1148,299 @@ function getRiskColor(level) {
     }
 }
 
+function getConnectionStatusSummary() {
+    const metrics = dashboardState.metrics;
+    const connections = metrics.zmq_connections || {};
+
+    const statuses = [
+        `• ML Events: ${getStatusIcon(connections.ml_events?.status)}`,
+        `• FW Commands: ${getStatusIcon(connections.firewall_commands?.status)}`,
+        `• FW Responses: ${getStatusIcon(connections.firewall_responses?.status)}`
+    ];
+
+    return statuses.join('<br>');
+}
+
+function getStatusIcon(status) {
+    switch(status) {
+        case 'active': return '<span style="color: green;">✅ ACTIVO</span>';
+        case 'inactive': return '<span style="color: orange;">⚠️ INACTIVO</span>';
+        case 'error': return '<span style="color: red;">❌ ERROR</span>';
+        default: return '<span style="color: gray;">❓ DESCONOCIDO</span>';
+    }
+}
+
+function showNodeDetailsModal() {
+    const nodeInfo = dashboardState.metrics.node_info || {};
+    const basicStats = dashboardState.metrics.basic_stats || {};
+    const connections = dashboardState.metrics.zmq_connections || {};
+
+    const content = `
+        <div class="node-detail-container">
+            <div class="detail-section">
+                <h4>🏠 Información del Nodo</h4>
+                <p><strong>Node ID:</strong> ${nodeInfo.node_id || 'N/A'}</p>
+                <p><strong>Componente:</strong> ${nodeInfo.component_name || 'N/A'}</p>
+                <p><strong>Versión:</strong> ${nodeInfo.version || 'N/A'}</p>
+                <p><strong>Modo:</strong> ${nodeInfo.mode || 'N/A'}</p>
+                <p><strong>Rol:</strong> ${nodeInfo.role || 'N/A'}</p>
+                <p><strong>PID:</strong> ${nodeInfo.pid || 'N/A'}</p>
+                <p><strong>Uptime:</strong> ${formatUptime(nodeInfo.uptime_seconds || 0)}</p>
+            </div>
+
+            <div class="detail-section">
+                <h4>📊 Estadísticas del Sistema</h4>
+                <p><strong>Memoria:</strong> ${Math.round(basicStats.memory_usage_mb || 0)} MB</p>
+                <p><strong>CPU:</strong> ${(basicStats.cpu_usage_percent || 0).toFixed(1)}%</p>
+                <p><strong>Eventos Recibidos:</strong> ${basicStats.events_received || 0}</p>
+                <p><strong>Comandos Enviados:</strong> ${basicStats.commands_sent || 0}</p>
+                <p><strong>Amenazas Bloqueadas:</strong> ${basicStats.threats_blocked || 0}</p>
+            </div>
+
+            <div class="detail-section">
+                <h4>🔌 Estado de Conexiones ZMQ</h4>
+                <div class="connections-grid">
+                    <div class="connection-item">
+                        <strong>ML Events (5570):</strong><br>
+                        Estado: ${getStatusIcon(connections.ml_events?.status)}<br>
+                        Mensajes: ${connections.ml_events?.total_messages || 0}<br>
+                        Endpoint: ${connections.ml_events?.endpoint || 'tcp://localhost:5570'}
+                    </div>
+                    <div class="connection-item">
+                        <strong>FW Commands (5580):</strong><br>
+                        Estado: ${getStatusIcon(connections.firewall_commands?.status)}<br>
+                        Mensajes: ${connections.firewall_commands?.total_messages || 0}<br>
+                        Endpoint: ${connections.firewall_commands?.endpoint || 'tcp://*:5580'}
+                    </div>
+                    <div class="connection-item">
+                        <strong>FW Responses (5581):</strong><br>
+                        Estado: ${getStatusIcon(connections.firewall_responses?.status)}<br>
+                        Mensajes: ${connections.firewall_responses?.total_messages || 0}<br>
+                        Endpoint: ${connections.firewall_responses?.endpoint || 'tcp://*:5581'}
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>🌍 Geolocalización</h4>
+                <p><strong>Ubicación:</strong> Madrid, España</p>
+                <p><strong>Latitud:</strong> 40.4168</p>
+                <p><strong>Longitud:</strong> -3.7038</p>
+                <p><strong>Zona Horaria:</strong> Europe/Madrid</p>
+            </div>
+        </div>
+
+        <style>
+            .connections-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 10px;
+                margin-top: 10px;
+            }
+            .connection-item {
+                background: rgba(0, 0, 0, 0.1);
+                padding: 8px;
+                border-radius: 4px;
+                border-left: 3px solid #0088ff;
+                font-size: 10px;
+            }
+        </style>
+    `;
+
+    const actions = [
+        {
+            text: '🧪 Probar Todas las Conexiones',
+            action: testAllConnections,
+            class: 'btn-primary'
+        },
+        {
+            text: '🛡️ Probar Firewall',
+            action: testFirewallConnection,
+            class: 'btn-warning'
+        },
+        {
+            text: '🔄 Actualizar',
+            action: () => {
+                closeModal();
+                refreshDashboard();
+                setTimeout(showNodeDetailsModal, 1000);
+            },
+            class: 'btn-secondary'
+        },
+        {
+            text: 'Cerrar',
+            action: closeModal,
+            class: 'btn-secondary'
+        }
+    ];
+
+    showModal('🏠 Detalles del Nodo Local', content, actions);
+}
+
+async function testAllConnections() {
+    addDebugLog('info', '🧪 Iniciando prueba completa de conexiones...');
+
+    showToast('Probando todas las conexiones...', 'info', 5000);
+
+    const connections = dashboardState.metrics.zmq_connections || {};
+    const results = [];
+
+    // Probar cada conexión
+    results.push(`📡 ML Events (5570): ${connections.ml_events?.status || 'unknown'}`);
+    results.push(`🔥 FW Commands (5580): ${connections.firewall_commands?.status || 'unknown'}`);
+    results.push(`📥 FW Responses (5581): ${connections.firewall_responses?.status || 'unknown'}`);
+
+    // Probar firewall específicamente
+    try {
+        const firewallResult = await testFirewallConnection();
+        results.push(`🛡️ Firewall Test: ${firewallResult ? 'SUCCESS' : 'FAILED'}`);
+    } catch (error) {
+        results.push(`🛡️ Firewall Test: ERROR - ${error.message}`);
+    }
+
+    // Mostrar resultados
+    results.forEach(result => addDebugLog('info', result));
+
+    const successCount = results.filter(r => r.includes('active') || r.includes('SUCCESS')).length;
+    const totalTests = results.length;
+
+    showModal('🧪 Resultados de Prueba de Conexiones', `
+        <div class="detail-section">
+            <h4>Resumen de Pruebas</h4>
+            <p><strong>Éxito:</strong> ${successCount}/${totalTests} conexiones</p>
+            <p><strong>Estado General:</strong> ${successCount === totalTests ? '✅ TODAS OK' : '⚠️ ALGUNAS FALLAN'}</p>
+        </div>
+        <div class="detail-section">
+            <h4>Detalles de Cada Conexión</h4>
+            ${results.map(result => `<p>${result}</p>`).join('')}
+        </div>
+        <div class="detail-section">
+            <h4>Recomendaciones</h4>
+            <p>• Verificar que todos los componentes estén ejecutándose</p>
+            <p>• Revisar logs de cada componente para errores</p>
+            <p>• Comprobar configuración de puertos en archivos JSON</p>
+            <p>• Reiniciar componentes con problemas si es necesario</p>
+        </div>
+    `);
+
+    if (successCount === totalTests) {
+        showToast('✅ Todas las conexiones funcionan correctamente', 'success');
+    } else {
+        showToast(`⚠️ ${totalTests - successCount} conexiones tienen problemas`, 'warning');
+    }
+}
+
+async function testFirewallConnection() {
+    try {
+        addDebugLog('info', '🛡️ Enviando comando de prueba al firewall...');
+
+        const response = await fetch('/api/test-firewall');
+        const data = await response.json();
+
+        if (data.success) {
+            addDebugLog('info', `✅ Firewall test exitoso: ${data.message}`);
+            showToast('✅ Comando de prueba enviado al firewall', 'success');
+            return true;
+        } else {
+            addDebugLog('error', `❌ Firewall test falló: ${data.message}`);
+            showToast(`❌ Error en prueba de firewall: ${data.message}`, 'error');
+            return false;
+        }
+
+    } catch (error) {
+        addDebugLog('error', `❌ Error probando firewall: ${error.message}`);
+        showToast(`❌ Error de conectividad con firewall: ${error.message}`, 'error');
+        return false;
+    }
+}
+
+function centerMapOnLocalNode() {
+    if (localNodeMarker && dashboardState.map) {
+        dashboardState.map.setView(localNodeMarker.getLatLng(), 10);
+        localNodeMarker.openPopup();
+        addDebugLog('info', 'Mapa centrado en nodo local');
+        showToast('Vista centrada en nodo local', 'info');
+    }
+}
+
+function showMapLegend() {
+    const content = `
+        <div class="map-legend">
+            <h4>🗺️ Leyenda del Mapa</h4>
+
+            <div class="legend-section">
+                <h5>Marcadores</h5>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #0088ff; border: 2px solid #fff;"></div>
+                    <span>Nodo Local (Dashboard)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #00ff00;"></div>
+                    <span>Evento de Riesgo Bajo (0-50%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #ffaa00;"></div>
+                    <span>Evento de Riesgo Medio (50-80%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #ff4444;"></div>
+                    <span>Evento de Riesgo Alto (80-100%)</span>
+                </div>
+            </div>
+
+            <div class="legend-section">
+                <h5>Controles del Mapa</h5>
+                <p><strong>Clear Map:</strong> Eliminar todos los marcadores de eventos</p>
+                <p><strong>Center:</strong> Centrar vista en el nodo local</p>
+                <p><strong>Heatmap:</strong> Activar mapa de calor (próximamente)</p>
+                <p><strong>Legend:</strong> Mostrar esta leyenda</p>
+            </div>
+
+            <div class="legend-section">
+                <h5>Interacciones</h5>
+                <p><strong>Click en marcador:</strong> Ver detalles del evento/nodo</p>
+                <p><strong>Zoom:</strong> Rueda del ratón o controles del mapa</p>
+                <p><strong>Pan:</strong> Arrastrar para mover vista</p>
+            </div>
+        </div>
+
+        <style>
+            .map-legend {
+                font-size: 11px;
+                line-height: 1.4;
+            }
+            .legend-section {
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid #333;
+            }
+            .legend-section:last-child {
+                border-bottom: none;
+            }
+            .legend-section h5 {
+                color: #00ffff;
+                margin-bottom: 8px;
+                font-size: 12px;
+            }
+            .legend-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .legend-marker {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                margin-right: 8px;
+                border: 1px solid #fff;
+            }
+        </style>
+    `;
+
+    showModal('🗺️ Leyenda del Mapa', content);
+}
+
+
 // Exponer funciones globales para uso en HTML
 window.initializeDashboard = initializeDashboard;
 window.showConnectionDetails = showConnectionDetails;
@@ -1037,3 +1457,8 @@ window.clearAllMarkers = clearAllMarkers;
 window.centerMap = centerMap;
 window.toggleHeatmap = toggleHeatmap;
 window.closeModal = closeModal;
+window.showNodeDetailsModal = showNodeDetailsModal;
+window.testAllConnections = testAllConnections;
+window.testFirewallConnection = testFirewallConnection;
+window.centerMapOnLocalNode = centerMapOnLocalNode;
+window.showMapLegend = showMapLegend;
