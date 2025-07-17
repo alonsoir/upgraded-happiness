@@ -3,14 +3,12 @@
  * Maneja toda la interactividad del dashboard con datos protobuf
  */
 
-// Variable para el marcador del nodo local
+// Variables globales del dashboard
 let localNodeMarker = null;
-/ Variables adicionales para el estado del dashboard
 let eventsUpdatePaused = false;
 let currentEventsFilter = 'all';
 let collapsedSections = new Set(); // Tracking de secciones colapsadas
 
-// Variables globales del dashboard
 let dashboardState = {
     map: null,
     markers: [],
@@ -52,10 +50,19 @@ function initializeDashboard() {
     initializeEventListeners();
     startPeriodicUpdates();
 
+    // Aplicar filtros al mapa
+    applyMapFilters();
+
+    // Configurar secciones colapsables (empezar con todas expandidas excepto debug)
+    setTimeout(() => {
+        toggleSection('debug');
+    }, 1000);
+
     // Logs iniciales
-    addDebugLog('info', 'Sistema SCADA Dashboard v2.1 iniciado');
+    addDebugLog('info', 'Sistema SCADA Dashboard v2.2 iniciado');
     addDebugLog('info', 'Arquitectura 3 puertos configurada');
-    addDebugLog('info', 'Mapa geolocalizado activado');
+    addDebugLog('info', 'Mapa geolocalizado y eventos en tiempo real activados');
+    addDebugLog('info', 'Cajas minimizables habilitadas');
 
     // Actualizar reloj
     updateClock();
@@ -74,13 +81,24 @@ function initializeMap() {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors © CARTO',
         subdomains: 'abcd',
-        maxZoom: 19
+        maxZoom: 19,
+        className: 'dark-map-tiles'
     }).addTo(dashboardState.map);
 
-    // NUEVO: Añadir marcador del nodo local inmediatamente
+    // Añadir marcador del nodo local inmediatamente
     addLocalNodeMarker();
 
     addDebugLog('info', `Mapa inicializado en ${DASHBOARD_CONFIG.MAP_CENTER.join(', ')}`);
+}
+
+/**
+ * Aplicar filtros CSS adicionales al mapa
+ */
+function applyMapFilters() {
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+        mapContainer.classList.add('enhanced-dark-map');
+    }
 }
 
 function addLocalNodeMarker() {
@@ -275,16 +293,16 @@ async function fetchAndUpdateMetrics() {
         const data = await response.json();
         dashboardState.metrics = data;
 
-        // Actualizar todos los componentes (funciones originales)
+        // Actualizar todos los componentes
         updateConnectionStatus();
         updateCounters(data.basic_stats || {});
         updateZMQConnections(data.zmq_connections || {});
         updateComponentStatus(data.component_status || {}, data.node_info || {});
 
-        // MEJORADO: Usar función mejorada para eventos
+        // Usar función mejorada para eventos
         updateEventsImproved(data.recent_events || []);
 
-        // NUEVO: Actualizar marcador del nodo local
+        // Actualizar marcador del nodo local
         if (data.local_node_position) {
             updateLocalNodeMarker(data.local_node_position);
         }
@@ -313,25 +331,27 @@ function updateConnectionStatus(forceState = null) {
     const firewallEl = document.getElementById('status-firewall');
 
     if (forceState === CONNECTION_STATES.ERROR) {
-        connectingEl.style.display = 'flex';
-        connectingEl.querySelector('.status-dot').className = 'status-dot error';
-        connectingEl.querySelector('span').textContent = 'Connection Error';
+        if (connectingEl) {
+            connectingEl.style.display = 'flex';
+            connectingEl.querySelector('.status-dot').className = 'status-dot error';
+            connectingEl.querySelector('span').textContent = 'Connection Error';
+        }
         return;
     }
 
     // Ocultar indicador de connecting si hay datos
-    if (data && Object.keys(data).length > 0) {
+    if (data && Object.keys(data).length > 0 && connectingEl) {
         connectingEl.style.display = 'none';
     }
 
     // Estado ML Detector
-    if (data.zmq_connections?.ml_events) {
+    if (data.zmq_connections?.ml_events && mlDetectorEl) {
         const status = data.zmq_connections.ml_events.status || 'inactive';
         mlDetectorEl.className = `status-dot ${status}`;
     }
 
     // Estado Firewall
-    if (data.zmq_connections?.firewall_commands) {
+    if (data.zmq_connections?.firewall_commands && firewallEl) {
         const status = data.zmq_connections.firewall_commands.status || 'inactive';
         firewallEl.className = `status-dot ${status}`;
     }
@@ -365,13 +385,8 @@ function updateZMQConnections(zmqConnections) {
     if (zmqConnections.ml_events) {
         const conn = zmqConnections.ml_events;
         updateElement('ml-messages', conn.total_messages || 0);
-        updateElement('ml-bytes', formatBytes(conn.bytes_transferred || 0));
         updateElement('ml-last-activity', formatRelativeTime(conn.last_activity));
-        updateElement('ml-queue-size', conn.queue_size || 0);
         updateElement('ml-events-endpoint', conn.endpoint || 'tcp://localhost:5570');
-        updateElement('ml-events-type', conn.socket_type || 'PULL');
-        updateElement('ml-events-mode', conn.mode || 'CONNECT');
-        updateElement('ml-hwm', conn.high_water_mark || 0);
 
         updateConnectionElement('zmq-ml-events', conn.status);
         updateConnectionElement('ml-events-status', conn.status);
@@ -382,13 +397,8 @@ function updateZMQConnections(zmqConnections) {
     if (zmqConnections.firewall_commands) {
         const conn = zmqConnections.firewall_commands;
         updateElement('fw-cmd-count', conn.total_messages || 0);
-        updateElement('fw-cmd-bytes', formatBytes(conn.bytes_transferred || 0));
         updateElement('fw-subscribers', conn.connected_peers?.length || 0);
-        updateElement('fw-cmd-queue', conn.queue_size || 0);
         updateElement('fw-commands-endpoint', conn.endpoint || 'tcp://*:5580');
-        updateElement('fw-commands-type', conn.socket_type || 'PUB');
-        updateElement('fw-commands-mode', conn.mode || 'BIND');
-        updateElement('fw-cmd-hwm', conn.high_water_mark || 0);
 
         updateConnectionElement('zmq-fw-commands', conn.status);
         updateConnectionElement('fw-commands-status', conn.status);
@@ -399,13 +409,8 @@ function updateZMQConnections(zmqConnections) {
     if (zmqConnections.firewall_responses) {
         const conn = zmqConnections.firewall_responses;
         updateElement('fw-resp-count', conn.total_messages || 0);
-        updateElement('fw-resp-bytes', formatBytes(conn.bytes_transferred || 0));
         updateElement('fw-success-rate', '95%'); // Calcular desde respuestas
-        updateElement('fw-latency', '12ms'); // Calcular desde métricas
         updateElement('fw-responses-endpoint', conn.endpoint || 'tcp://*:5581');
-        updateElement('fw-responses-type', conn.socket_type || 'PULL');
-        updateElement('fw-responses-mode', conn.mode || 'BIND');
-        updateElement('fw-resp-hwm', conn.high_water_mark || 0);
 
         updateConnectionElement('zmq-fw-responses', conn.status);
         updateConnectionElement('fw-responses-status', conn.status);
@@ -509,6 +514,128 @@ function addEventToMap(event) {
         const oldMarker = dashboardState.markers.shift();
         dashboardState.map.removeLayer(oldMarker);
     }
+}
+
+/**
+ * Actualizar eventos mejorada - incluye lista de eventos
+ */
+function updateEventsImproved(events) {
+    if (!events || events.length === 0) return;
+
+    // Actualizar eventos en el mapa (función original)
+    updateEvents(events);
+
+    // Actualizar lista de eventos en sidebar
+    updateEventsList(events);
+
+    // Actualizar estadísticas específicas de eventos
+    updateEventsStatistics(events);
+}
+
+/**
+ * Actualizar estadísticas específicas de eventos
+ */
+function updateEventsStatistics(events) {
+    const highRiskEvents = events.filter(e => e.risk_score > 0.8).length;
+    const mediumRiskEvents = events.filter(e => e.risk_score > 0.5 && e.risk_score <= 0.8).length;
+    const lowRiskEvents = events.filter(e => e.risk_score <= 0.5).length;
+
+    // Actualizar contadores si existen
+    updateElement('high-risk-count', highRiskEvents);
+
+    addDebugLog('debug', `Estadísticas de eventos: Alto: ${highRiskEvents}, Medio: ${mediumRiskEvents}, Bajo: ${lowRiskEvents}`);
+}
+
+/**
+ * Actualizar lista de eventos
+ */
+function updateEventsList(events) {
+    if (eventsUpdatePaused || !events || events.length === 0) return;
+
+    const eventsList = document.getElementById('events-list');
+    const eventsCount = document.getElementById('live-events-count');
+
+    if (!eventsList) return;
+
+    // Limpiar placeholder si existe
+    if (eventsList.querySelector('.no-events-placeholder')) {
+        eventsList.innerHTML = '';
+    }
+
+    // Actualizar contador
+    if (eventsCount) {
+        eventsCount.textContent = events.length;
+    }
+
+    // Añadir eventos nuevos al principio
+    events.forEach(event => {
+        if (!document.querySelector(`[data-event-id="${event.id}"]`)) {
+            const eventElement = createEventElement(event);
+            eventsList.insertBefore(eventElement, eventsList.firstChild);
+        }
+    });
+
+    // Mantener solo los últimos 50 eventos
+    const eventItems = eventsList.querySelectorAll('.event-item');
+    if (eventItems.length > 50) {
+        for (let i = 50; i < eventItems.length; i++) {
+            eventItems[i].remove();
+        }
+    }
+
+    // Aplicar filtro actual
+    filterEvents();
+}
+
+/**
+ * Crear elemento de evento
+ */
+function createEventElement(event) {
+    const eventDiv = document.createElement('div');
+    eventDiv.className = `event-item risk-${getRiskLevel(event.risk_score)} new-event`;
+    eventDiv.setAttribute('data-event-id', event.id);
+    eventDiv.onclick = () => showEventDetailsModal(event.id);
+
+    const riskPercentage = Math.round(event.risk_score * 100);
+    const eventTime = formatTime(event.timestamp);
+
+    eventDiv.innerHTML = `
+        <div class="event-header">
+            <span class="event-time">${eventTime}</span>
+            <span class="event-risk ${getRiskLevel(event.risk_score)}">${riskPercentage}%</span>
+        </div>
+        <div class="event-details">
+            <div>
+                <span class="event-source">${event.source_ip}</span>
+                →
+                <span class="event-target">${event.target_ip}</span>
+                ${event.port ? `:${event.port}` : ''}
+            </div>
+            <div>
+                <span class="event-type">${event.attack_type || event.event_type || 'unknown'}</span>
+                ${event.protocol ? `• ${event.protocol}` : ''}
+                ${event.location ? `• ${event.location}` : ''}
+            </div>
+        </div>
+        <div class="event-actions">
+            <button class="event-action-btn block" onclick="blockEventIP('${event.source_ip}', event)" title="Bloquear IP">
+                🛡️ Block
+            </button>
+            <button class="event-action-btn details" onclick="showEventDetailsModal('${event.id}'); event.stopPropagation()" title="Ver detalles">
+                🔍 Details
+            </button>
+            <button class="event-action-btn map" onclick="focusEventOnMap('${event.id}'); event.stopPropagation()" title="Ver en mapa">
+                🗺️ Map
+            </button>
+        </div>
+    `;
+
+    // Remover la clase new-event después de la animación
+    setTimeout(() => {
+        eventDiv.classList.remove('new-event');
+    }, 2000);
+
+    return eventDiv;
 }
 
 // ============================================================================
@@ -750,7 +877,7 @@ function showEventDetailsModal(eventId) {
         },
         {
             text: '📊 Ver en Mapa',
-            action: () => focusEventOnMap(event),
+            action: () => focusEventOnMap(event.id),
             class: 'btn-primary'
         },
         {
@@ -844,26 +971,6 @@ function clearDebugLog() {
 }
 
 /**
- * Mostrar confirmaciones
- */
-function showConfirmations() {
-    const basicStats = dashboardState.metrics.basic_stats || {};
-    const confirmations = basicStats.threats_blocked || 0;
-
-    showModal('✅ Confirmaciones de Firewall', `
-        <div class="detail-section">
-            <h4>Resumen de Confirmaciones</h4>
-            <p><strong>Total Confirmaciones:</strong> ${confirmations}</p>
-            <p><strong>Comandos Enviados:</strong> ${basicStats.commands_sent || 0}</p>
-            <p><strong>Tasa de Éxito:</strong> ${confirmations > 0 ? Math.round((confirmations / (basicStats.commands_sent || 1)) * 100) : 0}%</p>
-            <p><strong>Última Actualización:</strong> ${formatTime(basicStats.last_update)}</p>
-        </div>
-    `);
-
-    addDebugLog('info', `Mostrando confirmaciones: ${confirmations}`);
-}
-
-/**
  * Probar conexiones de los 3 puertos
  */
 function testConnections() {
@@ -918,6 +1025,15 @@ function centerMap() {
     }
 }
 
+function centerMapOnLocalNode() {
+    if (localNodeMarker && dashboardState.map) {
+        dashboardState.map.setView(localNodeMarker.getLatLng(), 10);
+        localNodeMarker.openPopup();
+        addDebugLog('info', 'Mapa centrado en nodo local');
+        showToast('Vista centrada en nodo local', 'info');
+    }
+}
+
 /**
  * Toggle heatmap
  */
@@ -927,252 +1043,319 @@ function toggleHeatmap() {
     showToast('Heatmap no implementado aún', 'warning');
 }
 
-// ============================================================================
-// FUNCIONES AUXILIARES
-// ============================================================================
+function showMapLegend() {
+    const content = `
+        <div class="map-legend">
+            <h4>🗺️ Leyenda del Mapa</h4>
 
-/**
- * Actualizar elemento del DOM
- */
-function updateElement(id, value) {
-    const element = document.getElementById(id);
-    if (element) {
-        element.textContent = value;
+            <div class="legend-section">
+                <h5>Marcadores</h5>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #0088ff; border: 2px solid #fff;"></div>
+                    <span>Nodo Local (Dashboard)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #00ff00;"></div>
+                    <span>Evento de Riesgo Bajo (0-50%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #ffaa00;"></div>
+                    <span>Evento de Riesgo Medio (50-80%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-marker" style="background: #ff4444;"></div>
+                    <span>Evento de Riesgo Alto (80-100%)</span>
+                </div>
+            </div>
+
+            <div class="legend-section">
+                <h5>Controles del Mapa</h5>
+                <p><strong>Clear Map:</strong> Eliminar todos los marcadores de eventos</p>
+                <p><strong>Center:</strong> Centrar vista en el nodo local</p>
+                <p><strong>Heatmap:</strong> Activar mapa de calor (próximamente)</p>
+                <p><strong>Legend:</strong> Mostrar esta leyenda</p>
+            </div>
+
+            <div class="legend-section">
+                <h5>Interacciones</h5>
+                <p><strong>Click en marcador:</strong> Ver detalles del evento/nodo</p>
+                <p><strong>Zoom:</strong> Rueda del ratón o controles del mapa</p>
+                <p><strong>Pan:</strong> Arrastrar para mover vista</p>
+            </div>
+        </div>
+
+        <style>
+            .map-legend {
+                font-size: 11px;
+                line-height: 1.4;
+            }
+            .legend-section {
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid #333;
+            }
+            .legend-section:last-child {
+                border-bottom: none;
+            }
+            .legend-section h5 {
+                color: #00ffff;
+                margin-bottom: 8px;
+                font-size: 12px;
+            }
+            .legend-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            }
+            .legend-marker {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                margin-right: 8px;
+                border: 1px solid #fff;
+            }
+        </style>
+    `;
+
+    showModal('🗺️ Leyenda del Mapa', content);
+}
+
+function toggleSection(sectionId) {
+    const content = document.getElementById(`${sectionId}-content`);
+    const toggle = document.getElementById(`${sectionId}-toggle`);
+    const section = document.getElementById(`${sectionId}-section`);
+
+    if (!content || !toggle) return;
+
+    const isCollapsed = content.classList.contains('collapsed');
+
+    if (isCollapsed) {
+        // Expandir
+        content.classList.remove('collapsed');
+        toggle.classList.remove('rotated');
+        if (section) section.classList.add('expanded');
+        collapsedSections.delete(sectionId);
+        addDebugLog('debug', `Sección ${sectionId} expandida`);
+    } else {
+        // Colapsar
+        content.classList.add('collapsed');
+        toggle.classList.add('rotated');
+        if (section) section.classList.remove('expanded');
+        collapsedSections.add(sectionId);
+        addDebugLog('debug', `Sección ${sectionId} colapsada`);
     }
 }
 
 /**
- * Actualizar elemento de conexión
+ * Filtrar eventos por tipo
  */
-function updateConnectionElement(elementId, status) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.className = element.className.replace(/\b(active|inactive|error)\b/g, '') + ' ' + (status || 'inactive');
+function filterEvents() {
+    const filter = document.getElementById('events-filter').value;
+    const eventItems = document.querySelectorAll('.event-item');
+
+    currentEventsFilter = filter;
+
+    eventItems.forEach(item => {
+        const shouldShow = filter === 'all' || item.classList.contains(`risk-${filter}`);
+        item.style.display = shouldShow ? 'block' : 'none';
+    });
+
+    addDebugLog('debug', `Eventos filtrados por: ${filter}`);
+}
+
+/**
+ * Limpiar lista de eventos
+ */
+function clearEventsList() {
+    const eventsList = document.getElementById('events-list');
+    const eventsCount = document.getElementById('live-events-count');
+
+    if (eventsList) {
+        eventsList.innerHTML = `
+            <div class="no-events-placeholder">
+                <i class="fas fa-inbox"></i>
+                <p>Lista de eventos limpiada</p>
+                <button onclick="sendTestFirewallEvent()" class="btn btn-primary">
+                    🧪 Generar Evento de Prueba
+                </button>
+            </div>
+        `;
+    }
+
+    if (eventsCount) {
+        eventsCount.textContent = '0';
+    }
+
+    addDebugLog('info', 'Lista de eventos limpiada');
+    showToast('Lista de eventos limpiada', 'info');
+}
+
+/**
+ * Pausar/reanudar actualización de eventos
+ */
+function pauseEventsUpdate() {
+    eventsUpdatePaused = !eventsUpdatePaused;
+    const button = document.getElementById('pause-events-btn');
+
+    if (button) {
+        const icon = button.querySelector('i');
+        if (eventsUpdatePaused) {
+            icon.className = 'fas fa-play';
+            button.classList.add('paused');
+            button.title = 'Reanudar actualización';
+            addDebugLog('warning', 'Actualización de eventos pausada');
+            showToast('Actualización de eventos pausada', 'warning');
+        } else {
+            icon.className = 'fas fa-pause';
+            button.classList.remove('paused');
+            button.title = 'Pausar actualización';
+            addDebugLog('info', 'Actualización de eventos reanudada');
+            showToast('Actualización de eventos reanudada', 'info');
+        }
     }
 }
 
 /**
- * Actualizar estado de topología
+ * Bloquear IP de un evento
  */
-function updateTopologyStatus(elementId, status) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.style.color = status === 'active' ? '#00ff00' : (status === 'error' ? '#ff4444' : '#ffaa00');
-    }
-}
+async function blockEventIP(sourceIP, event) {
+    event.stopPropagation();
 
-/**
- * Añadir entrada al log de debug
- */
-function addDebugLog(level, message) {
-    const timestamp = new Date().toLocaleTimeString('es-ES');
-    const logEntry = {
-        timestamp,
-        level,
-        message,
-        id: Date.now() + Math.random()
-    };
+    try {
+        const confirmation = confirm(`¿Bloquear la IP ${sourceIP}?`);
+        if (!confirmation) return;
 
-    dashboardState.debugLogEntries.unshift(logEntry);
+        addDebugLog('warning', `Enviando comando de bloqueo para IP: ${sourceIP}`);
 
-    // Mantener límite de entradas
-    if (dashboardState.debugLogEntries.length > DASHBOARD_CONFIG.MAX_DEBUG_ENTRIES) {
-        dashboardState.debugLogEntries = dashboardState.debugLogEntries.slice(0, DASHBOARD_CONFIG.MAX_DEBUG_ENTRIES);
-    }
+        const blockCommand = {
+            action: 'block_ip',
+            target_ip: sourceIP,
+            duration: '1h',
+            reason: `Manual block from dashboard - suspicious activity`,
+            risk_score: 0.9,
+            timestamp: new Date().toISOString(),
+            event_id: `manual_block_${Date.now()}`,
+            rule_type: 'iptables',
+            port: null,
+            protocol: 'all'
+        };
 
-    updateDebugLogDisplay();
-}
-
-/**
- * Actualizar visualización del log
- */
-function updateDebugLogDisplay() {
-    const debugLog = document.getElementById('debug-log');
-    if (!debugLog) return;
-
-    debugLog.innerHTML = dashboardState.debugLogEntries.map(entry =>
-        `<div class="log-entry ${entry.level}" onclick="showLogEntryDetail(this, event)" data-entry-id="${entry.id}">
-            [${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}
-        </div>`
-    ).join('');
-
-    // Auto-scroll al final
-    debugLog.scrollTop = debugLog.scrollHeight;
-}
-
-/**
- * Mostrar modal genérico
- */
-function showModal(title, content, actions = null) {
-    const modal = document.getElementById('detail-modal');
-    const overlay = document.getElementById('modal-overlay');
-    const titleEl = document.getElementById('modal-title');
-    const contentEl = document.getElementById('modal-content');
-    const actionsEl = document.getElementById('modal-actions');
-
-    titleEl.textContent = title;
-    contentEl.innerHTML = content;
-
-    // Limpiar y añadir acciones
-    actionsEl.innerHTML = '';
-    if (actions) {
-        actions.forEach(action => {
-            const button = document.createElement('button');
-            button.className = `btn ${action.class || 'btn-secondary'}`;
-            button.textContent = action.text;
-            button.onclick = action.action;
-            actionsEl.appendChild(button);
+        // Simular envío del comando (en implementación real iría al firewall)
+        const response = await fetch('/api/test-firewall', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(blockCommand)
         });
+
+        if (response.ok) {
+            addDebugLog('info', `✅ Comando de bloqueo enviado para ${sourceIP}`);
+            showToast(`IP ${sourceIP} enviada para bloqueo`, 'success');
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+    } catch (error) {
+        addDebugLog('error', `❌ Error bloqueando IP ${sourceIP}: ${error.message}`);
+        showToast(`Error bloqueando IP: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Enfocar evento en el mapa
+ */
+function focusEventOnMap(eventId, event) {
+    if (event) event.stopPropagation();
+
+    const event_data = dashboardState.events.find(e => e.id === eventId);
+    if (!event_data) {
+        showToast('Evento no encontrado', 'error');
+        return;
+    }
+
+    if (event_data.latitude && event_data.longitude && dashboardState.map) {
+        dashboardState.map.setView([event_data.latitude, event_data.longitude], 10);
+
+        // Encontrar y abrir el popup del marcador correspondiente
+        dashboardState.markers.forEach(marker => {
+            if (marker.eventId === eventId) {
+                marker.openPopup();
+            }
+        });
+
+        addDebugLog('info', `Mapa enfocado en evento: ${event_data.source_ip} -> ${event_data.target_ip}`);
+        showToast('Vista centrada en evento', 'info');
     } else {
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'btn btn-secondary';
-        closeBtn.textContent = 'Cerrar';
-        closeBtn.onclick = closeModal;
-        actionsEl.appendChild(closeBtn);
-    }
-
-    overlay.style.display = 'block';
-    modal.style.display = 'block';
-    dashboardState.modalOpen = true;
-}
-
-/**
- * Cerrar modal
- */
-function closeModal() {
-    const modal = document.getElementById('detail-modal');
-    const overlay = document.getElementById('modal-overlay');
-
-    overlay.style.display = 'none';
-    modal.style.display = 'none';
-    dashboardState.modalOpen = false;
-}
-
-/**
- * Mostrar toast notification
- */
-function showToast(message, type = 'info', duration = 3000) {
-    const container = document.getElementById('toast-container');
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.remove();
-    }, duration);
-}
-
-/**
- * Mostrar indicador de amenaza
- */
-function showThreatIndicator() {
-    const indicator = document.getElementById('threat-indicator');
-    indicator.classList.add('show');
-
-    setTimeout(() => {
-        indicator.classList.remove('show');
-    }, 3000);
-}
-
-/**
- * Actualizar reloj
- */
-function updateClock() {
-    const now = new Date();
-    const timeElement = document.getElementById('current-time');
-    if (timeElement) {
-        timeElement.textContent = now.toLocaleTimeString('es-ES');
+        showToast('Evento sin coordenadas geográficas', 'warning');
     }
 }
 
 /**
- * Funciones de formateo
+ * Enviar evento de prueba al firewall
  */
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-function formatTime(timestamp) {
-    if (!timestamp) return '-';
+async function sendTestFirewallEvent() {
     try {
-        return new Date(timestamp).toLocaleString('es-ES');
-    } catch {
-        return '-';
-    }
-}
+        addDebugLog('info', '🧪 Generando evento de prueba para firewall...');
 
-function formatRelativeTime(timestamp) {
-    if (!timestamp) return '-';
-    try {
-        const now = new Date();
-        const time = new Date(timestamp);
-        const diff = now - time;
-        const seconds = Math.floor(diff / 1000);
+        const testEvent = {
+            id: `test_event_${Date.now()}`,
+            source_ip: '192.168.1.99',
+            target_ip: '10.0.0.1',
+            risk_score: 0.85, // Alto riesgo para activar firewall
+            anomaly_score: 0.8,
+            timestamp: new Date().toISOString(),
+            attack_type: 'test_intrusion',
+            protocol: 'TCP',
+            port: 22,
+            packets: 10,
+            bytes: 1024,
+            latitude: 40.4168,
+            longitude: -3.7038,
+            location: 'Madrid, ES (Test)',
+            ml_models_scores: {
+                'isolation_forest': 0.85,
+                'test_model': 0.9
+            },
+            event_type: 'test_attack',
+            description: 'Manual test event for firewall verification',
+            test_marker: 'MANUAL_TEST'
+        };
 
-        if (seconds < 60) return `${seconds}s`;
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-        return `${Math.floor(seconds / 86400)}d`;
-    } catch {
-        return '-';
-    }
-}
+        // Añadir evento a la lista local inmediatamente
+        dashboardState.events.unshift(testEvent);
+        updateEventsList([testEvent]);
 
-function formatUptime(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+        // Añadir al mapa
+        addEventToMap(testEvent);
 
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-        return `${minutes}m ${secs}s`;
-    } else {
-        return `${secs}s`;
-    }
-}
+        // Simular envío al backend (que debería generar comando de firewall)
+        const response = await fetch('/api/test-firewall', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ...testEvent,
+                action: 'test_event',
+                manual_trigger: true
+            })
+        });
 
-function getRiskLevel(score) {
-    if (score > 0.8) return 'high';
-    if (score > 0.5) return 'medium';
-    return 'low';
-}
+        if (response.ok) {
+            const result = await response.json();
+            addDebugLog('info', `✅ Evento de prueba enviado: ${result.message || 'Success'}`);
+            showToast('🧪 Evento de prueba generado exitosamente', 'success');
 
-function getRiskColor(level) {
-    switch(level) {
-        case 'high': return '#ff4444';
-        case 'medium': return '#ffaa00';
-        case 'low': return '#00ff00';
-        default: return '#0088ff';
-    }
-}
+            // Mostrar amenaza indicator
+            showThreatIndicator();
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
 
-function getConnectionStatusSummary() {
-    const metrics = dashboardState.metrics;
-    const connections = metrics.zmq_connections || {};
-
-    const statuses = [
-        `• ML Events: ${getStatusIcon(connections.ml_events?.status)}`,
-        `• FW Commands: ${getStatusIcon(connections.firewall_commands?.status)}`,
-        `• FW Responses: ${getStatusIcon(connections.firewall_responses?.status)}`
-    ];
-
-    return statuses.join('<br>');
-}
-
-function getStatusIcon(status) {
-    switch(status) {
-        case 'active': return '<span style="color: green;">✅ ACTIVO</span>';
-        case 'inactive': return '<span style="color: orange;">⚠️ INACTIVO</span>';
-        case 'error': return '<span style="color: red;">❌ ERROR</span>';
-        default: return '<span style="color: gray;">❓ DESCONOCIDO</span>';
+    } catch (error) {
+        addDebugLog('error', `❌ Error enviando evento de prueba: ${error.message}`);
+        showToast(`Error: ${error.message}`, 'error');
     }
 }
 
@@ -1360,666 +1543,451 @@ async function testFirewallConnection() {
     }
 }
 
-function centerMapOnLocalNode() {
-    if (localNodeMarker && dashboardState.map) {
-        dashboardState.map.setView(localNodeMarker.getLatLng(), 10);
-        localNodeMarker.openPopup();
-        addDebugLog('info', 'Mapa centrado en nodo local');
-        showToast('Vista centrada en nodo local', 'info');
-    }
-}
+// ============================================================================
+// FUNCIONES AUXILIARES
+// ============================================================================
 
-function showMapLegend() {
-    const content = `
-        <div class="map-legend">
-            <h4>🗺️ Leyenda del Mapa</h4>
-
-            <div class="legend-section">
-                <h5>Marcadores</h5>
-                <div class="legend-item">
-                    <div class="legend-marker" style="background: #0088ff; border: 2px solid #fff;"></div>
-                    <span>Nodo Local (Dashboard)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-marker" style="background: #00ff00;"></div>
-                    <span>Evento de Riesgo Bajo (0-50%)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-marker" style="background: #ffaa00;"></div>
-                    <span>Evento de Riesgo Medio (50-80%)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-marker" style="background: #ff4444;"></div>
-                    <span>Evento de Riesgo Alto (80-100%)</span>
-                </div>
-            </div>
-
-            <div class="legend-section">
-                <h5>Controles del Mapa</h5>
-                <p><strong>Clear Map:</strong> Eliminar todos los marcadores de eventos</p>
-                <p><strong>Center:</strong> Centrar vista en el nodo local</p>
-                <p><strong>Heatmap:</strong> Activar mapa de calor (próximamente)</p>
-                <p><strong>Legend:</strong> Mostrar esta leyenda</p>
-            </div>
-
-            <div class="legend-section">
-                <h5>Interacciones</h5>
-                <p><strong>Click en marcador:</strong> Ver detalles del evento/nodo</p>
-                <p><strong>Zoom:</strong> Rueda del ratón o controles del mapa</p>
-                <p><strong>Pan:</strong> Arrastrar para mover vista</p>
-            </div>
-        </div>
-
-        <style>
-            .map-legend {
-                font-size: 11px;
-                line-height: 1.4;
-            }
-            .legend-section {
-                margin-bottom: 15px;
-                padding-bottom: 10px;
-                border-bottom: 1px solid #333;
-            }
-            .legend-section:last-child {
-                border-bottom: none;
-            }
-            .legend-section h5 {
-                color: #00ffff;
-                margin-bottom: 8px;
-                font-size: 12px;
-            }
-            .legend-item {
-                display: flex;
-                align-items: center;
-                margin-bottom: 5px;
-            }
-            .legend-marker {
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                margin-right: 8px;
-                border: 1px solid #fff;
-            }
-        </style>
-    `;
-
-    showModal('🗺️ Leyenda del Mapa', content);
-}
-
-function toggleSection(sectionId) {
-    const content = document.getElementById(`${sectionId}-content`);
-    const toggle = document.getElementById(`${sectionId}-toggle`);
-    const section = document.getElementById(`${sectionId}-section`);
-
-    if (!content || !toggle) return;
-
-    const isCollapsed = content.classList.contains('collapsed');
-
-    if (isCollapsed) {
-        // Expandir
-        content.classList.remove('collapsed');
-        toggle.classList.remove('rotated');
-        section.classList.add('expanded');
-        collapsedSections.delete(sectionId);
-        addDebugLog('debug', `Sección ${sectionId} expandida`);
-    } else {
-        // Colapsar
-        content.classList.add('collapsed');
-        toggle.classList.add('rotated');
-        section.classList.remove('expanded');
-        collapsedSections.add(sectionId);
-        addDebugLog('debug', `Sección ${sectionId} colapsada`);
+/**
+ * Actualizar elemento del DOM
+ */
+function updateElement(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
     }
 }
 
 /**
- * Expandir todas las secciones
+ * Actualizar elemento de conexión
  */
-function expandAllSections() {
-    const sections = ['architecture', 'components', 'events', 'counters', 'zmq', 'debug'];
-    sections.forEach(sectionId => {
-        const content = document.getElementById(`${sectionId}-content`);
-        const toggle = document.getElementById(`${sectionId}-toggle`);
-        const section = document.getElementById(`${sectionId}-section`);
-
-        if (content && toggle) {
-            content.classList.remove('collapsed');
-            toggle.classList.remove('rotated');
-            section.classList.add('expanded');
-            collapsedSections.delete(sectionId);
-        }
-    });
-    addDebugLog('info', 'Todas las secciones expandidas');
-}
-
-/**
- * Colapsar todas las secciones
- */
-function collapseAllSections() {
-    const sections = ['architecture', 'components', 'events', 'counters', 'zmq', 'debug'];
-    sections.forEach(sectionId => {
-        const content = document.getElementById(`${sectionId}-content`);
-        const toggle = document.getElementById(`${sectionId}-toggle`);
-        const section = document.getElementById(`${sectionId}-section`);
-
-        if (content && toggle) {
-            content.classList.add('collapsed');
-            toggle.classList.add('rotated');
-            section.classList.remove('expanded');
-            collapsedSections.add(sectionId);
-        }
-    });
-    addDebugLog('info', 'Todas las secciones colapsadas');
-}
-
-/**
- * ============================================================================
- * FUNCIONES PARA EVENTOS ENTRANTES
- * ============================================================================
- */
-
-/**
- * Actualizar lista de eventos
- */
-function updateEventsList(events) {
-    if (eventsUpdatePaused || !events || events.length === 0) return;
-
-    const eventsList = document.getElementById('events-list');
-    const eventsCount = document.getElementById('live-events-count');
-
-    if (!eventsList) return;
-
-    // Limpiar placeholder si existe
-    if (eventsList.querySelector('.no-events-placeholder')) {
-        eventsList.innerHTML = '';
-    }
-
-    // Actualizar contador
-    if (eventsCount) {
-        eventsCount.textContent = events.length;
-    }
-
-    // Añadir eventos nuevos al principio
-    events.forEach(event => {
-        if (!document.querySelector(`[data-event-id="${event.id}"]`)) {
-            const eventElement = createEventElement(event);
-            eventsList.insertBefore(eventElement, eventsList.firstChild);
-        }
-    });
-
-    // Mantener solo los últimos 50 eventos
-    const eventItems = eventsList.querySelectorAll('.event-item');
-    if (eventItems.length > 50) {
-        for (let i = 50; i < eventItems.length; i++) {
-            eventItems[i].remove();
-        }
-    }
-
-    // Aplicar filtro actual
-    filterEvents();
-}
-
-/**
- * Crear elemento de evento
- */
-function createEventElement(event) {
-    const eventDiv = document.createElement('div');
-    eventDiv.className = `event-item risk-${getRiskLevel(event.risk_score)} new-event`;
-    eventDiv.setAttribute('data-event-id', event.id);
-    eventDiv.onclick = () => showEventDetailsModal(event.id);
-
-    const riskPercentage = Math.round(event.risk_score * 100);
-    const eventTime = formatTime(event.timestamp);
-
-    eventDiv.innerHTML = `
-        <div class="event-header">
-            <span class="event-time">${eventTime}</span>
-            <span class="event-risk ${getRiskLevel(event.risk_score)}">${riskPercentage}%</span>
-        </div>
-        <div class="event-details">
-            <div>
-                <span class="event-source">${event.source_ip}</span>
-                →
-                <span class="event-target">${event.target_ip}</span>
-                ${event.port ? `:${event.port}` : ''}
-            </div>
-            <div>
-                <span class="event-type">${event.attack_type || event.event_type || 'unknown'}</span>
-                ${event.protocol ? `• ${event.protocol}` : ''}
-                ${event.location ? `• ${event.location}` : ''}
-            </div>
-        </div>
-        <div class="event-actions">
-            <button class="event-action-btn block" onclick="blockEventIP('${event.source_ip}', event)" title="Bloquear IP">
-                🛡️ Block
-            </button>
-            <button class="event-action-btn details" onclick="showEventDetailsModal('${event.id}'); event.stopPropagation()" title="Ver detalles">
-                🔍 Details
-            </button>
-            <button class="event-action-btn map" onclick="focusEventOnMap('${event.id}'); event.stopPropagation()" title="Ver en mapa">
-                🗺️ Map
-            </button>
-        </div>
-    `;
-
-    // Remover la clase new-event después de la animación
-    setTimeout(() => {
-        eventDiv.classList.remove('new-event');
-    }, 2000);
-
-    return eventDiv;
-}
-
-/**
- * Filtrar eventos por tipo
- */
-function filterEvents() {
-    const filter = document.getElementById('events-filter').value;
-    const eventItems = document.querySelectorAll('.event-item');
-
-    currentEventsFilter = filter;
-
-    eventItems.forEach(item => {
-        const shouldShow = filter === 'all' || item.classList.contains(`risk-${filter}`);
-        item.style.display = shouldShow ? 'block' : 'none';
-    });
-
-    addDebugLog('debug', `Eventos filtrados por: ${filter}`);
-}
-
-/**
- * Limpiar lista de eventos
- */
-function clearEventsList() {
-    const eventsList = document.getElementById('events-list');
-    const eventsCount = document.getElementById('live-events-count');
-
-    if (eventsList) {
-        eventsList.innerHTML = `
-            <div class="no-events-placeholder">
-                <i class="fas fa-inbox"></i>
-                <p>Lista de eventos limpiada</p>
-                <button onclick="sendTestFirewallEvent()" class="btn btn-primary">
-                    🧪 Generar Evento de Prueba
-                </button>
-            </div>
-        `;
-    }
-
-    if (eventsCount) {
-        eventsCount.textContent = '0';
-    }
-
-    addDebugLog('info', 'Lista de eventos limpiada');
-    showToast('Lista de eventos limpiada', 'info');
-}
-
-/**
- * Pausar/reanudar actualización de eventos
- */
-function pauseEventsUpdate() {
-    eventsUpdatePaused = !eventsUpdatePaused;
-    const button = document.getElementById('pause-events-btn');
-
-    if (button) {
-        const icon = button.querySelector('i');
-        if (eventsUpdatePaused) {
-            icon.className = 'fas fa-play';
-            button.classList.add('paused');
-            button.title = 'Reanudar actualización';
-            addDebugLog('warning', 'Actualización de eventos pausada');
-            showToast('Actualización de eventos pausada', 'warning');
-        } else {
-            icon.className = 'fas fa-pause';
-            button.classList.remove('paused');
-            button.title = 'Pausar actualización';
-            addDebugLog('info', 'Actualización de eventos reanudada');
-            showToast('Actualización de eventos reanudada', 'info');
-        }
+function updateConnectionElement(elementId, status) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.className = element.className.replace(/\b(active|inactive|error)\b/g, '') + ' ' + (status || 'inactive');
     }
 }
 
 /**
- * ============================================================================
- * FUNCIONES PARA ACCIONES CON EVENTOS
- * ============================================================================
+ * Actualizar estado de topología
  */
-
-/**
- * Bloquear IP de un evento
- */
-async function blockEventIP(sourceIP, event) {
-    event.stopPropagation();
-
-    try {
-        const confirmation = confirm(`¿Bloquear la IP ${sourceIP}?`);
-        if (!confirmation) return;
-
-        addDebugLog('warning', `Enviando comando de bloqueo para IP: ${sourceIP}`);
-
-        const blockCommand = {
-            action: 'block_ip',
-            target_ip: sourceIP,
-            duration: '1h',
-            reason: `Manual block from dashboard - suspicious activity`,
-            risk_score: 0.9,
-            timestamp: new Date().toISOString(),
-            event_id: `manual_block_${Date.now()}`,
-            rule_type: 'iptables',
-            port: null,
-            protocol: 'all'
-        };
-
-        // Simular envío del comando (en implementación real iría al firewall)
-        const response = await fetch('/api/test-firewall', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(blockCommand)
-        });
-
-        if (response.ok) {
-            addDebugLog('info', `✅ Comando de bloqueo enviado para ${sourceIP}`);
-            showToast(`IP ${sourceIP} enviada para bloqueo`, 'success');
-        } else {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-    } catch (error) {
-        addDebugLog('error', `❌ Error bloqueando IP ${sourceIP}: ${error.message}`);
-        showToast(`Error bloqueando IP: ${error.message}`, 'error');
+function updateTopologyStatus(elementId, status) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.color = status === 'active' ? '#00ff00' : (status === 'error' ? '#ff4444' : '#ffaa00');
     }
 }
 
 /**
- * Enfocar evento en el mapa
+ * Añadir entrada al log de debug
  */
-function focusEventOnMap(eventId, event) {
-    if (event) event.stopPropagation();
-
-    const event_data = dashboardState.events.find(e => e.id === eventId);
-    if (!event_data) {
-        showToast('Evento no encontrado', 'error');
-        return;
-    }
-
-    if (event_data.latitude && event_data.longitude && dashboardState.map) {
-        dashboardState.map.setView([event_data.latitude, event_data.longitude], 10);
-
-        // Encontrar y abrir el popup del marcador correspondiente
-        dashboardState.markers.forEach(marker => {
-            if (marker.eventId === eventId) {
-                marker.openPopup();
-            }
-        });
-
-        addDebugLog('info', `Mapa enfocado en evento: ${event_data.source_ip} -> ${event_data.target_ip}`);
-        showToast('Vista centrada en evento', 'info');
-    } else {
-        showToast('Evento sin coordenadas geográficas', 'warning');
-    }
-}
-
-/**
- * ============================================================================
- * FUNCIÓN PARA ENVIAR EVENTO DE PRUEBA AL FIREWALL
- * ============================================================================
- */
-
-/**
- * Enviar evento de prueba al firewall
- */
-async function sendTestFirewallEvent() {
-    try {
-        addDebugLog('info', '🧪 Generando evento de prueba para firewall...');
-
-        const testEvent = {
-            id: `test_event_${Date.now()}`,
-            source_ip: '192.168.1.99',
-            target_ip: '10.0.0.1',
-            risk_score: 0.85, // Alto riesgo para activar firewall
-            anomaly_score: 0.8,
-            timestamp: new Date().toISOString(),
-            attack_type: 'test_intrusion',
-            protocol: 'TCP',
-            port: 22,
-            packets: 10,
-            bytes: 1024,
-            latitude: 40.4168,
-            longitude: -3.7038,
-            location: 'Madrid, ES (Test)',
-            ml_models_scores: {
-                'isolation_forest': 0.85,
-                'test_model': 0.9
-            },
-            event_type: 'test_attack',
-            description: 'Manual test event for firewall verification',
-            test_marker: 'MANUAL_TEST'
-        };
-
-        // Añadir evento a la lista local inmediatamente
-        dashboardState.events.unshift(testEvent);
-        updateEventsList([testEvent]);
-
-        // Añadir al mapa
-        addEventToMap(testEvent);
-
-        // Simular envío al backend (que debería generar comando de firewall)
-        const response = await fetch('/api/test-firewall', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ...testEvent,
-                action: 'test_event',
-                manual_trigger: true
-            })
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            addDebugLog('info', `✅ Evento de prueba enviado: ${result.message || 'Success'}`);
-            showToast('🧪 Evento de prueba generado exitosamente', 'success');
-
-            // Mostrar amenaza indicator
-            showThreatIndicator();
-        } else {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-    } catch (error) {
-        addDebugLog('error', `❌ Error enviando evento de prueba: ${error.message}`);
-        showToast(`Error: ${error.message}`, 'error');
-    }
-}
-
-/**
- * ============================================================================
- * MEJORAS EN EL MAPA
- * ============================================================================
- */
-
-/**
- * Mejorar inicialización del mapa con tiles más visibles
- */
-function initializeMapImproved() {
-    dashboardState.map = L.map('map').setView(DASHBOARD_CONFIG.MAP_CENTER, DASHBOARD_CONFIG.MAP_ZOOM);
-
-    // Usar tiles con mejor contraste para tema oscuro
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 19,
-        // Aplicar filtros para mejor visibilidad
-        className: 'dark-map-tiles'
-    }).addTo(dashboardState.map);
-
-    // Añadir overlay con contornos de países más visibles
-    const countryBordersStyle = {
-        color: '#00ff88',
-        weight: 2,
-        opacity: 0.8,
-        fillOpacity: 0.1,
-        fillColor: '#004400'
+function addDebugLog(level, message) {
+    const timestamp = new Date().toLocaleTimeString('es-ES');
+    const logEntry = {
+        timestamp,
+        level,
+        message,
+        id: Date.now() + Math.random()
     };
 
-    // NUEVO: Añadir marcador del nodo local inmediatamente
-    addLocalNodeMarker();
+    dashboardState.debugLogEntries.unshift(logEntry);
 
-    addDebugLog('info', `Mapa mejorado inicializado en ${DASHBOARD_CONFIG.MAP_CENTER.join(', ')}`);
+    // Mantener límite de entradas
+    if (dashboardState.debugLogEntries.length > DASHBOARD_CONFIG.MAX_DEBUG_ENTRIES) {
+        dashboardState.debugLogEntries = dashboardState.debugLogEntries.slice(0, DASHBOARD_CONFIG.MAX_DEBUG_ENTRIES);
+    }
+
+    updateDebugLogDisplay();
 }
 
 /**
- * Aplicar filtros CSS adicionales al mapa
+ * Actualizar visualización del log
  */
-function applyMapFilters() {
-    const mapContainer = document.getElementById('map');
-    if (mapContainer) {
-        // Añadir clase para aplicar filtros CSS mejorados
-        mapContainer.classList.add('enhanced-dark-map');
+function updateDebugLogDisplay() {
+    const debugLog = document.getElementById('debug-log');
+    if (!debugLog) return;
+
+    debugLog.innerHTML = dashboardState.debugLogEntries.map(entry =>
+        `<div class="log-entry ${entry.level}" onclick="showLogEntryDetail(this, event)" data-entry-id="${entry.id}">
+            [${entry.timestamp}] [${entry.level.toUpperCase()}] ${entry.message}
+        </div>`
+    ).join('');
+
+    // Auto-scroll al final
+    debugLog.scrollTop = debugLog.scrollHeight;
+}
+
+function showLogEntryDetail(element, event) {
+    event.stopPropagation();
+    const message = element.textContent;
+    showModal('📋 Detalle de Log Entry', `
+        <div class="detail-section">
+            <h4>Entrada de Log</h4>
+            <pre style="white-space: pre-wrap; font-family: monospace; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px;">${message}</pre>
+        </div>
+    `);
+}
+
+/**
+ * Mostrar modal genérico
+ */
+function showModal(title, content, actions = null) {
+    const modal = document.getElementById('detail-modal');
+    const overlay = document.getElementById('modal-overlay');
+    const titleEl = document.getElementById('modal-title');
+    const contentEl = document.getElementById('modal-content');
+    const actionsEl = document.getElementById('modal-actions');
+
+    if (!modal || !overlay || !titleEl || !contentEl || !actionsEl) return;
+
+    titleEl.textContent = title;
+    contentEl.innerHTML = content;
+
+    // Limpiar y añadir acciones
+    actionsEl.innerHTML = '';
+    if (actions) {
+        actions.forEach(action => {
+            const button = document.createElement('button');
+            button.className = `btn ${action.class || 'btn-secondary'}`;
+            button.textContent = action.text;
+            button.onclick = action.action;
+            actionsEl.appendChild(button);
+        });
+    } else {
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'btn btn-secondary';
+        closeBtn.textContent = 'Cerrar';
+        closeBtn.onclick = closeModal;
+        actionsEl.appendChild(closeBtn);
+    }
+
+    overlay.style.display = 'block';
+    modal.style.display = 'block';
+    dashboardState.modalOpen = true;
+}
+
+/**
+ * Cerrar modal
+ */
+function closeModal() {
+    const modal = document.getElementById('detail-modal');
+    const overlay = document.getElementById('modal-overlay');
+
+    if (modal && overlay) {
+        overlay.style.display = 'none';
+        modal.style.display = 'none';
+        dashboardState.modalOpen = false;
     }
 }
 
 /**
- * ============================================================================
- * FUNCIONES MEJORADAS DE ACTUALIZACIÓN
- * ============================================================================
+ * Mostrar toast notification
  */
+function showToast(message, type = 'info', duration = 3000) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
 
-/**
- * Actualizar eventos mejorada - incluye lista de eventos
- */
-function updateEventsImproved(events) {
-    if (!events || events.length === 0) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
 
-    // Actualizar eventos en el mapa (función original)
-    updateEvents(events);
+    container.appendChild(toast);
 
-    // NUEVO: Actualizar lista de eventos en sidebar
-    updateEventsList(events);
-
-    // NUEVO: Actualizar estadísticas específicas de eventos
-    updateEventsStatistics(events);
-}
-
-/**
- * Actualizar estadísticas específicas de eventos
- */
-function updateEventsStatistics(events) {
-    const highRiskEvents = events.filter(e => e.risk_score > 0.8).length;
-    const mediumRiskEvents = events.filter(e => e.risk_score > 0.5 && e.risk_score <= 0.8).length;
-    const lowRiskEvents = events.filter(e => e.risk_score <= 0.5).length;
-
-    // Actualizar contadores si existen
-    updateElement('high-risk-count', highRiskEvents);
-
-    addDebugLog('debug', `Estadísticas de eventos: Alto: ${highRiskEvents}, Medio: ${mediumRiskEvents}, Bajo: ${lowRiskEvents}`);
-}
-
-/**
- * ============================================================================
- * MEJORAS EN fetchAndUpdateMetrics
- * ============================================================================
- */
-
-/**
- * CORRECCIÓN: Sobrescribir fetchAndUpdateMetrics original para incluir eventos
- */
-async function fetchAndUpdateMetricsImproved() {
-    try {
-        const response = await fetch('/api/metrics');
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        dashboardState.metrics = data;
-
-        // Actualizar todos los componentes (funciones originales)
-        updateConnectionStatus();
-        updateCounters(data.basic_stats || {});
-        updateZMQConnections(data.zmq_connections || {});
-        updateComponentStatus(data.component_status || {}, data.node_info || {});
-
-        // MEJORADO: Usar función mejorada para eventos
-        updateEventsImproved(data.recent_events || []);
-
-        // NUEVO: Actualizar marcador del nodo local
-        if (data.local_node_position) {
-            updateLocalNodeMarker(data.local_node_position);
-        }
-
-        // Log de debug ocasional
-        if (Math.random() < 0.1) { // 10% de probabilidad
-            addDebugLog('debug', `Métricas actualizadas: ${data.basic_stats?.events_received || 0} eventos`);
-        }
-
-    } catch (error) {
-        addDebugLog('error', `Error obteniendo métricas: ${error.message}`);
-        updateConnectionStatus(CONNECTION_STATES.ERROR);
-        showToast(`Error de conexión: ${error.message}`, 'error');
-    }
-}
-
-/**
- * ============================================================================
- * INICIALIZACIÓN MEJORADA
- * ============================================================================
- */
-
-/**
- * Sobrescribir inicialización para incluir nuevas funcionalidades
- */
-function initializeDashboardImproved() {
-    console.log('🚀 Inicializando SCADA Dashboard Mejorado...');
-
-    // Inicializar componentes mejorados
-    initializeMapImproved();
-    initializeEventListeners();
-
-    // NUEVO: Aplicar filtros al mapa
-    applyMapFilters();
-
-    // NUEVO: Configurar secciones colapsables (empezar con todas expandidas)
     setTimeout(() => {
-        // Solo colapsar debug por defecto
-        toggleSection('debug');
-    }, 1000);
-
-    // Iniciar actualizaciones periódicas mejoradas
-    startPeriodicUpdatesImproved();
-
-    // Logs iniciales
-    addDebugLog('info', 'Sistema SCADA Dashboard v2.2 iniciado');
-    addDebugLog('info', 'Arquitectura 3 puertos configurada');
-    addDebugLog('info', 'Mapa geolocalizado y eventos en tiempo real activados');
-    addDebugLog('info', 'Cajas minimizables habilitadas');
-
-    // Actualizar reloj
-    updateClock();
-    setInterval(updateClock, 1000);
-
-    console.log('✅ Dashboard mejorado inicializado correctamente');
+        toast.remove();
+    }, duration);
 }
 
 /**
- * Iniciar actualizaciones periódicas mejoradas
+ * Mostrar indicador de amenaza
  */
-function startPeriodicUpdatesImproved() {
-    if (dashboardState.updateInterval) {
-        clearInterval(dashboardState.updateInterval);
+function showThreatIndicator() {
+    const indicator = document.getElementById('threat-indicator');
+    if (indicator) {
+        indicator.classList.add('show');
+
+        setTimeout(() => {
+            indicator.classList.remove('show');
+        }, 3000);
     }
-
-    dashboardState.updateInterval = setInterval(fetchAndUpdateMetricsImproved, DASHBOARD_CONFIG.UPDATE_INTERVAL);
-    fetchAndUpdateMetricsImproved(); // Primera actualización inmediata
-
-    addDebugLog('info', `Actualizaciones periódicas mejoradas iniciadas (${DASHBOARD_CONFIG.UPDATE_INTERVAL}ms)`);
 }
 
-// Exponer funciones globales para uso en HTML
+/**
+ * Actualizar reloj
+ */
+function updateClock() {
+    const now = new Date();
+    const timeElement = document.getElementById('current-time');
+    if (timeElement) {
+        timeElement.textContent = now.toLocaleTimeString('es-ES');
+    }
+}
+
+/**
+ * Funciones de formateo
+ */
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatTime(timestamp) {
+    if (!timestamp) return '-';
+    try {
+        return new Date(timestamp).toLocaleString('es-ES');
+    } catch {
+        return '-';
+    }
+}
+
+function formatRelativeTime(timestamp) {
+    if (!timestamp) return '-';
+    try {
+        const now = new Date();
+        const time = new Date(timestamp);
+        const diff = now - time;
+        const seconds = Math.floor(diff / 1000);
+
+        if (seconds < 60) return `${seconds}s`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+        return `${Math.floor(seconds / 86400)}d`;
+    } catch {
+        return '-';
+    }
+}
+
+function formatUptime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
+}
+
+function getRiskLevel(score) {
+    if (score > 0.8) return 'high';
+    if (score > 0.5) return 'medium';
+    return 'low';
+}
+
+function getRiskColor(level) {
+    switch(level) {
+        case 'high': return '#ff4444';
+        case 'medium': return '#ffaa00';
+        case 'low': return '#00ff00';
+        default: return '#0088ff';
+    }
+}
+
+function getConnectionStatusSummary() {
+    const metrics = dashboardState.metrics;
+    const connections = metrics.zmq_connections || {};
+
+    const statuses = [
+        `• ML Events: ${getStatusIcon(connections.ml_events?.status)}`,
+        `• FW Commands: ${getStatusIcon(connections.firewall_commands?.status)}`,
+        `• FW Responses: ${getStatusIcon(connections.firewall_responses?.status)}`
+    ];
+
+    return statuses.join('<br>');
+}
+
+function getStatusIcon(status) {
+    switch(status) {
+        case 'active': return '<span style="color: green;">✅ ACTIVO</span>';
+        case 'inactive': return '<span style="color: orange;">⚠️ INACTIVO</span>';
+        case 'error': return '<span style="color: red;">❌ ERROR</span>';
+        default: return '<span style="color: gray;">❓ DESCONOCIDO</span>';
+    }
+}
+
+// Funciones adicionales que podrían ser llamadas desde otros lugares
+function blockIPFromEvent(event) {
+    return blockEventIP(event.source_ip, {stopPropagation: () => {}});
+}
+
+function copyEventData(event) {
+    const dataStr = JSON.stringify(event, null, 2);
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(dataStr).then(() => {
+            showToast('Datos del evento copiados al portapapeles', 'success');
+        });
+    } else {
+        showToast('Clipboard no disponible', 'warning');
+    }
+}
+
+function testSpecificConnection(connectionType) {
+    addDebugLog('info', `Probando conexión específica: ${connectionType}`);
+    showToast(`Probando ${connectionType}...`, 'info');
+    // Implementar lógica específica según el tipo de conexión
+}
+
+function testPort(port) {
+    addDebugLog('info', `Probando puerto específico: ${port}`);
+    showToast(`Probando puerto ${port}...`, 'info');
+    // Implementar lógica específica de prueba de puerto
+}
+
+// ============================================================================
+// EVENTOS Y MÉTODOS ADICIONALES PARA COMPLETAR FUNCIONALIDAD
+// ============================================================================
+
+function showEventsDetail(event) {
+    event.stopPropagation();
+    showEventsSummary();
+}
+
+function showCommandsDetail(event) {
+    event.stopPropagation();
+    showConfirmationsSummary();
+}
+
+function showConfirmationsDetail(event) {
+    event.stopPropagation();
+    showConfirmationsSummary();
+}
+
+function showComponentDetail(componentType) {
+    addDebugLog('info', `Mostrando detalles del componente: ${componentType}`);
+
+    const content = `
+        <div class="detail-section">
+            <h4>Detalles del Componente: ${componentType}</h4>
+            <p>Información detallada del componente ${componentType} se mostrará aquí.</p>
+        </div>
+    `;
+
+    showModal(`🔧 ${componentType}`, content);
+}
+
+function showComponentMetric(metricId, event) {
+    event.stopPropagation();
+    addDebugLog('debug', `Click en métrica: ${metricId}`);
+}
+
+function showTopologyLineDetail(lineId) {
+    addDebugLog('info', `Mostrando detalles de línea de topología: ${lineId}`);
+
+    const content = `
+        <div class="detail-section">
+            <h4>Detalles de Topología: ${lineId}</h4>
+            <p>Información detallada de la línea de topología ${lineId}.</p>
+        </div>
+    `;
+
+    showModal(`🔌 ${lineId}`, content);
+}
+
+function showZMQConnectionDetail(connectionId) {
+    addDebugLog('info', `Mostrando detalles de conexión ZMQ: ${connectionId}`);
+
+    const connections = dashboardState.metrics.zmq_connections || {};
+    const connection = connections[connectionId.replace('-', '_')] || {};
+
+    const content = `
+        <div class="detail-section">
+            <h4>Detalles de Conexión ZMQ</h4>
+            <p><strong>ID:</strong> ${connectionId}</p>
+            <p><strong>Estado:</strong> ${connection.status || 'unknown'}</p>
+            <p><strong>Endpoint:</strong> ${connection.endpoint || 'N/A'}</p>
+            <p><strong>Tipo de Socket:</strong> ${connection.socket_type || 'N/A'}</p>
+            <p><strong>Modo:</strong> ${connection.mode || 'N/A'}</p>
+            <p><strong>Mensajes Totales:</strong> ${connection.total_messages || 0}</p>
+            <p><strong>Bytes Transferidos:</strong> ${formatBytes(connection.bytes_transferred || 0)}</p>
+        </div>
+    `;
+
+    showModal(`🔌 Conexión ${connectionId}`, content);
+}
+
+function showDebugLogDetail() {
+    const entriesCount = dashboardState.debugLogEntries.length;
+
+    const content = `
+        <div class="detail-section">
+            <h4>Información del Log de Debug</h4>
+            <p><strong>Total de Entradas:</strong> ${entriesCount}</p>
+            <p><strong>Límite Máximo:</strong> ${DASHBOARD_CONFIG.MAX_DEBUG_ENTRIES}</p>
+            <p><strong>Última Entrada:</strong> ${dashboardState.debugLogEntries[0]?.timestamp || 'N/A'}</p>
+        </div>
+        <div class="detail-section">
+            <h4>Acciones</h4>
+            <button onclick="clearDebugLog(); closeModal();" class="btn btn-warning">🗑️ Limpiar Log</button>
+        </div>
+    `;
+
+    showModal('🐛 Debug Log Information', content);
+}
+
+function showEventsPerMinuteDetail() {
+    const basicStats = dashboardState.metrics.basic_stats || {};
+
+    const content = `
+        <div class="detail-section">
+            <h4>Eventos por Minuto</h4>
+            <p><strong>Actual:</strong> ${basicStats.events_per_minute || 0} eventos/min</p>
+            <p><strong>Total Recibidos:</strong> ${basicStats.events_received || 0}</p>
+            <p><strong>Total Procesados:</strong> ${basicStats.events_processed || 0}</p>
+        </div>
+    `;
+
+    showModal('📊 Eventos por Minuto', content);
+}
+
+function showHighRiskEventsDetail() {
+    const basicStats = dashboardState.metrics.basic_stats || {};
+
+    const content = `
+        <div class="detail-section">
+            <h4>Eventos de Alto Riesgo</h4>
+            <p><strong>Count:</strong> ${basicStats.high_risk_events || 0}</p>
+            <p><strong>Umbral:</strong> >80% de riesgo</p>
+            <p><strong>Porcentaje del Total:</strong> ${basicStats.events_received > 0 ? ((basicStats.high_risk_events || 0) / basicStats.events_received * 100).toFixed(1) : 0}%</p>
+        </div>
+    `;
+
+    showModal('⚠️ Eventos de Alto Riesgo', content);
+}
+
+function showSuccessRateDetail() {
+    const basicStats = dashboardState.metrics.basic_stats || {};
+
+    const content = `
+        <div class="detail-section">
+            <h4>Tasa de Éxito</h4>
+            <p><strong>Amenazas Bloqueadas:</strong> ${basicStats.threats_blocked || 0}</p>
+            <p><strong>Comandos Enviados:</strong> ${basicStats.commands_sent || 0}</p>
+            <p><strong>Tasa de Éxito:</strong> ${basicStats.commands_sent > 0 ? ((basicStats.threats_blocked || 0) / basicStats.commands_sent * 100).toFixed(1) : 0}%</p>
+        </div>
+    `;
+
+    showModal('✅ Tasa de Éxito', content);
+}
+
+function showFailuresDetail() {
+    const content = `
+        <div class="detail-section">
+            <h4>Fallos del Sistema</h4>
+            <p><strong>Fallos de Conexión:</strong> 0</p>
+            <p><strong>Errores de Procesamiento:</strong> 0</p>
+            <p><strong>Timeouts:</strong> 0</p>
+        </div>
+    `;
+
+    showModal('❌ Detalles de Fallos', content);
+}
+
+// Exponer todas las funciones necesarias al ámbito global
 window.initializeDashboard = initializeDashboard;
 window.showConnectionDetails = showConnectionDetails;
 window.showSystemInfo = showSystemInfo;
@@ -2029,7 +1997,6 @@ window.showEventDetailsModal = showEventDetailsModal;
 window.showPortDetails = showPortDetails;
 window.refreshDashboard = refreshDashboard;
 window.clearDebugLog = clearDebugLog;
-window.showConfirmations = showConfirmations;
 window.testConnections = testConnections;
 window.clearAllMarkers = clearAllMarkers;
 window.centerMap = centerMap;
@@ -2041,16 +2008,22 @@ window.testFirewallConnection = testFirewallConnection;
 window.centerMapOnLocalNode = centerMapOnLocalNode;
 window.showMapLegend = showMapLegend;
 window.toggleSection = toggleSection;
-window.expandAllSections = expandAllSections;
-window.collapseAllSections = collapseAllSections;
-window.updateEventsList = updateEventsList;
 window.clearEventsList = clearEventsList;
 window.pauseEventsUpdate = pauseEventsUpdate;
 window.filterEvents = filterEvents;
 window.blockEventIP = blockEventIP;
 window.focusEventOnMap = focusEventOnMap;
 window.sendTestFirewallEvent = sendTestFirewallEvent;
-
-// Sobrescribir funciones originales con versiones mejoradas
-window.initializeDashboard = initializeDashboardImproved;
-window.fetchAndUpdateMetrics = fetchAndUpdateMetricsImproved;
+window.showEventsDetail = showEventsDetail;
+window.showCommandsDetail = showCommandsDetail;
+window.showConfirmationsDetail = showConfirmationsDetail;
+window.showComponentDetail = showComponentDetail;
+window.showComponentMetric = showComponentMetric;
+window.showTopologyLineDetail = showTopologyLineDetail;
+window.showZMQConnectionDetail = showZMQConnectionDetail;
+window.showDebugLogDetail = showDebugLogDetail;
+window.showLogEntryDetail = showLogEntryDetail;
+window.showEventsPerMinuteDetail = showEventsPerMinuteDetail;
+window.showHighRiskEventsDetail = showHighRiskEventsDetail;
+window.showSuccessRateDetail = showSuccessRateDetail;
+window.showFailuresDetail = showFailuresDetail;

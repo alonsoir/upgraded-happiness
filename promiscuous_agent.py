@@ -311,7 +311,7 @@ class DistributedPromiscuousAgent:
         self.logger.propagate = False
 
     def create_network_event(self, packet_data: Dict[str, Any], is_handshake: bool = False) -> bytes:
-        """Crea evento protobuf desde datos de paquete"""
+        """Crea evento protobuf desde datos de paquete - CORREGIDO para llenar todos los campos"""
         if not PROTOBUF_AVAILABLE:
             raise RuntimeError("❌ Protobuf no disponible")
 
@@ -374,8 +374,67 @@ class DistributedPromiscuousAgent:
                 event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
                 event.event_type = "network_traffic"
 
+            # 🔧 CAMPOS DE PIPELINE DISTRIBUIDO (POSICIONES 36-45) - CORREGIDOS
+
+            # PIDS de componentes (36-40)
+            event.promiscuous_pid = self.process_id  # CRÍTICO: Nuestro PID
+            event.geoip_enricher_pid = 0  # No tenemos geoip enricher aquí
+            event.ml_detector_pid = 0  # No tenemos ml detector aquí
+            event.dashboard_pid = 0  # Será llenado por el dashboard
+            event.firewall_pid = 0  # No tenemos firewall aquí
+
+            # TIMESTAMPS de procesamiento (41-45) - CORREGIDOS
+            current_time_ms = int(time.time() * 1000)
+
+            # CORRECCIÓN CRÍTICA: Llenar promiscuous_timestamp (campo 41)
+            if 'timestamp' in packet_data:
+                # Usar timestamp del paquete si está disponible
+                event.promiscuous_timestamp = int(packet_data['timestamp'] * 1000)
+            else:
+                # Usar timestamp actual
+                event.promiscuous_timestamp = current_time_ms
+
+            event.geoip_enricher_timestamp = 0  # No procesado por geoip aún
+            event.ml_detector_timestamp = 0  # No procesado por ML aún
+            event.dashboard_timestamp = 0  # Será llenado por dashboard
+            event.firewall_timestamp = 0  # No procesado por firewall aún
+
+            # MÉTRICAS de pipeline (46-48)
+            event.processing_latency_ms = 0.0  # Calcular en componentes posteriores
+            event.pipeline_hops = 1  # Somos el primer componente
+            event.pipeline_path = f"promiscuous[{self.node_id}]"
+
+            # CONTROL de flujo (49-51)
+            event.retry_count = 0
+            event.last_error = ""
+            event.requires_reprocessing = False
+
+            # TAGS y metadatos (52-53)
+            event.component_tags.extend([
+                "promiscuous",
+                "packet_capture",
+                f"node_{self.node_id}",
+                f"pid_{self.process_id}"
+            ])
+
+            # Metadatos del componente
+            metadata = event.component_metadata
+            metadata["capture_interface"] = self.config["capture"]["interface"]
+            metadata["agent_version"] = self.config.get("agent_version", "1.0.0")
+            metadata["config_file"] = self.config_file
+            metadata["queue_size"] = str(self.packet_queue.qsize())
+            metadata["processing_thread"] = str(threading.current_thread().name)
+
             # 🔄 Serializar a bytes
-            return event.SerializeToString()
+            serialized_data = event.SerializeToString()
+
+            # 📊 Log de debugging para verificar campos críticos
+            self.logger.debug(f"📦 Protobuf creado - Tamaño: {len(serialized_data)} bytes")
+            self.logger.debug(f"   🔢 promiscuous_pid: {event.promiscuous_pid}")
+            self.logger.debug(f"   ⏰ promiscuous_timestamp: {event.promiscuous_timestamp}")
+            self.logger.debug(f"   🛤️ pipeline_path: {event.pipeline_path}")
+
+            return serialized_data
 
         except Exception as e:
             self.stats['protobuf_errors'] += 1
@@ -397,9 +456,9 @@ class DistributedPromiscuousAgent:
             return "unknown"
 
     def packet_capture_callback(self, packet):
-        """Callback para captura de paquetes con Scapy"""
+        """Callback para captura de paquetes con Scapy - MEJORADO con timestamp"""
         try:
-            # 📊 Extraer información del paquete
+            # 📊 Extraer información del paquete con timestamp de captura
             packet_data = self._extract_packet_info(packet)
 
             if packet_data and self._should_process_packet(packet_data):
@@ -415,13 +474,13 @@ class DistributedPromiscuousAgent:
             self.logger.error(f"❌ Error en callback de captura: {e}")
 
     def _extract_packet_info(self, packet) -> Optional[Dict[str, Any]]:
-        """Extrae información relevante del paquete"""
+        """Extrae información relevante del paquete - MEJORADO con timestamp preciso"""
         try:
             info = {}
 
-            # 📦 Información básica
+            # 📦 Información básica con timestamp de captura preciso
             info['size'] = len(packet)
-            info['timestamp'] = time.time()
+            info['timestamp'] = time.time()  # CRÍTICO: Timestamp cuando se capturó
 
             # 🌐 Capa IP
             if packet.haslayer(IP):
@@ -546,14 +605,15 @@ class DistributedPromiscuousAgent:
             return
 
         try:
-            # 📦 Crear evento handshake
+            # 📦 Crear evento handshake con timestamp preciso
             handshake_data = {
                 'src_ip': 'handshake',
                 'dst_ip': 'handshake',
                 'size': 0,
                 'src_port': 0,
                 'dst_port': 0,
-                'protocol': 'handshake'
+                'protocol': 'handshake',
+                'timestamp': time.time()  # CRÍTICO: Timestamp del handshake
             }
 
             protobuf_data = self.create_network_event(handshake_data, is_handshake=True)
