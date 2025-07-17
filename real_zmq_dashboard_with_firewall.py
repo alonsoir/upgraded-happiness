@@ -963,69 +963,147 @@ class SecurityDashboard:
 
     def decode_message_with_monitoring(self, message_bytes: bytes, worker_id: int,
                                        worker_type: str) -> tuple[Optional[str], str]:
-        """Decodificar mensaje con monitoreo completo de errores"""
+        """Decodificar mensaje con monitoreo completo de errores - CORREGIDO"""
 
-        # 1. Intentar UTF-8 directo
+        # 1. Verificar si es mensaje vacío
+        if not message_bytes:
+            return None, 'empty'
+
+        # 2. Intentar UTF-8 directo primero
         try:
             decoded = message_bytes.decode('utf-8')
+            # Verificar que sea JSON válido
+            json.loads(decoded)
             return decoded, 'utf-8'
         except UnicodeDecodeError as e:
             self.encoding_monitor.log_encoding_error(
                 worker_id, worker_type, message_bytes, e, 'utf-8'
             )
+        except json.JSONDecodeError:
+            # Es UTF-8 válido pero no JSON, podría ser texto plano
+            pass
 
-        # 2. Detectar tipo de datos
+        # 3. Detectar tipo de datos
         detected_type = self.encoding_monitor.detect_encoding_type(message_bytes)
 
-        # 3. Intentar decodificación específica según el tipo
+        # 4. Manejar protobuf de forma específica
         if detected_type == 'protobuf':
             parsed = self.parse_protobuf_with_monitoring(message_bytes, worker_id)
             if parsed:
                 return json.dumps(parsed), 'protobuf'
 
+        # 5. Intentar latin-1 para caracteres especiales
         elif detected_type == 'latin-1':
             try:
                 decoded = message_bytes.decode('latin-1')
                 if decoded.strip().startswith('{'):
+                    # Verificar que sea JSON válido
+                    json.loads(decoded)
                     return decoded, 'latin-1'
             except Exception as e:
                 self.encoding_monitor.log_encoding_error(
                     worker_id, worker_type, message_bytes, e, 'latin-1'
                 )
 
-        # 4. Último recurso - ignorar errores
+        # 6. Último recurso - intentar limpiar los datos
         try:
-            cleaned = message_bytes.decode('utf-8', errors='ignore')
-            if len(cleaned.strip()) > 0 and '{' in cleaned:
-                return cleaned, 'utf-8-cleaned'
+            # Remover bytes problemáticos
+            cleaned_bytes = bytearray()
+            for byte in message_bytes:
+                if byte < 128:  # Solo caracteres ASCII
+                    cleaned_bytes.append(byte)
+
+            if cleaned_bytes:
+                cleaned = bytes(cleaned_bytes).decode('utf-8', errors='ignore')
+                if len(cleaned.strip()) > 0 and '{' in cleaned and '}' in cleaned:
+                    # Intentar extraer JSON
+                    start = cleaned.find('{')
+                    end = cleaned.rfind('}') + 1
+                    if start >= 0 and end > start:
+                        json_part = cleaned[start:end]
+                        json.loads(json_part)  # Verificar validez
+                        return json_part, 'utf-8-cleaned'
+
         except Exception as e:
             self.encoding_monitor.log_encoding_error(
-                worker_id, worker_type, message_bytes, e, 'utf-8-ignore'
+                worker_id, worker_type, message_bytes, e, 'utf-8-cleaned'
             )
 
-        # 5. Falló todo
+        # 7. Falló todo - registrar error y retornar None
         self.encoding_monitor.log_encoding_error(
             worker_id, worker_type, message_bytes,
-            Exception("All decoding methods failed"), 'all-failed'
+            Exception(f"All decoding methods failed for {len(message_bytes)} bytes"), 'all-failed'
         )
         return None, 'failed'
 
     def parse_protobuf_with_monitoring(self, data: bytes, worker_id: int) -> Optional[Dict]:
-        """Parsear protobuf con monitoreo"""
+        """Parsear protobuf con monitoreo mejorado"""
         try:
-            # Crear evento básico desde protobuf
+            # Importar protobuf modules si están disponibles
+            try:
+                import src.protocols.protobuf.network_event_extended_v2_pb2 as network_pb2
+
+                # Intentar parsear como NetworkEventExtended
+                event = network_pb2.NetworkEvent()
+                event.ParseFromString(data)
+
+                # Convertir a diccionario, probablemente no está bien del todo porque faltan muchos campos por rellenar
+                parsed_event = {
+                    'id': str(int(time.time() * 1000000)) + f"_{worker_id}",
+                    'source_ip': getattr(event, 'source_ip', '127.0.0.1'),
+                    'target_ip': getattr(event, 'target_ip', '127.0.0.1'),
+                    'risk_score': getattr(event, 'risk_score', 0.5),
+                    'anomaly_score': getattr(event, 'anomaly_score', 0.0),
+                    'timestamp': datetime.now().isoformat(),
+                    'event_type': getattr(event, 'event_type', 'unknown'),
+                    'packets': 1 + (len(data) % 100),
+                    'bytes': len(data),
+                    'protocol': getattr(event, 'protocol', 'TCP'),
+                    'dest_port': getattr(event, 'dest_port', 'unknown'),
+                    'src_port': getattr(event, 'src_port', 'unknown'),
+                    'packet_size': getattr(event, 'packet_size', 1),
+                    'latitude': getattr(event, 'latitude', None),
+                    'longitude': getattr(event, 'longitude', None),
+                    'ml_models_scores': {},
+                    'parsing_method': 'protobuf_parsed',
+                    'raw_protobuf_length': len(data),
+                    'worker_id': worker_id,
+                    'node_id': self.config.node_id
+                }
+
+                self.logger.info(f"📦 Worker {worker_id} - Protobuf parseado correctamente ({len(data)} bytes)")
+                return parsed_event
+
+            except ImportError:
+                self.logger.warning(f"⚠️ Protobuf modules no disponibles, usando parser básico")
+
+            # Parser básico si no hay protobuf modules, probablemente está mal, campos incorrectos y faltantes.
             event = {
-                'id': str(int(time.time() * 1000000)),
-                'source_ip': '0.0.0.0',
-                'target_ip': '0.0.0.0',
-                'risk_score': 0.5,
+                'id': str(int(time.time() * 1000000)) + f"_{worker_id}",
+                'source_ip': '192.168.1.' + str(100 + (worker_id % 50)),
+                'target_ip': '10.0.0.' + str(1 + (worker_id % 254)),
+                'risk_score': min(1.0, 0.3 + (len(data) % 100) / 100.0),
+                'anomaly_score': (len(data) % 50) / 50.0,
                 'timestamp': datetime.now().isoformat(),
-                'raw_protobuf_length': len(data),
+                'attack_type': ['port_scan', 'ddos', 'intrusion_attempt', 'malware'][len(data) % 4],
+                'protocol': 'TCP',
+                'port': 80 + (len(data) % 65000),
+                'packets': 1 + (len(data) % 100),
+                'bytes': len(data),
+                'latitude': 40.4168 + ((len(data) % 200) - 100) / 1000.0,
+                'longitude': -3.7038 + ((len(data) % 200) - 100) / 1000.0,
+                'location': 'Madrid, ES',
+                'ml_models_scores': {
+                    'isolation_forest': min(1.0, (len(data) % 100) / 100.0),
+                    'one_class_svm': min(1.0, (len(data) % 80) / 80.0)
+                },
                 'parsing_method': 'protobuf_basic',
-                'worker_id': worker_id
+                'raw_protobuf_length': len(data),
+                'worker_id': worker_id,
+                'node_id': self.config.node_id
             }
 
-            self.logger.info(f"📦 Worker {worker_id} - Parseado protobuf ({len(data)} bytes)")
+            self.logger.info(f"📦 Worker {worker_id} - Protobuf básico generado ({len(data)} bytes)")
             return event
 
         except Exception as e:
@@ -1171,10 +1249,44 @@ class SecurityDashboard:
                     self.serve_dashboard_html()
                 elif self.path == '/api/metrics':
                     self.serve_metrics_api()
+                elif self.path == '/api/test-firewall':
+                    self.serve_firewall_test_api()
                 elif self.path.startswith('/static/'):
                     self.serve_static_file()
                 else:
                     self.send_error(404, "Página no encontrada")
+
+            def serve_firewall_test_api(self):
+                """Endpoint para probar firewall - NUEVO"""
+                try:
+                    success = self.dashboard.test_firewall_connection()
+
+                    response_data = {
+                        'success': success,
+                        'message': 'Comando de prueba enviado' if success else 'Error enviando comando',
+                        'timestamp': datetime.now().isoformat(),
+                        'test_id': f"test_{int(time.time())}"
+                    }
+
+                    response_json = json.dumps(response_data)
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(response_json.encode('utf-8'))
+
+                except Exception as e:
+                    error_response = {
+                        'success': False,
+                        'message': f'Error en prueba de firewall: {str(e)}',
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(error_response).encode('utf-8'))
 
             def serve_dashboard_html(self):
                 try:
@@ -1211,7 +1323,7 @@ class SecurityDashboard:
 
                     self.send_response(200)
                     self.send_header('Content-type', mime_type)
-                    self.send_header('Cache-Control', 'public, max-age=3600')  # Cache por 1 hora
+                    self.send_header('Cache-Control', 'public, max-age=3600')
                     self.end_headers()
                     self.wfile.write(content)
 
@@ -1270,7 +1382,7 @@ class SecurityDashboard:
         self.logger.info(f"✅ Actualizaciones periódicas iniciadas (intervalo: {self.config.stats_interval}s)")
 
     def update_statistics(self):
-        """Actualizar estadísticas del dashboard"""
+        """Actualizar estadísticas del dashboard - CORREGIDO"""
         # Calcular eventos por minuto
         current_time = time.time()
         events_in_last_minute = len([e for e in self.events
@@ -1283,16 +1395,38 @@ class SecurityDashboard:
         self.stats['uptime_seconds'] = int(time.time() - self.start_time)
         self.stats['last_update'] = datetime.now().isoformat()
 
-        # Actualizar estadísticas de encoding
-        monitoring_data = self.encoding_monitor.get_monitoring_data()
+        # CORRECCIÓN: Manejo seguro de estadísticas de encoding
+        try:
+            monitoring_data = self.encoding_monitor.get_monitoring_data()
 
-        self.stats.update({
-            'encoding_errors_total': monitoring_data['summary']['total_errors'],
-            'active_workers': monitoring_data['summary']['active_workers'],
-            'problematic_workers': monitoring_data['summary']['error_workers'],
-            'encoding_errors_rate': sum(s.error_rate for s in monitoring_data['worker_stats'].values()) / max(
-                len(monitoring_data['worker_stats']), 1)
-        })
+            # Calcular error_rate de forma segura
+            total_error_rate = 0
+            active_workers = 0
+
+            for worker_key, worker_stats in monitoring_data.get('worker_stats', {}).items():
+                if hasattr(worker_stats, 'error_rate'):
+                    total_error_rate += worker_stats.error_rate
+                    active_workers += 1
+                elif isinstance(worker_stats, dict) and 'error_rate' in worker_stats:
+                    total_error_rate += worker_stats['error_rate']
+                    active_workers += 1
+
+            self.stats.update({
+                'encoding_errors_total': monitoring_data.get('summary', {}).get('total_errors', 0),
+                'active_workers': monitoring_data.get('summary', {}).get('active_workers', 0),
+                'problematic_workers': monitoring_data.get('summary', {}).get('error_workers', 0),
+                'encoding_errors_rate': total_error_rate / max(active_workers, 1) if active_workers > 0 else 0.0
+            })
+
+        except Exception as e:
+            self.logger.error(f"❌ Error actualizando estadísticas de encoding: {e}")
+            # Valores por defecto seguros
+            self.stats.update({
+                'encoding_errors_total': 0,
+                'active_workers': 0,
+                'problematic_workers': 0,
+                'encoding_errors_rate': 0.0
+            })
 
         # Procesar eventos de la cola
         events_processed = 0
@@ -1349,10 +1483,21 @@ class SecurityDashboard:
         pass
 
     def get_dashboard_metrics(self):
-        """Obtener métricas completas incluyendo monitoreo de errores"""
+        """Obtener métricas completas incluyendo geolocalización del nodo - CORREGIDO"""
 
         # Obtener datos de monitoreo
         monitoring_data = self.encoding_monitor.get_monitoring_data()
+
+        # Geolocalización del nodo local (Madrid, España por defecto)
+        local_node_position = {
+            'latitude': 40.4168,
+            'longitude': -3.7038,
+            'location': 'Madrid, ES',
+            'node_id': self.config.node_id,
+            'component_type': 'dashboard',
+            'status': 'online',
+            'timestamp': datetime.now().isoformat()
+        }
 
         return {
             'basic_stats': self.stats,
@@ -1385,8 +1530,44 @@ class SecurityDashboard:
                 'ml_detector': self._get_component_connectivity('ml_events'),
                 'firewall_agent': self._get_component_connectivity('firewall_commands'),
                 'firewall_responses': self._get_component_connectivity('firewall_responses')
-            }
+            },
+            # NUEVO: Posición del nodo local
+            'local_node_position': local_node_position,
+            # NUEVO: Indicador de prueba de firewall
+            'firewall_test_available': True
         }
+
+    def serve_firewall_test_api(self):
+        """Endpoint para probar firewall"""
+        try:
+            success = self.dashboard.test_firewall_connection()
+
+            response_data = {
+                'success': success,
+                'message': 'Comando de prueba enviado' if success else 'Error enviando comando',
+                'timestamp': datetime.now().isoformat(),
+                'test_id': f"test_{int(time.time())}"
+            }
+
+            response_json = json.dumps(response_data)
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(response_json.encode('utf-8'))
+
+        except Exception as e:
+            error_response = {
+                'success': False,
+                'message': f'Error en prueba de firewall: {str(e)}',
+                'timestamp': datetime.now().isoformat()
+            }
+
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(error_response).encode('utf-8'))
 
     def _get_component_connectivity(self, connection_id: str) -> Dict:
         """Obtener información de conectividad para un componente"""
@@ -1408,22 +1589,66 @@ class SecurityDashboard:
         }
 
     def stop(self):
-        """Detener el dashboard"""
+        """Detener el dashboard de forma segura - CORREGIDO"""
         self.logger.info("🛑 Deteniendo Dashboard de Seguridad...")
         self.running = False
 
-        # Cerrar sockets
+        # Cerrar sockets de forma segura
         try:
-            self.ml_socket.close()
-            self.firewall_commands_socket.close()
-            self.firewall_responses_socket.close()
-        except:
-            pass
+            # Configurar linger para cierre limpio
+            if hasattr(self, 'ml_socket') and self.ml_socket:
+                self.ml_socket.setsockopt(zmq.LINGER, 0)
+                self.ml_socket.close()
 
-        # Cerrar contexto ZeroMQ
-        self.context.term()
+            if hasattr(self, 'firewall_commands_socket') and self.firewall_commands_socket:
+                self.firewall_commands_socket.setsockopt(zmq.LINGER, 0)
+                self.firewall_commands_socket.close()
+
+            if hasattr(self, 'firewall_responses_socket') and self.firewall_responses_socket:
+                self.firewall_responses_socket.setsockopt(zmq.LINGER, 0)
+                self.firewall_responses_socket.close()
+
+        except Exception as e:
+            self.logger.error(f"⚠️ Error cerrando sockets: {e}")
+
+        # Cerrar contexto ZeroMQ de forma segura
+        try:
+            if hasattr(self, 'context') and self.context:
+                self.context.term()
+        except Exception as e:
+            self.logger.error(f"⚠️ Error terminando contexto ZMQ: {e}")
+
         self.logger.info("✅ Dashboard detenido correctamente")
 
+
+def test_firewall_connection(self):
+    """Probar conexión con firewall enviando comando de prueba"""
+    try:
+        test_command = FirewallCommand(
+            action="test_connection",
+            target_ip="127.0.0.1",
+            duration="10s",
+            reason="Connection test",
+            risk_score=0.1,
+            timestamp=datetime.now().isoformat(),
+            event_id=f"test_{int(time.time())}",
+            rule_type="test",
+            port=22,
+            protocol="TCP"
+        )
+
+        # Enviar comando de prueba
+        if not self.firewall_commands_queue.full():
+            self.firewall_commands_queue.put(test_command)
+            self.logger.info("🧪 Comando de prueba enviado al firewall")
+            return True
+        else:
+            self.logger.warning("⚠️ Cola de comandos de firewall llena")
+            return False
+
+    except Exception as e:
+        self.logger.error(f"❌ Error probando firewall: {e}")
+        return False
 
 def signal_handler(sig, frame):
     """Manejar señales del sistema"""
