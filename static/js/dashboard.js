@@ -5,6 +5,10 @@
 
 // Variable para el marcador del nodo local
 let localNodeMarker = null;
+/ Variables adicionales para el estado del dashboard
+let eventsUpdatePaused = false;
+let currentEventsFilter = 'all';
+let collapsedSections = new Set(); // Tracking de secciones colapsadas
 
 // Variables globales del dashboard
 let dashboardState = {
@@ -271,12 +275,14 @@ async function fetchAndUpdateMetrics() {
         const data = await response.json();
         dashboardState.metrics = data;
 
-        // Actualizar todos los componentes
+        // Actualizar todos los componentes (funciones originales)
         updateConnectionStatus();
         updateCounters(data.basic_stats || {});
         updateZMQConnections(data.zmq_connections || {});
         updateComponentStatus(data.component_status || {}, data.node_info || {});
-        updateEvents(data.recent_events || []);
+
+        // MEJORADO: Usar función mejorada para eventos
+        updateEventsImproved(data.recent_events || []);
 
         // NUEVO: Actualizar marcador del nodo local
         if (data.local_node_position) {
@@ -1440,6 +1446,578 @@ function showMapLegend() {
     showModal('🗺️ Leyenda del Mapa', content);
 }
 
+function toggleSection(sectionId) {
+    const content = document.getElementById(`${sectionId}-content`);
+    const toggle = document.getElementById(`${sectionId}-toggle`);
+    const section = document.getElementById(`${sectionId}-section`);
+
+    if (!content || !toggle) return;
+
+    const isCollapsed = content.classList.contains('collapsed');
+
+    if (isCollapsed) {
+        // Expandir
+        content.classList.remove('collapsed');
+        toggle.classList.remove('rotated');
+        section.classList.add('expanded');
+        collapsedSections.delete(sectionId);
+        addDebugLog('debug', `Sección ${sectionId} expandida`);
+    } else {
+        // Colapsar
+        content.classList.add('collapsed');
+        toggle.classList.add('rotated');
+        section.classList.remove('expanded');
+        collapsedSections.add(sectionId);
+        addDebugLog('debug', `Sección ${sectionId} colapsada`);
+    }
+}
+
+/**
+ * Expandir todas las secciones
+ */
+function expandAllSections() {
+    const sections = ['architecture', 'components', 'events', 'counters', 'zmq', 'debug'];
+    sections.forEach(sectionId => {
+        const content = document.getElementById(`${sectionId}-content`);
+        const toggle = document.getElementById(`${sectionId}-toggle`);
+        const section = document.getElementById(`${sectionId}-section`);
+
+        if (content && toggle) {
+            content.classList.remove('collapsed');
+            toggle.classList.remove('rotated');
+            section.classList.add('expanded');
+            collapsedSections.delete(sectionId);
+        }
+    });
+    addDebugLog('info', 'Todas las secciones expandidas');
+}
+
+/**
+ * Colapsar todas las secciones
+ */
+function collapseAllSections() {
+    const sections = ['architecture', 'components', 'events', 'counters', 'zmq', 'debug'];
+    sections.forEach(sectionId => {
+        const content = document.getElementById(`${sectionId}-content`);
+        const toggle = document.getElementById(`${sectionId}-toggle`);
+        const section = document.getElementById(`${sectionId}-section`);
+
+        if (content && toggle) {
+            content.classList.add('collapsed');
+            toggle.classList.add('rotated');
+            section.classList.remove('expanded');
+            collapsedSections.add(sectionId);
+        }
+    });
+    addDebugLog('info', 'Todas las secciones colapsadas');
+}
+
+/**
+ * ============================================================================
+ * FUNCIONES PARA EVENTOS ENTRANTES
+ * ============================================================================
+ */
+
+/**
+ * Actualizar lista de eventos
+ */
+function updateEventsList(events) {
+    if (eventsUpdatePaused || !events || events.length === 0) return;
+
+    const eventsList = document.getElementById('events-list');
+    const eventsCount = document.getElementById('live-events-count');
+
+    if (!eventsList) return;
+
+    // Limpiar placeholder si existe
+    if (eventsList.querySelector('.no-events-placeholder')) {
+        eventsList.innerHTML = '';
+    }
+
+    // Actualizar contador
+    if (eventsCount) {
+        eventsCount.textContent = events.length;
+    }
+
+    // Añadir eventos nuevos al principio
+    events.forEach(event => {
+        if (!document.querySelector(`[data-event-id="${event.id}"]`)) {
+            const eventElement = createEventElement(event);
+            eventsList.insertBefore(eventElement, eventsList.firstChild);
+        }
+    });
+
+    // Mantener solo los últimos 50 eventos
+    const eventItems = eventsList.querySelectorAll('.event-item');
+    if (eventItems.length > 50) {
+        for (let i = 50; i < eventItems.length; i++) {
+            eventItems[i].remove();
+        }
+    }
+
+    // Aplicar filtro actual
+    filterEvents();
+}
+
+/**
+ * Crear elemento de evento
+ */
+function createEventElement(event) {
+    const eventDiv = document.createElement('div');
+    eventDiv.className = `event-item risk-${getRiskLevel(event.risk_score)} new-event`;
+    eventDiv.setAttribute('data-event-id', event.id);
+    eventDiv.onclick = () => showEventDetailsModal(event.id);
+
+    const riskPercentage = Math.round(event.risk_score * 100);
+    const eventTime = formatTime(event.timestamp);
+
+    eventDiv.innerHTML = `
+        <div class="event-header">
+            <span class="event-time">${eventTime}</span>
+            <span class="event-risk ${getRiskLevel(event.risk_score)}">${riskPercentage}%</span>
+        </div>
+        <div class="event-details">
+            <div>
+                <span class="event-source">${event.source_ip}</span>
+                →
+                <span class="event-target">${event.target_ip}</span>
+                ${event.port ? `:${event.port}` : ''}
+            </div>
+            <div>
+                <span class="event-type">${event.attack_type || event.event_type || 'unknown'}</span>
+                ${event.protocol ? `• ${event.protocol}` : ''}
+                ${event.location ? `• ${event.location}` : ''}
+            </div>
+        </div>
+        <div class="event-actions">
+            <button class="event-action-btn block" onclick="blockEventIP('${event.source_ip}', event)" title="Bloquear IP">
+                🛡️ Block
+            </button>
+            <button class="event-action-btn details" onclick="showEventDetailsModal('${event.id}'); event.stopPropagation()" title="Ver detalles">
+                🔍 Details
+            </button>
+            <button class="event-action-btn map" onclick="focusEventOnMap('${event.id}'); event.stopPropagation()" title="Ver en mapa">
+                🗺️ Map
+            </button>
+        </div>
+    `;
+
+    // Remover la clase new-event después de la animación
+    setTimeout(() => {
+        eventDiv.classList.remove('new-event');
+    }, 2000);
+
+    return eventDiv;
+}
+
+/**
+ * Filtrar eventos por tipo
+ */
+function filterEvents() {
+    const filter = document.getElementById('events-filter').value;
+    const eventItems = document.querySelectorAll('.event-item');
+
+    currentEventsFilter = filter;
+
+    eventItems.forEach(item => {
+        const shouldShow = filter === 'all' || item.classList.contains(`risk-${filter}`);
+        item.style.display = shouldShow ? 'block' : 'none';
+    });
+
+    addDebugLog('debug', `Eventos filtrados por: ${filter}`);
+}
+
+/**
+ * Limpiar lista de eventos
+ */
+function clearEventsList() {
+    const eventsList = document.getElementById('events-list');
+    const eventsCount = document.getElementById('live-events-count');
+
+    if (eventsList) {
+        eventsList.innerHTML = `
+            <div class="no-events-placeholder">
+                <i class="fas fa-inbox"></i>
+                <p>Lista de eventos limpiada</p>
+                <button onclick="sendTestFirewallEvent()" class="btn btn-primary">
+                    🧪 Generar Evento de Prueba
+                </button>
+            </div>
+        `;
+    }
+
+    if (eventsCount) {
+        eventsCount.textContent = '0';
+    }
+
+    addDebugLog('info', 'Lista de eventos limpiada');
+    showToast('Lista de eventos limpiada', 'info');
+}
+
+/**
+ * Pausar/reanudar actualización de eventos
+ */
+function pauseEventsUpdate() {
+    eventsUpdatePaused = !eventsUpdatePaused;
+    const button = document.getElementById('pause-events-btn');
+
+    if (button) {
+        const icon = button.querySelector('i');
+        if (eventsUpdatePaused) {
+            icon.className = 'fas fa-play';
+            button.classList.add('paused');
+            button.title = 'Reanudar actualización';
+            addDebugLog('warning', 'Actualización de eventos pausada');
+            showToast('Actualización de eventos pausada', 'warning');
+        } else {
+            icon.className = 'fas fa-pause';
+            button.classList.remove('paused');
+            button.title = 'Pausar actualización';
+            addDebugLog('info', 'Actualización de eventos reanudada');
+            showToast('Actualización de eventos reanudada', 'info');
+        }
+    }
+}
+
+/**
+ * ============================================================================
+ * FUNCIONES PARA ACCIONES CON EVENTOS
+ * ============================================================================
+ */
+
+/**
+ * Bloquear IP de un evento
+ */
+async function blockEventIP(sourceIP, event) {
+    event.stopPropagation();
+
+    try {
+        const confirmation = confirm(`¿Bloquear la IP ${sourceIP}?`);
+        if (!confirmation) return;
+
+        addDebugLog('warning', `Enviando comando de bloqueo para IP: ${sourceIP}`);
+
+        const blockCommand = {
+            action: 'block_ip',
+            target_ip: sourceIP,
+            duration: '1h',
+            reason: `Manual block from dashboard - suspicious activity`,
+            risk_score: 0.9,
+            timestamp: new Date().toISOString(),
+            event_id: `manual_block_${Date.now()}`,
+            rule_type: 'iptables',
+            port: null,
+            protocol: 'all'
+        };
+
+        // Simular envío del comando (en implementación real iría al firewall)
+        const response = await fetch('/api/test-firewall', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(blockCommand)
+        });
+
+        if (response.ok) {
+            addDebugLog('info', `✅ Comando de bloqueo enviado para ${sourceIP}`);
+            showToast(`IP ${sourceIP} enviada para bloqueo`, 'success');
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+    } catch (error) {
+        addDebugLog('error', `❌ Error bloqueando IP ${sourceIP}: ${error.message}`);
+        showToast(`Error bloqueando IP: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Enfocar evento en el mapa
+ */
+function focusEventOnMap(eventId, event) {
+    if (event) event.stopPropagation();
+
+    const event_data = dashboardState.events.find(e => e.id === eventId);
+    if (!event_data) {
+        showToast('Evento no encontrado', 'error');
+        return;
+    }
+
+    if (event_data.latitude && event_data.longitude && dashboardState.map) {
+        dashboardState.map.setView([event_data.latitude, event_data.longitude], 10);
+
+        // Encontrar y abrir el popup del marcador correspondiente
+        dashboardState.markers.forEach(marker => {
+            if (marker.eventId === eventId) {
+                marker.openPopup();
+            }
+        });
+
+        addDebugLog('info', `Mapa enfocado en evento: ${event_data.source_ip} -> ${event_data.target_ip}`);
+        showToast('Vista centrada en evento', 'info');
+    } else {
+        showToast('Evento sin coordenadas geográficas', 'warning');
+    }
+}
+
+/**
+ * ============================================================================
+ * FUNCIÓN PARA ENVIAR EVENTO DE PRUEBA AL FIREWALL
+ * ============================================================================
+ */
+
+/**
+ * Enviar evento de prueba al firewall
+ */
+async function sendTestFirewallEvent() {
+    try {
+        addDebugLog('info', '🧪 Generando evento de prueba para firewall...');
+
+        const testEvent = {
+            id: `test_event_${Date.now()}`,
+            source_ip: '192.168.1.99',
+            target_ip: '10.0.0.1',
+            risk_score: 0.85, // Alto riesgo para activar firewall
+            anomaly_score: 0.8,
+            timestamp: new Date().toISOString(),
+            attack_type: 'test_intrusion',
+            protocol: 'TCP',
+            port: 22,
+            packets: 10,
+            bytes: 1024,
+            latitude: 40.4168,
+            longitude: -3.7038,
+            location: 'Madrid, ES (Test)',
+            ml_models_scores: {
+                'isolation_forest': 0.85,
+                'test_model': 0.9
+            },
+            event_type: 'test_attack',
+            description: 'Manual test event for firewall verification',
+            test_marker: 'MANUAL_TEST'
+        };
+
+        // Añadir evento a la lista local inmediatamente
+        dashboardState.events.unshift(testEvent);
+        updateEventsList([testEvent]);
+
+        // Añadir al mapa
+        addEventToMap(testEvent);
+
+        // Simular envío al backend (que debería generar comando de firewall)
+        const response = await fetch('/api/test-firewall', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ...testEvent,
+                action: 'test_event',
+                manual_trigger: true
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            addDebugLog('info', `✅ Evento de prueba enviado: ${result.message || 'Success'}`);
+            showToast('🧪 Evento de prueba generado exitosamente', 'success');
+
+            // Mostrar amenaza indicator
+            showThreatIndicator();
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+    } catch (error) {
+        addDebugLog('error', `❌ Error enviando evento de prueba: ${error.message}`);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * ============================================================================
+ * MEJORAS EN EL MAPA
+ * ============================================================================
+ */
+
+/**
+ * Mejorar inicialización del mapa con tiles más visibles
+ */
+function initializeMapImproved() {
+    dashboardState.map = L.map('map').setView(DASHBOARD_CONFIG.MAP_CENTER, DASHBOARD_CONFIG.MAP_ZOOM);
+
+    // Usar tiles con mejor contraste para tema oscuro
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors © CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19,
+        // Aplicar filtros para mejor visibilidad
+        className: 'dark-map-tiles'
+    }).addTo(dashboardState.map);
+
+    // Añadir overlay con contornos de países más visibles
+    const countryBordersStyle = {
+        color: '#00ff88',
+        weight: 2,
+        opacity: 0.8,
+        fillOpacity: 0.1,
+        fillColor: '#004400'
+    };
+
+    // NUEVO: Añadir marcador del nodo local inmediatamente
+    addLocalNodeMarker();
+
+    addDebugLog('info', `Mapa mejorado inicializado en ${DASHBOARD_CONFIG.MAP_CENTER.join(', ')}`);
+}
+
+/**
+ * Aplicar filtros CSS adicionales al mapa
+ */
+function applyMapFilters() {
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+        // Añadir clase para aplicar filtros CSS mejorados
+        mapContainer.classList.add('enhanced-dark-map');
+    }
+}
+
+/**
+ * ============================================================================
+ * FUNCIONES MEJORADAS DE ACTUALIZACIÓN
+ * ============================================================================
+ */
+
+/**
+ * Actualizar eventos mejorada - incluye lista de eventos
+ */
+function updateEventsImproved(events) {
+    if (!events || events.length === 0) return;
+
+    // Actualizar eventos en el mapa (función original)
+    updateEvents(events);
+
+    // NUEVO: Actualizar lista de eventos en sidebar
+    updateEventsList(events);
+
+    // NUEVO: Actualizar estadísticas específicas de eventos
+    updateEventsStatistics(events);
+}
+
+/**
+ * Actualizar estadísticas específicas de eventos
+ */
+function updateEventsStatistics(events) {
+    const highRiskEvents = events.filter(e => e.risk_score > 0.8).length;
+    const mediumRiskEvents = events.filter(e => e.risk_score > 0.5 && e.risk_score <= 0.8).length;
+    const lowRiskEvents = events.filter(e => e.risk_score <= 0.5).length;
+
+    // Actualizar contadores si existen
+    updateElement('high-risk-count', highRiskEvents);
+
+    addDebugLog('debug', `Estadísticas de eventos: Alto: ${highRiskEvents}, Medio: ${mediumRiskEvents}, Bajo: ${lowRiskEvents}`);
+}
+
+/**
+ * ============================================================================
+ * MEJORAS EN fetchAndUpdateMetrics
+ * ============================================================================
+ */
+
+/**
+ * CORRECCIÓN: Sobrescribir fetchAndUpdateMetrics original para incluir eventos
+ */
+async function fetchAndUpdateMetricsImproved() {
+    try {
+        const response = await fetch('/api/metrics');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        dashboardState.metrics = data;
+
+        // Actualizar todos los componentes (funciones originales)
+        updateConnectionStatus();
+        updateCounters(data.basic_stats || {});
+        updateZMQConnections(data.zmq_connections || {});
+        updateComponentStatus(data.component_status || {}, data.node_info || {});
+
+        // MEJORADO: Usar función mejorada para eventos
+        updateEventsImproved(data.recent_events || []);
+
+        // NUEVO: Actualizar marcador del nodo local
+        if (data.local_node_position) {
+            updateLocalNodeMarker(data.local_node_position);
+        }
+
+        // Log de debug ocasional
+        if (Math.random() < 0.1) { // 10% de probabilidad
+            addDebugLog('debug', `Métricas actualizadas: ${data.basic_stats?.events_received || 0} eventos`);
+        }
+
+    } catch (error) {
+        addDebugLog('error', `Error obteniendo métricas: ${error.message}`);
+        updateConnectionStatus(CONNECTION_STATES.ERROR);
+        showToast(`Error de conexión: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * ============================================================================
+ * INICIALIZACIÓN MEJORADA
+ * ============================================================================
+ */
+
+/**
+ * Sobrescribir inicialización para incluir nuevas funcionalidades
+ */
+function initializeDashboardImproved() {
+    console.log('🚀 Inicializando SCADA Dashboard Mejorado...');
+
+    // Inicializar componentes mejorados
+    initializeMapImproved();
+    initializeEventListeners();
+
+    // NUEVO: Aplicar filtros al mapa
+    applyMapFilters();
+
+    // NUEVO: Configurar secciones colapsables (empezar con todas expandidas)
+    setTimeout(() => {
+        // Solo colapsar debug por defecto
+        toggleSection('debug');
+    }, 1000);
+
+    // Iniciar actualizaciones periódicas mejoradas
+    startPeriodicUpdatesImproved();
+
+    // Logs iniciales
+    addDebugLog('info', 'Sistema SCADA Dashboard v2.2 iniciado');
+    addDebugLog('info', 'Arquitectura 3 puertos configurada');
+    addDebugLog('info', 'Mapa geolocalizado y eventos en tiempo real activados');
+    addDebugLog('info', 'Cajas minimizables habilitadas');
+
+    // Actualizar reloj
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    console.log('✅ Dashboard mejorado inicializado correctamente');
+}
+
+/**
+ * Iniciar actualizaciones periódicas mejoradas
+ */
+function startPeriodicUpdatesImproved() {
+    if (dashboardState.updateInterval) {
+        clearInterval(dashboardState.updateInterval);
+    }
+
+    dashboardState.updateInterval = setInterval(fetchAndUpdateMetricsImproved, DASHBOARD_CONFIG.UPDATE_INTERVAL);
+    fetchAndUpdateMetricsImproved(); // Primera actualización inmediata
+
+    addDebugLog('info', `Actualizaciones periódicas mejoradas iniciadas (${DASHBOARD_CONFIG.UPDATE_INTERVAL}ms)`);
+}
 
 // Exponer funciones globales para uso en HTML
 window.initializeDashboard = initializeDashboard;
@@ -1462,3 +2040,17 @@ window.testAllConnections = testAllConnections;
 window.testFirewallConnection = testFirewallConnection;
 window.centerMapOnLocalNode = centerMapOnLocalNode;
 window.showMapLegend = showMapLegend;
+window.toggleSection = toggleSection;
+window.expandAllSections = expandAllSections;
+window.collapseAllSections = collapseAllSections;
+window.updateEventsList = updateEventsList;
+window.clearEventsList = clearEventsList;
+window.pauseEventsUpdate = pauseEventsUpdate;
+window.filterEvents = filterEvents;
+window.blockEventIP = blockEventIP;
+window.focusEventOnMap = focusEventOnMap;
+window.sendTestFirewallEvent = sendTestFirewallEvent;
+
+// Sobrescribir funciones originales con versiones mejoradas
+window.initializeDashboard = initializeDashboardImproved;
+window.fetchAndUpdateMetrics = fetchAndUpdateMetricsImproved;
