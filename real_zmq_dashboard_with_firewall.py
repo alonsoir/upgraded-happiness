@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2
-INTEGRADO: UTF-8 + Monitoreo de Errores + Conectividad Detallada
+Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2.1
+CORREGIDO: Timestamp handling + Worker stats + ZMQ cleanup
 """
 from typing import Dict, List, Optional, Any, Set
 import zmq
@@ -1113,7 +1113,7 @@ class SecurityDashboard:
                     'promiscuous_pid': getattr(event, 'promiscuous_pid', 0),
                     'geoip_enricher_pid': getattr(event, 'geoip_enricher_pid', 0),
                     'ml_detector_pid': getattr(event, 'ml_detector_pid', 0),
-                    'dashboard_pid': getattr(event, 'dashboard_pid', os.getpid()),  # CAMPO 39 - CRÍTICO
+                    'dashboard_pid': self.get_safe_dashboard_pid(event),  # CAMPO 39 - CRÍTICO
                     'firewall_pid': getattr(event, 'firewall_pid', 0),
 
                     # 📊 TIMESTAMPS DE PROCESAMIENTO POR COMPONENTE - POSICIÓN 41-45
@@ -1159,6 +1159,23 @@ class SecurityDashboard:
                         dict(getattr(event, 'component_metadata', {}))
                     )
                 }
+                # Después de la línea donde se crea parsed_event, añadir:
+                # Validación adicional de PIDs para evitar problemas de encoding
+                for pid_field in ['dashboard_pid', 'promiscuous_pid', 'ml_detector_pid', 'firewall_pid',
+                                  'geoip_enricher_pid']:
+                    if pid_field in parsed_event:
+                        try:
+                            # Asegurar que todos los PIDs son strings válidos
+                            pid_value = parsed_event[pid_field]
+                            if isinstance(pid_value, (int, float)):
+                                parsed_event[pid_field] = str(int(pid_value))
+                            elif isinstance(pid_value, bytes):
+                                parsed_event[pid_field] = pid_value.decode('utf-8', errors='ignore')
+                            elif not isinstance(pid_value, str):
+                                parsed_event[pid_field] = str(pid_value)
+                        except Exception as e:
+                            self.logger.debug(f"Error validando {pid_field}: {e}")
+                            parsed_event[pid_field] = "0"
 
                 # Actualizar el dashboard_pid en el evento si es necesario
                 if hasattr(event, 'dashboard_pid') and event.dashboard_pid == 0:
@@ -1278,7 +1295,7 @@ class SecurityDashboard:
             'promiscuous_pid': 0,
             'geoip_enricher_pid': 0,
             'ml_detector_pid': 0,
-            'dashboard_pid': os.getpid(),  # CAMPO 39 - ESTE ES EL CRÍTICO
+            'dashboard_pid': self.get_safe_dashboard_pid(),  # CAMPO 39 - ESTE ES EL CRÍTICO
             'firewall_pid': 0,
 
             # 📊 TIMESTAMPS DE PROCESAMIENTO (POSICIONES 41-45)
@@ -1353,7 +1370,7 @@ class SecurityDashboard:
             'description': f'Legacy event from worker {worker_id}',
 
             # PIDs distribuidos
-            'dashboard_pid': os.getpid(),
+            'dashboard_pid': self.get_safe_dashboard_pid(),
             'worker_id': worker_id,
             'node_id': self.config.node_id,
 
@@ -1444,6 +1461,30 @@ class SecurityDashboard:
             ml_models_scores=data.get('ml_models_scores'),
             protobuf_data=data  # Guardar todos los datos del protobuf
         )
+
+    def get_safe_dashboard_pid(self, event=None) -> str:
+        """Obtener dashboard_pid de forma segura, siempre como string"""
+        try:
+            if event is not None:
+                pid = getattr(event, 'dashboard_pid', None)
+                if pid is not None:
+                    if isinstance(pid, (int, float)) and pid > 0:
+                        return str(int(pid))
+                    elif isinstance(pid, str) and pid.isdigit():
+                        return pid
+                    elif isinstance(pid, bytes):
+                        try:
+                            decoded = pid.decode('utf-8', errors='ignore')
+                            if decoded.isdigit():
+                                return decoded
+                        except:
+                            pass
+
+            return str(os.getpid())
+
+        except Exception as e:
+            self.logger.warning(f"Error obteniendo dashboard_pid: {e}")
+            return str(os.getpid())
 
     def firewall_commands_processor(self, worker_id: int):
         """Procesar y enviar comandos de firewall"""
@@ -1678,67 +1719,117 @@ class SecurityDashboard:
         self.logger.info(f"✅ Actualizaciones periódicas iniciadas (intervalo: {self.config.stats_interval}s)")
 
     def update_statistics(self):
-        """Actualizar estadísticas del dashboard - CORREGIDO"""
-        # Calcular eventos por minuto
-        current_time = time.time()
-        events_in_last_minute = len([e for e in self.events
-                                     if (current_time - time.mktime(
-                time.strptime(e.timestamp[:19], '%Y-%m-%dT%H:%M:%S'))) < 60])
-
-        self.stats['events_per_minute'] = events_in_last_minute
-        self.stats['high_risk_events'] = len([e for e in self.events if e.risk_score > 0.8])
-        self.stats['geographic_distribution'] = len(set(e.location for e in self.events if e.location))
-        self.stats['uptime_seconds'] = int(time.time() - self.start_time)
-        self.stats['last_update'] = datetime.now().isoformat()
-
-        # CORRECCIÓN: Manejo seguro de estadísticas de encoding
+        """Actualizar estadísticas del dashboard - CORREGIDO COMPLETAMENTE"""
         try:
-            monitoring_data = self.encoding_monitor.get_monitoring_data()
+            # Calcular eventos por minuto de forma segura
+            current_time = time.time()
+            events_in_last_minute = 0
 
-            # Calcular error_rate de forma segura
-            total_error_rate = 0
-            active_workers = 0
+            for event in self.events:
+                try:
+                    # CORRECCIÓN CRÍTICA: Manejar timestamp como int o string
+                    event_timestamp = event.timestamp
 
-            for worker_key, worker_stats in monitoring_data.get('worker_stats', {}).items():
-                if hasattr(worker_stats, 'error_rate'):
-                    total_error_rate += worker_stats.error_rate
-                    active_workers += 1
-                elif isinstance(worker_stats, dict) and 'error_rate' in worker_stats:
-                    total_error_rate += worker_stats['error_rate']
-                    active_workers += 1
+                    if isinstance(event_timestamp, (int, float)):
+                        # Unix timestamp en milliseconds o seconds
+                        if event_timestamp > 1e12:  # Milliseconds
+                            event_time = event_timestamp / 1000.0
+                        else:  # Seconds
+                            event_time = float(event_timestamp)
+                    else:
+                        # String timestamp - parsear de forma segura
+                        timestamp_str = str(event_timestamp)
+                        if 'T' in timestamp_str:
+                            # ISO format: 2025-07-17T14:43:59.617000
+                            timestamp_str = timestamp_str[:19]  # Solo hasta segundos
+                            event_time = time.mktime(time.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S'))
+                        else:
+                            # Otros formatos - usar tiempo actual como fallback
+                            event_time = current_time
 
-            self.stats.update({
-                'encoding_errors_total': monitoring_data.get('summary', {}).get('total_errors', 0),
-                'active_workers': monitoring_data.get('summary', {}).get('active_workers', 0),
-                'problematic_workers': monitoring_data.get('summary', {}).get('error_workers', 0),
-                'encoding_errors_rate': total_error_rate / max(active_workers, 1) if active_workers > 0 else 0.0
-            })
+                    # Verificar si el evento es de hace menos de 60 segundos
+                    if (current_time - event_time) < 60:
+                        events_in_last_minute += 1
+
+                except (ValueError, TypeError, AttributeError) as e:
+                    # Error parseando timestamp - ignorar este evento
+                    self.logger.debug(f"Error parseando timestamp del evento: {e}")
+                    continue
+
+            self.stats['events_per_minute'] = events_in_last_minute
+            self.stats['high_risk_events'] = len([e for e in self.events if e.risk_score > 0.8])
+            self.stats['geographic_distribution'] = len(set(e.location for e in self.events if e.location))
+            self.stats['uptime_seconds'] = int(time.time() - self.start_time)
+            self.stats['last_update'] = datetime.now().isoformat()
+
+            # CORRECCIÓN: Manejo seguro de estadísticas de encoding
+            try:
+                monitoring_data = self.encoding_monitor.get_monitoring_data()
+                summary = monitoring_data.get('summary', {})
+
+                # Calcular error_rate de forma completamente segura
+                total_error_rate = 0.0
+                active_workers = 0
+                worker_stats = monitoring_data.get('worker_stats', {})
+
+                for worker_key, worker_data in worker_stats.items():
+                    try:
+                        # worker_data puede ser un dict (del asdict) o un objeto WorkerStats
+                        if isinstance(worker_data, dict):
+                            error_rate = worker_data.get('error_rate', 0.0)
+                            status = worker_data.get('status', 'idle')
+                        else:
+                            error_rate = getattr(worker_data, 'error_rate', 0.0)
+                            status = getattr(worker_data, 'status', 'idle')
+
+                        if status == 'active':
+                            total_error_rate += float(error_rate)
+                            active_workers += 1
+
+                    except (AttributeError, TypeError, ValueError) as e:
+                        self.logger.debug(f"Error procesando worker stats {worker_key}: {e}")
+                        continue
+
+                self.stats.update({
+                    'encoding_errors_total': summary.get('total_errors', 0),
+                    'active_workers': summary.get('active_workers', 0),
+                    'problematic_workers': summary.get('error_workers', 0),
+                    'encoding_errors_rate': total_error_rate / max(active_workers, 1) if active_workers > 0 else 0.0
+                })
+
+            except Exception as e:
+                self.logger.error(f"❌ Error actualizando estadísticas de encoding: {e}")
+                # Valores por defecto seguros
+                self.stats.update({
+                    'encoding_errors_total': 0,
+                    'active_workers': 0,
+                    'problematic_workers': 0,
+                    'encoding_errors_rate': 0.0
+                })
+
+            # Procesar eventos de la cola de forma segura
+            events_processed = 0
+            while not self.ml_events_queue.empty() and events_processed < 100:
+                try:
+                    event = self.ml_events_queue.get_nowait()
+                    self.events.append(event)
+                    events_processed += 1
+                    self.stats['events_processed'] += 1
+
+                    # Mantener solo los últimos 1000 eventos
+                    if len(self.events) > 1000:
+                        self.events = self.events[-1000:]
+
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    self.logger.error(f"❌ Error procesando evento de la cola: {e}")
+                    break
 
         except Exception as e:
-            self.logger.error(f"❌ Error actualizando estadísticas de encoding: {e}")
-            # Valores por defecto seguros
-            self.stats.update({
-                'encoding_errors_total': 0,
-                'active_workers': 0,
-                'problematic_workers': 0,
-                'encoding_errors_rate': 0.0
-            })
-
-        # Procesar eventos de la cola
-        events_processed = 0
-        while not self.ml_events_queue.empty() and events_processed < 100:
-            try:
-                event = self.ml_events_queue.get_nowait()
-                self.events.append(event)
-                events_processed += 1
-                self.stats['events_processed'] += 1
-
-                # Mantener solo los últimos 1000 eventos
-                if len(self.events) > 1000:
-                    self.events = self.events[-1000:]
-
-            except queue.Empty:
-                break
+            self.logger.error(f"❌ Error crítico en update_statistics: {e}")
+            # Fallback para evitar crash
+            self.stats['last_update'] = datetime.now().isoformat()
 
     def update_zmq_connection_stats(self):
         """Actualizar estadísticas de conexiones ZeroMQ"""
@@ -1781,8 +1872,12 @@ class SecurityDashboard:
     def get_dashboard_metrics(self):
         """Obtener métricas completas incluyendo geolocalización del nodo - CORREGIDO"""
 
-        # Obtener datos de monitoreo
-        monitoring_data = self.encoding_monitor.get_monitoring_data()
+        # Obtener datos de monitoreo de forma segura
+        try:
+            monitoring_data = self.encoding_monitor.get_monitoring_data()
+        except Exception as e:
+            self.logger.error(f"Error obteniendo datos de monitoreo: {e}")
+            monitoring_data = {'summary': {}, 'worker_stats': {}, 'connection_info': {}}
 
         # Geolocalización del nodo local (Madrid, España por defecto)
         local_node_position = {
@@ -1795,12 +1890,32 @@ class SecurityDashboard:
             'timestamp': datetime.now().isoformat()
         }
 
+        # Convertir conexiones ZMQ de forma segura
+        safe_zmq_connections = {}
+        for k, v in self.zmq_connections.items():
+            try:
+                if hasattr(v, '__dict__'):
+                    safe_zmq_connections[k] = asdict(v)
+                else:
+                    safe_zmq_connections[k] = v
+            except Exception as e:
+                self.logger.debug(f"Error convirtiendo conexión ZMQ {k}: {e}")
+                safe_zmq_connections[k] = {'error': str(e)}
+
+        # Convertir component status de forma segura
+        safe_component_status = {}
+        for k, v in self.component_status.items():
+            try:
+                safe_component_status[k] = asdict(v)
+            except Exception as e:
+                self.logger.debug(f"Error convirtiendo component status {k}: {e}")
+                safe_component_status[k] = {'error': str(e)}
+
         return {
             'basic_stats': self.stats,
             'detailed_metrics': self.detailed_metrics,
-            'zmq_connections': {k: asdict(v) if hasattr(v, '__dict__') else v
-                                for k, v in self.zmq_connections.items()},
-            'component_status': {k: asdict(v) for k, v in self.component_status.items()},
+            'zmq_connections': safe_zmq_connections,
+            'component_status': safe_component_status,
             'recent_events': [asdict(e) for e in self.events[-50:]],
             'recent_commands': [asdict(c) for c in self.firewall_commands[-20:]],
             'node_info': {
@@ -1884,73 +1999,78 @@ class SecurityDashboard:
             'handshake_completed': conn_info.handshake_completed
         }
 
+    def test_firewall_connection(self):
+        """Probar conexión con firewall enviando comando de prueba"""
+        try:
+            test_command = FirewallCommand(
+                action="test_connection",
+                target_ip="127.0.0.1",
+                duration="10s",
+                reason="Connection test",
+                risk_score=0.1,
+                timestamp=datetime.now().isoformat(),
+                event_id=f"test_{int(time.time())}",
+                rule_type="test",
+                port=22,
+                protocol="TCP"
+            )
+
+            # Enviar comando de prueba
+            if not self.firewall_commands_queue.full():
+                self.firewall_commands_queue.put(test_command)
+                self.logger.info("🧪 Comando de prueba enviado al firewall")
+                return True
+            else:
+                self.logger.warning("⚠️ Cola de comandos de firewall llena")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ Error probando firewall: {e}")
+            return False
+
     def stop(self):
-        """Detener el dashboard de forma segura - CORREGIDO"""
+        """Detener el dashboard de forma segura - CORREGIDO COMPLETAMENTE"""
         self.logger.info("🛑 Deteniendo Dashboard de Seguridad...")
         self.running = False
 
-        # Cerrar sockets de forma segura
+        # Cerrar sockets de forma segura con timeouts
         try:
-            # Configurar linger para cierre limpio
+            # Configurar linger para cierre limpio pero rápido
             if hasattr(self, 'ml_socket') and self.ml_socket:
-                self.ml_socket.setsockopt(zmq.LINGER, 0)
+                self.ml_socket.setsockopt(zmq.LINGER, 100)  # 100ms max
                 self.ml_socket.close()
+                self.logger.debug("✅ ML socket cerrado")
 
             if hasattr(self, 'firewall_commands_socket') and self.firewall_commands_socket:
-                self.firewall_commands_socket.setsockopt(zmq.LINGER, 0)
+                self.firewall_commands_socket.setsockopt(zmq.LINGER, 100)
                 self.firewall_commands_socket.close()
+                self.logger.debug("✅ Firewall commands socket cerrado")
 
             if hasattr(self, 'firewall_responses_socket') and self.firewall_responses_socket:
-                self.firewall_responses_socket.setsockopt(zmq.LINGER, 0)
+                self.firewall_responses_socket.setsockopt(zmq.LINGER, 100)
                 self.firewall_responses_socket.close()
+                self.logger.debug("✅ Firewall responses socket cerrado")
 
         except Exception as e:
             self.logger.error(f"⚠️ Error cerrando sockets: {e}")
 
-        # Cerrar contexto ZeroMQ de forma segura
+        # Cerrar contexto ZeroMQ de forma segura con timeout
         try:
             if hasattr(self, 'context') and self.context:
+                # Dar tiempo para que los sockets se cierren
+                time.sleep(0.2)
                 self.context.term()
+                self.logger.debug("✅ Contexto ZMQ terminado")
         except Exception as e:
             self.logger.error(f"⚠️ Error terminando contexto ZMQ: {e}")
 
         self.logger.info("✅ Dashboard detenido correctamente")
 
 
-def test_firewall_connection(self):
-    """Probar conexión con firewall enviando comando de prueba"""
-    try:
-        test_command = FirewallCommand(
-            action="test_connection",
-            target_ip="127.0.0.1",
-            duration="10s",
-            reason="Connection test",
-            risk_score=0.1,
-            timestamp=datetime.now().isoformat(),
-            event_id=f"test_{int(time.time())}",
-            rule_type="test",
-            port=22,
-            protocol="TCP"
-        )
-
-        # Enviar comando de prueba
-        if not self.firewall_commands_queue.full():
-            self.firewall_commands_queue.put(test_command)
-            self.logger.info("🧪 Comando de prueba enviado al firewall")
-            return True
-        else:
-            self.logger.warning("⚠️ Cola de comandos de firewall llena")
-            return False
-
-    except Exception as e:
-        self.logger.error(f"❌ Error probando firewall: {e}")
-        return False
-
 def signal_handler(sig, frame):
     """Manejar señales del sistema"""
     print("\n🛑 Recibida señal de terminación")
     sys.exit(0)
-
 
 def main():
     """Función principal con configuración estricta"""
