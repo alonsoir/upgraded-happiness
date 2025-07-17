@@ -325,6 +325,215 @@
     <!-- Notificaciones toast -->
     <div class="toast-container" id="toast-container"></div>
 
+    <!-- Secciones adicionales para el sidebar del dashboard -->
+<!-- Insertar después de la sección de componentes existente -->
+
+<!-- Panel de Monitoreo de Errores UTF-8 -->
+<div class="encoding-monitoring-section">
+    <div class="section-title" onclick="showEncodingMonitoringOverview()">
+        🔍 Monitoreo de Errores UTF-8 <i class="fas fa-exclamation-triangle clickable-icon"></i>
+        <span class="error-count-badge" id="error-count-badge">0</span>
+    </div>
+
+    <!-- Resumen de errores -->
+    <div class="encoding-summary">
+        <div class="encoding-metric" onclick="showEncodingErrorsDetail()">
+            <span class="metric-label">Total Errores:</span>
+            <span class="metric-value error" id="encoding-errors-total">0</span>
+        </div>
+        <div class="encoding-metric" onclick="showEncodingRateDetail()">
+            <span class="metric-label">Tasa Error:</span>
+            <span class="metric-value warning" id="encoding-error-rate">0.0%</span>
+        </div>
+        <div class="encoding-metric" onclick="showActiveWorkersDetail()">
+            <span class="metric-label">Workers Activos:</span>
+            <span class="metric-value success" id="active-workers-count">0</span>
+        </div>
+        <div class="encoding-metric" onclick="showProblematicWorkersDetail()">
+            <span class="metric-label">Workers Problema:</span>
+            <span class="metric-value error" id="problematic-workers-count">0</span>
+        </div>
+    </div>
+
+    <!-- Log de errores recientes -->
+    <div class="encoding-errors-log-container">
+        <div class="log-header" onclick="toggleEncodingErrorsLog()">
+            <span>📋 Errores Recientes</span>
+            <i class="fas fa-chevron-down toggle-icon" id="encoding-log-toggle"></i>
+        </div>
+        <div class="encoding-errors-log" id="encoding-errors-log">
+            <div class="log-placeholder">No hay errores de encoding recientes</div>
+        </div>
+    </div>
+
+    <!-- Estadísticas por Worker -->
+    <div class="worker-stats-container" id="worker-stats-container">
+        <!-- Se llena dinámicamente -->
+    </div>
+</div>
+
+<!-- Panel de Conectividad Detallada -->
+<div class="detailed-connectivity-section">
+    <div class="section-title" onclick="showDetailedConnectivityOverview()">
+        🌐 Conectividad Detallada <i class="fas fa-network-wired clickable-icon"></i>
+    </div>
+
+    <!-- ML Detector Connection -->
+    <div class="detailed-connection ml-detector" onclick="showConnectionDetail('ml_events')">
+        <div class="connection-header">
+            <span class="connection-name">📡 ML Detector</span>
+            <span class="connection-status" id="ml-detector-connection-status">UNKNOWN</span>
+        </div>
+        <div class="connection-details">
+            <div class="detail-row">
+                <span class="detail-label">Node ID:</span>
+                <span class="detail-value" id="ml-detector-node-id">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Endpoint:</span>
+                <span class="detail-value" id="ml-detector-endpoint">tcp://localhost:5570</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Remote IP:</span>
+                <span class="detail-value" id="ml-detector-remote-ip">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Version:</span>
+                <span class="detail-value" id="ml-detector-version">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Handshake:</span>
+                <span class="handshake-indicator" id="ml-detector-handshake">⏳ Pending</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Last Seen:</span>
+                <span class="detail-value" id="ml-detector-last-seen">-</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Messages:</span>
+                <span class="detail-value" id="ml-detector-messages-exchanged">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firewall Agent Connection -->
+    <div class="detailed-connection firewall-agent" onclick="showConnectionDetail('firewall_commands')">
+        <div class="connection-header">
+            <span class="connection-name">🛡️ Firewall Agent</span>
+            <span class="connection-status" id="firewall-agent-connection-status">UNKNOWN</span>
+        </div>
+        <div class="connection-details">
+            <div class="detail-row">
+                <span class="detail-label">Node ID:</span>
+                <span class="detail-value" id="firewall-agent-node-id">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Endpoint:</span>
+                <span class="detail-value" id="firewall-agent-endpoint">tcp://*:5580</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Remote IP:</span>
+                <span class="detail-value" id="firewall-agent-remote-ip">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Version:</span>
+                <span class="detail-value" id="firewall-agent-version">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Handshake:</span>
+                <span class="handshake-indicator" id="firewall-agent-handshake">⏳ Pending</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Last Seen:</span>
+                <span class="detail-value" id="firewall-agent-last-seen">-</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Messages:</span>
+                <span class="detail-value" id="firewall-agent-messages-exchanged">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firewall Responses Connection -->
+    <div class="detailed-connection firewall-responses" onclick="showConnectionDetail('firewall_responses')">
+        <div class="connection-header">
+            <span class="connection-name">📥 Firewall Responses</span>
+            <span class="connection-status" id="firewall-responses-connection-status">UNKNOWN</span>
+        </div>
+        <div class="connection-details">
+            <div class="detail-row">
+                <span class="detail-label">Node ID:</span>
+                <span class="detail-value" id="firewall-responses-node-id">firewall_agent</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Endpoint:</span>
+                <span class="detail-value" id="firewall-responses-endpoint">tcp://*:5581</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Remote IP:</span>
+                <span class="detail-value" id="firewall-responses-remote-ip">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Version:</span>
+                <span class="detail-value" id="firewall-responses-version">unknown</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Handshake:</span>
+                <span class="handshake-indicator" id="firewall-responses-handshake">⏳ Pending</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Last Seen:</span>
+                <span class="detail-value" id="firewall-responses-last-seen">-</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Messages:</span>
+                <span class="detail-value" id="firewall-responses-messages-exchanged">0</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Panel de Alertas de Encoding -->
+<div class="encoding-alerts-panel" id="encoding-alerts-panel" style="display: none;">
+    <div class="alerts-header">
+        <span class="alerts-title">🚨 Alertas de Encoding</span>
+        <button class="close-alerts-btn" onclick="hideEncodingAlerts()">&times;</button>
+    </div>
+    <div class="alerts-content" id="encoding-alerts-content">
+        <!-- Alertas dinámicas -->
+    </div>
+</div>
+
+<!-- Indicador de error floating -->
+<div class="encoding-error-indicator" id="encoding-error-indicator">
+    <div class="error-indicator-content">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span class="error-indicator-text">Errores de Encoding Detectados</span>
+        <span class="error-indicator-count" id="error-indicator-count">0</span>
+    </div>
+</div>
+
+<!-- Modal de diagnóstico avanzado -->
+<div class="diagnostic-modal" id="diagnostic-modal" style="display: none;">
+    <div class="diagnostic-header">
+        <h3>🔬 Diagnóstico Avanzado de Encoding</h3>
+        <button class="close-diagnostic-btn" onclick="closeDiagnosticModal()">&times;</button>
+    </div>
+    <div class="diagnostic-content" id="diagnostic-content">
+        <!-- Contenido de diagnóstico -->
+    </div>
+    <div class="diagnostic-actions">
+        <button class="btn btn-primary" onclick="runEncodingDiagnostic()">
+            <i class="fas fa-play"></i> Ejecutar Diagnóstico
+        </button>
+        <button class="btn btn-secondary" onclick="exportDiagnosticReport()">
+            <i class="fas fa-download"></i> Exportar Reporte
+        </button>
+        <button class="btn btn-warning" onclick="resetEncodingStats()">
+            <i class="fas fa-redo"></i> Reset Estadísticas
+        </button>
+    </div>
+</div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/static/js/dashboard.js"></script>
     <script>

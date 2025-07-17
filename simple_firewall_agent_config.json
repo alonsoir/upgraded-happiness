@@ -14,10 +14,11 @@
       "address": "localhost",
       "port": 5580,
       "mode": "connect",
-      "socket_type": "PULL",
+      "socket_type": "SUB",
       "description": "Receives firewall commands from dashboard",
       "high_water_mark": 1000,
-      "connection_timeout": 5000
+      "connection_timeout": 5000,
+      "topic_filter": ""
     },
     "responses_output": {
       "address": "localhost",
@@ -160,12 +161,32 @@
 
   "logging": {
     "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:%(node_id)s] [agent_id:%(agent_id)s] - %(message)s",
-    "file": "logs/firewall_agent.log",
-    "max_file_size_mb": 100,
-    "backup_count": 5,
-    "log_firewall_commands": true,
-    "log_system_commands": true
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "file": {
+        "enabled": true,
+        "path": "./logs/firewall_agent.log",
+        "max_size_mb": 100,
+        "backup_count": 5,
+        "rotation": "size"
+      },
+      "console": {
+        "enabled": true,
+        "colored": true
+      },
+      "syslog": {
+        "enabled": false,
+        "facility": "authpriv",
+        "address": "/dev/log"
+      }
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "firewall_agent",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true
   },
 
   "debug": {
