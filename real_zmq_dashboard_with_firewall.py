@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2.1
-CORREGIDO: Timestamp handling + Worker stats + ZMQ cleanup
+Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2.2
+CORREGIDO: Thread Safety para ZeroMQ + Race condition fix
 """
 from typing import Dict, List, Optional, Any, Set
 import zmq
@@ -579,7 +579,7 @@ class DashboardConfig:
 
 
 class SecurityDashboard:
-    """Dashboard principal de seguridad con monitoreo integrado"""
+    """Dashboard principal de seguridad con thread safety para ZMQ"""
 
     def __init__(self, config: DashboardConfig):
         self.config = config
@@ -587,6 +587,18 @@ class SecurityDashboard:
 
         # Inicializar monitor de encoding
         self.encoding_monitor = EncodingMonitor(self.logger)
+
+        # 🔒 CRÍTICO: Lock para thread safety de sockets ZMQ
+        self.socket_lock = threading.RLock()
+
+        # 📊 Debug counters para monitoreo
+        self.debug_counters = {
+            'messages_received': 0,
+            'messages_parsed': 0,
+            'socket_operations': 0,
+            'last_message_size': 0,
+            'last_message_time': 0
+        }
 
         # Crear contexto ZMQ con configuración del JSON
         self.context = zmq.Context(io_threads=config.zmq_io_threads)
@@ -646,7 +658,7 @@ class SecurityDashboard:
         # Verificar archivos requeridos
         self._verify_required_files()
 
-        # Configurar sockets ZeroMQ con monitoreo
+        # Configurar sockets ZeroMQ con configuración conservadora
         self.setup_zmq_sockets_with_monitoring()
 
     def _verify_required_files(self):
@@ -663,26 +675,27 @@ class SecurityDashboard:
         self.logger.info("✅ Archivos requeridos verificados")
 
     def setup_zmq_sockets_with_monitoring(self):
-        """Configurar sockets ZeroMQ con monitoreo integrado"""
-        self.logger.info("🔧 Configurando sockets ZeroMQ con monitoreo de errores...")
+        """Setup ZMQ con configuración más conservadora para evitar crashes"""
+        self.logger.info("🔧 Configurando sockets ZeroMQ con configuración conservadora...")
 
         try:
-            # ML Events Input Socket
+            # ML Events Input Socket con configuración MÁS CONSERVADORA
             self.logger.info(f"📡 Configurando ML Events socket...")
             socket_type = getattr(zmq, self.config.ml_detector_socket_type)
             self.ml_socket = self.context.socket(socket_type)
 
-            # Configurar opciones desde JSON
-            self.ml_socket.setsockopt(zmq.RCVHWM, self.config.ml_detector_hwm)
-            self.ml_socket.setsockopt(zmq.LINGER, 1000)
-            self.ml_socket.setsockopt(zmq.RCVTIMEO, 1000)
+            # 🔧 Configuración MÁS CONSERVADORA
+            self.ml_socket.setsockopt(zmq.RCVHWM, min(self.config.ml_detector_hwm, 1000))  # Limitar HWM
+            self.ml_socket.setsockopt(zmq.LINGER, 0)  # Cierre inmediato
+            self.ml_socket.setsockopt(zmq.RCVTIMEO, 500)  # Timeout más corto
+
+            # 🔒 Configuraciones adicionales para estabilidad
+            self.ml_socket.setsockopt(zmq.RCVBUF, 65536)  # Buffer de recepción
+            self.ml_socket.setsockopt(zmq.MAXMSGSIZE, 10000)  # Límite de mensaje
 
             if self.config.zmq_tcp_keepalive:
                 self.ml_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
                 self.ml_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, self.config.zmq_tcp_keepalive_idle)
-
-            if self.config.zmq_immediate:
-                self.ml_socket.setsockopt(zmq.IMMEDIATE, 1)
 
             ml_endpoint = f"tcp://{self.config.ml_detector_address}:{self.config.ml_detector_port}"
 
@@ -717,13 +730,13 @@ class SecurityDashboard:
                 connected_peers=[]
             )
 
-            # Firewall Commands Output Socket
+            # Firewall Commands Output Socket con configuración conservadora
             self.logger.info(f"🔥 Configurando Firewall Commands socket...")
             socket_type = getattr(zmq, self.config.firewall_commands_socket_type)
             self.firewall_commands_socket = self.context.socket(socket_type)
 
-            self.firewall_commands_socket.setsockopt(zmq.SNDHWM, self.config.firewall_commands_hwm)
-            self.firewall_commands_socket.setsockopt(zmq.LINGER, 1000)
+            self.firewall_commands_socket.setsockopt(zmq.SNDHWM, min(self.config.firewall_commands_hwm, 1000))
+            self.firewall_commands_socket.setsockopt(zmq.LINGER, 0)
 
             if self.config.zmq_tcp_keepalive:
                 self.firewall_commands_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
@@ -762,14 +775,14 @@ class SecurityDashboard:
                 connected_peers=[]
             )
 
-            # Firewall Responses Input Socket
+            # Firewall Responses Input Socket con configuración conservadora
             self.logger.info(f"📥 Configurando Firewall Responses socket...")
             socket_type = getattr(zmq, self.config.firewall_responses_socket_type)
             self.firewall_responses_socket = self.context.socket(socket_type)
 
-            self.firewall_responses_socket.setsockopt(zmq.RCVHWM, self.config.firewall_responses_hwm)
-            self.firewall_responses_socket.setsockopt(zmq.LINGER, 1000)
-            self.firewall_responses_socket.setsockopt(zmq.RCVTIMEO, 1000)
+            self.firewall_responses_socket.setsockopt(zmq.RCVHWM, min(self.config.firewall_responses_hwm, 1000))
+            self.firewall_responses_socket.setsockopt(zmq.LINGER, 0)
+            self.firewall_responses_socket.setsockopt(zmq.RCVTIMEO, 500)
 
             if self.config.zmq_tcp_keepalive:
                 self.firewall_responses_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
@@ -808,7 +821,7 @@ class SecurityDashboard:
                 connected_peers=[]
             )
 
-            self.logger.info("✅ Todos los sockets ZeroMQ configurados con monitoreo")
+            self.logger.info("✅ Socket ML Events configurado con parámetros conservadores")
 
         except Exception as e:
             self.logger.error(f"❌ Error configurando sockets ZeroMQ: {e}")
@@ -929,68 +942,125 @@ class SecurityDashboard:
             f"✅ Total hilos iniciados: {self.config.ml_events_consumers + self.config.firewall_command_producers + self.config.firewall_response_consumers}")
 
     def ml_events_receiver_with_monitoring(self, worker_id: int):
-        """Recibir eventos del ML Detector con monitoreo completo"""
-        self.logger.info(f"📡 ML Events Receiver {worker_id} iniciado con monitoreo")
-        crash_counter = 0
+        """Recibir eventos con thread safety mejorado"""
+        self.logger.info(f"📡 ML Events Receiver {worker_id} iniciado con thread safety")
+
         while self.running:
             try:
-                # Recibir mensaje como bytes
-                message_bytes = self.ml_socket.recv(zmq.NOBLOCK)
+                # 🔒 CRÍTICO: Proteger acceso al socket con lock
+                with self.socket_lock:
+                    try:
+                        message_bytes = self.ml_socket.recv(zmq.NOBLOCK)
+                        self.debug_counters['socket_operations'] += 1
+                        self.debug_counters['last_message_size'] = len(message_bytes)
+                        self.debug_counters['last_message_time'] = time.time()
+                    except zmq.Again:
+                        continue  # No hay mensajes
 
-                # Intentar decodificar con monitoreo
+                # 🔍 Debugging: Log detalles del mensaje
+                self.logger.debug(f"🔍 Worker {worker_id} - Mensaje recibido: {len(message_bytes)} bytes")
+
+                # Verificar integridad del mensaje
+                if len(message_bytes) == 0:
+                    self.logger.warning(f"⚠️ Worker {worker_id} - Mensaje vacío recibido")
+                    continue
+
+                if len(message_bytes) > 10000:  # Mensaje sospechosamente grande
+                    self.logger.warning(f"⚠️ Worker {worker_id} - Mensaje muy grande: {len(message_bytes)} bytes")
+
+                self.debug_counters['messages_received'] += 1
+
+                # Intentar decodificar con monitoreo (fuera del lock)
                 message_text, encoding_used = self.decode_message_with_monitoring(
                     message_bytes, worker_id, 'ml_events'
                 )
 
                 if message_text is None:
-                    continue  # Error ya registrado en monitoring
+                    self.logger.warning(f"⚠️ Worker {worker_id} - Falló decodificación")
+                    continue
+
+                self.debug_counters['messages_parsed'] += 1
 
                 # Registrar mensaje exitoso
                 self.encoding_monitor.log_successful_message(
                     worker_id, 'ml_events', len(message_bytes), encoding_used
                 )
 
-                # Intentar extraer información del remitente
+                # Resto del procesamiento...
                 try:
                     event_data = json.loads(message_text)
+
+                    # Verificar integridad de datos críticos
+                    if not self._validate_event_data(event_data, worker_id):
+                        continue
+
                     if 'node_id' in event_data:
                         self.encoding_monitor.update_connection_info(
                             'ml_events',
                             node_id=event_data.get('node_id'),
                             component_type='ml_detector',
                             version=event_data.get('version'),
-                            remote_ip=event_data.get('source_ip')  # IP del componente
+                            remote_ip=event_data.get('source_ip')
                         )
-                except:
-                    pass  # Información opcional
+                except Exception as e:
+                    self.logger.error(f"❌ Worker {worker_id} - Error procesando event_data: {e}")
+                    continue
 
-                # Actualizar estadísticas de conexión
-                conn_info = self.zmq_connections['ml_events']
-                conn_info.total_messages += 1
-                conn_info.bytes_transferred += len(message_bytes)
-                conn_info.last_activity = datetime.now()
+                # Actualizar estadísticas de conexión de forma segura
+                try:
+                    conn_info = self.zmq_connections['ml_events']
+                    conn_info.total_messages += 1
+                    conn_info.bytes_transferred += len(message_bytes)
+                    conn_info.last_activity = datetime.now()
+                except Exception as e:
+                    self.logger.error(f"❌ Worker {worker_id} - Error actualizando stats: {e}")
 
                 # Parsear y procesar evento
-                event = self.parse_security_event(event_data)
+                try:
+                    event = self.parse_security_event(event_data)
 
-                # Añadir a cola de procesamiento
-                if not self.ml_events_queue.full():
-                    self.ml_events_queue.put(event)
-                    self.stats['events_received'] += 1
+                    # Añadir a cola con timeout
+                    if not self.ml_events_queue.full():
+                        self.ml_events_queue.put(event, timeout=1.0)
+                        self.stats['events_received'] += 1
 
-                    self.logger.debug(
-                        f"📨 Worker {worker_id} - Evento recibido: {event.source_ip} -> {event.target_ip} (riesgo: {event.risk_score:.2f})")
-                else:
-                    self.logger.warning(f"⚠️ Worker {worker_id} - Cola ML events llena, descartando evento")
+                        self.logger.debug(
+                            f"📨 Worker {worker_id} - Evento procesado: {event.source_ip} -> {event.target_ip}")
+                    else:
+                        self.logger.warning(f"⚠️ Worker {worker_id} - Cola ML events llena")
 
-            except zmq.Again:
-                # Timeout, continuar
-                continue
-            except json.JSONDecodeError as e:
-                self.logger.error(f"❌ Worker {worker_id} - Error parseando JSON: {e}")
+                except Exception as e:
+                    self.logger.error(f"❌ Worker {worker_id} - Error parseando evento: {e}")
+
+            except zmq.ZMQError as e:
+                self.logger.error(f"❌ Worker {worker_id} - Error ZMQ: {e}")
+                time.sleep(0.1)  # Evitar busy loop
             except Exception as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error general: {e}")
                 time.sleep(0.1)
+
+    def _validate_event_data(self, event_data: dict, worker_id: int) -> bool:
+        """Validar integridad de datos del evento"""
+        try:
+            # Verificar campos críticos
+            required_fields = ['source_ip', 'target_ip']
+            for field in required_fields:
+                if field not in event_data:
+                    self.logger.warning(f"⚠️ Worker {worker_id} - Campo faltante: {field}")
+                    return False
+
+            # Verificar tipos de datos críticos
+            if 'dashboard_pid' in event_data:
+                pid_value = event_data['dashboard_pid']
+                if not isinstance(pid_value, (int, str)):
+                    self.logger.warning(f"⚠️ Worker {worker_id} - dashboard_pid tipo inválido: {type(pid_value)}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Worker {worker_id} - Error validando datos: {e}")
+            return False
 
     def decode_message_with_monitoring(self, message_bytes: bytes, worker_id: int,
                                        worker_type: str) -> tuple[Optional[str], str]:
@@ -1549,10 +1619,14 @@ class SecurityDashboard:
 
         while self.running:
             try:
-                # Recibir respuesta como bytes primero
-                response_bytes = self.firewall_responses_socket.recv(zmq.NOBLOCK)
+                # 🔒 CRÍTICO: Proteger acceso al socket con lock también para firewall responses
+                with self.socket_lock:
+                    try:
+                        response_bytes = self.firewall_responses_socket.recv(zmq.NOBLOCK)
+                    except zmq.Again:
+                        continue  # No hay mensajes
 
-                # Decodificar de manera segura
+                # Decodificar de manera segura (fuera del lock)
                 response_text, encoding_used = self.decode_message_with_monitoring(
                     response_bytes, worker_id, 'firewall_responses'
                 )
@@ -1589,8 +1663,6 @@ class SecurityDashboard:
                 if response_data.get('status') == 'applied':
                     self.stats['threats_blocked'] += 1
 
-            except zmq.Again:
-                continue
             except json.JSONDecodeError as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error parseando respuesta firewall: {e}")
             except Exception as e:
@@ -1970,40 +2042,10 @@ class SecurityDashboard:
             # NUEVO: Posición del nodo local
             'local_node_position': local_node_position,
             # NUEVO: Indicador de prueba de firewall
-            'firewall_test_available': True
+            'firewall_test_available': True,
+            # NUEVO: Debug counters para ZMQ threading
+            'debug_counters': self.debug_counters
         }
-
-    def serve_firewall_test_api(self):
-        """Endpoint para probar firewall"""
-        try:
-            success = self.dashboard.test_firewall_connection()
-
-            response_data = {
-                'success': success,
-                'message': 'Comando de prueba enviado' if success else 'Error enviando comando',
-                'timestamp': datetime.now().isoformat(),
-                'test_id': f"test_{int(time.time())}"
-            }
-
-            response_json = json.dumps(response_data)
-
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(response_json.encode('utf-8'))
-
-        except Exception as e:
-            error_response = {
-                'success': False,
-                'message': f'Error en prueba de firewall: {str(e)}',
-                'timestamp': datetime.now().isoformat()
-            }
-
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(error_response).encode('utf-8'))
 
     def _get_component_connectivity(self, connection_id: str) -> Dict:
         """Obtener información de conectividad para un componente"""
@@ -2053,39 +2095,63 @@ class SecurityDashboard:
             self.logger.error(f"❌ Error probando firewall: {e}")
             return False
 
-    def stop(self):
-        """Detener el dashboard de forma segura - CORREGIDO COMPLETAMENTE"""
-        self.logger.info("🛑 Deteniendo Dashboard de Seguridad...")
-        self.running = False
-
-        # Cerrar sockets de forma segura con timeouts
+    def _debug_socket_state(self):
+        """Método para debugging del estado de sockets"""
         try:
-            # Configurar linger para cierre limpio pero rápido
-            if hasattr(self, 'ml_socket') and self.ml_socket:
-                self.ml_socket.setsockopt(zmq.LINGER, 100)  # 100ms max
-                self.ml_socket.close()
-                self.logger.debug("✅ ML socket cerrado")
+            # Información de debug sobre sockets
+            debug_info = {
+                'ml_socket_closed': getattr(self.ml_socket, 'closed', 'unknown'),
+                'context_closed': getattr(self.context, 'closed', 'unknown'),
+                'queue_size': self.ml_events_queue.qsize(),
+                'workers_active': sum(1 for t in threading.enumerate() if 'ML Events Receiver' in t.name)
+            }
 
-            if hasattr(self, 'firewall_commands_socket') and self.firewall_commands_socket:
-                self.firewall_commands_socket.setsockopt(zmq.LINGER, 100)
-                self.firewall_commands_socket.close()
-                self.logger.debug("✅ Firewall commands socket cerrado")
-
-            if hasattr(self, 'firewall_responses_socket') and self.firewall_responses_socket:
-                self.firewall_responses_socket.setsockopt(zmq.LINGER, 100)
-                self.firewall_responses_socket.close()
-                self.logger.debug("✅ Firewall responses socket cerrado")
+            self.logger.debug(f"🔍 Socket Debug: {debug_info}")
 
         except Exception as e:
-            self.logger.error(f"⚠️ Error cerrando sockets: {e}")
+            self.logger.error(f"❌ Error en socket debug: {e}")
 
-        # Cerrar contexto ZeroMQ de forma segura con timeout
+    def stop(self):
+        """Detener dashboard con cleanup mejorado"""
+        self.logger.info("🛑 Deteniendo Dashboard de Seguridad con cleanup seguro...")
+        self.running = False
+
+        # 📊 Log estadísticas finales antes del cierre
+        self.logger.info(f"📊 Stats finales:")
+        self.logger.info(f"   📨 Mensajes recibidos: {self.debug_counters['messages_received']}")
+        self.logger.info(f"   ✅ Mensajes parseados: {self.debug_counters['messages_parsed']}")
+        self.logger.info(f"   🔧 Operaciones socket: {self.debug_counters['socket_operations']}")
+        self.logger.info(f"   📏 Último mensaje: {self.debug_counters['last_message_size']} bytes")
+
+        # 🔒 Cerrar sockets de forma thread-safe
+        with self.socket_lock:
+            try:
+                if hasattr(self, 'ml_socket') and self.ml_socket:
+                    # Configurar linger muy bajo para cierre rápido
+                    self.ml_socket.setsockopt(zmq.LINGER, 0)
+                    self.ml_socket.close()
+                    self.logger.debug("✅ ML socket cerrado de forma segura")
+
+                if hasattr(self, 'firewall_commands_socket') and self.firewall_commands_socket:
+                    self.firewall_commands_socket.setsockopt(zmq.LINGER, 0)
+                    self.firewall_commands_socket.close()
+                    self.logger.debug("✅ Firewall commands socket cerrado")
+
+                if hasattr(self, 'firewall_responses_socket') and self.firewall_responses_socket:
+                    self.firewall_responses_socket.setsockopt(zmq.LINGER, 0)
+                    self.firewall_responses_socket.close()
+                    self.logger.debug("✅ Firewall responses socket cerrado")
+
+            except Exception as e:
+                self.logger.error(f"⚠️ Error cerrando sockets: {e}")
+
+        # Cerrar contexto ZeroMQ de forma más segura
         try:
             if hasattr(self, 'context') and self.context:
-                # Dar tiempo para que los sockets se cierren
-                time.sleep(0.2)
+                # Dar tiempo mínimo para que los sockets se cierren
+                time.sleep(0.1)
                 self.context.term()
-                self.logger.debug("✅ Contexto ZMQ terminado")
+                self.logger.debug("✅ Contexto ZMQ terminado de forma segura")
         except Exception as e:
             self.logger.error(f"⚠️ Error terminando contexto ZMQ: {e}")
 
@@ -2096,6 +2162,7 @@ def signal_handler(sig, frame):
     """Manejar señales del sistema"""
     print("\n🛑 Recibida señal de terminación")
     sys.exit(0)
+
 
 def main():
     """Función principal con configuración estricta"""

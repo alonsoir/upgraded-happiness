@@ -1,198 +1,185 @@
 {
-  "node_id": "dashboard_distributed_001",
+  "node_id": "dashboard_main_001",
   "component": {
-    "name": "real_zmq_dashboard_with_firewall",
-    "version": "2.2.0",
+    "name": "security_dashboard",
+    "version": "2.2.2",
     "mode": "distributed_orchestrator",
-    "role": "dashboard_coordinator",
-    "description": "Dashboard principal con monitoreo de errores UTF-8 y conectividad detallada"
+    "role": "dashboard_coordinator"
   },
+
   "network": {
     "ml_events_input": {
       "address": "localhost",
       "port": 5570,
-      "socket_type": "PULL",
       "mode": "connect",
-      "high_water_mark": 5000,
-      "expected_publishers": 1,
-      "timeout_ms": 1000,
-      "description": "Recibe eventos enriquecidos del lightweight_ml_detector"
-    },
-    "firewall_commands_output": {
-      "address": "*",
-      "port": 5580,
-      "socket_type": "PUB",
-      "mode": "bind",
-      "high_water_mark": 2000,
-      "expected_subscribers": 10,
-      "timeout_ms": 1000,
-      "description": "Envía comandos de firewall al simple_firewall_agent"
-    },
-    "firewall_responses_input": {
-      "address": "*",
-      "port": 5581,
       "socket_type": "PULL",
-      "mode": "bind",
-      "high_water_mark": 2000,
-      "expected_publishers": 10,
-      "timeout_ms": 1000,
-      "description": "Recibe respuestas del simple_firewall_agent"
+      "high_water_mark": 1000,
+      "expected_publishers": 1,
+      "description": "Recibe eventos del ML Detector"
     },
+
+    "_comment_firewall_fix": "🔧 CORREGIDO: Puertos compatibles con firewall_agent",
+    "firewall_commands_output": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "high_water_mark": 500,
+      "expected_subscribers": 1,
+      "description": "Envía comandos al firewall_agent puerto 5580"
+    },
+
+    "firewall_responses_input": {
+      "address": "localhost",
+      "port": 5581,
+      "mode": "bind",
+      "socket_type": "PULL",
+      "high_water_mark": 500,
+      "expected_publishers": 1,
+      "description": "Recibe respuestas del firewall_agent puerto 5581"
+    },
+
     "admin_interface": {
       "address": "0.0.0.0",
-      "port": 8080,
-      "description": "Interfaz web del dashboard"
+      "port": 8080
     }
   },
+
   "zmq": {
-    "context_io_threads": 2,
-    "max_sockets": 512,
+    "_comment_conservative": "🔒 Configuración ULTRA CONSERVADORA compatible con ML Detector",
+    "context_io_threads": 1,
+    "max_sockets": 32,
     "tcp_keepalive": true,
     "tcp_keepalive_idle": 300,
-    "tcp_keepalive_interval": 60,
-    "tcp_keepalive_count": 3,
     "immediate": true,
-    "linger_ms": 1000,
-    "reconnect_interval_ms": 5000,
-    "max_reconnect_interval_ms": 30000
+
+    "_comment_compatibility": "⭐ CRÍTICO: Configuraciones compatibles con ML Detector conservador",
+    "linger_ms": 0,
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 500,
+    "max_message_size": 10000,
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 65536
   },
+
   "processing": {
+    "_comment_threads": "🔧 CRÍTICO: 1 thread para evitar race conditions",
     "threads": {
       "ml_events_consumers": 1,
       "firewall_command_producers": 1,
-      "firewall_response_consumers": 1,
-      "description": "Número de hilos de procesamiento para cada tipo de tarea"
+      "firewall_response_consumers": 1
     },
+
+    "_comment_queues": "📋 Colas compatibles con configuración conservadora",
     "internal_queues": {
-      "ml_events_queue_size": 1000,
-      "firewall_commands_queue_size": 500,
-      "firewall_responses_queue_size": 500,
-      "max_event_history": 2000,
-      "max_command_history": 1000,
-      "description": "Tamaños de colas internas para buffers"
+      "ml_events_queue_size": 500,
+      "firewall_commands_queue_size": 200,
+      "firewall_responses_queue_size": 200
     },
-    "performance": {
-      "batch_size": 10,
-      "max_processing_time_ms": 100,
-      "backpressure_threshold": 0.8,
-      "memory_threshold_mb": 512,
-      "enable_flow_control": true
+
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0
     }
   },
+
   "monitoring": {
-    "stats_interval_seconds": 10,
+    "stats_interval_seconds": 20,
     "detailed_metrics": true,
-    "encoding_monitoring": {
-      "enabled": true,
-      "max_error_history": 100,
-      "error_rate_threshold": 0.1,
-      "alert_on_encoding_errors": true
-    },
-    "connectivity_monitoring": {
-      "enabled": true,
-      "heartbeat_interval_seconds": 30,
-      "connection_timeout_seconds": 60,
-      "max_connection_failures": 5
-    },
-    "performance_monitoring": {
-      "enabled": true,
-      "latency_threshold_ms": 100,
-      "memory_check_interval_seconds": 30,
-      "cpu_check_interval_seconds": 15
+
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 50.0,
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 512,
+      "max_cpu_usage_percent": 60.0,
+
+      "_comment_firewall": "🔥 Alertas específicas para firewall",
+      "max_firewall_command_failures": 5,
+      "max_firewall_response_timeout": 3000,
+      "firewall_health_check_interval": 30
     }
   },
+
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
     "handlers": {
       "console": {
-        "enabled": true,
-        "level": "INFO"
+        "enabled": true
       },
       "file": {
-        "enabled": true,
-        "path": "logs/dashboard.log",
-        "level": "DEBUG",
-        "max_size_mb": 100,
-        "backup_count": 5,
-        "rotation": "time"
+        "enabled": false,
+        "path": "logs/dashboard.log"
       }
     }
   },
+
   "security": {
-    "enable_authentication": false,
-    "allowed_origins": ["*"],
-    "rate_limiting": {
-      "enabled": false,
-      "requests_per_minute": 1000
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 10000,
+      "validate_message_integrity": true,
+      "sanitize_inputs": true
     },
-    "encryption": {
-      "enabled": false,
-      "curve_keys": null
+
+    "firewall_integration": {
+      "enabled": true,
+      "test_commands_enabled": true,
+      "auto_block_high_risk": true,
+      "block_threshold": 0.95,
+      "default_block_duration": "300s"
     }
   },
+
   "web_interface": {
-    "enable_compression": true,
-    "cache_static_files": true,
-    "websocket_enabled": false,
-    "real_time_updates": true,
-    "max_connections": 100
-  },
-  "features": {
-    "firewall_testing": {
+    "enabled": true,
+    "static_files_path": "static",
+    "templates_path": "templates",
+    "cache_control": "no-cache",
+
+    "_comment_map": "🗺️ Configuración específica para el mapa",
+    "map_settings": {
       "enabled": true,
-      "test_command_timeout_seconds": 30,
-      "max_test_frequency_seconds": 10
+      "default_zoom": 6,
+      "center_lat": 40.4168,
+      "center_lon": -3.7038,
+      "tile_server": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "© OpenStreetMap contributors",
+      "marker_clustering": true,
+      "auto_fit_bounds": true
     },
-    "geolocation": {
-      "enabled": true,
-      "default_location": {
-        "latitude": 40.4168,
-        "longitude": -3.7038,
-        "city": "Madrid",
-        "country": "ES",
-        "description": "Ubicación por defecto del nodo dashboard"
-      }
-    },
-    "map_visualization": {
-      "enabled": true,
-      "max_markers": 100,
-      "marker_cleanup_interval_seconds": 300,
-      "heatmap_enabled": false
-    },
-    "encoding_diagnostics": {
-      "enabled": true,
-      "auto_detection": true,
-      "fallback_strategies": [
-        "utf-8",
-        "protobuf",
-        "latin-1",
-        "ascii_clean"
-      ]
+
+    "api_endpoints": {
+      "metrics": "/api/metrics",
+      "test_firewall": "/api/test-firewall",
+      "map_data": "/api/map-data",
+      "live_events": "/api/live-events"
     }
   },
-  "error_handling": {
-    "max_retries": 3,
-    "retry_delay_seconds": 1,
-    "circuit_breaker": {
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "dashboard_coordinator",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+
+    "pipeline_tracking": {
       "enabled": true,
-      "failure_threshold": 5,
-      "timeout_seconds": 60,
-      "half_open_max_calls": 3
-    },
-    "graceful_shutdown": {
-      "enabled": true,
-      "timeout_seconds": 30,
-      "force_shutdown_after_seconds": 60
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10
     }
   },
-  "development": {
-    "debug_mode": false,
-    "mock_data": false,
-    "simulation": {
-      "enabled": false,
-      "event_generation_rate": 1.0,
-      "max_simulated_events": 1000
-    }
+
+  "_comment_compatibility_notes": {
+    "firewall_agent_ports": "Dashboard CONECTA a 5580 (commands) y BIND en 5581 (responses)",
+    "ml_detector_port": "Dashboard CONECTA a 5570 para recibir eventos ML",
+    "thread_safety": "Solo 1 thread ML consumer para evitar race conditions ZMQ",
+    "message_size": "Límite 10KB compatible con configuración conservadora ML",
+    "timeouts": "500ms timeout compatible con ML detector conservador",
+    "map_debugging": "Usar CSS debug si el mapa no aparece"
   }
 }
