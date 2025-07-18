@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # =============================================================================
-# UPGRADED HAPPINESS - Nuclear Stop Script
+# UPGRADED HAPPINESS - Nuclear Stop Script (Nueva Arquitectura)
 # =============================================================================
 # Parada REAL y efectiva de todos los componentes SCADA
+# Arquitectura: promiscuous_agent → geoip_enricher → ml_detector → dashboard → firewall_agent
 # Incluye procesos root, puertos bloqueados, y limpieza completa
 # =============================================================================
 
@@ -22,7 +23,8 @@ success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-echo -e "${RED}🛑 NUCLEAR STOP - PARADA FORZADA DE UPGRADED HAPPINESS${NC}\n"
+echo -e "${RED}🛑 NUCLEAR STOP - PARADA FORZADA DE UPGRADED HAPPINESS${NC}"
+echo -e "${BLUE}🏗️ Arquitectura: promiscuous_agent → geoip_enricher → ml_detector → dashboard → firewall_agent${NC}\n"
 
 # Función para verificar si un proceso existe
 process_exists() {
@@ -43,32 +45,40 @@ log "Intentando parada gentil primero..."
 
 if command -v make &> /dev/null && [[ -f "Makefile" ]]; then
     log "Ejecutando 'make stop'..."
-    timeout 10 make stop &>/dev/null || warning "make stop falló o tomó mucho tiempo"
+    timeout 15 make stop &>/dev/null || warning "make stop falló o tomó mucho tiempo"
 else
     warning "Makefile no encontrado, saltando parada gentil"
 fi
 
 # Esperar un poco para procesos que se cierren correctamente
-sleep 2
+sleep 3
 
-# 2. IDENTIFICAR PROCESOS SCADA ACTIVOS
-log "Identificando procesos SCADA activos..."
+# 2. IDENTIFICAR PROCESOS SCADA ACTIVOS (NUEVA ARQUITECTURA)
+log "Identificando procesos SCADA activos (nueva arquitectura)..."
 
 scada_processes=(
-    "smart_broker"
-    "lightweight_ml_detector"
-    "ml_detector"
     "promiscuous_agent"
-    "uvicorn"
-    "dashboard"
-    "system_orchestrator"
-    "bitdefender_integration"
+    "geoip_enricher"
+    "lightweight_ml_detector"
+    "real_zmq_dashboard_with_firewall"
+    "simple_firewall_agent"
 )
+
+# También incluir algunos legacy por si acaso
+legacy_processes=(
+    "smart_broker"
+    "ml_detector"
+    "dashboard"
+    "firewall_agent"
+    "uvicorn"
+)
+
+all_processes=("${scada_processes[@]}" "${legacy_processes[@]}")
 
 active_processes=()
 root_processes=()
 
-for process in "${scada_processes[@]}"; do
+for process in "${all_processes[@]}"; do
     if process_exists "$process"; then
         # Obtener PIDs y usuarios
         local pids_info=$(ps aux | grep -E "$process" | grep -v grep | awk '{print $1 ":" $2}')
@@ -92,14 +102,35 @@ done
 
 # 3. PARADA FORZADA DE PROCESOS DE USUARIO
 if [[ ${#active_processes[@]} -gt 0 ]]; then
-    log "Parando procesos de usuario..."
+    log "Parando procesos de usuario en orden inverso al inicio..."
 
-    for proc_info in "${active_processes[@]}"; do
-        local pid=$(echo "$proc_info" | cut -d: -f1)
-        local name=$(echo "$proc_info" | cut -d: -f2)
+    # Parar en orden inverso: dashboard → ml_detector → geoip_enricher → firewall_agent
+    declare -A process_priority=(
+        ["real_zmq_dashboard_with_firewall"]=1
+        ["dashboard"]=1
+        ["lightweight_ml_detector"]=2
+        ["ml_detector"]=2
+        ["geoip_enricher"]=3
+        ["simple_firewall_agent"]=4
+        ["firewall_agent"]=4
+        ["smart_broker"]=5
+        ["uvicorn"]=6
+    )
 
-        log "Matando proceso usuario: $name (PID: $pid)"
-        kill -TERM "$pid" 2>/dev/null || true
+    # Ordenar procesos por prioridad
+    for priority in {1..6}; do
+        for proc_info in "${active_processes[@]}"; do
+            local pid=$(echo "$proc_info" | cut -d: -f1)
+            local name=$(echo "$proc_info" | cut -d: -f2)
+
+            local proc_priority=${process_priority[$name]:-99}
+
+            if [[ $proc_priority -eq $priority ]]; then
+                log "Matando proceso usuario (prioridad $priority): $name (PID: $pid)"
+                kill -TERM "$pid" 2>/dev/null || true
+                sleep 1
+            fi
+        done
     done
 
     # Esperar a que terminen
@@ -126,8 +157,13 @@ if [[ ${#root_processes[@]} -gt 0 ]]; then
     log "🚨 Ejecutando parada nuclear de procesos root..."
 
     # Métodos progresivamente más agresivos
-    log "Método 1: pkill con sudo..."
+    log "Método 1: pkill con sudo (nueva arquitectura)..."
     for process in "${scada_processes[@]}"; do
+        sudo pkill -f "$process" 2>/dev/null || true
+    done
+
+    # También limpiar legacy
+    for process in "${legacy_processes[@]}"; do
         sudo pkill -f "$process" 2>/dev/null || true
     done
 
@@ -152,26 +188,39 @@ if [[ ${#root_processes[@]} -gt 0 ]]; then
         sleep 1
     fi
 
-    # Limpieza agresiva final
-    log "Método 3: Limpieza agresiva por nombre..."
+    # Limpieza agresiva final (nueva arquitectura)
+    log "Método 3: Limpieza agresiva por nombre (nueva arquitectura)..."
     sudo pkill -9 -f "promiscuous_agent" 2>/dev/null || true
+    sudo pkill -9 -f "geoip_enricher" 2>/dev/null || true
+    sudo pkill -9 -f "lightweight_ml_detector" 2>/dev/null || true
+    sudo pkill -9 -f "real_zmq_dashboard_with_firewall" 2>/dev/null || true
+    sudo pkill -9 -f "simple_firewall_agent" 2>/dev/null || true
+
+    # Legacy cleanup
     sudo pkill -9 -f "smart_broker" 2>/dev/null || true
-    sudo pkill -9 -f "ml_detector" 2>/dev/null || true
     sudo pkill -9 -f "uvicorn.*8766" 2>/dev/null || true
-    sudo pkill -9 -f "uvicorn.*8080" 2>/dev/null || true
+    sudo pkill -9 -f "uvicorn.*8000" 2>/dev/null || true
 
     success "✅ Procesos root terminados (método nuclear)"
 else
     success "✅ No hay procesos root activos"
 fi
 
-# 5. LIBERACIÓN FORZADA DE PUERTOS
-log "Liberando puertos SCADA..."
+# 5. LIBERACIÓN FORZADA DE PUERTOS (NUEVA ARQUITECTURA)
+log "Liberando puertos SCADA (nueva arquitectura)..."
 
-scada_ports=(5555 5556 8766 8080 55565)
+# Puertos de la nueva arquitectura
+scada_ports=(5559 5560 5561 5562 8000)
+
+# Puertos legacy por si acaso
+legacy_ports=(5555 5556 8766 8080 55565)
+
+all_ports=("${scada_ports[@]}" "${legacy_ports[@]}")
 ports_cleared=0
 
-for port in "${scada_ports[@]}"; do
+echo -e "${BLUE}🔌 Puertos nueva arquitectura: 5559→5560→5561→5562, UI:8000${NC}"
+
+for port in "${all_ports[@]}"; do
     if port_in_use "$port"; then
         warning "Puerto $port en uso, liberando..."
 
@@ -205,19 +254,19 @@ for port in "${scada_ports[@]}"; do
     fi
 done
 
-# 6. LIMPIEZA DE ARCHIVOS TEMPORALES Y PID
-log "Limpiando archivos temporales..."
+# 6. LIMPIEZA DE ARCHIVOS TEMPORALES Y PID (NUEVA ARQUITECTURA)
+log "Limpiando archivos temporales (nueva arquitectura)..."
 
 cleanup_patterns=(
     "*.pid"
-    "dashboard.pid"
-    "./*scada*.pid"
+    ".pids/*.pid"
+    "logs/*.lock"
+    "./*.lock"
     "/tmp/*scada*"
     "/tmp/*broker*"
     "/tmp/*zmq*"
+    "/tmp/*geoip*"
     "/tmp/*upgraded-happiness*"
-    "./logs/*.lock"
-    "./*.lock"
 )
 
 files_cleaned=0
@@ -229,11 +278,19 @@ for pattern in "${cleanup_patterns[@]}"; do
         fi
     else
         # Archivos locales
-        if rm -f $pattern 2>/dev/null; then
-            ((files_cleaned++))
+        local found_files=$(ls $pattern 2>/dev/null || true)
+        if [[ -n "$found_files" ]]; then
+            rm -f $pattern 2>/dev/null && ((files_cleaned++))
         fi
     fi
 done
+
+# Limpieza específica de nueva arquitectura
+rm -f .pids/promiscuous_agent.pid 2>/dev/null && ((files_cleaned++)) || true
+rm -f .pids/geoip_enricher.pid 2>/dev/null && ((files_cleaned++)) || true
+rm -f .pids/ml_detector.pid 2>/dev/null && ((files_cleaned++)) || true
+rm -f .pids/dashboard.pid 2>/dev/null && ((files_cleaned++)) || true
+rm -f .pids/firewall_agent.pid 2>/dev/null && ((files_cleaned++)) || true
 
 if [[ $files_cleaned -gt 0 ]]; then
     success "✅ $files_cleaned archivos temporales eliminados"
@@ -248,48 +305,48 @@ log "Limpiando recursos de sistema..."
 sudo ipcs -m 2>/dev/null | grep $(whoami) | awk '{print $2}' | xargs -r sudo ipcrm -m 2>/dev/null || true
 
 # Limpiar sockets Unix
-sudo find /tmp -name "*zmq*" -o -name "*ipc*" -o -name "*scada*" 2>/dev/null | xargs sudo rm -f 2>/dev/null || true
+sudo find /tmp -name "*zmq*" -o -name "*ipc*" -o -name "*scada*" -o -name "*geoip*" 2>/dev/null | xargs sudo rm -f 2>/dev/null || true
 
 success "✅ Recursos de sistema limpiados"
 
-# 8. VERIFICACIÓN FINAL
+# 8. VERIFICACIÓN FINAL (NUEVA ARQUITECTURA)
 log "Ejecutando verificación final..."
 
-echo -e "\n${CYAN}📋 ESTADO FINAL:${NC}"
+echo -e "\n${CYAN}📋 ESTADO FINAL (Nueva Arquitectura):${NC}"
 
-# Verificar procesos
-remaining_processes=$(ps aux | grep -E "(smart_broker|ml_detector|promiscuous_agent|uvicorn.*8766|dashboard)" | grep -v grep || true)
-if [[ -z "$remaining_processes" ]]; then
-    success "✅ Sin procesos SCADA activos"
-else
-    warning "⚠️ Procesos aún activos:"
-    echo "$remaining_processes"
-fi
+# Verificar procesos de nueva arquitectura
+echo -e "${BLUE}🔍 Verificando procesos nueva arquitectura:${NC}"
+for process in "${scada_processes[@]}"; do
+    if process_exists "$process"; then
+        warning "⚠️ $process aún activo"
+    else
+        success "✅ $process detenido"
+    fi
+done
 
-# Verificar puertos
+# Verificar puertos de nueva arquitectura
+echo -e "\n${BLUE}🔌 Verificando puertos nueva arquitectura:${NC}"
 busy_ports=()
 for port in "${scada_ports[@]}"; do
     if port_in_use "$port"; then
         busy_ports+=("$port")
+        warning "⚠️ Puerto $port aún ocupado"
+    else
+        success "✅ Puerto $port libre"
     fi
 done
 
-if [[ ${#busy_ports[@]} -eq 0 ]]; then
-    success "✅ Todos los puertos SCADA libres"
-else
-    warning "⚠️ Puertos aún ocupados: ${busy_ports[*]}"
-fi
-
 # Verificar archivos PID
-remaining_pids=$(find . -name "*.pid" 2>/dev/null || true)
+remaining_pids=$(find .pids -name "*.pid" 2>/dev/null || true)
 if [[ -z "$remaining_pids" ]]; then
     success "✅ Sin archivos PID restantes"
 else
     warning "⚠️ Archivos PID encontrados: $remaining_pids"
+    rm -f .pids/*.pid 2>/dev/null || true
 fi
 
 # 9. RESUMEN FINAL
-echo -e "\n${GREEN}🎉 PARADA NUCLEAR COMPLETADA${NC}\n"
+echo -e "\n${GREEN}🎉 PARADA NUCLEAR COMPLETADA (Nueva Arquitectura)${NC}\n"
 
 echo -e "${CYAN}📊 ESTADÍSTICAS:${NC}"
 echo -e "  • Procesos usuario: ${#active_processes[@]} terminados"
@@ -297,9 +354,17 @@ echo -e "  • Procesos root: ${#root_processes[@]} terminados (nuclear)"
 echo -e "  • Puertos liberados: $ports_cleared"
 echo -e "  • Archivos limpiados: $files_cleaned"
 
-if [[ ${#busy_ports[@]} -eq 0 ]] && [[ -z "$remaining_processes" ]]; then
+echo -e "\n${CYAN}🏗️ ARQUITECTURA VERIFICADA:${NC}"
+echo -e "  • promiscuous_agent (5559): $(process_exists "promiscuous_agent" && echo "❌ Activo" || echo "✅ Detenido")"
+echo -e "  • geoip_enricher (5560): $(process_exists "geoip_enricher" && echo "❌ Activo" || echo "✅ Detenido")"
+echo -e "  • ml_detector (5561): $(process_exists "lightweight_ml_detector" && echo "❌ Activo" || echo "✅ Detenido")"
+echo -e "  • dashboard (8000→5562): $(process_exists "real_zmq_dashboard_with_firewall" && echo "❌ Activo" || echo "✅ Detenido")"
+echo -e "  • firewall_agent (5562): $(process_exists "simple_firewall_agent" && echo "❌ Activo" || echo "✅ Detenido")"
+
+if [[ ${#busy_ports[@]} -eq 0 ]] && ! process_exists "promiscuous_agent|geoip_enricher|lightweight_ml_detector|real_zmq_dashboard_with_firewall|simple_firewall_agent"; then
     echo -e "\n${GREEN}✅ SISTEMA COMPLETAMENTE LIMPIO${NC}"
-    echo -e "${GREEN}🚀 Listo para reiniciar con configuración sincronizada${NC}"
+    echo -e "${GREEN}🚀 Listo para reiniciar con nueva arquitectura${NC}"
+    echo -e "${BLUE}💡 Ejecutar: make start${NC}"
     exit 0
 else
     echo -e "\n${YELLOW}⚠️ LIMPIEZA PARCIAL COMPLETADA${NC}"

@@ -283,7 +283,7 @@ done
 print_step "9. Creando archivo de prueba"
 
 # Crear script de test básico
-cat > test_integration.py << 'EOF'
+cat > integration_test.py << 'EOF'
 #!/usr/bin/env python3
 """Test básico de la integración BitDefender"""
 
@@ -350,11 +350,11 @@ if __name__ == "__main__":
     asyncio.run(test_basic_functionality())
 EOF
 
-chmod +x test_integration.py
+chmod +x integration_test.py
 
 print_step "10. Ejecutando test básico"
 
-python3 test_integration.py
+python3 integration_test.py
 
 print_step "Setup completado!"
 

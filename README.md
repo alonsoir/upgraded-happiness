@@ -1,656 +1,383 @@
-# 🛡️ Upgraded Happiness - SCADA Security Platform
+# 🧬 Sistema Autoinmune Digital v2.0
 
-**Advanced Real-time Network Security System with ML-Powered Threat Detection and Automated Firewall Response**
+## 🎯 **Visión General**
 
-![System Status](https://img.shields.io/badge/Status-Production%20Ready-green)
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+El Sistema Autoinmune Digital es una plataforma de seguridad distribuida que emula el comportamiento del sistema inmunológico humano para detectar, analizar y responder automáticamente a amenazas de red en tiempo real.
 
-## 🚀 **NEW: Automated Firewall Response System**
+### **🔥 Características Principales**
 
-Upgraded Happiness now includes a **complete automated firewall response system** that detects threats in real-time and automatically blocks malicious IPs through an intelligent, ML-powered dashboard.
+- **⚡ Procesamiento en Tiempo Real**: Pipeline distribuido con latencia < 25ms
+- **🧠 Machine Learning Adaptativo**: Detección de anomalías con aprendizaje continuo
+- **🔐 Cifrado Empresarial**: AES-256-GCM con rotación automática de claves
+- **🌐 Arquitectura Distribuida**: Escalamiento horizontal y vertical
+- **🗣️ Interfaz Conversacional**: RAG para consultas en lenguaje natural
+- **📊 Observabilidad Completa**: Métricas, dashboards y alertas en tiempo real
+- **🛡️ Respuesta Automática**: Integración con firewalls distribuidos
+- **🔄 Auto-optimización**: Sistema que se mejora continuamente
 
-### ⚡ Quick Start (Firewall System)
+## 🏗️ **Arquitectura del Sistema**
 
+```
+📡 CAPTURA DE TRÁFICO
+├── promiscuous_agent.py → Captura promiscua de paquetes (Puerto 5559)
+├── geoip_enricher.py → Enriquecimiento geográfico (5559→5560)
+└── lightweight_ml_detector.py → Detección ML (5560→5561)
+
+📊 ORCHESTRACIÓN Y DECISIÓN
+├── real_zmq_dashboard_with_firewall.py → Dashboard central (5561→5562)
+├── neural_trainer_collector.py → Entrenamiento continuo
+└── autoinmune_rag_engine.py → Interfaz conversacional
+
+🛡️ RESPUESTA Y ACCIÓN
+├── simple_firewall_agent.py → Agentes de firewall distribuidos (Puerto 5562)
+├── etcd → Coordinación de cluster
+└── monitoring → Métricas y alertas
+```
+
+## 🚀 **Estado Actual del Proyecto**
+
+### **✅ FUNCIONALIDADES COMPLETADAS (Q3 2025)**
+- ✅ **Pipeline distribuido básico**: Flujo completo promiscuous → geoip → ml → dashboard → firewall
+- ✅ **Comunicación ZeroMQ/Protobuf**: Arquitectura distribuida funcionando
+- ✅ **Captura de tráfico**: Agente promiscuo con Scapy operativo
+- ✅ **Enriquecimiento GeoIP**: Localización geográfica de IPs
+- ✅ **ML Detection básico**: Detección de anomalías con múltiples algoritmos
+- ✅ **Dashboard web**: Interfaz visual en tiempo real
+- ✅ **Sistema de configuración**: JSON declarativo para todos los componentes
+- ✅ **Cifrado empresarial**: SecureEnvelope AES-256-GCM
+- ✅ **Makefile avanzado**: Gestión completa del ciclo de vida
+
+### **🔄 EN DESARROLLO ACTIVO**
+- 🔄 **Dashboard-Firewall Integration**: Botones de bloqueo en eventos
+- 🔄 **Clasificación de eventos**: Mejora de la precisión ML
+- 🔄 **Auto-respuesta**: Firewall automático en eventos críticos
+- 🔄 **RAG Engine**: Interfaz conversacional con Claude
+- 🔄 **Neural Trainer**: Aprendizaje continuo optimizado
+
+### **📋 PRÓXIMOS HITOS**
+- 🎯 **Dashboard interactivo**: Click-to-block en eventos de alto riesgo
+- 🎯 **Threat intelligence**: Feeds externos de amenazas
+- 🎯 **Advanced correlation**: Análisis de patrones complejos
+- 🎯 **Performance tuning**: Optimización para Intel i9
+
+## 🚀 **Instalación y Configuración**
+
+### **Requisitos**
+- Python 3.13+
+- ZeroMQ 4.3+
+- etcd 3.5+
+- 16GB RAM (recomendado)
+- CPU multi-core (Intel i9 optimizado)
+- Permisos sudo (para iptables)
+
+### **Quick Start**
 ```bash
-# 1. Setup and install dependencies
-make setup-firewall-perms
-make install-firewall-deps
-
-# 2. Start the complete firewall system
-make run-firewall
-
-# 3. Open interactive dashboard
-make show-firewall-dashboard
-```
-
-**🎯 Access the dashboard at:** http://localhost:8000
-
----
-
-## 📋 Table of Contents
-
-- [🎯 System Overview](#-system-overview)
-- [🔥 Firewall System (NEW)](#-firewall-system-new)
-- [🏗️ Architecture](#️-architecture)  
-- [📦 Installation](#-installation)
-- [🚀 Usage](#-usage)
-- [🌍 GIS Dashboard (Legacy)](#-gis-dashboard-legacy)
-- [🧪 Testing](#-testing)
-- [📊 Monitoring](#-monitoring)
-- [🔧 Configuration](#-configuration)
-- [🐋 Docker Deployment (Future)](#-docker-deployment-future)
-- [🤝 Contributing](#-contributing)
-
----
-
-## 🎯 System Overview
-
-Upgraded Happiness is a comprehensive **SCADA (Supervisory Control and Data Acquisition) security platform** that provides:
-
-### 🔥 **Core Features (Enhanced)**
-
-- **🚨 Real-time Threat Detection**: ML-powered analysis of network traffic
-- **🛡️ Automated Firewall Response**: Click-to-block malicious IPs with intelligent command generation
-- **📊 Interactive Dashboard**: Real-time visualization with geographic mapping
-- **🤖 Machine Learning**: Multiple ML models for anomaly and risk detection
-- **🗺️ Geographic Intelligence**: IP geolocation with interactive maps
-- **⚡ High Performance**: ZeroMQ-based messaging for real-time processing
-- **🔧 Multi-Platform**: Linux, macOS, and Windows support
-
-### 🎯 **New Capabilities**
-
-| Feature | Description | Status |
-|---------|-------------|---------|
-| **Automated Blocking** | Click events to instantly block IPs | ✅ Production |
-| **Intelligent Commands** | Context-aware firewall rule generation | ✅ Production |
-| **Temporal Management** | Auto-expiring firewall rules | ✅ Production |
-| **Claude Integration** | AI-powered command optimization | 🔄 Beta |
-| **Multi-Platform Firewall** | iptables, pfctl, netsh support | ✅ Production |
-
----
-
-## 🔥 Firewall System (NEW)
-
-### 🎯 **Architecture Flow**
-
-```mermaid
-graph TD
-    A[📡 Promiscuous Agent] -->|Port 5559| B[🤖 ML Detector]
-    B -->|Port 5560| C[📊 Interactive Dashboard]
-    C -->|Port 5561| D[🔥 Firewall Agent]
-    D -->|iptables/pfctl| E[🛡️ System Firewall]
-    C -->|Web UI| F[👤 Security Operator]
-```
-
-### 🎮 **Interactive Features**
-
-#### 1. **Click-to-Block Events**
-- Click any high-risk event in the dashboard
-- Automatic firewall command generation
-- Confirmation modal with command preview
-- One-click deployment to system firewall
-
-#### 2. **Intelligent Command Generation**
-```javascript
-// Example: SSH Brute Force Detection
-Event: 192.168.1.100 → 10.0.0.1:22 (Risk: 85%)
-Generated Command: 
-  iptables -A INPUT -s 192.168.1.100 -p tcp --dport 22 -m limit --limit 3/min -j ACCEPT
-  iptables -A INPUT -s 192.168.1.100 -p tcp --dport 22 -j DROP
-Duration: 24h (High Risk)
-```
-
-#### 3. **Temporal Rule Management**
-- Automatic rule expiration
-- Cleanup of outdated rules
-- Rollback on errors
-- Audit trail of all actions
-
-### 🚀 **Firewall System Usage**
-
-#### **Option A: One-Command Start**
-```bash
-make run-firewall
-```
-
-#### **Option B: Manual Component Start**
-```bash
-# Terminal 1: Firewall Agent (must be first!)
-python firewall_agent.py
-
-# Terminal 2: Packet Capture
-sudo python promiscuous_agent.py enhanced_agent_config.json
-
-# Terminal 3: ML Analysis
-python ml_detector_with_persistence.py
-
-# Terminal 4: Interactive Dashboard
-python real_zmq_dashboard_with_firewall.py
-```
-
-#### **Option C: Background Mode**
-```bash
-make run-firewall-bg
-```
-
-### 📊 **Dashboard Features**
-
-- **🗺️ Real-time Event Map**: Geographic visualization of threats
-- **📋 Event List**: Clickable events with risk scoring
-- **🛡️ Firewall Controls**: One-click blocking with intelligent commands
-- **📈 Live Statistics**: Events/minute, anomalies, high-risk events
-- **🔍 Event Details**: Complete packet analysis and ML scores
-- **📜 Action Log**: History of all firewall commands executed
-
----
-
-## 🏗️ Architecture
-
-### 🔄 **Data Flow**
-
-```
-Network Traffic → Promiscuous Capture → ML Analysis → Dashboard → Firewall Response
-      ↓                ↓                    ↓           ↓            ↓
-   Raw Packets    Protobuf Events    Enhanced Events  User Action  iptables Rules
-```
-
-### 📦 **Component Architecture**
-
-#### **Core Components**
-1. **Promiscuous Agent** (`promiscuous_agent.py`)
-   - Captures network packets in promiscuous mode
-   - Converts to protobuf format
-   - Sends to ML Detector via port 5559
-
-2. **ML Detector** (`ml_detector_with_persistence.py`)
-   - Receives raw events from port 5559
-   - Applies 6 different ML models
-   - Enriches events with risk and anomaly scores
-   - Forwards enhanced events to port 5560
-
-3. **Interactive Dashboard** (`real_zmq_dashboard_with_firewall.py`)
-   - Receives enhanced events from port 5560
-   - Provides web interface with real-time updates
-   - Generates firewall commands for high-risk events
-   - Sends commands to Firewall Agent via port 5561
-
-4. **Firewall Agent** (`firewall_agent.py`)
-   - Receives firewall commands from port 5561
-   - Applies rules to system firewall
-   - Manages rule expiration and cleanup
-   - Provides audit logging
-
-#### **Support Components**
-- **Claude Integration** (`claude_firewall_integration.py`): AI-powered command generation
-- **System Orchestrator** (`system_orchestrator.py`): Automated system management
-- **GPS Generator** (`generate_gps_traffic.py`): Test data with geographic coordinates
-
-### 🌐 **Network Ports**
-
-| Port | Component | Direction | Purpose |
-|------|-----------|-----------|---------|
-| 5559 | ML Detector | ← Agent | Raw packet events |
-| 5560 | Dashboard | ← ML | Enhanced events with ML scores |
-| 5561 | Firewall Agent | ← Dashboard | Firewall commands |
-| 8000 | Dashboard | ← Browser | Web interface |
-
----
-
-## 📦 Installation
-
-### 🔧 **Prerequisites**
-
-```bash
-# System requirements
-Python 3.8+
-sudo access (for packet capture and firewall)
-Virtual environment support
-
-# Platform-specific
-Linux: iptables
-macOS: pfctl  
-Windows: netsh
-```
-
-### 📥 **Quick Installation**
-
-```bash
-# Clone repository
-git clone <repository-url>
+git clone https://github.com/alonsoir/upgraded-happiness.git
 cd upgraded-happiness
+git checkout feature/claude-integration
 
-# Setup virtual environment and dependencies
+# Setup completo automático
+make quick
+
+# O paso a paso
 make setup
-make install-all
-
-# Configure firewall permissions (Linux/macOS)
-make setup-firewall-perms
-
-# Verify installation
-make verify-firewall
+make install
+make setup-perms
+make start
 ```
 
-### 📋 **Manual Installation**
+### **URLs del Sistema**
+- **Dashboard Principal**: http://localhost:8000
+- **RAG Engine**: http://localhost:8090/chat (próximamente)
+- **Métricas**: http://localhost:8000/metrics
+- **Health Check**: http://localhost:8000/health
 
+## 🔧 **Componentes Principales**
+
+### **📡 Promiscuous Agent**
 ```bash
-# 1. Create virtual environment
-python3 -m venv upgraded_happiness_venv
-source upgraded_happiness_venv/bin/activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-pip install zmq psutil scikit-learn
-
-# 3. Configure firewall permissions
-sudo visudo
-# Add: your_user ALL=(ALL) NOPASSWD: /sbin/iptables
-
-# 4. Verify protobuf files
-ls src/protocols/protobuf/network_event_pb2.py
+sudo python promiscuous_agent.py enhanced_agent_config.json
 ```
+**Estado**: ✅ Operativo
+- Captura selectiva de paquetes con Scapy
+- Filtrado BPF a nivel kernel
+- Envío vía ZeroMQ puerto 5559
+- Protocolos: TCP, UDP, ICMP
 
----
-
-## 🚀 Usage
-
-### 🎯 **Firewall System (Primary)**
-
-#### **Start Complete System**
+### **🌍 GeoIP Enricher** 
 ```bash
-make run-firewall
+python geoip_enricher.py geoip_enricher_config.json
 ```
-This starts all components in the correct order and opens the dashboard.
+**Estado**: ✅ Operativo
+- Recibe de puerto 5559, envía a 5560
+- Cache LRU con alta eficiencia
+- Fallback a ip-api.com
+- Detección de países de alto riesgo
 
-#### **Monitor System Status**
+### **🤖 ML Detector**
 ```bash
-make status-firewall
-make monitor-firewall
+python lightweight_ml_detector.py lightweight_ml_detector_config.json
 ```
+**Estado**: ✅ Operativo (refinando)
+- Recibe de puerto 5560, envía a 5561
+- Isolation Forest + algoritmos adicionales
+- Latencia objetivo < 15ms
+- **⚠️ Mejorando clasificación de eventos**
 
-#### **Test Firewall Functionality**
+### **📊 Dashboard Central**
 ```bash
-make test-firewall
-make test-claude
+python real_zmq_dashboard_with_firewall.py dashboard_config.json
 ```
+**Estado**: 🔄 En desarrollo
+- Recibe de puerto 5561, controla 5562
+- Interfaz web responsive
+- **⚠️ Integrando botones de bloqueo**
+- **⚠️ Mejorando interacción con firewall**
 
-### 🌍 **Legacy GIS System**
-
-#### **Start GIS Dashboard**
+### **🛡️ Firewall Agents**
 ```bash
-make run-enhanced  # Complete legacy system
-make gis          # GIS dashboard only
+python simple_firewall_agent.py firewall_agent_config.json
 ```
+**Estado**: ✅ Básico (mejorando integración)
+- Escucha en puerto 5562
+- Aplicación de reglas iptables
+- **⚠️ Integrando con dashboard**
 
-### 🛠️ **System Management**
-
-#### **Stop Systems**
+### **🧠 Neural Trainer** (Próximo)
 ```bash
-make stop-firewall    # Stop firewall system only
-make stop            # Nuclear stop (all components)
-make emergency-stop  # Force kill all processes
+python neural_trainer_collector.py neural_trainer_config.json
 ```
+**Estado**: 🎯 Planificado
+- Entrenamiento incremental
+- Distribución vía etcd
+- A/B testing de modelos
 
-#### **View Logs**
+### **🗣️ RAG Engine** (Próximo)
 ```bash
-make logs-firewall   # Firewall system logs
-make logs-gis       # GIS system logs
-make show-logs      # All logs (live)
+python autoinmune_rag_engine.py rag_engine_config.json
 ```
+**Estado**: 🎯 En diseño
+- Integración con Claude
+- Vector database (Chroma)
+- API REST para consultas
 
-### 🧪 **Development Mode**
+## 🔐 **Sistema de Cifrado**
 
-```bash
-# Start individual components for development
-python firewall_agent.py
-python real_zmq_dashboard_with_firewall.py
-python claude_firewall_integration.py  # Test AI integration
-```
+### **SecureEnvelope - Cifrado Empresarial**
 
----
+```python
+from crypto_utils import SecureEnvelope
 
-## 🌍 GIS Dashboard (Legacy)
-
-The original GIS dashboard provides geographic visualization without firewall capabilities.
-
-### 🚀 **Legacy Quick Start**
-```bash
-make run-enhanced
-```
-
-### 🔗 **Legacy URLs**
-- **GIS Dashboard**: http://localhost:8001
-- **Fixed Dashboard**: http://localhost:8766
-
-### 🎯 **Legacy Features**
-- Real-time IP geolocation
-- Interactive Leaflet maps
-- WebSocket updates
-- Event visualization
-- Basic anomaly detection
-
----
-
-## 🧪 Testing
-
-### 🔬 **Firewall System Tests**
-
-```bash
-# Test complete firewall system
-make test-firewall
-
-# Test individual components
-make test-claude
-python claude_firewall_integration.py
-
-# Test with sample data
-make run-firewall-test
-```
-
-### 🗺️ **GIS System Tests**
-
-```bash
-# Test GIS functionality
-make test-gis
-make test-geolocation
-```
-
-### 🎯 **Manual Testing**
-
-#### **Generate Test Events**
-```bash
-# Start system with GPS test data
-make run-firewall-test
-
-# Manual event injection
-python generate_gps_traffic.py continuous 15
-```
-
-#### **Test Firewall Commands**
-```bash
-# Send test command to firewall agent
-python -c "
-import zmq, json
-context = zmq.Context()
-socket = context.socket(zmq.PUSH) 
-socket.connect('tcp://localhost:5561')
-socket.send(json.dumps({
-    'action': 'block_ip',
-    'target_ip': '192.168.1.100',
-    'reason': 'Test command'
-}).encode())
-"
-```
-
----
-
-## 📊 Monitoring
-
-### 📈 **System Metrics**
-
-#### **Real-time Dashboard**
-- Events per minute
-- ML anomaly detection rate
-- High-risk event count
-- Firewall rules active
-- Geographic event distribution
-
-#### **Command Line Monitoring**
-```bash
-# System status
-make status-firewall
-make monitor-firewall
-
-# Performance monitoring
-watch -n 2 "make status-firewall"
-
-# Log monitoring
-tail -f logs/firewall_agent.out
-tail -f logs/firewall_dashboard.out
-```
-
-### 🔍 **Health Checks**
-
-```bash
-# Verify all components
-make verify-firewall
-
-# Test connectivity
-curl http://localhost:8000/health
-curl http://localhost:8000/api/stats
-
-# Check firewall status
-curl http://localhost:8000/api/firewall/log
-```
-
-### 📋 **Logging**
-
-#### **Log Files**
-```
-logs/
-├── firewall_agent.out      # Firewall agent operations
-├── firewall_dashboard.out  # Dashboard activity  
-├── ml.out                  # ML detector processing
-├── agent.out               # Packet capture
-└── gps_generator.out       # Test data generation
-```
-
-#### **Log Levels**
-- `INFO`: Normal operations
-- `WARNING`: Non-critical issues
-- `ERROR`: Component failures
-- `DEBUG`: Detailed troubleshooting
-
----
-
-## 🔧 Configuration
-
-### 🌍 **Environment Variables**
-
-The system uses a comprehensive `.env` file for configuration:
-
-```bash
-# Firewall System
-FIREWALL_COMMAND_PORT=5561
-FIREWALL_DASHBOARD_PORT=8000
-FIREWALL_DEFAULT_BLOCK_DURATION=1h
-
-# ML Configuration  
-ML_ANOMALY_THRESHOLD=0.7
-ML_RISK_THRESHOLD=0.8
-ML_HIGH_RISK_THRESHOLD=0.9
-
-# Network Capture
-CAPTURE_PORT=5559
-ML_ENHANCED_PORT=5560
-
-# Dashboard
-DASHBOARD_REFRESH_INTERVAL=3000
-DASHBOARD_MAX_EVENTS_DISPLAY=300
-```
-
-### 🔧 **Component Configuration**
-
-#### **Promiscuous Agent**
-```json
-// enhanced_agent_config.json
-{
-  "interface": "auto",
-  "buffer_size": 1024,
-  "timeout": 1,
-  "output_port": 5559
+encryption_config = {
+    "enabled": True,
+    "algorithm": "AES-256-GCM",
+    "rotation_interval_seconds": 3600,
+    "entropy_sources": ["pid", "boot_time", "random_bytes"],
+    "aad_includes": ["node_id", "component_name"]
 }
+
+envelope = SecureEnvelope(encryption_config)
+ciphertext = envelope.encrypt(protobuf_bytes)
+plaintext = envelope.decrypt(ciphertext)
 ```
 
-#### **ML Detector**
-```python
-# Built-in configuration
-MODELS = [
-    'IsolationForest',
-    'OneClassSVM', 
-    'EllipticEnvelope',
-    'LocalOutlierFactor',
-    'RandomForest',
-    'XGBoost'
-]
-```
+## 📊 **Comandos de Gestión**
 
-#### **Firewall Agent**
-```python
-# Automatic rule expiration
-RULE_CHECK_INTERVAL = 60  # seconds
-MAX_ACTIVE_RULES = 100
-SUDO_TIMEOUT = 30
-```
-
----
-
-## 🐋 Docker Deployment (Future)
-
-### 🚢 **Containerized Architecture** 
-
-```yaml
-# docker-compose.yml (Future)
-version: '3.8'
-services:
-  firewall-agent:
-    build: ./docker/firewall.Dockerfile
-    ports: ["5561:5561"]
-    
-  ml-detector:
-    build: ./docker/ml.Dockerfile
-    ports: ["5559:5559", "5560:5560"]
-    
-  dashboard:
-    build: ./docker/dashboard.Dockerfile  
-    ports: ["8000:8000"]
-    
-  capture-agent:
-    build: ./docker/agent.Dockerfile
-    network_mode: host
-    privileged: true
-```
-
-### 🎯 **Deployment Commands**
+### **Control del Sistema**
 ```bash
-# Future deployment
-docker-compose up -d
-docker-compose ps
-docker-compose logs -f firewall-agent
+# Inicio completo
+make start
+
+# Estado del sistema
+make status
+
+# Monitorización
+make monitor
+
+# Parada controlada
+make stop
+
+# Parada nuclear (emergencia)
+make stop-nuclear
+
+# Reinicio completo
+make restart
+
+# Verificación de integridad
+make verify
+
+# Dashboard web
+make show-dashboard
 ```
 
----
-
-## 🤝 Contributing
-
-### 🛠️ **Development Setup**
-
+### **Debugging y Logs**
 ```bash
-# Development environment
-make setup
-make install-dev
-make test
+# Ver logs de todos los componentes
+make logs
 
-# Pre-commit hooks
-pip install pre-commit
-pre-commit install
+# Verificar configuración GeoIP
+make check-geoip
+
+# Setup de permisos
+make setup-perms
+
+# Limpiar y reinstalar
+make clean && make quick
 ```
 
-### 📝 **Code Standards**
+## 🎯 **Issues Conocidos y Roadmap**
 
-- **Python**: PEP 8, Black formatting
-- **JavaScript**: ES6+, Prettier formatting  
-- **Documentation**: Inline comments + README updates
-- **Testing**: Unit tests for new features
+### **🚨 Issues Críticos (En resolución)**
+1. **Dashboard-Firewall Integration**
+   - Los botones de bloqueo no aparecen en eventos clickados
+   - La comunicación dashboard→firewall necesita refinamiento
+   - **Próximo sprint**: Implementar click-to-block UI
 
-### 🔄 **Pull Request Process**
+2. **Clasificación de Eventos ML**
+   - Los algoritmos necesitan ajuste fino
+   - False positives/negatives en clasificación
+   - **Próximo sprint**: Tuning de hiperparámetros
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+3. **Auto-respuesta Firewall**
+   - Integración automática dashboard→firewall en desarrollo
+   - **Próximo sprint**: Respuesta automática a eventos críticos
 
-### 🧪 **Testing Requirements**
+### **🔮 Roadmap Detallado**
 
+#### **Q4 2025 - Sprint Actual**
+- 🔄 **[EN PROGRESO]** Click-to-block en dashboard
+- 🔄 **[EN PROGRESO]** ML classification tuning
+- 🎯 **[PLANIFICADO]** Auto-respuesta firewall
+- 🎯 **[PLANIFICADO]** RAG Engine básico
+- 🎯 **[PLANIFICADO]** Neural trainer inicial
+
+#### **Q1 2026 - Advanced Features**
+- 🔮 Auto-scaling inteligente
+- 🔮 Threat intelligence feeds
+- 🔮 Advanced correlation engine
+- 🔮 Multi-region deployment
+- 🔮 Kubernetes integration
+
+#### **Q2 2026 - AI Enhancement**
+- 🔮 Claude-powered threat hunting
+- 🔮 Conversational security analysis
+- 🔮 Predictive threat modeling
+- 🔮 Self-healing infrastructure
+
+#### **Q3 2026 - Next-Gen**
+- 🔮 Quantum-ready encryption
+- 🔮 Edge computing support
+- 🔮 Zero-trust architecture
+- 🔮 Autonomous security operations
+
+## 📈 **Métricas Actuales**
+
+### **Performance Baseline (Intel i9)**
+```
+Component               Estado    CPU%    Memory    Latencia    Throughput
+promiscuous_agent       ✅        0.4%    108MB     0.2ms       Variable
+geoip_enricher         ✅       56.9%     22MB     0.1ms       1.8/s
+lightweight_ml_detector ⚠️       55.6%    146MB    14.7ms      1.8/s (tuning)
+dashboard              🔄       25.0%    512MB     5.0ms       1000/s (mejorando)
+firewall_agent         ✅        5.0%     32MB     1.0ms       N/A
+```
+
+### **Objetivos de Performance**
+- **Pipeline Latency**: < 25ms (P95) 
+- **Throughput**: 1000+ eventos/segundo ✅
+- **CPU Usage**: < 70% por componente ✅
+- **Memory Usage**: < 2GB por componente ✅
+- **False Positive Rate**: < 5% (🔄 optimizando)
+
+## 🔧 **Desarrollo y Contribución**
+
+### **Branch Strategy**
+- **main**: Producción estable
+- **feature/claude-integration**: Desarrollo activo ⭐
+- **feature/dashboard-improvements**: Dashboard enhancements
+- **feature/ml-tuning**: ML algorithm improvements
+
+### **Testing**
 ```bash
-# Required tests for firewall features
-make test-firewall
-make test-claude
+# Unit tests
+python -m pytest tests/
 
-# Performance testing
-make monitor-firewall
+# Integration tests  
+python -m pytest tests/integration/
 
-# Integration testing
-make run-firewall-test
+# Performance tests
+python -m pytest tests/performance/
 ```
 
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **ZeroMQ**: High-performance messaging
-- **Scikit-learn**: Machine learning models
-- **Leaflet**: Interactive mapping
-- **FastAPI**: Modern web framework
-- **Claude**: AI-powered intelligence (future)
-
----
-
-## 📞 Support
-
-### 🆘 **Quick Help**
-
+### **Debugging Workflow**
 ```bash
-# View all available commands
-make help
-make help-firewall
-make help-gis
+# 1. Verificar sistema
+make verify
 
-# Diagnostic information
-make diagnose
-make verify-firewall
+# 2. Iniciar con logs
+make start
 
-# Emergency recovery
-make emergency-fix
-make emergency-stop
+# 3. Monitorizar en tiempo real
+make monitor
+
+# 4. Verificar logs específicos
+tail -f logs/dashboard.log | grep ERROR
+
+# 5. Debug componente específico
+python -c "import dashboard; dashboard.debug_mode()"
 ```
 
-### 📧 **Contact**
+## 🎯 **Casos de Uso**
 
-- **Issues**: [GitHub Issues](link-to-issues)
-- **Discussions**: [GitHub Discussions](link-to-discussions)  
-- **Security**: security@upgraded-happiness.com
+### **1. Detección de Amenazas (Funcionando)**
+```
+Sistema: Detecta SSH brute force desde 192.168.1.100
+Dashboard: Muestra evento de alto riesgo
+Usuario: Click para bloquear (🔄 implementando)
+Firewall: Aplica regla automáticamente
+```
+
+### **2. Análisis Geográfico (Funcionando)**
+```
+Sistema: IP desde China intenta conexión
+GeoIP: Enriquece con ubicación y ASN
+ML: Clasifica según patrones históricos
+Dashboard: Visualiza en mapa tiempo real
+```
+
+### **3. Consulta RAG (Próximamente)**
+```
+Usuario: "¿Qué amenazas hemos visto desde China hoy?"
+RAG: "Detectamos 47 eventos desde China: 23 SSH brute force, 
+     15 port scanning, 9 eventos de alto riesgo..."
+```
+
+## 📞 **Soporte y Contribución**
+
+### **Canal de Desarrollo**
+- **Repositorio**: https://github.com/alonsoir/upgraded-happiness
+- **Branch Activa**: `feature/claude-integration`
+- **Issues**: [GitHub Issues](https://github.com/alonsoir/upgraded-happiness/issues)
+- **Discusiones**: [GitHub Discussions](https://github.com/alonsoir/upgraded-happiness/discussions)
+
+### **Próximos PRs**
+1. **Dashboard-Firewall Integration** (Próxima semana)
+2. **ML Classification Tuning** (Sprint actual)
+3. **RAG Engine Foundation** (Próximo sprint)
+4. **Neural Trainer Basic** (Mes actual)
+
+### **Cómo Contribuir**
+1. Fork del repositorio
+2. Checkout de `feature/claude-integration`
+3. Crear branch: `git checkout -b feature/your-feature`
+4. Commit: `git commit -m 'Add your feature'`
+5. Push: `git push origin feature/your-feature`
+6. Crear Pull Request a `feature/claude-integration`
 
 ---
 
-## 🗺️ Roadmap
+> **"Un sistema que no solo detecta amenazas, sino que aprende, se adapta y evoluciona como un organismo digital inteligente."** 🧬✨
 
-### 🎯 **Current Focus**
-- ✅ Automated firewall response system
-- ✅ Interactive threat blocking
-- ✅ Multi-platform firewall support
-- ✅ Temporal rule management
+> **Estado Actual**: 🚀 Pipeline distribuido funcionando → 🔄 Refinando integración → 🎯 Próximo: RAG + Auto-respuesta
 
-### 🔮 **Next Phase**
-- 🔄 Claude AI integration for smart commands
-- 🔄 Container deployment with Docker
-- 🔄 Advanced threat intelligence
-- 🔄 Mobile dashboard app
-
-### 🚀 **Future Vision**
-- 📋 Multi-node deployment
-- 📋 Advanced analytics and reporting
-- 📋 Integration with SIEM systems
-- 📋 Cloud-native architecture
-
----
-
-**⚡ Ready to secure your network? Start with `make run-firewall`** 🛡️
+**Construido con ❤️ por el equipo de Upgraded Happiness**

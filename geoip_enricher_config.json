@@ -1,0 +1,225 @@
+{
+  "component": {
+    "name": "geoip_enricher",
+    "version": "2.0.0",
+    "mode": "distributed_vertical"
+  },
+  "node_id": "geoip_enricher_vertical_001",
+  "version": "2.0.0",
+  "component_type": "geoip_enricher",
+
+  "network": {
+    "input_socket": {
+      "address": "localhost",
+      "port": 5559,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "description": "Recibe eventos protobuf del promiscuous_agent (i9 8-cores optimized)"
+    },
+    "output_socket": {
+      "address": "localhost",
+      "port": 5560,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos enriquecidos al lightweight_ml_detector (32GB RAM optimized)"
+    }
+  },
+
+  "zmq": {
+    "input_port": 5559,
+    "output_port": 5560,
+    "rcvhwm": 2000,
+    "sndhwm": 2000,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 100,
+    "linger_ms": 1000,
+    "vertical_scaling_optimizations": {
+      "io_threads": 1,
+      "max_sockets": 128,
+      "tcp_keepalive": true,
+      "tcp_keepalive_idle": 300,
+      "immediate": true
+    }
+  },
+
+  "backpressure": {
+    "enabled": true,
+    "max_retries": 4,
+    "retry_delays_ms": [1, 2, 4, 8],
+    "drop_threshold_percent": 10.0,
+    "activation_threshold": 75,
+    "queue_full_strategy": "intelligent_drop",
+    "vertical_optimizations": {
+      "adaptive_delays": true,
+      "cpu_aware_backpressure": true,
+      "memory_pressure_detection": true
+    }
+  },
+
+  "processing": {
+    "threads": 3,
+    "send_threads": 1,
+    "internal_queue_size": 1000,
+    "protobuf_queue_size": 500,
+    "queue_timeout_seconds": 1.0,
+    "performance_mode": "conservative_i9",
+    "vertical_scaling": {
+      "optimized_for_i9_8cores": true,
+      "memory_pool_size_mb": 256,
+      "cpu_affinity_enabled": false,
+      "prefetch_geoip_data": false,
+      "leave_cores_for_system": 4
+    },
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 25,
+      "max_wait_ms": 50,
+      "adaptive_batching": false
+    }
+  },
+
+  "geoip": {
+    "lookup_method": "mock",
+    "performance_mode": "conservative",
+    "cache_enabled": true,
+    "cache_size": 5000,
+    "cache_ttl_seconds": 1800,
+    "mock_coordinates": [40.4168, -3.7038],
+    "use_default_coordinates_on_failure": true,
+    "default_coordinates": [40.4168, -3.7038],
+    "vertical_optimizations": {
+      "preload_common_ips": false,
+      "memory_mapped_database": false,
+      "batch_lookup_enabled": false,
+      "lookup_timeout_ms": 20,
+      "optimized_for_32gb_ram": false
+    },
+    "maxmind": {
+      "database_path": "/opt/geoip/GeoLite2-City.mmdb",
+      "enabled": false,
+      "auto_update": false,
+      "fallback_to_country": true,
+      "connection_pool_size": 8
+    },
+    "api": {
+      "url": "https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}",
+      "timeout_seconds": 2.0,
+      "api_key": null,
+      "enabled": false,
+      "rate_limit_per_minute": 2000,
+      "retry_failed_requests": false,
+      "connection_pool_size": 10
+    },
+    "precision": {
+      "coordinate_precision": 4,
+      "validate_coordinates": true,
+      "min_latitude": -90.0,
+      "max_latitude": 90.0,
+      "min_longitude": -180.0,
+      "max_longitude": 180.0
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [i9-VERTICAL] - %(message)s",
+    "file": null,
+    "max_file_size_mb": 100,
+    "backup_count": 5,
+    "performance_logging": {
+      "enabled": true,
+      "log_slow_requests": true,
+      "slow_request_threshold_ms": 50,
+      "log_throughput_stats": true
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 15,
+    "detailed_metrics": true,
+    "vertical_scaling_metrics": {
+      "track_cpu_per_core": true,
+      "track_memory_pressure": true,
+      "track_cache_efficiency": true,
+      "track_batch_performance": true,
+      "hardware_profile": "i9_8cores_32gb"
+    },
+    "component_health_check": {
+      "enabled": true,
+      "check_interval_seconds": 30,
+      "memory_threshold_mb": 1024,
+      "cpu_threshold_percent": 75.0,
+      "cache_hit_rate_threshold": 70.0
+    },
+    "alerts": {
+      "max_queue_usage_percent": 80.0,
+      "max_geoip_failure_rate_percent": 15.0,
+      "max_processing_latency_ms": 50.0,
+      "max_backpressure_activations": 150,
+      "min_cache_hit_rate_percent": 60.0,
+      "max_memory_usage_mb": 1024,
+      "max_cpu_sustained_percent": 70.0
+    },
+    "metrics_export": {
+      "enabled": false,
+      "prometheus_port": 9090,
+      "export_interval_seconds": 60
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "enricher_vertical",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10,
+      "track_vertical_metrics": true
+    },
+    "load_balancing": {
+      "strategy": "vertical_single_node",
+      "health_check_enabled": true,
+      "failover_timeout_ms": 5000
+    },
+    "scaling": {
+      "auto_scale_enabled": false,
+      "scaling_type": "vertical",
+      "min_instances": 1,
+      "max_instances": 1,
+      "scale_up_cpu_threshold": 75.0,
+      "scale_up_memory_threshold": 70.0,
+      "hardware_constraints": {
+        "max_cores_available": 8,
+        "max_memory_gb": 32,
+        "recommended_threads": 6
+      }
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 1048576,
+      "validate_protobuf_schema": true,
+      "sanitize_ip_addresses": true
+    },
+    "rate_limiting": {
+      "enabled": false,
+      "max_events_per_second": 2000,
+      "burst_capacity": 4000,
+      "penalty_duration_seconds": 60
+    }
+  },
+
+  "debug": {
+    "enabled": false,
+    "sample_events": false,
+    "sample_rate_percent": 1.0,
+    "log_protobuf_details": false,
+    "profile_performance": false,
+    "log_vertical_metrics": false
+  }
+}

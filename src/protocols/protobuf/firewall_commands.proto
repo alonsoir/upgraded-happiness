@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package firewall.commands;
+
+//protoc --python_out=. firewall_commands.proto
+
+enum CommandAction {
+    BLOCK_IP = 0;
+    UNBLOCK_IP = 1;
+    BLOCK_PORT = 2;
+    UNBLOCK_PORT = 3;
+    RATE_LIMIT_IP = 4;
+    ALLOW_IP_TEMP = 5;
+    FLUSH_RULES = 6;
+    LIST_RULES = 7;
+    BACKUP_RULES = 8;
+    RESTORE_RULES = 9;
+}
+
+enum CommandPriority {
+    LOW = 0;
+    MEDIUM = 1;
+    HIGH = 2;
+    CRITICAL = 3;
+}
+
+message FirewallCommand {
+    string command_id = 1;           // ID único del comando
+    CommandAction action = 2;        // Acción a realizar
+    string target_ip = 3;            // IP objetivo
+    int32 target_port = 4;           // Puerto objetivo (0 si no aplica)
+    int32 duration_seconds = 5;      // Duración (0 = permanente)
+    string reason = 6;               // Razón humana para el comando
+    CommandPriority priority = 7;    // Prioridad del comando
+    bool dry_run = 8;                // true = solo mostrar, false = ejecutar
+    string rate_limit_rule = 9;      // "10/min", "5/sec" para rate limiting
+    map<string, string> extra_params = 10; // Parámetros adicionales específicos del SO
+}
+
+message FirewallCommandBatch {
+    string batch_id = 1;             // ID único del lote
+    string target_node_id = 2;       // ID del nodo destino
+    string so_identifier = 3;        // SO del nodo destino para validación
+    int64 timestamp = 4;             // Timestamp de creación
+    string generated_by = 5;         // "dashboard", "rule_engine", "manual"
+    bool dry_run_all = 6;            // Aplicar dry_run a todos los comandos
+
+    repeated FirewallCommand commands = 7; // Secuencia de comandos
+
+    // Metadatos del lote
+    string description = 8;          // Descripción del lote
+    string source_event_id = 9;      // ID del evento que originó estos comandos
+    float confidence_score = 10;     // Confianza en las recomendaciones (0-1)
+    int32 expected_execution_time = 11; // Tiempo estimado de ejecución en segundos
+}
+
+message FirewallResponse {
+    string batch_id = 1;             // ID del lote procesado
+    string command_id = 2;           // ID del comando específico
+    string node_id = 3;              // ID del nodo que responde
+    int64 timestamp = 4;             // Timestamp de la respuesta
+    bool success = 5;                // Si el comando fue exitoso
+    string message = 6;              // Mensaje de resultado/error
+    string executed_command = 7;     // Comando real ejecutado
+    float execution_time = 8;        // Tiempo de ejecución en segundos
+
+    // Para respuestas de lotes completos
+    int32 total_commands = 9;        // Total de comandos en el lote
+    int32 successful_commands = 10;  // Comandos ejecutados exitosamente
+    int32 failed_commands = 11;      // Comandos que fallaron
+}

@@ -1,666 +1,1025 @@
 #!/usr/bin/env python3
 """
-Sistema ML Ligero para Intel i9 + 32GB RAM
-Optimizado para CPU, sin dependencias GPU
-lightweight_ml_detector.py - PUERTO CORREGIDO + MULTIPART FIX
+lightweight_ml_detector.py - VERSIÓN CONSERVADORA COMPATIBLE CON DASHBOARD
+🤖 Enhanced ML Detector para Upgraded-Happiness - CONFIGURACIÓN LOCAL ESTABLE
+- Configuración ZMQ conservadora compatible con dashboard thread-safe
+- Validación estricta de tamaño de mensajes (MAXMSGSIZE: 10000)
+- Backpressure agresivo para evitar saturación del dashboard
+- Solo 2 algoritmos ML ligeros: Isolation Forest + K-Means
+- Timeouts y buffers compatible con dashboard (LINGER=0, timeout=500ms)
+- Colas pequeñas para uso eficiente de memoria local
 """
 
-# Auto-discovery functions
-import socket
-import time
-
 import zmq
-
-
-def find_available_port(start_port=5559, max_attempts=10):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(("localhost", port))
-                return port
-        except OSError:
-            continue
-    return start_port
-
-
-def find_active_broker(start_port=5559, max_attempts=10):
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            context = zmq.Context()
-            socket_test = context.socket(zmq.REQ)
-            socket_test.setsockopt(zmq.RCVTIMEO, 500)
-            socket_test.connect(f"tcp://localhost:{port}")
-            socket_test.send_string("ping", zmq.NOBLOCK)
-            socket_test.close()
-            context.term()
-            print(f"✅ Broker encontrado en puerto {port}")
-            return f"tcp://localhost:{port}"
-        except:
-            continue
-    print(f"⚠️  No se encontró broker, usando puerto {start_port}")
-    return f"tcp://localhost:{start_port}"
-
-
-def get_smart_broker_address():
-    import sys
-
-    for i, arg in enumerate(sys.argv):
-        if arg == "--broker" and i + 1 < len(sys.argv):
-            return sys.argv[i + 1]
-    return find_active_broker()
-
-
 import json
-import os
-import pickle
-import sys
-import threading
 import time
-from collections import defaultdict, deque
-from datetime import datetime
-
+import logging
+import threading
+import sys
+import os
+import socket
+import psutil
 import joblib
+import pickle
 import numpy as np
-import pandas as pd
-# XGBoost es muy eficiente en CPU
-import xgboost as xgb
-import zmq
-from sklearn.cluster import DBSCAN, KMeans
-from sklearn.decomposition import PCA
-# ML optimizado para CPU
-from sklearn.ensemble import (GradientBoostingClassifier, IsolationForest,
-                              RandomForestClassifier)
-from sklearn.feature_selection import SelectKBest, f_classif
-# Para análisis temporal básico sin GPU
-from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
-from sklearn.preprocessing import RobustScaler, StandardScaler
+import math
+from queue import Queue, Empty
+from datetime import datetime
+from pathlib import Path
+from collections import deque, defaultdict
+from typing import Dict, Any, Optional, Tuple, List
+from threading import Event
 
-sys.path.insert(0, os.getcwd())
-
+# 📦 Protobuf - USAR VERSIÓN ACTUALIZADA v2
 try:
-    from src.protocols.protobuf import network_event_pb2
+    import network_event_extended_v2_pb2 as NetworkEventProto
+
+    PROTOBUF_AVAILABLE = True
+except ImportError:
+    try:
+        from src.protocols.protobuf import network_event_extended_v2_pb2 as NetworkEventProto
+
+        PROTOBUF_AVAILABLE = True
+    except ImportError:
+        print("⚠️ Protobuf network_event_extended_v2 no disponible")
+        PROTOBUF_AVAILABLE = False
+
+# 📦 ML Libraries - SOLO 2 algoritmos ligeros para local
+try:
+    from sklearn.ensemble import IsolationForest
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler, RobustScaler
+    from sklearn.metrics import silhouette_score
+    from functools import lru_cache
+
+    ML_AVAILABLE = True
+except ImportError:
+    print("⚠️ Scikit-learn no disponible - ML deshabilitado")
+    ML_AVAILABLE = False
+
+
+class ModelPersistenceManager:
+    """Gestor de persistencia simplificado para configuración conservadora"""
+
+    def __init__(self, persistence_config: Dict[str, Any]):
+        self.config = persistence_config
+        self.models_dir = Path(self.config.get("models_dir", "ml_models"))
+        self.models_dir.mkdir(exist_ok=True)
+
+        # Subdirectorios organizados pero simplificados
+        self.model_versions_dir = self.models_dir / "versions"
+        self.best_models_dir = self.models_dir / "best"
+
+        for dir_path in [self.model_versions_dir, self.best_models_dir]:
+            dir_path.mkdir(exist_ok=True)
+
+        self.current_version = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.enabled = self.config.get("enabled", True)
+        self.max_model_files = self.config.get("max_model_files", 5)
+
+    def save_models(self, models, processors, training_metrics=None):
+        """Guardar modelos con cleanup automático para conservar espacio"""
+        if not self.enabled:
+            return None
+
+        version_dir = self.model_versions_dir / self.current_version
+        version_dir.mkdir(exist_ok=True)
 
-    print("✅ Protobuf importado exitosamente")
-except ImportError as e:
-    print(f"❌ Error importando protobuf: {e}")
-    sys.exit(1)
-
-
-class LightweightThreatDetector:
-    def __init__(self, broker_address="tcp://localhost:5559"):
-        self.broker_address = broker_address
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.SUB)
-        # ⭐ FIX: Suscribirse al topic específico del agente promiscuo
-        self.socket.setsockopt(zmq.SUBSCRIBE, b"network_event")
-
-        # Optimización para CPU Intel i9
-        self.cpu_config = {
-            "n_jobs": 8,  # Usar 8 cores del i9
-            "batch_size": 1000,  # Procesar en lotes
-            "memory_limit": "24GB",  # Dejar 8GB para el SO
-            "model_cache_size": 50,  # Cachear 50 modelos
-            "feature_limit": 50,  # Máximo 50 features para eficiencia
-        }
-
-        # Modelos ligeros optimizados para CPU
-        self.models = {
-            "isolation_forest": None,
-            "random_forest": None,
-            "xgboost": None,
-            "gradient_boost": None,
-            "kmeans": None,
-            "dbscan": None,
-            "sgd_classifier": None,
-            "naive_bayes": None,
-        }
-
-        # Pipelines de procesamiento rápido
-        self.processors = {
-            "scaler": RobustScaler(),  # Más robusto que StandardScaler
-            "pca": PCA(n_components=20),  # Reducir dimensionalidad
-            "feature_selector": SelectKBest(score_func=f_classif, k=30),
-        }
-
-        # Cache para features frecuentes
-        self.feature_cache = {}
-        self.pattern_cache = deque(maxlen=10000)  # Últimos 10k patrones
-
-        # Ventana deslizante para entrenamiento incremental
-        self.sliding_window = deque(maxlen=5000)  # 5k samples para reentrenamiento
-
-        # Estadísticas de rendimiento
-        self.performance_stats = {
-            "processing_time_ms": deque(maxlen=1000),
-            "prediction_time_ms": deque(maxlen=1000),
-            "memory_usage_mb": deque(maxlen=100),
-            "cpu_utilization": deque(maxlen=100),
-        }
-
-        print(f"🧠 DETECTOR ML LIGERO (Optimizado para Intel i9)")
-        print(f"💾 RAM disponible: 32GB (usando hasta 24GB)")
-        print(f"🔧 CPU cores: {self.cpu_config['n_jobs']}")
-        print(f"📊 Batch size: {self.cpu_config['batch_size']}")
-        print(f"🔌 Conectando a: {broker_address}")
-        print(f"📡 Suscrito a topic: 'network_event'")  # AÑADIDO
-        print("=" * 60)
-
-    def connect(self):
-        """Conectar al broker ZeroMQ"""
-        try:
-            self.socket.connect(self.broker_address)
-            print(f"✅ Conectado al Enhanced Promiscuous Agent: {self.broker_address}")
-            return True
-        except Exception as e:
-            print(f"❌ Error conectando: {e}")
-            return False
-
-    def extract_lightweight_features(self, event):
-        """Extraer features optimizadas para procesamiento rápido"""
-        # Cache check para IPs frecuentes
-        cache_key = f"{event.source_ip}:{event.target_ip}:{event.dest_port}"
-        if cache_key in self.feature_cache:
-            cached_features = self.feature_cache[cache_key].copy()
-            cached_features["timestamp"] = time.time()
-            return cached_features
-
-        # Features básicas optimizadas
-        features = {
-            # Network features (más importantes)
-            "src_port": event.src_port,
-            "dst_port": event.dest_port,
-            "packet_size": event.packet_size,
-            "port_diff": abs(event.dest_port - event.src_port)
-            if event.src_port > 0
-            else 0,
-            # IP features simplificadas
-            "is_internal_src": 1 if self._is_internal_ip(event.source_ip) else 0,
-            "is_internal_dst": 1 if self._is_internal_ip(event.target_ip) else 0,
-            "ip_class": self._classify_ip_range(event.target_ip),
-            # Port classification (más eficiente que muchos booleanos)
-            "port_category": self._categorize_port(event.dest_port),
-            "src_port_category": self._categorize_port(event.src_port),
-            # Temporal features básicas
-            "hour": datetime.now().hour,
-            "is_business_hours": 1 if 9 <= datetime.now().hour <= 17 else 0,
-            "is_weekend": 1 if datetime.now().weekday() >= 5 else 0,
-            # Size features
-            "size_category": min(4, event.packet_size // 256),  # 0-4 categories
-            "is_large_packet": 1 if event.packet_size > 1500 else 0,
-            # Protocol inference (rápido)
-            "likely_protocol": self._infer_protocol(event.dest_port),
-            # GPS/Geolocation features (usando coordenadas del enhanced agent)
-            "has_gps": 1 if (event.latitude != 0.0 or event.longitude != 0.0) else 0,
-            "lat_category": int(abs(event.latitude) // 10) if event.latitude != 0.0 else 0,
-            "lon_category": int(abs(event.longitude) // 10) if event.longitude != 0.0 else 0,
-            # Metadata básico
-            "timestamp": time.time(),
-        }
-
-        # Cache para IPs frecuentes (optimización)
-        if len(self.feature_cache) < 1000:  # Limitar cache
-            self.feature_cache[cache_key] = features.copy()
-
-        return features
-
-    def _is_internal_ip(self, ip):
-        """Verificación rápida de IP interna"""
-        if not ip or ip == "unknown":
-            return 0
-        return 1 if ip.startswith(("192.168.", "10.", "172.")) else 0
-
-    def _classify_ip_range(self, ip):
-        """Clasificar rango de IP (0-5)"""
-        if not ip or ip == "unknown":
-            return 0
-
-        if ip.startswith("192.168."):
-            return 1  # LAN
-        elif ip.startswith("10."):
-            return 2  # Private Class A
-        elif ip.startswith("172."):
-            return 3  # Private Class B
-        elif ip.startswith(("8.8.", "1.1.", "208.67.")):
-            return 4  # Public DNS
-        else:
-            return 5  # Other public
-
-    def _categorize_port(self, port):
-        """Categorizar puerto (0-6) para eficiencia"""
-        if port == 0:
-            return 0
-        elif port < 1024:
-            return 1  # Privileged
-        elif port in [80, 443, 22, 25, 53, 21, 23]:
-            return 2  # Common services
-        elif 1024 <= port <= 5000:
-            return 3  # Registered
-        elif 5001 <= port <= 32767:
-            return 4  # Registered high
-        elif 32768 <= port <= 49151:
-            return 5  # Dynamic/ephemeral
-        else:
-            return 6  # Private/dynamic high
-
-    def _infer_protocol(self, port):
-        """Inferir protocolo por puerto (0-10)"""
-        protocol_map = {
-            80: 1,
-            8080: 1,  # HTTP
-            443: 2,
-            8443: 2,  # HTTPS
-            22: 3,  # SSH
-            25: 4,
-            587: 4,
-            465: 4,  # SMTP
-            53: 5,  # DNS
-            21: 6,  # FTP
-            23: 7,  # Telnet
-            110: 8,
-            995: 8,  # POP3
-            143: 9,
-            993: 9,  # IMAP
-        }
-        return protocol_map.get(port, 0)  # Unknown = 0
-
-    def train_lightweight_models(self, X, y=None):
-        """Entrenar modelos optimizados para CPU"""
-        print(f"🔧 Entrenando modelos con {len(X)} muestras...")
-
-        start_time = time.time()
-
-        # Preprocesamiento rápido
-        X_processed = self.processors["scaler"].fit_transform(X)
-
-        # Reducir dimensionalidad si es necesario
-        if X_processed.shape[1] > 20:
-            X_processed = self.processors["pca"].fit_transform(X_processed)
-
-        # 1. Isolation Forest (muy rápido para anomalías)
-        print("🌲 Entrenando Isolation Forest...")
-        self.models["isolation_forest"] = IsolationForest(
-            contamination=0.1,
-            n_estimators=50,  # Reducido para velocidad
-            n_jobs=self.cpu_config["n_jobs"],
-            random_state=42,
-        )
-        self.models["isolation_forest"].fit(X_processed)
-
-        # 2. Random Forest (eficiente y preciso)
-        if y is not None and len(np.unique(y)) > 1:
-            print("🌳 Entrenando Random Forest...")
-            self.models["random_forest"] = RandomForestClassifier(
-                n_estimators=50,  # Optimizado para velocidad
-                max_depth=10,
-                n_jobs=self.cpu_config["n_jobs"],
-                random_state=42,
-            )
-            self.models["random_forest"].fit(X_processed, y)
-
-        # 3. XGBoost (excelente en CPU)
-        if y is not None and len(np.unique(y)) > 1:
-            print("🚀 Entrenando XGBoost...")
-            self.models["xgboost"] = xgb.XGBClassifier(
-                n_estimators=50,
-                max_depth=6,
-                learning_rate=0.1,
-                n_jobs=self.cpu_config["n_jobs"],
-                random_state=42,
-                eval_metric="logloss",
-            )
-            self.models["xgboost"].fit(X_processed, y)
-
-        # 4. SGD Classifier (muy rápido, ideal para streaming)
-        if y is not None:
-            print("⚡ Entrenando SGD Classifier...")
-            self.models["sgd_classifier"] = SGDClassifier(
-                loss="hinge",
-                alpha=0.01,
-                random_state=42,
-                n_jobs=self.cpu_config["n_jobs"],
-            )
-            self.models["sgd_classifier"].fit(X_processed, y)
-
-        # 5. KMeans (clustering rápido)
-        print("🎯 Entrenando KMeans...")
-        self.models["kmeans"] = KMeans(
-            n_clusters=5, n_init=5, random_state=42  # Reducido para velocidad
-        )
-        self.models["kmeans"].fit(X_processed)
-
-        # 6. Naive Bayes (ultrarrápido)
-        if y is not None:
-            print("🧮 Entrenando Naive Bayes...")
-            self.models["naive_bayes"] = GaussianNB()
-            self.models["naive_bayes"].fit(X_processed, y)
-
-        training_time = time.time() - start_time
-        print(f"✅ Entrenamiento completado en {training_time:.2f} segundos")
-
-        return X_processed
-
-    def predict_threat(self, features):
-        """Predicción rápida de amenazas"""
-        start_time = time.time()
-
-        # Convertir a array
-        feature_array = np.array(list(features.values())[:-1]).reshape(
-            1, -1
-        )  # Excluir timestamp
-
-        # Preprocesar
-        try:
-            feature_array = self.processors["scaler"].transform(feature_array)
-            if hasattr(self.processors["pca"], "components_"):
-                feature_array = self.processors["pca"].transform(feature_array)
-        except:
-            # Si no están entrenados los processors, usar array original
-            pass
-
-        threats = []
-
-        # Isolation Forest (detección de anomalías)
-        if self.models["isolation_forest"] is not None:
-            try:
-                anomaly_score = self.models["isolation_forest"].decision_function(
-                    feature_array
-                )[0]
-                is_anomaly = (
-                        self.models["isolation_forest"].predict(feature_array)[0] == -1
-                )
-
-                if is_anomaly:
-                    threats.append(
-                        {
-                            "type": "anomaly",
-                            "model": "isolation_forest",
-                            "score": float(anomaly_score),
-                            "severity": "medium" if anomaly_score < -0.5 else "low",
-                        }
-                    )
-            except:
-                pass
-
-        # Random Forest
-        if self.models["random_forest"] is not None:
-            try:
-                proba = self.models["random_forest"].predict_proba(feature_array)[0]
-                max_proba = max(proba)
-
-                if max_proba > 0.7:  # Umbral de confianza
-                    threats.append(
-                        {
-                            "type": "classification",
-                            "model": "random_forest",
-                            "probability": float(max_proba),
-                            "severity": "high" if max_proba > 0.9 else "medium",
-                        }
-                    )
-            except:
-                pass
-
-        # XGBoost
-        if self.models["xgboost"] is not None:
-            try:
-                proba = self.models["xgboost"].predict_proba(feature_array)[0]
-                max_proba = max(proba)
-
-                if max_proba > 0.8:
-                    threats.append(
-                        {
-                            "type": "ml_classification",
-                            "model": "xgboost",
-                            "probability": float(max_proba),
-                            "severity": "high",
-                        }
-                    )
-            except:
-                pass
-
-        # KMeans (clustering)
-        if self.models["kmeans"] is not None:
-            try:
-                cluster = self.models["kmeans"].predict(feature_array)[0]
-                distance = self.models["kmeans"].transform(feature_array)[0][cluster]
-
-                if distance > 2.0:  # Lejos del centro del cluster
-                    threats.append(
-                        {
-                            "type": "outlier",
-                            "model": "kmeans",
-                            "distance": float(distance),
-                            "cluster": int(cluster),
-                            "severity": "low",
-                        }
-                    )
-            except:
-                pass
-
-        prediction_time = time.time() - start_time
-        self.performance_stats["prediction_time_ms"].append(prediction_time * 1000)
-
-        return threats
-
-    def process_event_batch(self, events):
-        """Procesar eventos en lotes para eficiencia"""
-        if not events:
-            return
-
-        features_batch = []
-        for event in events:
-            features = self.extract_lightweight_features(event)
-            features_batch.append(features)
-            self.sliding_window.append(features)
-
-        # Procesar amenazas en lote
-        for i, features in enumerate(features_batch):
-            threats = self.predict_threat(features)
-            if threats:
-                self.handle_threat_detection(events[i], threats)
-
-    def handle_threat_detection(self, event, threats):
-        """Manejar detección de amenazas"""
-        for threat in threats:
-            # Mostrar coordenadas GPS si existen
-            gps_info = ""
-            if event.latitude != 0.0 or event.longitude != 0.0:
-                gps_info = f" GPS:({event.latitude:.3f},{event.longitude:.3f})"
-
-            print(
-                f"🚨 AMENAZA: {threat['type']} ({threat['model']}) - {event.source_ip}:{event.src_port} → {event.target_ip}:{event.dest_port}{gps_info}"
-            )
-
-    def incremental_training(self):
-        """Entrenamiento incremental con ventana deslizante"""
-        if len(self.sliding_window) < 1000:
-            return
-
-        print(
-            f"🔄 Reentrenamiento incremental con {len(self.sliding_window)} muestras..."
-        )
-
-        # Convertir a DataFrame
-        df = pd.DataFrame(list(self.sliding_window))
-
-        # Preparar datos
-        X = df.drop(["timestamp"], axis=1).values
-
-        # Generar etiquetas simples (para demo)
-        y = self._generate_simple_labels(df)
-
-        # Reentrenar modelos rápidos
-        self.train_lightweight_models(X, y)
-
-    def _generate_simple_labels(self, df):
-        """Generar etiquetas simples para entrenamiento"""
-        labels = []
-        for _, row in df.iterrows():
-            # Heurística simple para etiquetado
-            if (
-                    row.get("port_category", 0) == 6
-                    or row.get("packet_size", 0) > 8000  # High ports
-                    or (  # Large packets
-                    row.get("hour", 12) < 6 or row.get("hour", 12) > 22
-            )
-            ):  # Unusual hours
-                labels.append(1)  # Suspicious
-            else:
-                labels.append(0)  # Normal
-
-        return np.array(labels)
-
-    def start_monitoring(self):
-        """Iniciar monitoreo optimizado"""
-        print("🚀 Iniciando monitoreo ML ligero...")
-        print("📡 Esperando eventos del Enhanced Promiscuous Agent...")
-        print("🔄 Configurado para recibir mensajes multipart ZeroMQ")  # AÑADIDO
-
-        event_batch = []
-        last_batch_process = time.time()
-
-        try:
-            while True:
-                try:
-                    # ⭐ FIX: Recibir mensaje multipart correctamente
-                    topic, message = self.socket.recv_multipart(zmq.NOBLOCK)
-
-                    # Debug: mostrar que estamos recibiendo eventos
-                    if len(event_batch) == 0:  # Solo mostrar el primer evento
-                        print(f"📨 Primer evento recibido - Topic: {topic.decode()}, Tamaño: {len(message)} bytes")
-
-                    event = network_event_pb2.NetworkEvent()
-                    event.ParseFromString(message)  # Ahora parseamos el mensaje correcto
-
-                    event_batch.append(event)
-
-                    # Procesar en lotes para eficiencia
-                    if (
-                            len(event_batch) >= self.cpu_config["batch_size"]
-                            or time.time() - last_batch_process > 5
-                    ):  # Máximo 5 segundos
-                        self.process_event_batch(event_batch)
-                        event_batch = []
-                        last_batch_process = time.time()
-
-                        # Reentrenamiento periódico
-                        if len(self.sliding_window) >= 2000:
-                            self.incremental_training()
-
-                except zmq.Again:
-                    time.sleep(0.1)
-
-                    # Procesar lote parcial si hay timeout
-                    if event_batch and time.time() - last_batch_process > 10:
-                        self.process_event_batch(event_batch)
-                        event_batch = []
-                        last_batch_process = time.time()
-
-                    continue
-
-        except KeyboardInterrupt:
-            print(f"\n🛑 Monitoreo detenido")
-            if event_batch:  # Procesar eventos restantes
-                self.process_event_batch(event_batch)
-
-    # En lightweight_ml_detector.py, añadir al final de la clase LightweightThreatDetector:
-
-    def save_models_quick(self):
-        """Guardar modelos actuales con timestamp"""
-        import joblib
-        from datetime import datetime
-        from pathlib import Path
-
-        models_dir = Path("saved_models")
-        models_dir.mkdir(exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_files = []
 
-        # Guardar cada modelo
-        for model_name, model in self.models.items():
-            if model is not None:
-                filename = models_dir / f"{model_name}_{timestamp}.joblib"
-                joblib.dump(model, filename)
-                saved_files.append(filename)
-                print(f"💾 {model_name} → {filename}")
+        try:
+            # Guardar solo modelos habilitados y entrenados
+            for model_name, model in models.items():
+                if model is not None:
+                    model_file = version_dir / f"{model_name}.joblib"
+                    joblib.dump(model, model_file)
+                    saved_files.append(model_file)
 
-        # Guardar procesadores
-        processors_file = models_dir / f"processors_{timestamp}.joblib"
-        joblib.dump(self.processors, processors_file)
-        print(f"💾 Procesadores → {processors_file}")
+            # Guardar procesadores
+            processors_file = version_dir / "processors.joblib"
+            joblib.dump(processors, processors_file)
+            saved_files.append(processors_file)
 
-        print(f"✅ {len(saved_files)} modelos guardados")
-        return saved_files
+            # Guardar metadatos simplificados
+            metadata = {
+                "version": self.current_version,
+                "timestamp": datetime.now().isoformat(),
+                "training_metrics": training_metrics or {},
+                "model_count": len([m for m in models.values() if m is not None]),
+                "config_mode": "conservative_local"
+            }
 
-    def load_models_quick(self, timestamp=None):
-        """Cargar modelos guardados"""
-        import joblib
-        from pathlib import Path
+            metadata_file = version_dir / "metadata.json"
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
 
-        models_dir = Path("saved_models")
-        if not models_dir.exists():
-            print("❌ No hay modelos guardados")
-            return False
+            # 🧹 Limpiar versiones antiguas para conservar espacio
+            self._cleanup_old_versions()
 
-        # Si no se especifica timestamp, usar el más reciente
-        if timestamp is None:
-            model_files = list(models_dir.glob("isolation_forest_*.joblib"))
-            if model_files:
-                latest_file = max(model_files, key=lambda f: f.stat().st_mtime)
-                timestamp = latest_file.stem.split('_')[-1]
-            else:
-                print("❌ No se encontraron modelos")
-                return False
+            return version_dir
 
-        print(f"📂 Cargando modelos del timestamp: {timestamp}")
+        except Exception as e:
+            raise RuntimeError(f"❌ Error guardando modelos: {e}")
 
-        # Cargar modelos
-        for model_name in self.models.keys():
-            model_file = models_dir / f"{model_name}_{timestamp}.joblib"
-            if model_file.exists():
-                self.models[model_name] = joblib.load(model_file)
-                print(f"📂 {model_name} ✓")
+    def _cleanup_old_versions(self):
+        """Limpiar versiones antiguas para conservar espacio"""
+        try:
+            versions = sorted(self.model_versions_dir.glob("*"))
+            if len(versions) > self.max_model_files:
+                for old_version in versions[:-self.max_model_files]:
+                    if old_version.is_dir():
+                        import shutil
+                        shutil.rmtree(old_version)
+        except Exception as e:
+            print(f"⚠️ Error limpiando versiones antiguas: {e}")
 
-        # Cargar procesadores
-        processors_file = models_dir / f"processors_{timestamp}.joblib"
-        if processors_file.exists():
-            self.processors = joblib.load(processors_file)
-            print(f"📂 Procesadores ✓")
+    def load_models(self, version=None):
+        """Cargar modelos de la versión más reciente"""
+        if not self.enabled:
+            return None, None
 
-        return True
+        # Cargar la versión más reciente
+        versions = sorted(self.model_versions_dir.glob("*"))
+        if not versions:
+            return None, None
 
-def main():
-    """Función principal optimizada"""
-    print("🤖 ML DETECTOR LIGERO - PUERTO CORREGIDO + MULTIPART FIX")
-    print("=" * 55)
-    print("🔧 FIX 1: Puerto 5560 → 5559")
-    print("🔧 FIX 2: Recepción multipart ZeroMQ")
-    print("📡 FUENTE: Enhanced Promiscuous Agent")
-    print("🧠 ENTRENAMIENTO: Datos sintéticos + aprendizaje incremental")
-    print("⚡ OPTIMIZADO: Intel i9 + 32GB RAM")
-    print("=" * 55)
-
-    detector = LightweightThreatDetector()
-
-    if detector.connect():
-        # Entrenamiento inicial
-        X_initial = np.random.rand(1000, 17)
-        y_initial = np.random.choice([0, 1], 1000)
-
-        detector.train_lightweight_models(X_initial, y_initial)
-
-        # ⭐ AÑADIR: Guardar modelos automáticamente
-        detector.save_models_quick()
+        version_dir = versions[-1]  # Más reciente
 
         try:
-            detector.start_monitoring()
-        finally:
-            detector.socket.close()
-            detector.context.term()
+            models = {}
+
+            # Cargar solo los modelos que existan
+            for model_file in version_dir.glob("*.joblib"):
+                if model_file.name != "processors.joblib":
+                    model_name = model_file.stem
+                    models[model_name] = joblib.load(model_file)
+
+            # Cargar procesadores
+            processors_file = version_dir / "processors.joblib"
+            processors = None
+            if processors_file.exists():
+                processors = joblib.load(processors_file)
+
+            return models, processors
+
+        except Exception as e:
+            raise RuntimeError(f"❌ Error cargando modelos: {e}")
 
 
+class ConservativeMLDetector:
+    """
+    Detector ML conservador compatible con dashboard thread-safe
+    - Solo 2 algoritmos ML ligeros para local
+    - Configuración ZMQ compatible con dashboard conservador
+    - Validación estricta de tamaño de mensajes
+    - Backpressure agresivo para estabilidad
+    """
+
+    def __init__(self, config_file: str):
+        # 📄 Cargar configuración conservadora
+        self.config = self._load_config_strict(config_file)
+        self.config_file = config_file
+
+        # 🏷️ Identidad distribuida
+        self.node_id = self.config["node_id"]
+        self.process_id = os.getpid()
+        self.start_time = time.time()
+
+        # 📝 Setup logging PRIMERO
+        self.setup_logging()
+
+        # 🔌 Setup ZeroMQ CONSERVADOR compatible con dashboard
+        self.context = zmq.Context()
+        self.input_socket = None
+        self.output_socket = None
+        self.setup_conservative_sockets()
+
+        # 🔄 Backpressure AGRESIVO
+        self.backpressure_config = self.config["backpressure"]
+
+        # 📦 Colas internas PEQUEÑAS para local
+        self.setup_internal_queues()
+
+        # 🤖 Configuración ML CONSERVADORA
+        self.ml_config = self.config["ml"]
+        self.models_enabled = self.ml_config.get("enabled", True)
+
+        # 🧠 SOLO 2 Modelos ML ligeros para local
+        self.models = {
+            'isolation_forest': None,
+            'kmeans': None
+        }
+
+        # 🔧 Procesadores simplificados
+        self.processors = {
+            'scaler': StandardScaler()
+        }
+
+        # 💾 Sistema de persistencia conservador
+        self.persistence_manager = None
+        if self.config.get("persistence", {}).get("enabled", False):
+            self.persistence_manager = ModelPersistenceManager(self.config["persistence"])
+
+        # 📊 Métricas conservadoras
+        self.stats = {
+            'received': 0, 'processed': 0, 'sent': 0,
+            'ml_predictions': 0, 'anomalies_detected': 0, 'high_risk_events': 0,
+            'training_sessions': 0, 'processing_errors': 0,
+            'backpressure_activations': 0, 'queue_overflows': 0, 'dropped_events': 0,
+            'buffer_full_errors': 0, 'send_errors': 0, 'send_timeouts': 0,
+            'oversized_messages': 0, 'message_validation_errors': 0,
+            'pipeline_latency_total': 0.0, 'start_time': time.time()
+        }
+
+        # 🎛️ Control
+        self.running = True
+        self.stop_event = Event()
+        self.models_trained = False
+
+        # 📈 Buffer de entrenamiento PEQUEÑO para local
+        training_config = self.ml_config.get("training", {})
+        self.training_data = deque(maxlen=training_config.get("min_training_samples", 200))
+        self.last_training_time = 0
+        self.training_interval = training_config.get("retrain_interval_minutes", 60) * 60
+
+        # 📊 Estadísticas simplificadas
+        self.ip_stats = defaultdict(int)
+        self.port_stats = defaultdict(int)
+
+        # ✅ Verificar dependencias
+        self._verify_dependencies()
+
+        # 🔄 Intentar cargar modelos existentes
+        if self.persistence_manager:
+            self._load_existing_models()
+
+        self.logger.info(f"🤖 Conservative ML Detector inicializado")
+        self.logger.info(f"   🏷️ Node ID: {self.node_id}")
+        self.logger.info(f"   🔢 PID: {self.process_id}")
+        self.logger.info(f"   🧠 Algoritmos: {list(self.models.keys())} (conservador)")
+        self.logger.info(f"   💾 Persistencia: {'✅' if self.persistence_manager else '❌'}")
+        self.logger.info(f"   🔒 Modo: CONSERVADOR - Compatible con dashboard thread-safe")
+
+    def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
+        """Carga configuración conservadora estricta"""
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(f"❌ Archivo de configuración no encontrado: {config_file}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"❌ Error parseando JSON: {e}")
+
+        # ✅ Validar campos críticos conservadores
+        required_fields = ["node_id", "network", "zmq", "backpressure", "processing", "ml"]
+        for field in required_fields:
+            if field not in config:
+                raise RuntimeError(f"❌ Campo requerido faltante: {field}")
+
+        return config
+
+    def _verify_dependencies(self):
+        """Verifica dependencias críticas"""
+        issues = []
+
+        if not PROTOBUF_AVAILABLE:
+            issues.append("❌ Protobuf network_event_extended_v2 no disponible")
+
+        if not ML_AVAILABLE:
+            issues.append("❌ Scikit-learn no disponible - modelos ML deshabilitados")
+
+        if issues:
+            for issue in issues:
+                print(issue)
+            if not PROTOBUF_AVAILABLE:
+                raise RuntimeError("❌ Protobuf es crítico para el funcionamiento")
+
+    def setup_logging(self):
+        """Setup logging conservador"""
+        log_config = self.config["logging"]
+        level = getattr(logging, log_config["level"].upper())
+        log_format = log_config["format"].format(node_id=self.node_id, pid=self.process_id)
+        formatter = logging.Formatter(log_format)
+
+        if log_config.get("file"):
+            handler = logging.FileHandler(log_config["file"])
+        else:
+            handler = logging.StreamHandler()
+
+        handler.setFormatter(formatter)
+        self.logger = logging.getLogger(f"ml_detector_{self.node_id}")
+        self.logger.setLevel(level)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
+
+    def setup_conservative_sockets(self):
+        """🔒 Configuración ZMQ CONSERVADORA compatible con dashboard"""
+        network_config = self.config["network"]
+        zmq_config = self.config["zmq"]
+
+        try:
+            # 📥 Socket de entrada (PULL) con configuración conservadora
+            input_config = network_config["input_socket"]
+            self.input_socket = self.context.socket(zmq.PULL)
+
+            # 🔧 CONFIGURACIÓN CONSERVADORA COMPATIBLE CON DASHBOARD
+            self.input_socket.setsockopt(zmq.RCVHWM, min(zmq_config["rcvhwm"], 500))
+            self.input_socket.setsockopt(zmq.RCVTIMEO, zmq_config["recv_timeout_ms"])
+            self.input_socket.setsockopt(zmq.LINGER, 0)  # 🔒 CRÍTICO: Cierre inmediato como dashboard
+            self.input_socket.setsockopt(zmq.RCVBUF, zmq_config.get("recv_buffer_size", 65536))
+            self.input_socket.setsockopt(zmq.MAXMSGSIZE, zmq_config.get("max_message_size", 10000))
+
+            # TCP Keepalive conservador
+            if zmq_config["vertical_scaling_optimizations"]["tcp_keepalive"]:
+                self.input_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                self.input_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE,
+                                             zmq_config["vertical_scaling_optimizations"]["tcp_keepalive_idle"])
+
+            input_address = f"tcp://{input_config['address']}:{input_config['port']}"
+            self.input_socket.connect(input_address)
+
+            # 📤 Socket de salida (PUSH) con configuración conservadora
+            output_config = network_config["output_socket"]
+            self.output_socket = self.context.socket(zmq.PUSH)
+
+            # 🔧 CONFIGURACIÓN CONSERVADORA COMPATIBLE CON DASHBOARD
+            self.output_socket.setsockopt(zmq.SNDHWM, min(zmq_config["sndhwm"], 500))
+            self.output_socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
+            self.output_socket.setsockopt(zmq.LINGER, 0)  # 🔒 CRÍTICO: Cierre inmediato como dashboard
+            self.output_socket.setsockopt(zmq.SNDBUF, zmq_config.get("send_buffer_size", 65536))
+            self.output_socket.setsockopt(zmq.MAXMSGSIZE, zmq_config.get("max_message_size", 10000))
+
+            # TCP Keepalive para salida
+            if zmq_config["vertical_scaling_optimizations"]["tcp_keepalive"]:
+                self.output_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                self.output_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE,
+                                              zmq_config["vertical_scaling_optimizations"]["tcp_keepalive_idle"])
+
+            output_address = f"tcp://*:{output_config['port']}"
+            self.output_socket.bind(output_address)
+
+            self.logger.info(f"🔌 Sockets ZMQ CONSERVADORES configurados:")
+            self.logger.info(f"   📥 Input: CONNECT to {input_address}")
+            self.logger.info(f"   📤 Output: BIND on {output_address}")
+            self.logger.info(f"   🔒 LINGER: 0ms (cierre inmediato como dashboard)")
+            self.logger.info(
+                f"   ⏱️ Timeouts: RCV={zmq_config['recv_timeout_ms']}ms, SND={zmq_config['send_timeout_ms']}ms")
+            self.logger.info(f"   📏 MAXMSGSIZE: {zmq_config.get('max_message_size', 10000)} bytes")
+            self.logger.info(f"   🌊 HWM: RCV={min(zmq_config['rcvhwm'], 500)}, SND={min(zmq_config['sndhwm'], 500)}")
+
+        except Exception as e:
+            raise RuntimeError(f"❌ Error configurando sockets ZMQ conservadores: {e}")
+
+    def setup_internal_queues(self):
+        """📋 Configuración de colas PEQUEÑAS para local"""
+        proc_config = self.config["processing"]
+
+        # Colas más pequeñas para evitar uso excesivo de memoria
+        self.protobuf_queue = Queue(maxsize=proc_config["protobuf_queue_size"])
+        self.enriched_queue = Queue(maxsize=proc_config["internal_queue_size"])
+
+        self.logger.info(f"📋 Colas conservadoras configuradas:")
+        self.logger.info(f"   📦 Protobuf queue: {proc_config['protobuf_queue_size']} (pequeña)")
+        self.logger.info(f"   🤖 Enriched queue: {proc_config['internal_queue_size']} (pequeña)")
+
+    def _load_existing_models(self):
+        """Cargar modelos existentes conservadores"""
+        self.logger.info("🔍 Buscando modelos ML conservadores...")
+        try:
+            loaded_models, loaded_processors = self.persistence_manager.load_models()
+
+            if loaded_models:
+                # Solo cargar modelos que están habilitados en configuración conservadora
+                for model_name in self.models.keys():
+                    if model_name in loaded_models:
+                        self.models[model_name] = loaded_models[model_name]
+
+                if loaded_processors:
+                    self.processors.update(loaded_processors)
+
+                self.models_trained = True
+                active_models = [k for k, v in self.models.items() if v is not None]
+                self.logger.info(f"✅ Modelos conservadores cargados: {active_models}")
+            else:
+                self.logger.info("💡 No hay modelos guardados - entrenamiento automático activado")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error cargando modelos: {e}")
+
+    def receive_protobuf_events(self):
+        """Thread de recepción con backpressure AGRESIVO"""
+        self.logger.info("📡 Iniciando recepción protobuf CONSERVADORA...")
+
+        consecutive_errors = 0
+        queue_full_count = 0
+
+        while self.running:
+            try:
+                # 📨 Recibir evento protobuf
+                protobuf_data = self.input_socket.recv(zmq.NOBLOCK)
+                self.stats['received'] += 1
+                consecutive_errors = 0
+
+                # 🔍 VALIDACIÓN CRÍTICA: Verificar tamaño antes de procesar
+                max_size = self.config["zmq"].get("max_message_size", 10000)
+                if len(protobuf_data) > max_size:
+                    self.stats['oversized_messages'] += 1
+                    self.logger.warning(
+                        f"🚫 Mensaje demasiado grande: {len(protobuf_data)} > {max_size} bytes, descartado")
+                    continue
+
+                if len(protobuf_data) == 0:
+                    self.stats['message_validation_errors'] += 1
+                    self.logger.warning("🚫 Mensaje vacío recibido, descartado")
+                    continue
+
+                # 🔍 Verificar backpressure AGRESIVO
+                queue_config = self.config["processing"].get("queue_overflow_handling", {})
+                current_usage = self.protobuf_queue.qsize() / self.config["processing"]["protobuf_queue_size"]
+
+                emergency_threshold = queue_config.get("emergency_drop_threshold_percent", 50.0) / 100.0
+
+                if current_usage > emergency_threshold:
+                    # 🚨 EMERGENCY DROP - descartar inmediatamente
+                    self.stats['queue_overflows'] += 1
+                    self.stats['dropped_events'] += 1
+
+                    if self.stats['queue_overflows'] % 10 == 0:
+                        self.logger.warning(f"🚨 EMERGENCY DROP activado: cola {current_usage * 100:.1f}% llena")
+                    continue
+
+                # 📋 Añadir a cola con timeout MUY CORTO
+                queue_timeout = queue_config.get("max_queue_wait_ms", 10) / 1000.0
+
+                try:
+                    self.protobuf_queue.put(protobuf_data, timeout=queue_timeout)
+                    queue_full_count = 0
+                except:
+                    # 🔄 Aplicar estrategia drop_oldest si está configurada
+                    self.stats['queue_overflows'] += 1
+                    strategy = queue_config.get("strategy", "emergency_drop")
+
+                    if strategy == "drop_oldest" and not self.protobuf_queue.empty():
+                        try:
+                            self.protobuf_queue.get_nowait()  # Descartar más antiguo
+                            self.protobuf_queue.put_nowait(protobuf_data)  # Añadir nuevo
+                        except:
+                            self.stats['dropped_events'] += 1
+
+            except zmq.Again:
+                continue
+            except zmq.ZMQError as e:
+                consecutive_errors += 1
+                if consecutive_errors % 20 == 0:
+                    self.logger.error(f"❌ Error ZMQ recepción ({consecutive_errors}): {e}")
+                time.sleep(0.05)
+
+    def process_protobuf_events(self):
+        """Thread de procesamiento ML CONSERVADOR"""
+        self.logger.info("⚙️ Iniciando procesamiento ML CONSERVADOR...")
+
+        queue_timeout = self.config["processing"]["queue_timeout_seconds"]
+        max_processing_time = self.config["processing"].get("max_processing_time", 1.0)
+
+        while self.running:
+            try:
+                protobuf_data = self.protobuf_queue.get(timeout=queue_timeout)
+                start_time = time.time()
+
+                # 🔒 Verificar timeout de procesamiento
+                enriched_protobuf = self.enrich_protobuf_event_with_conservative_ml(protobuf_data)
+
+                processing_time = time.time() - start_time
+
+                # ⚠️ Verificar si el procesamiento fue demasiado lento
+                if processing_time > max_processing_time:
+                    self.logger.warning(
+                        f"⚠️ Procesamiento lento: {processing_time * 1000:.1f}ms > {max_processing_time * 1000:.1f}ms")
+
+                if enriched_protobuf:
+                    self.stats['pipeline_latency_total'] += processing_time * 1000
+                    self.stats['processed'] += 1
+
+                    # 📋 Añadir a cola con timeout corto
+                    try:
+                        self.enriched_queue.put(enriched_protobuf, timeout=queue_timeout)
+                    except:
+                        self.stats['queue_overflows'] += 1
+
+                self.protobuf_queue.task_done()
+
+            except Empty:
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Error procesamiento conservador: {e}")
+                self.stats['processing_errors'] += 1
+
+    def send_enriched_events(self):
+        """Thread de envío con validación ESTRICTA"""
+        self.logger.info("📤 Iniciando envío CONSERVADOR...")
+
+        queue_timeout = self.config["processing"]["queue_timeout_seconds"]
+        max_message_size = self.config["zmq"].get("max_message_size", 10000)
+
+        while self.running:
+            try:
+                enriched_protobuf = self.enriched_queue.get(timeout=queue_timeout)
+
+                # 🔍 VALIDACIÓN CRÍTICA antes de enviar
+                if len(enriched_protobuf) > max_message_size:
+                    self.stats['oversized_messages'] += 1
+                    self.logger.error(
+                        f"🚫 Evento demasiado grande para enviar: {len(enriched_protobuf)} > {max_message_size}")
+                    continue
+
+                # 📤 Enviar con backpressure conservador
+                success = self.send_event_with_conservative_backpressure(enriched_protobuf)
+
+                if success:
+                    self.stats['sent'] += 1
+
+                self.enriched_queue.task_done()
+
+            except Empty:
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Error envío conservador: {e}")
+
+    def enrich_protobuf_event_with_conservative_ml(self, protobuf_data: bytes) -> Optional[bytes]:
+        """Enriquecimiento ML CONSERVADOR - solo 2 algoritmos ligeros"""
+        if not PROTOBUF_AVAILABLE:
+            return None
+
+        try:
+            # 📦 Deserializar evento
+            event = NetworkEventProto.NetworkEvent()
+            event.ParseFromString(protobuf_data)
+
+            # 🤖 Extraer features SIMPLIFICADAS
+            features = self._extract_conservative_ml_features(event)
+            if features is None:
+                self.stats['processing_errors'] += 1
+                return None
+
+            # 📈 Añadir a buffer de entrenamiento (más pequeño)
+            self.training_data.append(features)
+
+            # 🧠 Predecir con SOLO 2 algoritmos conservadores
+            anomaly_score, risk_score = self._predict_with_conservative_ml(features)
+
+            # 🔄 Actualizar estadísticas
+            self.stats['ml_predictions'] += 1
+
+            if anomaly_score > self.ml_config.get("anomaly_threshold", 0.6):
+                self.stats['anomalies_detected'] += 1
+
+            if risk_score > self.ml_config.get("high_risk_threshold", 0.8):
+                self.stats['high_risk_events'] += 1
+
+            # ✅ Enriquecer evento - PRESERVAR TODO del geoip_enricher
+            enriched_event = NetworkEventProto.NetworkEvent()
+            enriched_event.CopyFrom(event)
+
+            # 🤖 Añadir scores ML conservadores
+            enriched_event.anomaly_score = self._sanitize_float(anomaly_score)
+            enriched_event.risk_score = self._sanitize_float(risk_score)
+
+            # 🆔 Información del ML detector conservador
+            enriched_event.ml_detector_pid = self.process_id
+            enriched_event.ml_detector_timestamp = int(time.time() * 1000)
+
+            # 📊 Pipeline tracking simplificado
+            if enriched_event.geoip_enricher_timestamp > 0:
+                pipeline_latency = enriched_event.ml_detector_timestamp - enriched_event.geoip_enricher_timestamp
+                enriched_event.processing_latency_ms = float(pipeline_latency)
+
+            # 🎯 Path del pipeline
+            if enriched_event.pipeline_path:
+                enriched_event.pipeline_path += "->ml_conservative"
+            else:
+                enriched_event.pipeline_path = "geoip->ml_conservative"
+
+            enriched_event.pipeline_hops += 1
+
+            # 🏷️ Tag conservador
+            enriched_event.component_tags.append(f"ml_conservative_{self.node_id}")
+
+            # 📝 Descripción simplificada
+            if risk_score > 0.7:
+                enriched_event.description = f"🚨 ML Risk: {risk_score:.2f} | {enriched_event.description or ''}"
+            elif anomaly_score > 0.6:
+                enriched_event.description = f"⚠️ ML Anomaly: {anomaly_score:.2f} | {enriched_event.description or ''}"
+
+            enriched_event.component_status = "healthy"
+
+            return enriched_event.SerializeToString()
+
+        except Exception as e:
+            self.stats['processing_errors'] += 1
+            self.logger.error(f"❌ Error enriquecimiento conservador: {e}")
+            return None
+
+    def _extract_conservative_ml_features(self, event) -> Optional[np.ndarray]:
+        """Extrae features SIMPLIFICADAS - siempre 17 para compatibilidad"""
+        try:
+            features = []
+
+            # 📊 Features básicas (4)
+            features.extend([
+                float(event.packet_size or 0),
+                float(event.dest_port or 0),
+                float(event.src_port or 0),
+                float(self._protocol_to_numeric(getattr(event, 'protocol', '')))
+            ])
+
+            # ⏰ Features temporales simplificadas (3)
+            now = datetime.now()
+            features.extend([
+                float(now.hour),
+                float(now.minute),
+                float(1 if now.weekday() >= 5 else 0)
+            ])
+
+            # 🌐 Features de IP simplificadas (2)
+            source_ip = event.source_ip or ""
+            target_ip = event.target_ip or ""
+            features.extend([
+                float(len(set(source_ip.replace('.', ''))) / max(len(source_ip), 1)),
+                float(len(set(target_ip.replace('.', ''))) / max(len(target_ip), 1))
+            ])
+
+            # 🚪 Features de puertos (2)
+            self.port_stats[event.src_port] += 1
+            self.port_stats[event.dest_port] += 1
+            features.extend([
+                float(min(self.port_stats[event.src_port], 100)),  # Limitado para estabilidad
+                float(min(self.port_stats[event.dest_port], 100))
+            ])
+
+            # 🌍 Features de GeoIP (4)
+            has_geoip = 1 if (event.latitude != 0 and event.longitude != 0) else 0
+            lat_abs = abs(event.latitude) if has_geoip else 0
+            lon_abs = abs(event.longitude) if has_geoip else 0
+            distance = math.sqrt(lat_abs ** 2 + lon_abs ** 2) if has_geoip else 0
+
+            features.extend([float(has_geoip), float(lat_abs), float(lon_abs), float(distance)])
+
+            # 🔧 Features adicionales (2)
+            features.extend([
+                float(1 if event.dest_port in [22, 23, 80, 443, 135, 139, 445] else 0),
+                float(len(event.event_id or "") % 100) / 100.0
+            ])
+
+            # ✅ Verificar longitud exacta (17)
+            final_features = np.array(features)
+            if len(final_features) != 17:
+                # 🔧 Ajustar a 17 exactamente
+                if len(final_features) < 17:
+                    padding = np.zeros(17 - len(final_features))
+                    final_features = np.concatenate([final_features, padding])
+                else:
+                    final_features = final_features[:17]
+
+            return final_features
+
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo features conservadoras: {e}")
+            return np.zeros(17)  # Fallback seguro
+
+    def _protocol_to_numeric(self, protocol: str) -> int:
+        """Convierte protocolo a numérico"""
+        protocol_map = {'tcp': 6, 'udp': 17, 'icmp': 1, 'http': 80, 'https': 443}
+        return protocol_map.get(protocol.lower(), 0)
+
+    def _predict_with_conservative_ml(self, features: np.ndarray) -> Tuple[float, float]:
+        """Predicción con SOLO 2 algoritmos conservadores"""
+        if not ML_AVAILABLE or not self.models_enabled:
+            return self._conservative_heuristic_prediction(features)
+
+        # 🔄 Auto-entrenamiento conservador
+        self._auto_train_conservative_models()
+
+        if not self.models_trained:
+            return self._conservative_heuristic_prediction(features)
+
+        try:
+            features_scaled = self.processors['scaler'].transform(features.reshape(1, -1))
+
+            anomaly_scores = []
+            risk_scores = []
+
+            # 1️⃣ Isolation Forest (habilitado)
+            if self.models['isolation_forest'] and self.ml_config["models"]["isolation_forest"]["enabled"]:
+                try:
+                    iso_score = self.models['isolation_forest'].decision_function(features_scaled)[0]
+                    iso_normalized = max(0, min(1, (iso_score + 1) / 2))
+                    anomaly_scores.append(1 - iso_normalized)
+                except Exception as e:
+                    self.logger.debug(f"⚠️ Error Isolation Forest: {e}")
+
+            # 2️⃣ K-Means (habilitado)
+            if self.models['kmeans'] and self.ml_config["models"]["kmeans"]["enabled"]:
+                try:
+                    cluster = self.models['kmeans'].predict(features_scaled)[0]
+                    center = self.models['kmeans'].cluster_centers_[cluster]
+                    distance = np.linalg.norm(features_scaled[0] - center)
+                    kmeans_score = min(1.0, distance / 2.0)
+                    anomaly_scores.append(kmeans_score)
+                    risk_scores.append(kmeans_score)  # Usar para ambos scores
+                except Exception as e:
+                    self.logger.debug(f"⚠️ Error K-Means: {e}")
+
+            # 🔄 Combinar scores (promedio simple)
+            final_anomaly = np.mean(anomaly_scores) if anomaly_scores else 0.0
+            final_risk = np.mean(risk_scores) if risk_scores else final_anomaly
+
+            return max(0.0, min(1.0, final_anomaly)), max(0.0, min(1.0, final_risk))
+
+        except Exception as e:
+            self.logger.error(f"❌ Error predicción conservadora: {e}")
+            return self._conservative_heuristic_prediction(features)
+
+    def _conservative_heuristic_prediction(self, features: np.ndarray) -> Tuple[float, float]:
+        """Predicción heurística CONSERVADORA"""
+        try:
+            if len(features) < 4:
+                return 0.0, 0.0
+
+            packet_size, dest_port = features[0], features[1]
+
+            anomaly_score = 0.0
+            risk_score = 0.0
+
+            # Heurísticas conservadoras simples
+            if packet_size > 1500 or packet_size < 20:
+                anomaly_score += 0.2
+
+            if dest_port in [22, 23, 135, 139, 445]:
+                risk_score += 0.3
+
+            if dest_port > 49152:
+                anomaly_score += 0.1
+
+            return min(anomaly_score, 1.0), min(risk_score, 1.0)
+
+        except:
+            return 0.0, 0.0
+
+    def _auto_train_conservative_models(self):
+        """Entrenamiento automático CONSERVADOR"""
+        current_time = time.time()
+        training_config = self.ml_config.get("training", {})
+
+        min_samples = training_config.get("min_training_samples", 200)
+
+        should_train = (
+                len(self.training_data) >= min_samples and
+                (not self.models_trained or
+                 (current_time - self.last_training_time > self.training_interval and
+                  training_config.get("auto_retrain", True)))
+        )
+
+        if should_train:
+            self.logger.info("🔧 Entrenamiento automático conservador...")
+            self._train_conservative_models()
+            self.last_training_time = current_time
+
+    def _train_conservative_models(self):
+        """Entrenar SOLO 2 modelos conservadores"""
+        try:
+            if len(self.training_data) < 50:
+                return
+
+            start_time = time.time()
+            X = np.array(list(self.training_data))
+
+            self.logger.info(f"🔧 Entrenando 2 algoritmos conservadores con {len(X)} muestras...")
+
+            # Preprocesamiento simple
+            X_scaled = self.processors['scaler'].fit_transform(X)
+
+            models_config = self.ml_config["models"]
+
+            # 1️⃣ Isolation Forest (conservador)
+            if models_config["isolation_forest"]["enabled"]:
+                iso_config = models_config["isolation_forest"]
+                self.models['isolation_forest'] = IsolationForest(
+                    contamination=iso_config["contamination"],
+                    random_state=iso_config["random_state"],
+                    n_estimators=iso_config["n_estimators"],  # Ya reducido en config
+                    n_jobs=1  # Solo 1 job para local
+                )
+                self.models['isolation_forest'].fit(X_scaled)
+                self.logger.info("✅ Isolation Forest conservador entrenado")
+
+            # 2️⃣ K-Means (conservador)
+            if models_config["kmeans"]["enabled"]:
+                kmeans_config = models_config["kmeans"]
+                self.models['kmeans'] = KMeans(
+                    n_clusters=kmeans_config["n_clusters"],  # Ya reducido en config
+                    random_state=kmeans_config["random_state"],
+                    n_init=kmeans_config["n_init"]  # Ya reducido en config
+                )
+                self.models['kmeans'].fit(X_scaled)
+                self.logger.info("✅ K-Means conservador entrenado")
+
+            training_time = time.time() - start_time
+            self.stats['training_sessions'] += 1
+
+            self.logger.info(f"✅ 2 algoritmos conservadores entrenados en {training_time:.2f}s")
+
+            # 💾 Guardar modelos
+            if self.persistence_manager:
+                training_metrics = {
+                    "training_time": training_time,
+                    "samples_count": len(X),
+                    "mode": "conservative_local"
+                }
+                self.persistence_manager.save_models(self.models, self.processors, training_metrics)
+
+            self.models_trained = True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error entrenamiento conservador: {e}")
+
+    def send_event_with_conservative_backpressure(self, enriched_data: bytes) -> bool:
+        """Envío con backpressure MUY AGRESIVO"""
+        bp_config = self.backpressure_config
+        max_retries = min(bp_config["max_retries"], 2)  # Máximo 2 reintentos
+
+        for attempt in range(max_retries + 1):
+            try:
+                self.output_socket.send(enriched_data, zmq.NOBLOCK)
+                return True
+
+            except zmq.Again:
+                self.stats['buffer_full_errors'] += 1
+
+                if attempt == max_retries:
+                    self.stats['dropped_events'] += 1
+                    return False
+
+                # 🔄 Backpressure MUY corto
+                delays = bp_config["retry_delays_ms"]
+                delay_ms = delays[attempt] if attempt < len(delays) else delays[-1]
+                time.sleep(min(delay_ms, 10) / 1000.0)  # Máximo 10ms de delay
+
+                self.stats['backpressure_activations'] += 1
+                continue
+
+            except zmq.ZMQError as e:
+                self.stats['send_errors'] += 1
+                if "timeout" in str(e).lower():
+                    self.stats['send_timeouts'] += 1
+                return False
+
+        return False
+
+    def _sanitize_float(self, value) -> float:
+        """Sanitizar valores float"""
+        try:
+            if value is None:
+                return 0.0
+            float_val = float(value)
+            if math.isnan(float_val) or math.isinf(float_val):
+                return 0.0
+            return max(0.0, min(1.0, float_val))
+        except:
+            return 0.0
+
+    def monitor_conservative_performance(self):
+        """Monitoreo de performance CONSERVADOR"""
+        monitoring_config = self.config["monitoring"]
+        interval = monitoring_config["stats_interval_seconds"]
+
+        while self.running:
+            time.sleep(interval)
+            if not self.running:
+                break
+
+            self._log_conservative_stats()
+            self._check_conservative_alerts()
+
+    def _log_conservative_stats(self):
+        """Log estadísticas conservadoras"""
+        self.logger.info(f"📊 Conservative ML Stats:")
+        self.logger.info(f"   📨 Recibidos: {self.stats['received']}")
+        self.logger.info(f"   🤖 Procesados: {self.stats['processed']}")
+        self.logger.info(f"   📤 Enviados: {self.stats['sent']}")
+        self.logger.info(f"   🧠 Predicciones: {self.stats['ml_predictions']}")
+        self.logger.info(f"   🚨 Anomalías: {self.stats['anomalies_detected']}")
+        self.logger.info(f"   ⚠️ Alto riesgo: {self.stats['high_risk_events']}")
+        self.logger.info(f"   🔄 Backpressure: {self.stats['backpressure_activations']}")
+        self.logger.info(f"   🗑️ Descartados: {self.stats['dropped_events']}")
+        self.logger.info(f"   📏 Oversized: {self.stats['oversized_messages']}")
+        self.logger.info(f"   ⏰ Send timeouts: {self.stats['send_timeouts']}")
+        self.logger.info(f"   📋 Colas: protobuf={self.protobuf_queue.qsize()}, enriched={self.enriched_queue.qsize()}")
+
+        # Reset stats
+        for key in ['received', 'processed', 'sent', 'ml_predictions', 'anomalies_detected',
+                    'high_risk_events', 'backpressure_activations', 'dropped_events',
+                    'oversized_messages', 'send_timeouts']:
+            self.stats[key] = 0
+
+    def _check_conservative_alerts(self):
+        """Verificar alertas conservadoras"""
+        monitoring_config = self.config["monitoring"]
+        alerts = monitoring_config.get("alerts", {})
+
+        # 🚨 Alertas de colas
+        protobuf_usage = self.protobuf_queue.qsize() / self.config["processing"]["protobuf_queue_size"]
+        enriched_usage = self.enriched_queue.qsize() / self.config["processing"]["internal_queue_size"]
+
+        max_usage = alerts.get("max_queue_usage_percent", 40.0) / 100.0
+
+        if protobuf_usage > max_usage:
+            self.logger.warning(f"🚨 ALERTA CONSERVADORA: Protobuf queue {protobuf_usage * 100:.1f}% llena")
+
+        if enriched_usage > max_usage:
+            self.logger.warning(f"🚨 ALERTA CONSERVADORA: Enriched queue {enriched_usage * 100:.1f}% llena")
+
+        # 🚨 Alertas de mensajes oversized
+        max_violations = alerts.get("max_message_size_violations", 5)
+        if self.stats.get('oversized_messages', 0) > max_violations:
+            self.logger.warning(f"🚨 ALERTA: Demasiados mensajes oversized ({self.stats['oversized_messages']})")
+
+        # 🚨 Alertas de timeouts
+        max_timeouts = alerts.get("max_send_timeouts", 10)
+        if self.stats.get('send_timeouts', 0) > max_timeouts:
+            self.logger.warning(f"🚨 ALERTA: Demasiados send timeouts ({self.stats['send_timeouts']})")
+
+    def run(self):
+        """Ejecutar detector ML CONSERVADOR"""
+        self.logger.info("🚀 Iniciando Conservative ML Detector...")
+
+        threads = []
+
+        # Thread de recepción
+        recv_thread = threading.Thread(target=self.receive_protobuf_events, name="ConservativeReceiver")
+        threads.append(recv_thread)
+
+        # Thread de procesamiento (solo 1 para local)
+        proc_thread = threading.Thread(target=self.process_protobuf_events, name="ConservativeProcessor")
+        threads.append(proc_thread)
+
+        # Thread de envío (solo 1 para local)
+        send_thread = threading.Thread(target=self.send_enriched_events, name="ConservativeSender")
+        threads.append(send_thread)
+
+        # Thread de monitoreo
+        monitor_thread = threading.Thread(target=self.monitor_conservative_performance, name="ConservativeMonitor")
+        threads.append(monitor_thread)
+
+        # 🚀 Iniciar threads
+        for thread in threads:
+            thread.start()
+
+        self.logger.info(f"✅ Conservative ML Detector iniciado:")
+        self.logger.info(f"   🧵 Threads: {len(threads)} (conservador)")
+        self.logger.info(f"   🧠 Algoritmos: Isolation Forest + K-Means")
+        self.logger.info(f"   🔒 Modo: ULTRA CONSERVADOR para estabilidad local")
+
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Deteniendo Conservative ML Detector...")
+
+        self.shutdown(threads)
+
+    def shutdown(self, threads):
+        """Cierre graceful conservador"""
+        self.running = False
+        self.stop_event.set()
+
+        runtime = time.time() - self.stats['start_time']
+        self.logger.info(f"📊 Runtime conservador: {runtime:.1f}s")
+
+        # Esperar threads con timeout corto
+        for thread in threads:
+            thread.join(timeout=3)
+
+        # Cerrar sockets con LINGER=0 (inmediato)
+        if self.input_socket:
+            self.input_socket.close()
+        if self.output_socket:
+            self.output_socket.close()
+        self.context.term()
+
+        self.logger.info("✅ Conservative ML Detector cerrado correctamente")
+
+
+# 🚀 Main
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 2:
+        print("❌ Uso: python lightweight_ml_detector_conservative.py <config.json>")
+        print("💡 Ejemplo: python lightweight_ml_detector_conservative.py ml_detector_conservative_config.json")
+        sys.exit(1)
+
+    config_file = sys.argv[1]
+
+    try:
+        detector = ConservativeMLDetector(config_file)
+        detector.run()
+    except Exception as e:
+        print(f"❌ Error fatal conservador: {e}")
+        sys.exit(1)

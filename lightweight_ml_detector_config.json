@@ -1,0 +1,336 @@
+{
+  "component": {
+    "name": "lightweight_ml_detector",
+    "version": "2.0.1",
+    "mode": "distributed_conservative"
+  },
+  "node_id": "ml_detector_conservative_001",
+  "version": "2.0.1",
+  "component_type": "ml_detector",
+
+  "network": {
+    "input_socket": {
+      "address": "localhost",
+      "port": 5560,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "description": "Recibe eventos enriquecidos del geoip_enricher"
+    },
+    "output_socket": {
+      "address": "localhost",
+      "port": 5570,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos con ML scores al dashboard"
+    }
+  },
+
+  "zmq": {
+    "input_port": 5560,
+    "output_port": 5570,
+
+    "_comment_hwm": "HWM reducido para evitar saturación",
+    "rcvhwm": 500,
+    "sndhwm": 500,
+
+    "_comment_timeouts": "Timeouts compatibles con dashboard conservador",
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 500,
+
+    "_comment_linger": "Cierre inmediato como dashboard",
+    "linger_ms": 0,
+
+    "_comment_buffers": "Buffers compatibles con dashboard",
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 65536,
+
+    "_comment_message_size": "CRÍTICO: Límite de mensaje compatible con dashboard",
+    "max_message_size": 10000,
+
+    "vertical_scaling_optimizations": {
+      "io_threads": 1,
+      "max_sockets": 32,
+      "tcp_keepalive": true,
+      "tcp_keepalive_idle": 300,
+      "immediate": true,
+      "conflate": false
+    }
+  },
+
+  "backpressure": {
+    "enabled": true,
+    "_comment_retries": "Más agresivo para evitar bloqueos",
+    "max_retries": 2,
+    "retry_delays_ms": [1, 5, 10],
+    "drop_threshold_percent": 5.0,
+    "activation_threshold": 20,
+    "queue_full_strategy": "drop_oldest",
+
+    "_comment_conservative": "Configuración conservadora adicional",
+    "emergency_drop_enabled": true,
+    "emergency_drop_threshold_percent": 60.0,
+    "force_flush_interval_ms": 100
+  },
+
+  "processing": {
+    "_comment_threads": "Configuración conservadora para local",
+    "threads": 1,
+    "send_threads": 1,
+
+    "_comment_queues": "Colas más pequeñas para evitar memoria excesiva",
+    "internal_queue_size": 200,
+    "protobuf_queue_size": 100,
+    "queue_timeout_seconds": 0.3,
+
+    "_comment_performance": "Modo ultra conservador",
+    "performance_mode": "ultra_conservative_local",
+    "enable_heuristics": true,
+    "enable_alerts": true,
+    "max_processing_time": 1.0,
+
+    "vertical_scaling": {
+      "optimized_for_local": true,
+      "memory_buffer_multiplier": 0.3,
+      "cpu_intensive_operations": false,
+      "leave_cores_for_system": 2,
+      "processing_batch_optimization": false
+    },
+
+    "queue_overflow_handling": {
+      "strategy": "emergency_drop",
+      "max_queue_wait_ms": 10,
+      "emergency_drop_threshold_percent": 50.0,
+      "log_drops": true
+    },
+
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 1,
+      "max_wait_ms": 10
+    },
+
+    "_comment_message_validation": "Validación estricta de mensajes",
+    "message_validation": {
+      "enabled": true,
+      "max_protobuf_size": 9500,
+      "validate_before_processing": true,
+      "drop_oversized_messages": true,
+      "log_validation_errors": true
+    }
+  },
+
+  "ml": {
+    "enabled": true,
+    "_comment_thresholds": "🎯 CORREGIDO: Umbrales más altos para evitar falsos positivos",
+    "anomaly_threshold": 0.85,
+    "high_risk_threshold": 0.95,
+    "confidence_threshold": 0.7,
+
+    "models": {
+      "isolation_forest": {
+        "enabled": true,
+        "contamination": 0.1,
+        "_comment": "Reducido para local",
+        "n_estimators": 15,
+        "random_state": 42,
+        "n_jobs": 1
+      },
+      "one_class_svm": {
+        "_comment": "Deshabilitado - muy pesado para local",
+        "enabled": false,
+        "nu": 0.1,
+        "kernel": "rbf"
+      },
+      "local_outlier_factor": {
+        "_comment": "Deshabilitado - pesado para local",
+        "enabled": false,
+        "n_neighbors": 20,
+        "contamination": 0.1
+      },
+      "dbscan": {
+        "_comment": "Deshabilitado - pesado para local",
+        "enabled": false,
+        "eps": 0.5,
+        "min_samples": 5
+      },
+      "kmeans": {
+        "enabled": true,
+        "_comment": "Configuración ligera",
+        "n_clusters": 3,
+        "random_state": 42,
+        "n_init": 1
+      },
+      "random_forest": {
+        "_comment": "Deshabilitado - muy pesado para local",
+        "enabled": false,
+        "n_estimators": 50,
+        "random_state": 42,
+        "max_depth": 8,
+        "n_jobs": 1
+      }
+    },
+
+    "training": {
+      "_comment_training": "Entrenamiento menos frecuente para conservar recursos",
+      "min_training_samples": 200,
+      "retrain_interval_samples": 300,
+      "contamination_rate": 0.1,
+      "auto_retrain": true,
+      "retrain_interval_minutes": 60,
+      "max_training_time_seconds": 30
+    },
+
+    "features": [
+      "packet_size", "dest_port", "src_port", "protocol_numeric",
+      "hour", "minute", "is_weekend", "ip_entropy_src", "ip_entropy_dst",
+      "port_frequency_src", "port_frequency_dst", "has_geoip",
+      "latitude_abs", "longitude_abs", "distance_from_origin",
+      "is_common_port", "event_id_hash"
+    ],
+
+    "feature_engineering": {
+      "total_features": 17,
+      "enable_port_analysis": true,
+      "enable_temporal_features": true,
+      "enable_ip_analysis": true,
+      "enable_geoip_features": true,
+      "enable_mismatch_detection": true,
+      "auto_retrain_on_mismatch": true,
+      "_comment": "Procesamiento de features simplificado",
+      "feature_caching_enabled": true,
+      "cache_size": 100
+    }
+  },
+
+  "persistence": {
+    "enabled": true,
+    "models_dir": "ml_models",
+    "save_predictions": false,
+    "predictions_file": "data/predictions.jsonl",
+    "_comment": "Guardado menos frecuente para local",
+    "auto_save_interval": 1800,
+    "state_file": "data/ml_detector_state.json",
+    "backup_models": true,
+    "model_versioning": true,
+    "evaluation_enabled": false,
+
+    "_comment_conservative": "Configuración conservadora de persistencia",
+    "max_model_files": 5,
+    "compress_models": true,
+    "cleanup_old_models": true
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
+    "file": null,
+    "max_file_size_mb": 50,
+    "backup_count": 3,
+    "performance_logging": {
+      "enabled": true,
+      "log_slow_requests": true,
+      "_comment": "Umbral más bajo para detectar problemas",
+      "slow_request_threshold_ms": 15
+    }
+  },
+
+  "monitoring": {
+    "_comment": "Monitoreo más frecuente para detectar problemas",
+    "stats_interval_seconds": 20,
+    "detailed_metrics": true,
+
+    "component_health_check": {
+      "enabled": true,
+      "check_interval_seconds": 30,
+      "_comment": "Umbrales más bajos para local",
+      "memory_threshold_mb": 128,
+      "cpu_threshold_percent": 40.0
+    },
+
+    "alerts": {
+      "_comment": "Alertas más sensibles para detectar problemas temprano",
+      "max_queue_usage_percent": 40.0,
+      "max_ml_failure_rate_percent": 10.0,
+      "max_processing_latency_ms": 25.0,
+      "max_backpressure_activations": 5,
+      "max_drop_rate_percent": 2.0,
+      "min_model_accuracy_percent": 60.0,
+      "max_buffer_full_errors": 3,
+      "_comment_new": "Nuevas alertas para compatibilidad ZMQ",
+      "max_message_size_violations": 5,
+      "max_send_timeouts": 10
+    },
+
+    "metrics_export": {
+      "enabled": false,
+      "prometheus_port": 9091,
+      "export_interval_seconds": 60
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "ml_detector_conservative",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 5,
+      "_comment": "Tracking simplificado para local",
+      "lightweight_tracking": true
+    },
+
+    "load_balancing": {
+      "strategy": "simple",
+      "health_check_enabled": true,
+      "failover_timeout_ms": 2000
+    },
+
+    "scaling": {
+      "_comment": "Sin auto-scaling para local",
+      "auto_scale_enabled": false,
+      "min_instances": 1,
+      "max_instances": 1,
+      "scale_up_threshold_percent": 90.0,
+      "scale_down_threshold_percent": 10.0,
+      "cooldown_period_seconds": 300
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "_comment": "Validación más estricta",
+      "max_event_size_bytes": 10000,
+      "validate_protobuf_schema": true,
+      "sanitize_ml_scores": true,
+      "reject_malformed_events": true
+    },
+
+    "rate_limiting": {
+      "enabled": true,
+      "_comment": "Rate limiting conservador para local",
+      "max_events_per_second": 50,
+      "burst_capacity": 100,
+      "penalty_duration_seconds": 30
+    }
+  },
+
+  "debug": {
+    "enabled": false,
+    "sample_events": false,
+    "sample_rate_percent": 0.1,
+    "log_protobuf_details": false,
+    "profile_performance": false,
+    "log_ml_predictions": false,
+    "log_feature_extraction": false,
+
+    "_comment_conservative": "Debug adicional para compatibilidad ZMQ",
+    "log_zmq_errors": true,
+    "log_backpressure_events": true,
+    "log_message_sizes": false
+  }
+}
