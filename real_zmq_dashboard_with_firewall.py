@@ -1730,6 +1730,24 @@ class SecurityDashboard:
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html; charset=utf-8')
                     self.send_header('Cache-Control', 'no-cache')
+
+                    # 🗺️ CRÍTICO: CSP permisivo para Leaflet
+                    csp_policy = (
+                        "default-src 'self'; "
+                        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+                        "https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+                        "style-src 'self' 'unsafe-inline' "
+                        "https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+                        "img-src 'self' data: blob: "
+                        "https://*.tile.openstreetmap.org https://*.openstreetmap.org "
+                        "https://unpkg.com https://cdn.jsdelivr.net; "
+                        "connect-src 'self' "
+                        "https://*.tile.openstreetmap.org https://*.openstreetmap.org; "
+                        "font-src 'self' 'unsafe-inline' "
+                        "https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;"
+                    )
+                    self.send_header('Content-Security-Policy', csp_policy)
+
                     self.end_headers()
                     self.wfile.write(html_content.encode('utf-8'))
 
