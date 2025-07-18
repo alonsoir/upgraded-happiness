@@ -1,584 +1,809 @@
-#!/usr/bin/env python3
-"""
-Enhanced Promiscuous Agent - TIMESTAMP CORREGIDO
-Corregido el problema de timestamp que causaba errores de parsing
-"""
+# promiscuous_agent.py - Agente distribuido con captura real y protobuf
 
-import os
-import sys
+import zmq
 import time
-import uuid
-import hashlib
-import socket
-import psutil
+import json
 import logging
 import threading
-from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
+import socket
+import uuid
+import os
+import sys
+import platform
+import psutil
+from threading import Event
+from typing import Dict, Any, Optional, List
+from queue import Queue, Empty
 
-# Network and packet capture
-from scapy.all import *
-import netifaces
-
-# Messaging and serialization
-import zmq
-import json
-
-# Geolocation
+# 📦 Dependencias para captura de paquetes
 try:
-    import geoip2.database
-    import geoip2.errors
+    from scapy.all import sniff, Ether, IP, TCP, UDP
 
-    GEOIP_AVAILABLE = True
+    SCAPY_AVAILABLE = True
 except ImportError:
-    GEOIP_AVAILABLE = False
-    print("⚠️  GeoIP2 no disponible. Instalar con: pip install geoip2")
+    print("⚠️ Scapy no disponible - usando modo simulación")
+    SCAPY_AVAILABLE = False
 
-# Protocol Buffers - USAR EL EXISTENTE
+# 📦 Protobuf - asume que ya se generó el código Python
 try:
-    from src.protocols.protobuf import network_event_pb2
+    # Importar el protobuf generado
+    # protoc --python_out=. network_event_extended_v2.proto
+    import src.protocols.protobuf.network_event_extended_v2_pb2 as NetworkEventProto
 
-    print("✅ Protobuf importado exitosamente")
     PROTOBUF_AVAILABLE = True
-except ImportError as e:
-    print(f"❌ Error importando protobuf: {e}")
-    sys.exit(1)
-
-# Detector de coordenadas GPS (implementación simplificada integrada)
-import re
-import struct
-
-# Configuración de logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('promiscuous_agent.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+except ImportError:
+    print("⚠️ Protobuf no disponible - generar con: protoc --python_out=. network_event_extended_v2.proto")
+    PROTOBUF_AVAILABLE = False
 
 
-class GeoDetector:
-    """Detector simplificado de coordenadas GPS en paquetes"""
-
-    def __init__(self):
-        # Patrones de coordenadas en texto plano
-        self.lat_lon_patterns = [
-            r'lat[itude]*["\s]*[:=]\s*([+-]?\d+\.?\d*)',
-            r'lon[gitude]*["\s]*[:=]\s*([+-]?\d+\.?\d*)',
-            r'latitude["\s]*[:=]\s*([+-]?\d+\.?\d*)',
-            r'longitude["\s]*[:=]\s*([+-]?\d+\.?\d*)',
-            r'GPS["\s]*[:=]\s*([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)',
-            r'coordinates["\s]*[:=]\s*\[?\s*([+-]?\d+\.?\d*)[,\s]+([+-]?\d+\.?\d*)',
-        ]
-
-    def extract_coordinates_from_payload(self, payload):
-        """Extrae coordenadas de texto plano en el payload"""
-        try:
-            payload_str = payload.decode('utf-8', errors='ignore')
-
-            coordinates = {}
-
-            # Buscar patrones de coordenadas
-            for pattern in self.lat_lon_patterns:
-                matches = re.findall(pattern, payload_str, re.IGNORECASE)
-                if matches:
-                    if len(matches[0]) == 2:  # GPS pattern with lat,lon
-                        coordinates['latitude'] = float(matches[0][0])
-                        coordinates['longitude'] = float(matches[0][1])
-                    else:
-                        # Determine if it's lat or lon based on pattern
-                        if 'lat' in pattern.lower():
-                            coordinates['latitude'] = float(matches[0])
-                        elif 'lon' in pattern.lower():
-                            coordinates['longitude'] = float(matches[0])
-
-            return coordinates if len(coordinates) >= 2 else None
-
-        except Exception:
-            return None
-
-    def check_json_coordinates(self, payload):
-        """Busca coordenadas en JSON"""
-        try:
-            payload_str = payload.decode('utf-8', errors='ignore')
-
-            # Try to parse as JSON
-            try:
-                data = json.loads(payload_str)
-                coords = self.extract_json_coords(data)
-                if coords:
-                    return coords
-            except json.JSONDecodeError:
-                pass
-
-            # Try partial JSON patterns
-            json_patterns = [
-                r'"lat":\s*([+-]?\d+\.?\d*)',
-                r'"lng":\s*([+-]?\d+\.?\d*)',
-                r'"latitude":\s*([+-]?\d+\.?\d*)',
-                r'"longitude":\s*([+-]?\d+\.?\d*)',
-            ]
-
-            coords = {}
-            for pattern in json_patterns:
-                matches = re.findall(pattern, payload_str, re.IGNORECASE)
-                if matches:
-                    value = float(matches[0])
-                    if 'lat' in pattern:
-                        coords['latitude'] = value
-                    elif 'lng' in pattern or 'lon' in pattern:
-                        coords['longitude'] = value
-
-            if len(coords) >= 2:
-                return coords
-
-        except Exception:
-            pass
-        return None
-
-    def extract_json_coords(self, data):
-        """Extrae coordenadas recursivamente de estructuras JSON"""
-        if isinstance(data, dict):
-            # Check common coordinate keys
-            lat_keys = ['lat', 'latitude', 'Lat', 'Latitude']
-            lon_keys = ['lng', 'lon', 'longitude', 'Lng', 'Lon', 'Longitude']
-
-            lat, lon = None, None
-
-            for key in lat_keys:
-                if key in data and isinstance(data[key], (int, float)):
-                    lat = data[key]
-                    break
-
-            for key in lon_keys:
-                if key in data and isinstance(data[key], (int, float)):
-                    lon = data[key]
-                    break
-
-            if lat is not None and lon is not None:
-                return {'latitude': lat, 'longitude': lon}
-
-            # Recursive search
-            for key, value in data.items():
-                result = self.extract_json_coords(value)
-                if result:
-                    return result
-
-        elif isinstance(data, list):
-            for item in data:
-                result = self.extract_json_coords(item)
-                if result:
-                    return result
-
-        return None
-
-    def check_binary_coordinates(self, payload):
-        """Busca coordenadas en formatos binarios"""
-        try:
-            # IEEE 754 double precision (8 bytes)
-            if len(payload) >= 16:
-                for i in range(len(payload) - 15):
-                    try:
-                        lat = struct.unpack('d', payload[i:i + 8])[0]
-                        lon = struct.unpack('d', payload[i + 8:i + 16])[0]
-
-                        # Validate coordinate ranges
-                        if (-90 <= lat <= 90) and (-180 <= lon <= 180):
-                            if abs(lat) > 0.001 or abs(lon) > 0.001:
-                                return {'latitude': lat, 'longitude': lon}
-                    except struct.error:
-                        continue
-
-        except Exception:
-            pass
-        return None
-
-    def analyze_packet(self, packet):
-        """Analiza un paquete buscando coordenadas GPS"""
-        # Extract payload
-        payload = None
-        if Raw in packet:
-            payload = packet[Raw].load
-        elif TCP in packet and packet[TCP].payload:
-            payload = bytes(packet[TCP].payload)
-        elif UDP in packet and packet[UDP].payload:
-            payload = bytes(packet[UDP].payload)
-
-        if not payload:
-            return None
-
-        # Check different coordinate extraction methods
-        methods = [
-            self.check_json_coordinates,
-            self.extract_coordinates_from_payload,
-            self.check_binary_coordinates,
-        ]
-
-        for method_func in methods:
-            coords = method_func(payload)
-            if coords:
-                return coords
-
-        return None
-
-
-class EnhancedPromiscuousAgent:
+class DistributedPromiscuousAgent:
     """
-    Agente promiscuo adaptado para usar el protobuf existente de upgraded-happiness
-    TIMESTAMP CORREGIDO - Eliminará todos los errores de parsing
+    Agente promiscuo distribuido completamente configurable desde JSON
+    - Captura real de paquetes de red
+    - Serialización protobuf
+    - node_id y PID para gestión distribuida
+    - Backpressure configurable
+    - Sin valores hardcodeados
     """
 
-    def __init__(self, config_file: Optional[str] = None):
-        self.config = self._load_config(config_file)
-        self.agent_id = f"agent_{socket.gethostname()}_{int(time.time())}"
-        self.hostname = socket.gethostname()
+    def __init__(self, config_file: str):
+        # 📄 Cargar configuración - SIN defaults hardcodeados
+        self.config = self._load_config_strict(config_file)
+        self.config_file = config_file
 
-        # Inicializar componentes
-        self.zmq_context = None
-        self.zmq_socket = None
-        self.geo_detector = GeoDetector()
-        self.geoip_reader = None
-        self.running = False
+        # 🏷️ Identidad distribuida
+        self.node_id = self.config["node_id"]
+        self.process_id = os.getpid()
+        self.container_id = self._get_container_id()
+        self.start_time = time.time()
+
+        # 🖥️ Información del sistema
+        self.system_info = self._gather_system_info()
+
+        # 📝 Setup logging desde configuración (PRIMERO para usar en otros métodos)
+        self.setup_logging()
+
+        # 🔌 Setup ZeroMQ desde configuración
+        self.context = zmq.Context()
+        self.socket = None
+        self.setup_socket()
+
+        # 🔄 Backpressure desde configuración
+        self.backpressure_config = self.config["backpressure"]
+
+        # 📦 Queue interno para procesamiento asíncrono
+        queue_size = self.config["processing"]["internal_queue_size"]
+        self.packet_queue = Queue(maxsize=queue_size)
+
+        # 📊 Métricas
         self.stats = {
-            'packets_captured': 0,
-            'packets_with_gps': 0,
-            'packets_with_geoip': 0,
-            'packets_sent': 0,
-            'errors': 0
+            'captured': 0,
+            'processed': 0,
+            'sent': 0,
+            'dropped': 0,
+            'filtered': 0,
+            'buffer_full_errors': 0,
+            'backpressure_activations': 0,
+            'queue_overflows': 0,
+            'protobuf_errors': 0,
+            'start_time': time.time(),
+            'last_stats_time': time.time()
         }
 
-        # Caché de geolocalización
-        self.geo_cache = {}
-        self.cache_max_size = 10000
+        # 🎛️ Control
+        self.stop_event = Event()
+        self.running = True
+        self.handshake_sent = False
 
-        # Inicializar servicios
-        self._init_zmq()
-        self._init_geoip()
+        # ✅ Verificar dependencias críticas
+        self._verify_dependencies()
 
-        logger.info(f"🚀 Enhanced Promiscuous Agent iniciado - ID: {self.agent_id}")
+        self.logger.info(f"🚀 Distributed Promiscuous Agent inicializado")
+        self.logger.info(f"   🏷️ Node ID: {self.node_id}")
+        self.logger.info(f"   🔢 PID: {self.process_id}")
+        self.logger.info(f"   📄 Config: {config_file}")
 
-    def _load_config(self, config_file: Optional[str]) -> Dict[str, Any]:
-        """Cargar configuración del agente"""
-        default_config = {
-            'zmq_port': 5559,
-            'zmq_host': 'localhost',
-            'interface': 'any',
-            'promiscuous_mode': True,
-            'packet_filter': '',
-            'geoip_db_path': 'GeoLite2-City.mmdb',
-            'max_packet_size': 65535,
-            'geo_cache_ttl': 3600,
-            'batch_size': 100,
-        }
-
-        if config_file and os.path.exists(config_file):
-            try:
-                with open(config_file, 'r') as f:
-                    user_config = json.load(f)
-                default_config.update(user_config)
-                logger.info(f"📄 Configuración cargada desde {config_file}")
-            except Exception as e:
-                logger.warning(f"⚠️  Error cargando configuración: {e}")
-
-        return default_config
-
-    def _init_zmq(self):
-        """Inicializar conexión ZeroMQ"""
+    def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
+        """Carga configuración SIN proporcionar defaults"""
         try:
-            self.zmq_context = zmq.Context()
-            self.zmq_socket = self.zmq_context.socket(zmq.PUB)
-            zmq_address = f"tcp://*:{self.config['zmq_port']}"
-            self.zmq_socket.bind(zmq_address)
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(f"❌ Archivo de configuración no encontrado: {config_file}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"❌ Error parseando JSON: {e}")
 
-            # Dar tiempo para que ZMQ se establezca
-            time.sleep(0.1)
+        # ✅ Validar campos críticos
+        required_fields = [
+            "node_id", "zmq", "backpressure", "capture",
+            "processing", "protobuf", "logging", "monitoring"
+        ]
 
-            logger.info(f"🔌 ZeroMQ Publisher vinculado a {zmq_address}")
+        for field in required_fields:
+            if field not in config:
+                raise RuntimeError(f"❌ Campo requerido faltante en config: {field}")
 
-        except Exception as e:
-            logger.error(f"❌ Error inicializando ZeroMQ: {e}")
-            raise
+        # ✅ Validar subcampos críticos
+        self._validate_config_structure(config)
 
-    def _init_geoip(self):
-        """Inicializar base de datos GeoIP"""
-        if not GEOIP_AVAILABLE:
-            logger.warning("⚠️  GeoIP no disponible - solo detección en paquetes")
+        return config
+
+    def _validate_config_structure(self, config: Dict[str, Any]):
+        """Valida estructura de configuración - actualizada para network"""
+
+        # 🆕 Validar nueva estructura "network" si existe
+        if "network" in config:
+            network_config = config["network"]
+            if "output_socket" in network_config:
+                output_socket = network_config["output_socket"]
+                required_network_fields = ["address", "port", "mode", "socket_type"]
+                for field in required_network_fields:
+                    if field not in output_socket:
+                        raise RuntimeError(f"❌ Campo network.output_socket faltante: {field}")
+
+                # Validar valores específicos
+                valid_modes = ["bind", "connect"]
+                if output_socket["mode"].lower() not in valid_modes:
+                    raise RuntimeError(f"❌ Modo inválido: {output_socket['mode']}. Válidos: {valid_modes}")
+
+                valid_socket_types = ["PUSH", "PULL", "PUB", "SUB"]
+                if output_socket["socket_type"] not in valid_socket_types:
+                    raise RuntimeError(
+                        f"❌ Tipo de socket inválido: {output_socket['socket_type']}. Válidos: {valid_socket_types}")
+
+        # ✅ Validar campos ZMQ (mantener para opciones técnicas)
+        if "zmq" in config:
+            zmq_required = ["sndhwm", "linger_ms", "send_timeout_ms"]
+            # Si no hay network config, también requerir output_port
+            if "network" not in config or "output_socket" not in config.get("network", {}):
+                zmq_required.append("output_port")
+
+            for field in zmq_required:
+                if field not in config["zmq"]:
+                    raise RuntimeError(f"❌ Campo ZMQ faltante: zmq.{field}")
+
+        # Resto de validaciones...
+        proc_required = ["internal_queue_size", "processing_threads", "queue_timeout_seconds"]
+        for field in proc_required:
+            if field not in config["processing"]:
+                raise RuntimeError(f"❌ Campo processing faltante: processing.{field}")
+
+        cap_required = ["interface", "filter_expression", "buffer_size", "promiscuous_mode"]
+        for field in cap_required:
+            if field not in config["capture"]:
+                raise RuntimeError(f"❌ Campo capture faltante: capture.{field}")
+
+    def _get_container_id(self) -> Optional[str]:
+        """Obtiene ID del contenedor si está ejecutándose en uno"""
+        try:
+            # Intentar leer cgroup para Docker
+            with open('/proc/self/cgroup', 'r') as f:
+                content = f.read()
+                for line in content.split('\n'):
+                    if 'docker' in line:
+                        return line.split('/')[-1][:12]  # Primeros 12 chars del container ID
+            return None
+        except:
+            return None
+
+    def _gather_system_info(self) -> Dict[str, Any]:
+        """Recolecta información del sistema"""
+        return {
+            'hostname': socket.gethostname(),
+            'os_name': platform.system(),
+            'os_version': platform.release(),
+            'architecture': platform.machine(),
+            'python_version': platform.python_version(),
+            'cpu_count': psutil.cpu_count(),
+            'memory_total_gb': round(psutil.virtual_memory().total / (1024 ** 3), 2)
+        }
+
+    def _verify_dependencies(self):
+        """Verifica que las dependencias críticas estén disponibles"""
+        issues = []
+
+        if not SCAPY_AVAILABLE:
+            if self.config["capture"]["mode"] == "real":
+                issues.append("❌ Scapy requerido para captura real - pip install scapy")
+
+        if not PROTOBUF_AVAILABLE:
+            issues.append("❌ Protobuf no generado - ejecutar: protoc --python_out=. network_event_extended_v2.proto")
+
+        if issues:
+            for issue in issues:
+                print(issue)
+            raise RuntimeError("❌ Dependencias críticas faltantes")
+
+    def setup_socket(self):
+        """Configuración ZMQ desde archivo usando nueva estructura network"""
+        # 🆕 Leer desde la nueva sección "network"
+        network_config = self.config.get("network", {})
+        output_socket_config = network_config.get("output_socket", {})
+
+        # 🔄 Fallback a configuración legacy "zmq" si no existe "network"
+        if not output_socket_config:
+            self.logger.warning("⚠️ Usando configuración legacy 'zmq' - considera migrar a 'network'")
+            zmq_config = self.config["zmq"]
+
+            self.socket = self.context.socket(zmq.PUSH)
+
+            # Configuración legacy
+            self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
+            self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
+            self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
+
+            port = zmq_config["output_port"]
+            bind_address = f"tcp://*:{port}"
+            self.socket.bind(bind_address)
+
+            self.logger.info(f"🔌 Socket ZMQ configurado (legacy):")
+            self.logger.info(f"   📡 Bind: {bind_address}")
+            self.logger.info(f"   🌊 SNDHWM: {zmq_config['sndhwm']}")
             return
 
-        geoip_path = self.config['geoip_db_path']
+        # 🆕 Nueva configuración desde "network"
+        zmq_config = self.config["zmq"]  # Mantenemos zmq para opciones técnicas
 
-        if os.path.exists(geoip_path):
-            try:
-                self.geoip_reader = geoip2.database.Reader(geoip_path)
-                logger.info(f"🌍 Base de datos GeoIP cargada: {geoip_path}")
-            except Exception as e:
-                logger.warning(f"⚠️  Error cargando GeoIP: {e}")
-        else:
-            logger.warning(f"⚠️  Base de datos GeoIP no encontrada: {geoip_path}")
-
-    def get_geolocation(self, packet, ip_address: str) -> Tuple[float, float, str]:
-        """
-        Obtener geolocalización híbrida: GPS en paquete + fallback GeoIP
-        Retorna: (latitude, longitude, source)
-        """
-
-        # Verificar caché primero
-        if ip_address in self.geo_cache:
-            cache_entry = self.geo_cache[ip_address]
-            if time.time() - cache_entry['timestamp'] < self.config['geo_cache_ttl']:
-                return cache_entry['lat'], cache_entry['lon'], cache_entry['source']
-
-        # 🎯 PASO 1: Detectar coordenadas GPS en el paquete
         try:
-            coords = self.geo_detector.analyze_packet(packet)
+            # 🔧 Determinar tipo de socket desde configuración
+            socket_type_str = output_socket_config.get("socket_type", "PUSH")
+            socket_type = getattr(zmq, socket_type_str)
+            self.socket = self.context.socket(socket_type)
 
-            if coords:
-                lat = coords['latitude']
-                lon = coords['longitude']
-                source = "packet-gps"
+            # 🔧 Configurar opciones ZMQ (desde sección zmq)
+            self.socket.setsockopt(zmq.SNDHWM, zmq_config["sndhwm"])
+            self.socket.setsockopt(zmq.LINGER, zmq_config["linger_ms"])
+            self.socket.setsockopt(zmq.SNDTIMEO, zmq_config["send_timeout_ms"])
 
-                self.stats['packets_with_gps'] += 1
-                logger.debug(f"🎯 GPS detectado en paquete de {ip_address}: {lat}, {lon}")
+            # 🔌 Configurar dirección desde "network"
+            address = output_socket_config["address"]
+            port = output_socket_config["port"]
+            mode = output_socket_config["mode"].lower()
 
-                # Guardar en caché
-                self._cache_geolocation(ip_address, lat, lon, source)
-                return lat, lon, source
+            if mode == "bind":
+                # BIND para actuar como servidor
+                bind_address = f"tcp://*:{port}"
+                self.socket.bind(bind_address)
+                connection_info = f"BIND on {bind_address}"
+            elif mode == "connect":
+                # CONNECT para actuar como cliente
+                connect_address = f"tcp://{address}:{port}"
+                self.socket.connect(connect_address)
+                connection_info = f"CONNECT to {connect_address}"
+            else:
+                raise ValueError(f"❌ Modo de socket desconocido: {mode}. Use 'bind' o 'connect'")
+
+            self.logger.info(f"🔌 Socket ZMQ configurado:")
+            self.logger.info(f"   📡 {connection_info}")
+            self.logger.info(f"   🔌 Tipo: {socket_type_str}")
+            self.logger.info(f"   🌊 SNDHWM: {zmq_config['sndhwm']}")
+            self.logger.info(f"   📝 Descripción: {output_socket_config.get('description', 'N/A')}")
 
         except Exception as e:
-            logger.debug(f"🔍 No se detectó GPS en paquete de {ip_address}: {e}")
+            raise RuntimeError(f"❌ Error configurando socket ZMQ: {e}")
 
-        # 🔄 PASO 2: Fallback a base de datos GeoIP
-        if self.geoip_reader and ip_address not in ['127.0.0.1', '::1']:
-            try:
-                response = self.geoip_reader.city(ip_address)
+    def setup_logging(self):
+        """Setup logging desde configuración con node_id"""
+        log_config = self.config["logging"]
 
-                lat = float(response.location.latitude or 0.0)
-                lon = float(response.location.longitude or 0.0)
-                source = "geoip-database"
+        # 📝 Configurar nivel
+        level = getattr(logging, log_config["level"].upper())
 
-                self.stats['packets_with_geoip'] += 1
-
-                # Guardar en caché
-                self._cache_geolocation(ip_address, lat, lon, source)
-                return lat, lon, source
-
-            except geoip2.errors.AddressNotFoundError:
-                logger.debug(f"🌍 IP no encontrada en GeoIP: {ip_address}")
-            except Exception as e:
-                logger.debug(f"🌍 Error en lookup GeoIP para {ip_address}: {e}")
-
-        # 🚫 PASO 3: Fallback vacío
-        return 0.0, 0.0, "unknown"
-
-    def _cache_geolocation(self, ip_address: str, lat: float, lon: float, source: str):
-        """Guardar geolocalización en caché"""
-        # Limpiar caché si está lleno
-        if len(self.geo_cache) >= self.cache_max_size:
-            oldest_entries = sorted(
-                self.geo_cache.items(),
-                key=lambda x: x[1]['timestamp']
-            )[:self.cache_max_size // 2]
-
-            for ip, _ in oldest_entries:
-                del self.geo_cache[ip]
-
-        self.geo_cache[ip_address] = {
-            'lat': lat,
-            'lon': lon,
-            'source': source,
-            'timestamp': time.time()
-        }
-
-    def create_network_event(self, packet) -> network_event_pb2.NetworkEvent:
-        """Crear evento usando el protobuf existente - TIMESTAMP CORREGIDO"""
-        event = network_event_pb2.NetworkEvent()
-
-        # Identificación básica
-        event.event_id = str(uuid.uuid4())
-
-        # 🔧 CORRECCIÓN CRÍTICA: timestamp en SEGUNDOS, no milisegundos
-        # Esto eliminará TODOS los errores de parsing en el ML detector
-        event.timestamp = int(time.time())  # CORREGIDO: segundos en lugar de milisegundos
-
-        event.agent_id = self.agent_id
-
-        # Información de red básica
-        if IP in packet:
-            event.source_ip = packet[IP].src
-            event.target_ip = packet[IP].dst
-
-            # 🌍 GEOLOCALIZACIÓN CRÍTICA - usando campos existentes
-            src_lat, src_lon, src_source = self.get_geolocation(packet, packet[IP].src)
-            # Para el protobuf existente, usaremos las coordenadas del origen
-            # (se podría extender el protobuf para tener src_lat, src_lon, dst_lat, dst_lon)
-            event.latitude = src_lat
-            event.longitude = src_lon
-
-        # Puertos
-        if TCP in packet:
-            event.src_port = packet[TCP].sport
-            event.dest_port = packet[TCP].dport
-        elif UDP in packet:
-            event.src_port = packet[UDP].sport
-            event.dest_port = packet[UDP].dport
-
-        # Tamaño del paquete
-        event.packet_size = len(packet)
-
-        # Información adicional usando campos existentes
-        event.event_type = "network_capture"
-        event.anomaly_score = 0.0  # Será poblado por ML detector
-        event.risk_score = 0.0  # Será poblado por ML detector
-        event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
-
-        self.stats['packets_captured'] += 1
-        return event
-
-    def send_event(self, event):
-        """Enviar evento via ZeroMQ usando protobuf"""
-        try:
-            # Enviar como protobuf binario
-            data = event.SerializeToString()
-
-            # Envío simple - sin topic para compatibilidad
-            self.zmq_socket.send(data)
-            self.stats['packets_sent'] += 1
-
-        except Exception as e:
-            logger.error(f"❌ Error enviando evento: {e}")
-            self.stats['errors'] += 1
-
-    def packet_handler(self, packet):
-        """Handler principal para procesar paquetes capturados"""
-        try:
-            # Crear evento de red con geolocalización
-            event = self.create_network_event(packet)
-
-            # Enviar via ZeroMQ
-            self.send_event(event)
-
-            # Log periódico de estadísticas
-            if self.stats['packets_captured'] % 100 == 0:
-                self._log_stats()
-
-        except Exception as e:
-            logger.error(f"❌ Error procesando paquete: {e}")
-            self.stats['errors'] += 1
-
-    def _log_stats(self):
-        """Log de estadísticas del agente"""
-        stats = self.stats
-        gps_rate = (stats['packets_with_gps'] / max(stats['packets_captured'], 1)) * 100
-        geoip_rate = (stats['packets_with_geoip'] / max(stats['packets_captured'], 1)) * 100
-
-        logger.info(
-            f"📊 Stats: {stats['packets_captured']} capturados, "
-            f"{stats['packets_sent']} enviados, "
-            f"{gps_rate:.1f}% con GPS, "
-            f"{geoip_rate:.1f}% con GeoIP, "
-            f"{stats['errors']} errores"
+        # 🏷️ Formato con node_id y PID
+        log_format = log_config["format"].format(
+            node_id=self.node_id,
+            pid=self.process_id
         )
+        formatter = logging.Formatter(log_format)
 
-    def start(self):
-        """Iniciar captura de paquetes"""
-        if not self.zmq_socket:
-            raise RuntimeError("ZeroMQ no inicializado")
+        # 🔧 Configurar handler
+        if log_config.get("file"):
+            handler = logging.FileHandler(log_config["file"])
+        else:
+            handler = logging.StreamHandler()
 
-        self.running = True
-        interface = self.config['interface']
-        packet_filter = self.config['packet_filter']
+        handler.setFormatter(formatter)
 
-        logger.info(f"🎯 Iniciando captura promiscua en interfaz: {interface}")
-        logger.info(f"🔌 Enviando eventos a ZeroMQ puerto: {self.config['zmq_port']}")
-        logger.info(f"📍 Geolocalización: GPS en paquetes + GeoIP fallback")
-        logger.info(f"🔧 TIMESTAMP CORREGIDO: Eliminará errores de parsing en ML detector")
+        # 📋 Setup logger
+        self.logger = logging.getLogger(f"promiscuous_agent_{self.node_id}")
+        self.logger.setLevel(level)
+        self.logger.addHandler(handler)
+        self.logger.propagate = False
 
-        if packet_filter:
-            logger.info(f"🔍 Filtro BPF aplicado: {packet_filter}")
+    def create_network_event(self, packet_data: Dict[str, Any], is_handshake: bool = False) -> bytes:
+        """Crea evento protobuf desde datos de paquete - CORREGIDO para llenar todos los campos"""
+        if not PROTOBUF_AVAILABLE:
+            raise RuntimeError("❌ Protobuf no disponible")
 
         try:
-            # Captura en modo promiscuo
+            # 📦 Crear evento protobuf
+            event = NetworkEventProto.NetworkEvent()
+
+            # 🆔 Identificación única
+            event.event_id = str(uuid.uuid4())
+            event.timestamp = int(time.time() * 1000)  # Milliseconds
+
+            # 🌐 Datos de red
+            event.source_ip = packet_data.get('src_ip', 'unknown')
+            event.target_ip = packet_data.get('dst_ip', 'unknown')
+            event.packet_size = packet_data.get('size', 0)
+            event.dest_port = packet_data.get('dst_port', 0)
+            event.src_port = packet_data.get('src_port', 0)
+            event.protocol = packet_data.get('protocol', 'unknown')
+
+            # 🤖 Identificación del agente (legacy)
+            event.agent_id = f"agent_{self.node_id}"
+
+            # 🆔 CAMPOS DISTRIBUIDOS CRÍTICOS
+            event.node_id = self.node_id
+            event.process_id = self.process_id
+            if self.container_id:
+                event.container_id = self.container_id
+
+            # 🔄 Estado del componente
+            event.component_status = "healthy"  # TODO: calcular basado en métricas
+            event.uptime_seconds = int(time.time() - self.start_time)
+
+            # 📈 Métricas de performance
+            event.queue_depth = self.packet_queue.qsize()
+            try:
+                process = psutil.Process(self.process_id)
+                event.cpu_usage_percent = process.cpu_percent()
+                event.memory_usage_mb = process.memory_info().rss / (1024 * 1024)
+            except:
+                pass  # Ignorar errores de psutil
+
+            # 🔧 Configuración
+            event.config_version = self.config.get("version", "unknown")
+            event.config_timestamp = int(time.time())
+
+            # 🏠 Información del nodo (solo en handshake)
+            if is_handshake:
+                event.is_initial_handshake = True
+                event.node_hostname = self.system_info['hostname']
+                event.os_version = f"{self.system_info['os_name']} {self.system_info['os_version']}"
+                event.agent_version = self.config.get("agent_version", "1.0.0")
+                event.so_identifier = self._get_so_identifier()
+                event.firewall_status = "unknown"  # TODO: detectar estado del firewall
+
+                # 📊 Descripción de handshake
+                event.description = f"Initial handshake from {self.node_id}"
+                event.event_type = "handshake"
+            else:
+                event.is_initial_handshake = False
+                event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
+                event.event_type = "network_traffic"
+
+            # 🔧 CAMPOS DE PIPELINE DISTRIBUIDO (POSICIONES 36-45) - CORREGIDOS
+
+            # PIDS de componentes (36-40)
+            event.promiscuous_pid = self.process_id  # CRÍTICO: Nuestro PID
+            event.geoip_enricher_pid = 0  # No tenemos geoip enricher aquí
+            event.ml_detector_pid = 0  # No tenemos ml detector aquí
+            event.dashboard_pid = 0  # Será llenado por el dashboard
+            event.firewall_pid = 0  # No tenemos firewall aquí
+
+            # TIMESTAMPS de procesamiento (41-45) - CORREGIDOS
+            current_time_ms = int(time.time() * 1000)
+
+            # CORRECCIÓN CRÍTICA: Llenar promiscuous_timestamp (campo 41)
+            if 'timestamp' in packet_data:
+                # Usar timestamp del paquete si está disponible
+                event.promiscuous_timestamp = int(packet_data['timestamp'] * 1000)
+            else:
+                # Usar timestamp actual
+                event.promiscuous_timestamp = current_time_ms
+
+            event.geoip_enricher_timestamp = 0  # No procesado por geoip aún
+            event.ml_detector_timestamp = 0  # No procesado por ML aún
+            event.dashboard_timestamp = 0  # Será llenado por dashboard
+            event.firewall_timestamp = 0  # No procesado por firewall aún
+
+            # MÉTRICAS de pipeline (46-48)
+            event.processing_latency_ms = 0.0  # Calcular en componentes posteriores
+            event.pipeline_hops = 1  # Somos el primer componente
+            event.pipeline_path = f"promiscuous[{self.node_id}]"
+
+            # CONTROL de flujo (49-51)
+            event.retry_count = 0
+            event.last_error = ""
+            event.requires_reprocessing = False
+
+            # TAGS y metadatos (52-53)
+            event.component_tags.extend([
+                "promiscuous",
+                "packet_capture",
+                f"node_{self.node_id}",
+                f"pid_{self.process_id}"
+            ])
+
+            # Metadatos del componente
+            metadata = event.component_metadata
+            metadata["capture_interface"] = self.config["capture"]["interface"]
+            metadata["agent_version"] = self.config.get("agent_version", "1.0.0")
+            metadata["config_file"] = self.config_file
+            metadata["queue_size"] = str(self.packet_queue.qsize())
+            metadata["processing_thread"] = str(threading.current_thread().name)
+
+            # 🔄 Serializar a bytes
+            serialized_data = event.SerializeToString()
+
+            # 📊 Log de debugging para verificar campos críticos
+            self.logger.debug(f"📦 Protobuf creado - Tamaño: {len(serialized_data)} bytes")
+            self.logger.debug(f"   🔢 promiscuous_pid: {event.promiscuous_pid}")
+            self.logger.debug(f"   ⏰ promiscuous_timestamp: {event.promiscuous_timestamp}")
+            self.logger.debug(f"   🛤️ pipeline_path: {event.pipeline_path}")
+
+            return serialized_data
+
+        except Exception as e:
+            self.stats['protobuf_errors'] += 1
+            self.logger.error(f"❌ Error creando evento protobuf: {e}")
+            raise
+
+    def _get_so_identifier(self) -> str:
+        """Identifica el sistema operativo y su firewall"""
+        os_name = self.system_info['os_name'].lower()
+
+        if 'linux' in os_name:
+            # TODO: detectar si usa ufw, iptables, etc.
+            return "linux_iptables"
+        elif 'darwin' in os_name:
+            return "darwin_pf"
+        elif 'windows' in os_name:
+            return "windows_firewall"
+        else:
+            return "unknown"
+
+    def packet_capture_callback(self, packet):
+        """Callback para captura de paquetes con Scapy - MEJORADO con timestamp"""
+        try:
+            # 📊 Extraer información del paquete con timestamp de captura
+            packet_data = self._extract_packet_info(packet)
+
+            if packet_data and self._should_process_packet(packet_data):
+                # 📋 Añadir a queue para procesamiento asíncrono
+                try:
+                    queue_timeout = self.config["processing"]["queue_timeout_seconds"]
+                    self.packet_queue.put(packet_data, timeout=queue_timeout)
+                    self.stats['captured'] += 1
+                except:
+                    self.stats['queue_overflows'] += 1
+
+        except Exception as e:
+            self.logger.error(f"❌ Error en callback de captura: {e}")
+
+    def _extract_packet_info(self, packet) -> Optional[Dict[str, Any]]:
+        """Extrae información relevante del paquete - MEJORADO con timestamp preciso"""
+        try:
+            info = {}
+
+            # 📦 Información básica con timestamp de captura preciso
+            info['size'] = len(packet)
+            info['timestamp'] = time.time()  # CRÍTICO: Timestamp cuando se capturó
+
+            # 🌐 Capa IP
+            if packet.haslayer(IP):
+                ip_layer = packet[IP]
+                info['src_ip'] = ip_layer.src
+                info['dst_ip'] = ip_layer.dst
+                info['protocol'] = ip_layer.proto
+
+                # 🚪 Puertos para TCP/UDP
+                if packet.haslayer(TCP):
+                    tcp_layer = packet[TCP]
+                    info['src_port'] = tcp_layer.sport
+                    info['dst_port'] = tcp_layer.dport
+                    info['protocol'] = 'tcp'
+                elif packet.haslayer(UDP):
+                    udp_layer = packet[UDP]
+                    info['src_port'] = udp_layer.sport
+                    info['dst_port'] = udp_layer.dport
+                    info['protocol'] = 'udp'
+                else:
+                    info['src_port'] = 0
+                    info['dst_port'] = 0
+                    info['protocol'] = 'other'
+            else:
+                # Sin capa IP
+                info['src_ip'] = 'unknown'
+                info['dst_ip'] = 'unknown'
+                info['src_port'] = 0
+                info['dst_port'] = 0
+                info['protocol'] = 'non-ip'
+
+            return info
+
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo info de paquete: {e}")
+            return None
+
+    def _should_process_packet(self, packet_data: Dict[str, Any]) -> bool:
+        """Determina si el paquete debe ser procesado según filtros"""
+        capture_config = self.config["capture"]
+
+        # 📏 Filtro por tamaño mínimo
+        if packet_data['size'] < capture_config.get("min_packet_size", 0):
+            self.stats['filtered'] += 1
+            return False
+
+        # 🚪 Filtro por puertos excluidos
+        excluded_ports = capture_config.get("excluded_ports", [])
+        if (packet_data.get('src_port') in excluded_ports or
+                packet_data.get('dst_port') in excluded_ports):
+            self.stats['filtered'] += 1
+            return False
+
+        # 📝 Filtro por protocolos incluidos
+        included_protocols = capture_config.get("included_protocols", [])
+        if included_protocols and packet_data.get('protocol') not in included_protocols:
+            self.stats['filtered'] += 1
+            return False
+
+        return True
+
+    def start_packet_capture(self):
+        """Inicia captura de paquetes"""
+        capture_config = self.config["capture"]
+
+        if not SCAPY_AVAILABLE:
+            self.logger.error("❌ Scapy no disponible - no se puede capturar paquetes")
+            return
+
+        interface = capture_config["interface"]
+        filter_expr = capture_config.get("filter_expression", "")
+
+        self.logger.info(f"🎯 Iniciando captura de paquetes:")
+        self.logger.info(f"   📡 Interface: {interface}")
+        self.logger.info(f"   🔍 Filtro: {filter_expr or 'sin filtro'}")
+        self.logger.info(f"   🎭 Promiscuo: {capture_config['promiscuous_mode']}")
+
+        try:
+            # 🎣 Iniciar captura con Scapy
             sniff(
-                iface=interface if interface != 'any' else None,
-                prn=self.packet_handler,
-                filter=packet_filter if packet_filter else None,
-                store=0,
+                iface=interface if interface != "any" else None,
+                filter=filter_expr,
+                prn=self.packet_capture_callback,
+                store=0,  # No almacenar paquetes en memoria
                 stop_filter=lambda x: not self.running
             )
-        except PermissionError:
-            logger.error("❌ Error: Se requieren privilegios de root para captura promiscua")
-            logger.info("💡 Ejecutar con: sudo python promiscuous_agent.py")
-            raise
         except Exception as e:
-            logger.error(f"❌ Error en captura: {e}")
-            raise
+            self.logger.error(f"❌ Error en captura de paquetes: {e}")
+            self.logger.error("💡 Tip: ejecutar con sudo para captura promiscua")
 
-    def stop(self):
-        """Detener agente limpiamente"""
-        logger.info("🛑 Deteniendo agente promiscuo...")
+    def process_packets(self):
+        """Thread para procesar paquetes de la cola"""
+        queue_timeout = self.config["processing"]["queue_timeout_seconds"]
+
+        self.logger.info("⚙️ Iniciando thread de procesamiento de paquetes")
+
+        while self.running:
+            try:
+                # 📋 Obtener paquete de la cola
+                packet_data = self.packet_queue.get(timeout=queue_timeout)
+
+                # 📦 Crear evento protobuf
+                protobuf_data = self.create_network_event(packet_data)
+
+                # 📤 Enviar con backpressure
+                success = self.send_event_with_backpressure(protobuf_data)
+
+                if success:
+                    self.stats['processed'] += 1
+
+                self.packet_queue.task_done()
+
+            except Empty:
+                # Timeout normal - continuar
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Error procesando paquete: {e}")
+
+    def send_handshake(self):
+        """Envía handshake inicial del nodo"""
+        if self.handshake_sent:
+            return
+
+        try:
+            # 📦 Crear evento handshake con timestamp preciso
+            handshake_data = {
+                'src_ip': 'handshake',
+                'dst_ip': 'handshake',
+                'size': 0,
+                'src_port': 0,
+                'dst_port': 0,
+                'protocol': 'handshake',
+                'timestamp': time.time()  # CRÍTICO: Timestamp del handshake
+            }
+
+            protobuf_data = self.create_network_event(handshake_data, is_handshake=True)
+
+            # 📤 Enviar handshake
+            success = self.send_event_with_backpressure(protobuf_data)
+
+            if success:
+                self.handshake_sent = True
+                self.logger.info(f"🤝 Handshake enviado exitosamente")
+            else:
+                self.logger.warning(f"⚠️ Error enviando handshake")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error creando handshake: {e}")
+
+    def send_event_with_backpressure(self, event_data: bytes) -> bool:
+        """Envío con backpressure configurable"""
+        bp_config = self.backpressure_config
+        max_retries = bp_config["max_retries"]
+
+        for attempt in range(max_retries + 1):
+            try:
+                # 🚀 Intento de envío
+                self.socket.send(event_data, zmq.NOBLOCK)
+                self.stats['sent'] += 1
+                return True
+
+            except zmq.Again:
+                # 🔴 Buffer lleno
+                self.stats['buffer_full_errors'] += 1
+
+                if attempt == max_retries:
+                    # 🗑️ Último intento fallido
+                    self.stats['dropped'] += 1
+                    return False
+
+                # 🔄 Aplicar backpressure
+                if not self._apply_backpressure(attempt):
+                    return False
+
+                continue
+
+            except zmq.ZMQError as e:
+                self.logger.error(f"❌ Error ZMQ: {e}")
+                self.stats['dropped'] += 1
+                return False
+
+        return False
+
+    def _apply_backpressure(self, attempt: int) -> bool:
+        """Aplica backpressure según configuración"""
+        bp_config = self.backpressure_config
+
+        if not bp_config["enabled"]:
+            return False
+
+        if attempt >= bp_config["max_retries"]:
+            self.stats['dropped'] += 1
+            return False
+
+        # 🔄 Aplicar delay configurado
+        delays = bp_config["retry_delays_ms"]
+        delay_ms = delays[attempt] if attempt < len(delays) else delays[-1]
+
+        time.sleep(delay_ms / 1000.0)
+        self.stats['backpressure_activations'] += 1
+        return True
+
+    def monitor_performance(self):
+        """Thread de monitoreo de performance"""
+        monitoring_config = self.config["monitoring"]
+        interval = monitoring_config["stats_interval_seconds"]
+
+        while self.running:
+            time.sleep(interval)
+            if not self.running:
+                break
+
+            self._log_performance_stats()
+            self._check_performance_alerts()
+
+    def _log_performance_stats(self):
+        """Log de estadísticas de performance"""
+        now = time.time()
+        interval = now - self.stats['last_stats_time']
+
+        # 📊 Calcular rates
+        capture_rate = self.stats['captured'] / interval if interval > 0 else 0
+        process_rate = self.stats['processed'] / interval if interval > 0 else 0
+        send_rate = self.stats['sent'] / interval if interval > 0 else 0
+
+        self.logger.info(f"📊 Performance Stats:")
+        self.logger.info(f"   📡 Capturados: {self.stats['captured']} ({capture_rate:.1f}/s)")
+        self.logger.info(f"   ⚙️ Procesados: {self.stats['processed']} ({process_rate:.1f}/s)")
+        self.logger.info(f"   📤 Enviados: {self.stats['sent']} ({send_rate:.1f}/s)")
+        self.logger.info(f"   🗑️ Descartados: {self.stats['dropped']}")
+        self.logger.info(f"   📋 Cola: {self.packet_queue.qsize()}")
+        self.logger.info(f"   🔄 Backpressure: {self.stats['backpressure_activations']}")
+
+        # 🔄 Reset stats para próximo intervalo
+        for key in ['captured', 'processed', 'sent', 'dropped', 'backpressure_activations']:
+            self.stats[key] = 0
+
+        self.stats['last_stats_time'] = now
+
+    def _check_performance_alerts(self):
+        """Verifica alertas de performance"""
+        monitoring_config = self.config["monitoring"]
+        alerts = monitoring_config.get("alerts", {})
+
+        # 🚨 Alert de cola llena
+        queue_usage = self.packet_queue.qsize() / self.config["processing"]["internal_queue_size"]
+        max_queue_usage = alerts.get("max_queue_usage_percent", 100) / 100.0
+
+        if queue_usage > max_queue_usage:
+            self.logger.warning(f"🚨 ALERTA: Cola interna llena ({queue_usage * 100:.1f}%)")
+
+    def run(self):
+        """Ejecutar el agente distribuido"""
+        self.logger.info("🚀 Iniciando Distributed Promiscuous Agent...")
+
+        # 🤝 Enviar handshake inicial
+        self.send_handshake()
+
+        # 🧵 Iniciar threads
+        threads = []
+
+        # Thread de monitoreo
+        monitor_thread = threading.Thread(target=self.monitor_performance, name="Monitor")
+        monitor_thread.start()
+        threads.append(monitor_thread)
+
+        # Threads de procesamiento
+        num_processing_threads = self.config["processing"]["processing_threads"]
+        for i in range(num_processing_threads):
+            proc_thread = threading.Thread(target=self.process_packets, name=f"Processor-{i}")
+            proc_thread.start()
+            threads.append(proc_thread)
+
+        # Thread de captura (debe ser último para bloquear)
+        capture_thread = threading.Thread(target=self.start_packet_capture, name="Capture")
+        capture_thread.start()
+        threads.append(capture_thread)
+
+        self.logger.info(f"✅ Agent iniciado con {len(threads)} threads")
+
+        try:
+            # 🔄 Mantener vivo el proceso principal
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Deteniendo Agent...")
+
+        # 🛑 Cierre graceful
+        self.shutdown(threads)
+
+    def shutdown(self, threads):
+        """Cierre graceful del agente"""
         self.running = False
+        self.stop_event.set()
 
-        # Cerrar conexiones
-        if self.zmq_socket:
-            self.zmq_socket.close()
-        if self.zmq_context:
-            self.zmq_context.term()
-        if self.geoip_reader:
-            self.geoip_reader.close()
+        # 📊 Stats finales
+        runtime = time.time() - self.stats['start_time']
+        self.logger.info(f"📊 Stats finales - Runtime: {runtime:.1f}s")
 
-        # Log final de estadísticas
-        self._log_stats()
-        logger.info(f"✅ Agente {self.agent_id} detenido correctamente")
+        # 🧵 Esperar threads
+        for thread in threads:
+            thread.join(timeout=5)
+
+        # 🔌 Cerrar socket
+        if self.socket:
+            self.socket.close()
+        self.context.term()
+
+        self.logger.info("✅ Distributed Promiscuous Agent cerrado correctamente")
 
 
-def main():
-    """Función principal"""
-    import signal
+# 🚀 Main
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("❌ Uso: python promiscuous_agent.py <config.json>")
+        print("💡 Ejemplo: python promiscuous_agent.py enhanced_agent_config.json")
+        sys.exit(1)
 
-    # Configurar manejo de señales para parada limpia
-    agent = None
-
-    def signal_handler(signum, frame):
-        logger.info(f"📡 Señal {signum} recibida")
-        if agent:
-            agent.stop()
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    config_file = sys.argv[1]
 
     try:
-        # Crear y iniciar agente
-        config_file = sys.argv[1] if len(sys.argv) > 1 else None
-        agent = EnhancedPromiscuousAgent(config_file)
-
-        logger.info("🚀 Iniciando Enhanced Promiscuous Agent...")
-        logger.info("📍 Usando protobuf existente: network_event_pb2.NetworkEvent")
-        logger.info("🎯 Detectando GPS en paquetes + fallback GeoIP local")
-        logger.info("🔧 TIMESTAMP CORREGIDO - Eliminará errores de parsing")
-        logger.info("⚡ Presiona Ctrl+C para detener")
-
-        agent.start()
-
-    except KeyboardInterrupt:
-        logger.info("🛑 Interrupción por teclado")
+        agent = DistributedPromiscuousAgent(config_file)
+        agent.run()
     except Exception as e:
-        logger.error(f"❌ Error fatal: {e}")
-        return 1
-    finally:
-        if agent:
-            agent.stop()
-
-    return 0
-
-
-if __name__ == "__main__":
-    # Verificar que se ejecuta con privilegios suficientes
-    if os.geteuid() != 0:
-        print("⚠️  ADVERTENCIA: Se recomienda ejecutar como root para captura promiscua")
-        print("💡 Ejecutar: sudo python promiscuous_agent.py")
-
-    sys.exit(main())
+        print(f"❌ Error fatal: {e}")
+        sys.exit(1)

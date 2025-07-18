@@ -1,0 +1,185 @@
+{
+  "node_id": "dashboard_main_001",
+  "component": {
+    "name": "security_dashboard",
+    "version": "2.2.2",
+    "mode": "distributed_orchestrator",
+    "role": "dashboard_coordinator"
+  },
+
+  "network": {
+    "ml_events_input": {
+      "address": "localhost",
+      "port": 5570,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "high_water_mark": 1000,
+      "expected_publishers": 1,
+      "description": "Recibe eventos del ML Detector"
+    },
+
+    "_comment_firewall_fix": "🔧 CORREGIDO: Puertos compatibles con firewall_agent",
+    "firewall_commands_output": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "high_water_mark": 500,
+      "expected_subscribers": 1,
+      "description": "Envía comandos al firewall_agent puerto 5580"
+    },
+
+    "firewall_responses_input": {
+      "address": "localhost",
+      "port": 5581,
+      "mode": "bind",
+      "socket_type": "PULL",
+      "high_water_mark": 500,
+      "expected_publishers": 1,
+      "description": "Recibe respuestas del firewall_agent puerto 5581"
+    },
+
+    "admin_interface": {
+      "address": "0.0.0.0",
+      "port": 8080
+    }
+  },
+
+  "zmq": {
+    "_comment_conservative": "🔒 Configuración ULTRA CONSERVADORA compatible con ML Detector",
+    "context_io_threads": 1,
+    "max_sockets": 32,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": true,
+
+    "_comment_compatibility": "⭐ CRÍTICO: Configuraciones compatibles con ML Detector conservador",
+    "linger_ms": 0,
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 500,
+    "max_message_size": 10000,
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 65536
+  },
+
+  "processing": {
+    "_comment_threads": "🔧 CRÍTICO: 1 thread para evitar race conditions",
+    "threads": {
+      "ml_events_consumers": 1,
+      "firewall_command_producers": 1,
+      "firewall_response_consumers": 1
+    },
+
+    "_comment_queues": "📋 Colas compatibles con configuración conservadora",
+    "internal_queues": {
+      "ml_events_queue_size": 500,
+      "firewall_commands_queue_size": 200,
+      "firewall_responses_queue_size": 200
+    },
+
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 20,
+    "detailed_metrics": true,
+
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 50.0,
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 512,
+      "max_cpu_usage_percent": 60.0,
+
+      "_comment_firewall": "🔥 Alertas específicas para firewall",
+      "max_firewall_command_failures": 5,
+      "max_firewall_response_timeout": 3000,
+      "firewall_health_check_interval": 30
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true
+      },
+      "file": {
+        "enabled": false,
+        "path": "logs/dashboard.log"
+      }
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 10000,
+      "validate_message_integrity": true,
+      "sanitize_inputs": true
+    },
+
+    "firewall_integration": {
+      "enabled": true,
+      "test_commands_enabled": true,
+      "auto_block_high_risk": true,
+      "block_threshold": 0.95,
+      "default_block_duration": "300s"
+    }
+  },
+
+  "web_interface": {
+    "enabled": true,
+    "static_files_path": "static",
+    "templates_path": "templates",
+    "cache_control": "no-cache",
+
+    "_comment_map": "🗺️ Configuración específica para el mapa",
+    "map_settings": {
+      "enabled": true,
+      "default_zoom": 6,
+      "center_lat": 40.4168,
+      "center_lon": -3.7038,
+      "tile_server": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "© OpenStreetMap contributors",
+      "marker_clustering": true,
+      "auto_fit_bounds": true
+    },
+
+    "api_endpoints": {
+      "metrics": "/api/metrics",
+      "test_firewall": "/api/test-firewall",
+      "map_data": "/api/map-data",
+      "live_events": "/api/live-events"
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "component_role": "dashboard_coordinator",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10
+    }
+  },
+
+  "_comment_compatibility_notes": {
+    "firewall_agent_ports": "Dashboard CONECTA a 5580 (commands) y BIND en 5581 (responses)",
+    "ml_detector_port": "Dashboard CONECTA a 5570 para recibir eventos ML",
+    "thread_safety": "Solo 1 thread ML consumer para evitar race conditions ZMQ",
+    "message_size": "Límite 10KB compatible con configuración conservadora ML",
+    "timeouts": "500ms timeout compatible con ML detector conservador",
+    "map_debugging": "Usar CSS debug si el mapa no aparece"
+  }
+}

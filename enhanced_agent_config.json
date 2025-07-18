@@ -1,0 +1,102 @@
+{
+  "component": {
+    "name": "promiscuous_agent",
+    "version": "2.0.0",
+    "mode": "distributed"
+  },
+  "node_id": "promiscuous_agent_default_001",
+  "version": "2.0.0",
+  "agent_version": "2.0.0-distributed",
+
+  "network": {
+    "output_socket": {
+      "address": "localhost",
+      "port": 5559,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos protobuf al geoip_enricher"
+    }
+  },
+
+  "zmq": {
+    "output_port": 5559,
+    "sndhwm": 2000,
+    "linger_ms": 5000,
+    "send_timeout_ms": 100
+  },
+
+  "backpressure": {
+    "enabled": true,
+    "max_retries": 3,
+    "retry_delays_ms": [1, 2, 5],
+    "drop_threshold_percent": 15.0,
+    "activation_threshold": 50
+  },
+
+  "capture": {
+    "mode": "real",
+    "interface": "any",
+    "promiscuous_mode": true,
+    "filter_expression": "",
+    "buffer_size": 65536,
+    "min_packet_size": 20,
+    "max_packet_size": 65536,
+    "excluded_ports": [22, 80, 443],
+    "included_protocols": ["tcp", "udp"],
+    "filter_rules": []
+  },
+
+  "processing": {
+    "internal_queue_size": 1000,
+    "processing_threads": 2,
+    "queue_timeout_seconds": 1.0,
+    "max_packets_per_second": 1000,
+    "batch_size": 1
+  },
+
+  "protobuf": {
+    "schema_version": "v2",
+    "compression": false,
+    "validate_before_send": true,
+    "error_handling": "log_and_drop"
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
+    "file": null,
+    "max_file_size_mb": 100,
+    "backup_count": 5,
+    "include_performance_logs": true
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 30,
+    "performance_tracking": true,
+    "system_metrics": true,
+    "alerts": {
+      "max_drop_rate_percent": 10.0,
+      "max_backpressure_activations": 100,
+      "max_queue_usage_percent": 80.0,
+      "max_memory_usage_mb": 512,
+      "max_cpu_usage_percent": 80.0
+    },
+    "health_check": {
+      "enabled": true,
+      "interval_seconds": 60,
+      "endpoint": null
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "heartbeat_interval_seconds": 30,
+    "node_registration": {
+      "enabled": false,
+      "etcd_endpoints": [],
+      "registration_ttl_seconds": 60
+    }
+  }
+}

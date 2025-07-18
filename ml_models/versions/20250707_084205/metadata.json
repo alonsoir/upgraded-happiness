@@ -1,0 +1,19 @@
+{
+  "version": "20250707_084205",
+  "timestamp": "2025-07-07T08:47:28.354279",
+  "training_metrics": {
+    "training_time": 1.2629849910736084,
+    "samples_count": 2096,
+    "timestamp": "2025-07-07T08:47:27.989385"
+  },
+  "model_count": 6,
+  "saved_files": [
+    "ml_models/versions/20250707_084205/isolation_forest.joblib",
+    "ml_models/versions/20250707_084205/one_class_svm.joblib",
+    "ml_models/versions/20250707_084205/local_outlier_factor.joblib",
+    "ml_models/versions/20250707_084205/dbscan.joblib",
+    "ml_models/versions/20250707_084205/kmeans.joblib",
+    "ml_models/versions/20250707_084205/random_forest.joblib",
+    "ml_models/versions/20250707_084205/processors.joblib"
+  ]
+}
