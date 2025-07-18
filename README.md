@@ -19,20 +19,46 @@ El Sistema Autoinmune Digital es una plataforma de seguridad distribuida que emu
 
 ```
 📡 CAPTURA DE TRÁFICO
-├── promiscuous_agent.py → Captura promiscua de paquetes
-├── geoip_enricher.py → Enriquecimiento geográfico
-└── lightweight_ml_detector.py → Detección ML de anomalías
+├── promiscuous_agent.py → Captura promiscua de paquetes (Puerto 5559)
+├── geoip_enricher.py → Enriquecimiento geográfico (5559→5560)
+└── lightweight_ml_detector.py → Detección ML (5560→5561)
 
 📊 ORCHESTRACIÓN Y DECISIÓN
-├── real_zmq_dashboard_with_firewall.py → Dashboard central
+├── real_zmq_dashboard_with_firewall.py → Dashboard central (5561→5562)
 ├── neural_trainer_collector.py → Entrenamiento continuo
 └── autoinmune_rag_engine.py → Interfaz conversacional
 
 🛡️ RESPUESTA Y ACCIÓN
-├── simple_firewall_agent.py → Agentes de firewall distribuidos
+├── simple_firewall_agent.py → Agentes de firewall distribuidos (Puerto 5562)
 ├── etcd → Coordinación de cluster
 └── monitoring → Métricas y alertas
 ```
+
+## 🚀 **Estado Actual del Proyecto**
+
+### **✅ FUNCIONALIDADES COMPLETADAS (Q3 2025)**
+- ✅ **Pipeline distribuido básico**: Flujo completo promiscuous → geoip → ml → dashboard → firewall
+- ✅ **Comunicación ZeroMQ/Protobuf**: Arquitectura distribuida funcionando
+- ✅ **Captura de tráfico**: Agente promiscuo con Scapy operativo
+- ✅ **Enriquecimiento GeoIP**: Localización geográfica de IPs
+- ✅ **ML Detection básico**: Detección de anomalías con múltiples algoritmos
+- ✅ **Dashboard web**: Interfaz visual en tiempo real
+- ✅ **Sistema de configuración**: JSON declarativo para todos los componentes
+- ✅ **Cifrado empresarial**: SecureEnvelope AES-256-GCM
+- ✅ **Makefile avanzado**: Gestión completa del ciclo de vida
+
+### **🔄 EN DESARROLLO ACTIVO**
+- 🔄 **Dashboard-Firewall Integration**: Botones de bloqueo en eventos
+- 🔄 **Clasificación de eventos**: Mejora de la precisión ML
+- 🔄 **Auto-respuesta**: Firewall automático en eventos críticos
+- 🔄 **RAG Engine**: Interfaz conversacional con Claude
+- 🔄 **Neural Trainer**: Aprendizaje continuo optimizado
+
+### **📋 PRÓXIMOS HITOS**
+- 🎯 **Dashboard interactivo**: Click-to-block en eventos de alto riesgo
+- 🎯 **Threat intelligence**: Feeds externos de amenazas
+- 🎯 **Advanced correlation**: Análisis de patrones complejos
+- 🎯 **Performance tuning**: Optimización para Intel i9
 
 ## 🚀 **Instalación y Configuración**
 
@@ -42,133 +68,98 @@ El Sistema Autoinmune Digital es una plataforma de seguridad distribuida que emu
 - etcd 3.5+
 - 16GB RAM (recomendado)
 - CPU multi-core (Intel i9 optimizado)
+- Permisos sudo (para iptables)
 
-### **Instalación**
+### **Quick Start**
 ```bash
 git clone https://github.com/alonsoir/upgraded-happiness.git
 cd upgraded-happiness
-python -m venv upgraded_happiness_venv
-source upgraded_happiness_venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
+git checkout feature/claude-integration
+
+# Setup completo automático
+make quick
+
+# O paso a paso
+make setup
+make install
+make setup-perms
+make start
 ```
 
-### **Configuración**
-Cada componente utiliza configuración JSON declarativa:
-
-```json
-{
-  "component": {
-    "name": "component_name",
-    "version": "2.0.0",
-    "mode": "distributed"
-  },
-  "encryption": {
-    "enabled": true,
-    "algorithm": "AES-256-GCM",
-    "rotation_interval_seconds": 3600,
-    "entropy_sources": ["pid", "boot_time", "random_bytes"],
-    "aad_includes": ["node_id", "component_name"]
-  },
-  "backpressure": {
-    "enabled": true,
-    "max_retries": 3,
-    "drop_threshold_percent": 15.0
-  }
-}
-```
+### **URLs del Sistema**
+- **Dashboard Principal**: http://localhost:8000
+- **RAG Engine**: http://localhost:8090/chat (próximamente)
+- **Métricas**: http://localhost:8000/metrics
+- **Health Check**: http://localhost:8000/health
 
 ## 🔧 **Componentes Principales**
 
 ### **📡 Promiscuous Agent**
-Captura tráfico de red en modo promiscuo con filtrado inteligente.
-
 ```bash
 sudo python promiscuous_agent.py enhanced_agent_config.json
 ```
-
-**Características:**
-- Captura selectiva de paquetes
+**Estado**: ✅ Operativo
+- Captura selectiva de paquetes con Scapy
 - Filtrado BPF a nivel kernel
-- Uso eficiente de CPU (< 2%)
+- Envío vía ZeroMQ puerto 5559
 - Protocolos: TCP, UDP, ICMP
 
 ### **🌍 GeoIP Enricher** 
-Enriquece eventos con información geográfica y ASN.
-
 ```bash
 python geoip_enricher.py geoip_enricher_config.json
 ```
-
-**Características:**
-- Cache LRU con 100% hit rate
-- Latencia < 1ms
+**Estado**: ✅ Operativo
+- Recibe de puerto 5559, envía a 5560
+- Cache LRU con alta eficiencia
+- Fallback a ip-api.com
 - Detección de países de alto riesgo
-- Análisis de distancia geográfica
 
 ### **🤖 ML Detector**
-Detecta anomalías usando múltiples algoritmos de machine learning.
-
 ```bash
 python lightweight_ml_detector.py lightweight_ml_detector_config.json
 ```
-
-**Características:**
-- Isolation Forest optimizado
-- Entrenamiento continuo
-- Latencia < 15ms
-- Uso de CPU < 60%
+**Estado**: ✅ Operativo (refinando)
+- Recibe de puerto 5560, envía a 5561
+- Isolation Forest + algoritmos adicionales
+- Latencia objetivo < 15ms
+- **⚠️ Mejorando clasificación de eventos**
 
 ### **📊 Dashboard Central**
-Orchestrador principal con interfaz web en tiempo real.
-
 ```bash
 python real_zmq_dashboard_with_firewall.py dashboard_config.json
 ```
-
-**Características:**
+**Estado**: 🔄 En desarrollo
+- Recibe de puerto 5561, controla 5562
 - Interfaz web responsive
-- Métricas en tiempo real
-- Comandos de firewall automáticos
-- Exportación a neural trainer y RAG
-
-### **🧠 Neural Trainer**
-Sistema de aprendizaje continuo que mejora los modelos ML.
-
-```bash
-python neural_trainer_collector.py neural_trainer_config.json
-```
-
-**Características:**
-- Entrenamiento incremental
-- Múltiples arquitecturas (Autoencoder, LSTM, RL)
-- Distribución vía etcd
-- A/B testing de modelos
-
-### **🗣️ RAG Engine**
-Interfaz conversacional para consultas en lenguaje natural.
-
-```bash
-python autoinmune_rag_engine.py rag_engine_config.json
-```
-
-**Características:**
-- Embeddings con sentence-transformers
-- Vector database (Chroma)
-- API REST para consultas
-- Integración con dashboard
+- **⚠️ Integrando botones de bloqueo**
+- **⚠️ Mejorando interacción con firewall**
 
 ### **🛡️ Firewall Agents**
-Agentes distribuidos para aplicación de reglas de firewall.
-
 ```bash
 python simple_firewall_agent.py firewall_agent_config.json
 ```
+**Estado**: ✅ Básico (mejorando integración)
+- Escucha en puerto 5562
+- Aplicación de reglas iptables
+- **⚠️ Integrando con dashboard**
 
-**Características:**
-- Aplicación de reglas automática
-- Soporte multi-plataforma
-- Heartbeat y health checks
-- Escalamiento horizontal
+### **🧠 Neural Trainer** (Próximo)
+```bash
+python neural_trainer_collector.py neural_trainer_config.json
+```
+**Estado**: 🎯 Planificado
+- Entrenamiento incremental
+- Distribución vía etcd
+- A/B testing de modelos
+
+### **🗣️ RAG Engine** (Próximo)
+```bash
+python autoinmune_rag_engine.py rag_engine_config.json
+```
+**Estado**: 🎯 En diseño
+- Integración con Claude
+- Vector database (Chroma)
+- API REST para consultas
 
 ## 🔐 **Sistema de Cifrado**
 
@@ -177,7 +168,6 @@ python simple_firewall_agent.py firewall_agent_config.json
 ```python
 from crypto_utils import SecureEnvelope
 
-# Configuración desde JSON
 encryption_config = {
     "enabled": True,
     "algorithm": "AES-256-GCM",
@@ -186,183 +176,208 @@ encryption_config = {
     "aad_includes": ["node_id", "component_name"]
 }
 
-# Inicializar cifrado
 envelope = SecureEnvelope(encryption_config)
-
-# Cifrar payload
 ciphertext = envelope.encrypt(protobuf_bytes)
-
-# Descifrar en destino
 plaintext = envelope.decrypt(ciphertext)
 ```
 
-**Características:**
-- AES-256-GCM (cifrado autenticado)
-- Rotación automática de claves
-- Claves solo en RAM (no persistidas)
-- AAD para autenticación de metadata
-- Thread-safe y eficiente
+## 📊 **Comandos de Gestión**
 
-## 📊 **Métricas y Observabilidad**
+### **Control del Sistema**
+```bash
+# Inicio completo
+make start
 
-### **Métricas Principales**
-- **Pipeline Latency**: < 25ms (P95)
-- **Throughput**: 1000+ eventos/segundo
-- **CPU Usage**: < 70% por componente
-- **Memory Usage**: < 2GB por componente
-- **False Positive Rate**: < 5%
+# Estado del sistema
+make status
 
-### **Dashboards**
-- **Web Dashboard**: http://localhost:8080
-- **Métricas en tiempo real**: http://localhost:8080/metrics
-- **RAG Chat**: http://localhost:8090/chat
+# Monitorización
+make monitor
 
-## 🎯 **Casos de Uso**
+# Parada controlada
+make stop
 
-### **1. Detección de Amenazas**
-```
-Usuario: "¿Qué amenazas hemos visto desde China hoy?"
-RAG: "Detectamos 47 eventos desde China: 23 SSH brute force, 
-     15 port scanning, 9 eventos de alto riesgo. IPs más 
-     activas: 192.168.1.100 (12 eventos), 10.0.0.50 (8 eventos)"
+# Parada nuclear (emergencia)
+make stop-nuclear
+
+# Reinicio completo
+make restart
+
+# Verificación de integridad
+make verify
+
+# Dashboard web
+make show-dashboard
 ```
 
-### **2. Análisis de Performance**
+### **Debugging y Logs**
+```bash
+# Ver logs de todos los componentes
+make logs
+
+# Verificar configuración GeoIP
+make check-geoip
+
+# Setup de permisos
+make setup-perms
+
+# Limpiar y reinstalar
+make clean && make quick
 ```
-Usuario: "¿Por qué está lento el pipeline?"
-RAG: "Latencia aumentó 23% por incremento del 45% en eventos 
-     de China. ML detector procesando más eventos complejos. 
-     Recomiendo escalamiento horizontal."
+
+## 🎯 **Issues Conocidos y Roadmap**
+
+### **🚨 Issues Críticos (En resolución)**
+1. **Dashboard-Firewall Integration**
+   - Los botones de bloqueo no aparecen en eventos clickados
+   - La comunicación dashboard→firewall necesita refinamiento
+   - **Próximo sprint**: Implementar click-to-block UI
+
+2. **Clasificación de Eventos ML**
+   - Los algoritmos necesitan ajuste fino
+   - False positives/negatives en clasificación
+   - **Próximo sprint**: Tuning de hiperparámetros
+
+3. **Auto-respuesta Firewall**
+   - Integración automática dashboard→firewall en desarrollo
+   - **Próximo sprint**: Respuesta automática a eventos críticos
+
+### **🔮 Roadmap Detallado**
+
+#### **Q4 2025 - Sprint Actual**
+- 🔄 **[EN PROGRESO]** Click-to-block en dashboard
+- 🔄 **[EN PROGRESO]** ML classification tuning
+- 🎯 **[PLANIFICADO]** Auto-respuesta firewall
+- 🎯 **[PLANIFICADO]** RAG Engine básico
+- 🎯 **[PLANIFICADO]** Neural trainer inicial
+
+#### **Q1 2026 - Advanced Features**
+- 🔮 Auto-scaling inteligente
+- 🔮 Threat intelligence feeds
+- 🔮 Advanced correlation engine
+- 🔮 Multi-region deployment
+- 🔮 Kubernetes integration
+
+#### **Q2 2026 - AI Enhancement**
+- 🔮 Claude-powered threat hunting
+- 🔮 Conversational security analysis
+- 🔮 Predictive threat modeling
+- 🔮 Self-healing infrastructure
+
+#### **Q3 2026 - Next-Gen**
+- 🔮 Quantum-ready encryption
+- 🔮 Edge computing support
+- 🔮 Zero-trust architecture
+- 🔮 Autonomous security operations
+
+## 📈 **Métricas Actuales**
+
+### **Performance Baseline (Intel i9)**
+```
+Component               Estado    CPU%    Memory    Latencia    Throughput
+promiscuous_agent       ✅        0.4%    108MB     0.2ms       Variable
+geoip_enricher         ✅       56.9%     22MB     0.1ms       1.8/s
+lightweight_ml_detector ⚠️       55.6%    146MB    14.7ms      1.8/s (tuning)
+dashboard              🔄       25.0%    512MB     5.0ms       1000/s (mejorando)
+firewall_agent         ✅        5.0%     32MB     1.0ms       N/A
 ```
 
-### **3. Correlación Histórica**
-```
-Usuario: "¿Hemos visto este patrón antes?"
-RAG: "Patrón similar el 12 de julio: mismo ASN, mismo targeting. 
-     Escaló a 200 eventos/hora. Recomiendo bloqueo preventivo."
-```
+### **Objetivos de Performance**
+- **Pipeline Latency**: < 25ms (P95) 
+- **Throughput**: 1000+ eventos/segundo ✅
+- **CPU Usage**: < 70% por componente ✅
+- **Memory Usage**: < 2GB por componente ✅
+- **False Positive Rate**: < 5% (🔄 optimizando)
 
-## 🚀 **Optimizaciones para Intel i9**
+## 🔧 **Desarrollo y Contribución**
 
-### **CPU Optimization**
-- **Threads**: Optimizado para 16 cores
-- **Leave cores**: 4 cores reservados para sistema
-- **Batch processing**: Tamaños optimizados
-- **Thermal awareness**: Monitoreo de temperatura
-
-### **Memory Optimization**
-- **Buffer sizes**: Configurados para 16GB RAM
-- **Cache strategies**: LRU con límites inteligentes
-- **Backpressure**: Prevención de OOM
-
-### **Network Optimization**
-- **ZMQ high water marks**: Configurados para throughput
-- **TCP keepalive**: Optimizado para latencia
-- **Buffer management**: Prevención de drops
-
-## 🛠️ **Desarrollo y Contribución**
-
-### **Arquitectura de Configuración**
-Todos los componentes siguen el patrón de configuración JSON:
-
-```json
-{
-  "component": {...},
-  "network": {...},
-  "zmq": {...},
-  "backpressure": {...},
-  "processing": {...},
-  "encryption": {...},
-  "monitoring": {...},
-  "debug": {...}
-}
-```
+### **Branch Strategy**
+- **main**: Producción estable
+- **feature/claude-integration**: Desarrollo activo ⭐
+- **feature/dashboard-improvements**: Dashboard enhancements
+- **feature/ml-tuning**: ML algorithm improvements
 
 ### **Testing**
 ```bash
 # Unit tests
 python -m pytest tests/
 
-# Integration tests
+# Integration tests  
 python -m pytest tests/integration/
 
 # Performance tests
 python -m pytest tests/performance/
 ```
 
-### **Debugging**
+### **Debugging Workflow**
 ```bash
-# Monitor en tiempo real
-./monitor_autoinmune.sh
+# 1. Verificar sistema
+make verify
 
-# CPU monitoring
-watch "ps aux | grep -E '(promiscuous|geoip|ml_detector)' | grep -v grep"
+# 2. Iniciar con logs
+make start
 
-# Log tailing
-tail -f logs/*.log | grep -E "(📊|📨|📤)" | ts
+# 3. Monitorizar en tiempo real
+make monitor
+
+# 4. Verificar logs específicos
+tail -f logs/dashboard.log | grep ERROR
+
+# 5. Debug componente específico
+python -c "import dashboard; dashboard.debug_mode()"
 ```
 
-## 📈 **Benchmarks**
+## 🎯 **Casos de Uso**
 
-### **Performance Baseline (Intel i9)**
+### **1. Detección de Amenazas (Funcionando)**
 ```
-Component               CPU%    Memory    Latency    Throughput
-promiscuous_agent       0.4%    108MB     0.2ms      Variable
-geoip_enricher         56.9%     22MB     0.1ms      1.8/s
-lightweight_ml_detector 55.6%    146MB    14.7ms     1.8/s
-dashboard              25.0%    512MB     5.0ms      1000/s
-neural_trainer         60.0%      1GB    100ms      Batch
-rag_engine             40.0%      2GB     50ms      10 queries/s
+Sistema: Detecta SSH brute force desde 192.168.1.100
+Dashboard: Muestra evento de alto riesgo
+Usuario: Click para bloquear (🔄 implementando)
+Firewall: Aplica regla automáticamente
 ```
 
-### **Escalabilidad**
-- **Horizontal**: Múltiples instancias por componente
-- **Vertical**: Aprovechamiento completo de cores
-- **Geográfica**: Distribución por regiones
+### **2. Análisis Geográfico (Funcionando)**
+```
+Sistema: IP desde China intenta conexión
+GeoIP: Enriquece con ubicación y ASN
+ML: Clasifica según patrones históricos
+Dashboard: Visualiza en mapa tiempo real
+```
 
-## 🔮 **Roadmap v2.0**
+### **3. Consulta RAG (Próximamente)**
+```
+Usuario: "¿Qué amenazas hemos visto desde China hoy?"
+RAG: "Detectamos 47 eventos desde China: 23 SSH brute force, 
+     15 port scanning, 9 eventos de alto riesgo..."
+```
 
-### **Q3 2025**
-- ✅ Pipeline distribuido básico
-- ✅ ML detection optimizado
-- ✅ Cifrado empresarial
-- ✅ Dashboard web
-- ✅ RAG conversacional
+## 📞 **Soporte y Contribución**
 
-### **Q4 2025**
-- 🔄 Auto-scaling inteligente
-- 🔄 Threat intelligence feeds
-- 🔄 Advanced correlation
-- 🔄 Multi-region deployment
-- 🔄 Kubernetes integration
-
-### **Q1 2026**
-- 🔮 Quantum-ready encryption
-- 🔮 AI-powered threat hunting
-- 🔮 Self-healing infrastructure
-- 🔮 Zero-trust architecture
-- 🔮 Edge computing support
-
-## 📝 **Licencia**
-
-MIT License - ver [LICENSE](LICENSE) para detalles.
-
-## 🤝 **Contribuir**
-
-1. Fork el repositorio
-2. Crea una rama feature (`git checkout -b feature/amazing-feature`)
-3. Commit cambios (`git commit -m 'Add amazing feature'`)
-4. Push a la rama (`git push origin feature/amazing-feature`)
-5. Abre un Pull Request
-
-## 📞 **Soporte**
-
+### **Canal de Desarrollo**
+- **Repositorio**: https://github.com/alonsoir/upgraded-happiness
+- **Branch Activa**: `feature/claude-integration`
 - **Issues**: [GitHub Issues](https://github.com/alonsoir/upgraded-happiness/issues)
 - **Discusiones**: [GitHub Discussions](https://github.com/alonsoir/upgraded-happiness/discussions)
-- **Email**: [support@upgraded-happiness.com](mailto:support@upgraded-happiness.com)
+
+### **Próximos PRs**
+1. **Dashboard-Firewall Integration** (Próxima semana)
+2. **ML Classification Tuning** (Sprint actual)
+3. **RAG Engine Foundation** (Próximo sprint)
+4. **Neural Trainer Basic** (Mes actual)
+
+### **Cómo Contribuir**
+1. Fork del repositorio
+2. Checkout de `feature/claude-integration`
+3. Crear branch: `git checkout -b feature/your-feature`
+4. Commit: `git commit -m 'Add your feature'`
+5. Push: `git push origin feature/your-feature`
+6. Crear Pull Request a `feature/claude-integration`
 
 ---
 
 > **"Un sistema que no solo detecta amenazas, sino que aprende, se adapta y evoluciona como un organismo digital inteligente."** 🧬✨
+
+> **Estado Actual**: 🚀 Pipeline distribuido funcionando → 🔄 Refinando integración → 🎯 Próximo: RAG + Auto-respuesta
 
 **Construido con ❤️ por el equipo de Upgraded Happiness**

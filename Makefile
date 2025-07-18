@@ -1,14 +1,15 @@
 # =============================================================================
-# 🛡️ Upgraded Happiness - SCADA Security Platform (PRODUCTION)
+# 🛡️ Upgraded Happiness - Sistema Autoinmune Digital v2.0 (PRODUCTION)
 # =============================================================================
 # Arquitectura: promiscuous_agent → geoip_enricher → ml_detector → dashboard → firewall_agent
+# Branch: feature/claude-integration
 # =============================================================================
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 # =============================================================================
-# COLORES
+# COLORES Y EMOJIS
 # =============================================================================
 RED = \033[0;31m
 GREEN = \033[0;32m
@@ -19,8 +20,14 @@ CYAN = \033[0;36m
 NC = \033[0m # No Color
 
 # =============================================================================
-# CONFIGURACIÓN
+# CONFIGURACIÓN DEL PROYECTO
 # =============================================================================
+# Información del proyecto
+PROJECT_NAME = upgraded-happiness
+PROJECT_VERSION = v2.0.0
+BRANCH = feature/claude-integration
+REPO_URL = https://github.com/alonsoir/upgraded-happiness
+
 # Python y Entorno
 PYTHON = python3
 VENV_NAME = upgraded_happiness_venv
@@ -29,12 +36,19 @@ PYTHON_VENV = $(VENV_BIN)/python
 PIP_VENV = $(VENV_BIN)/pip
 ACTIVATE = source $(VENV_BIN)/activate
 
-# Scripts de Producción (ARQUITECTURA NUEVA)
-PROMISCUOUS_AGENT = promiscuous_agent.py
-GEOIP_ENRICHER = geoip_enricher.py
-ML_DETECTOR = lightweight_ml_detector.py
-DASHBOARD = real_zmq_dashboard_with_firewall.py
-FIREWALL_AGENT = simple_firewall_agent.py
+# =============================================================================
+# COMPONENTES PRINCIPALES (ARQUITECTURA DISTRIBUIDA)
+# =============================================================================
+# Core Pipeline Components (✅ = Operativo, 🔄 = En desarrollo, 🎯 = Planificado)
+PROMISCUOUS_AGENT = promiscuous_agent.py              # ✅ Captura promiscua
+GEOIP_ENRICHER = geoip_enricher.py                   # ✅ Enriquecimiento GeoIP
+ML_DETECTOR = lightweight_ml_detector.py             # ✅ Detección ML (refinando)
+DASHBOARD = real_zmq_dashboard_with_firewall.py      # 🔄 Dashboard principal (mejorando)
+FIREWALL_AGENT = simple_firewall_agent.py            # ✅ Agente firewall (integrando)
+
+# Advanced Components (Próximas fases)
+NEURAL_TRAINER = neural_trainer_collector.py         # 🎯 Entrenamiento continuo
+RAG_ENGINE = autoinmune_rag_engine.py               # 🎯 Interfaz conversacional
 
 # Configuraciones JSON
 PROMISCUOUS_CONFIG = enhanced_agent_config.json
@@ -42,83 +56,175 @@ GEOIP_CONFIG = geoip_enricher_config.json
 ML_CONFIG = lightweight_ml_detector_config.json
 DASHBOARD_CONFIG = dashboard_config.json
 FIREWALL_CONFIG = simple_firewall_agent_config.json
+NEURAL_CONFIG = neural_trainer_config.json
+RAG_CONFIG = rag_engine_config.json
 
-# Directorios
-PIDS_DIR = .pids
-LOGS_DIR = logs
-
-# Puertos (NUEVA ARQUITECTURA)
+# =============================================================================
+# ARQUITECTURA DE RED (ZeroMQ)
+# =============================================================================
+# Pipeline Ports (Flujo de datos)
 CAPTURE_PORT = 5559          # promiscuous_agent → geoip_enricher
 GEOIP_PORT = 5560           # geoip_enricher → ml_detector
 ML_PORT = 5561              # ml_detector → dashboard
 FIREWALL_PORT = 5562        # dashboard → firewall_agent
-DASHBOARD_WEB_PORT = 8000   # Web UI
 
-# PIDs
+# Service Ports
+DASHBOARD_WEB_PORT = 8000   # Web UI principal
+RAG_WEB_PORT = 8090         # RAG Engine (próximamente)
+NEURAL_PORT = 5563          # Neural trainer (próximamente)
+
+# =============================================================================
+# GESTIÓN DE PROCESOS
+# =============================================================================
+# Directorios
+PIDS_DIR = .pids
+LOGS_DIR = logs
+DATA_DIR = data
+MODELS_DIR = models
+
+# PIDs para gestión de procesos
 PROMISCUOUS_PID = $(PIDS_DIR)/promiscuous_agent.pid
 GEOIP_PID = $(PIDS_DIR)/geoip_enricher.pid
 ML_PID = $(PIDS_DIR)/ml_detector.pid
 DASHBOARD_PID = $(PIDS_DIR)/dashboard.pid
 FIREWALL_PID = $(PIDS_DIR)/firewall_agent.pid
+NEURAL_PID = $(PIDS_DIR)/neural_trainer.pid
+RAG_PID = $(PIDS_DIR)/rag_engine.pid
 
-# Logs
+# Logs para debugging
 PROMISCUOUS_LOG = $(LOGS_DIR)/promiscuous_agent.log
 GEOIP_LOG = $(LOGS_DIR)/geoip_enricher.log
 ML_LOG = $(LOGS_DIR)/ml_detector.log
 DASHBOARD_LOG = $(LOGS_DIR)/dashboard.log
 FIREWALL_LOG = $(LOGS_DIR)/firewall_agent.log
+NEURAL_LOG = $(LOGS_DIR)/neural_trainer.log
+RAG_LOG = $(LOGS_DIR)/rag_engine.log
 
-# Nuclear stop script
+# Scripts de utilidad
 NUCLEAR_STOP_SCRIPT = nuclear-stop.sh
+MONITOR_SCRIPT = monitor_autoinmune.sh
 
 # =============================================================================
 # PHONY DECLARATIONS
 # =============================================================================
 .PHONY: help setup install clean \
-        start start-bg stop stop-nuclear restart \
-        status monitor logs \
-        setup-perms verify \
-        show-dashboard \
-        quick check-geoip
+        start start-bg start-core start-advanced stop stop-nuclear restart \
+        status monitor logs logs-tail logs-errors \
+        setup-perms verify check-geoip check-deps \
+        show-dashboard show-architecture show-roadmap \
+        quick debug test benchmark \
+        dev-start dev-stop dev-restart
 
 # =============================================================================
-# HELP
+# HELP Y DOCUMENTACIÓN
 # =============================================================================
 help:
-	@echo "$(CYAN)🛡️ Upgraded Happiness - SCADA Security Platform$(NC)"
-	@echo "$(CYAN)================================================$(NC)"
+	@echo "$(CYAN)🧬 Sistema Autoinmune Digital v2.0$(NC)"
+	@echo "$(CYAN)=====================================$(NC)"
+	@echo "$(PURPLE)Branch: $(BRANCH)$(NC)"
+	@echo "$(PURPLE)Repo: $(REPO_URL)$(NC)"
 	@echo ""
 	@echo "$(YELLOW)🚀 COMANDOS PRINCIPALES:$(NC)"
-	@echo "  $(GREEN)make start$(NC)           - Iniciar sistema completo (RECOMENDADO)"
-	@echo "  $(GREEN)make show-dashboard$(NC)  - Abrir dashboard web"
-	@echo "  $(GREEN)make stop$(NC)            - Detener sistema completo"
-	@echo "  $(GREEN)make status$(NC)          - Ver estado del sistema"
+	@echo "  $(GREEN)make quick$(NC)            - Setup completo + Start (RECOMENDADO)"
+	@echo "  $(GREEN)make start$(NC)            - Iniciar sistema completo"
+	@echo "  $(GREEN)make show-dashboard$(NC)   - Abrir dashboard web"
+	@echo "  $(GREEN)make stop$(NC)             - Detener sistema completo"
+	@echo "  $(GREEN)make status$(NC)           - Ver estado del sistema"
 	@echo ""
-	@echo "$(YELLOW)📦 SETUP:$(NC)"
-	@echo "  setup                 - Crear entorno virtual"
-	@echo "  install               - Instalar dependencias"
-	@echo "  setup-perms           - Configurar permisos (sudo)"
-	@echo "  check-geoip           - Verificar configuración GeoIP"
-	@echo "  clean                 - Limpiar todo"
+	@echo "$(YELLOW)📦 SETUP Y CONFIGURACIÓN:$(NC)"
+	@echo "  setup                  - Crear entorno virtual"
+	@echo "  install                - Instalar dependencias"
+	@echo "  setup-perms            - Configurar permisos sudo (iptables)"
+	@echo "  check-geoip            - Verificar configuración GeoIP"
+	@echo "  check-deps             - Verificar dependencias"
+	@echo "  verify                 - Verificar integridad del sistema"
+	@echo "  clean                  - Limpiar todo"
 	@echo ""
-	@echo "$(YELLOW)🔄 OPERACIONES:$(NC)"
-	@echo "  start-bg              - Iniciar en background"
-	@echo "  restart               - Reiniciar sistema"
-	@echo "  stop-nuclear          - Parada nuclear (máxima agresividad)"
-	@echo "  monitor               - Monitorizar en tiempo real"
-	@echo "  logs                  - Ver logs"
-	@echo "  verify                - Verificar integridad"
+	@echo "$(YELLOW)🔄 OPERACIONES AVANZADAS:$(NC)"
+	@echo "  start-core             - Solo componentes core (básico)"
+	@echo "  start-advanced         - Componentes avanzados (RAG, Neural)"
+	@echo "  start-bg               - Iniciar en background"
+	@echo "  restart                - Reiniciar sistema completo"
+	@echo "  stop-nuclear           - Parada nuclear (emergencia)"
 	@echo ""
-	@echo "$(YELLOW)⚡ QUICK:$(NC)"
-	@echo "  quick                 - Setup + Install + Start"
+	@echo "$(YELLOW)📊 MONITORIZACIÓN Y DEBUG:$(NC)"
+	@echo "  monitor                - Monitor tiempo real"
+	@echo "  logs                   - Ver logs de todos los componentes"
+	@echo "  logs-tail              - Seguir logs en tiempo real"
+	@echo "  logs-errors            - Ver solo errores"
+	@echo "  debug                  - Modo debug interactivo"
+	@echo "  benchmark              - Ejecutar benchmarks"
 	@echo ""
-	@echo "$(CYAN)🏗️ ARQUITECTURA:$(NC)"
+	@echo "$(YELLOW)🔧 DESARROLLO:$(NC)"
+	@echo "  dev-start              - Iniciar en modo desarrollo"
+	@echo "  dev-stop               - Parar modo desarrollo"
+	@echo "  test                   - Ejecutar tests"
+	@echo ""
+	@echo "$(YELLOW)ℹ️  INFORMACIÓN:$(NC)"
+	@echo "  show-architecture      - Mostrar arquitectura del sistema"
+	@echo "  show-roadmap           - Ver roadmap y estado actual"
+	@echo ""
+	@echo "$(CYAN)🏗️ ARQUITECTURA ACTUAL:$(NC)"
 	@echo "  promiscuous_agent ($(CAPTURE_PORT)) → geoip_enricher ($(GEOIP_PORT)) → ml_detector ($(ML_PORT)) → dashboard ($(FIREWALL_PORT)) → firewall_agent"
 	@echo ""
-	@echo "$(CYAN)🌐 URL: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+	@echo "$(CYAN)🌐 SERVICIOS WEB:$(NC)"
+	@echo "  Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)"
+	@echo "  RAG Engine: http://localhost:$(RAG_WEB_PORT) (próximamente)"
 
 # =============================================================================
-# SETUP
+# INFORMACIÓN DEL SISTEMA
+# =============================================================================
+show-architecture:
+	@echo "$(CYAN)🏗️ Arquitectura del Sistema$(NC)"
+	@echo "$(CYAN)==============================$(NC)"
+	@echo ""
+	@echo "$(YELLOW)📡 PIPELINE PRINCIPAL:$(NC)"
+	@echo "  1. 🕵️  $(PROMISCUOUS_AGENT) → Puerto $(CAPTURE_PORT) (✅ Operativo)"
+	@echo "  2. 🌍 $(GEOIP_ENRICHER) → Puerto $(GEOIP_PORT) (✅ Operativo)"
+	@echo "  3. 🤖 $(ML_DETECTOR) → Puerto $(ML_PORT) (⚠️ Refinando)"
+	@echo "  4. 📊 $(DASHBOARD) → Puerto $(FIREWALL_PORT) (🔄 Mejorando)"
+	@echo "  5. 🛡️  $(FIREWALL_AGENT) (✅ Integrando)"
+	@echo ""
+	@echo "$(YELLOW)🧠 COMPONENTES AVANZADOS:$(NC)"
+	@echo "  6. 🤖 $(NEURAL_TRAINER) → Puerto $(NEURAL_PORT) (🎯 Planificado)"
+	@echo "  7. 🗣️  $(RAG_ENGINE) → Puerto $(RAG_WEB_PORT) (🎯 En diseño)"
+	@echo ""
+	@echo "$(YELLOW)🌐 SERVICIOS WEB:$(NC)"
+	@echo "  📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)"
+	@echo "  🗣️  RAG Chat: http://localhost:$(RAG_WEB_PORT)"
+
+show-roadmap:
+	@echo "$(CYAN)🔮 Roadmap del Proyecto$(NC)"
+	@echo "$(CYAN)========================$(NC)"
+	@echo ""
+	@echo "$(GREEN)✅ COMPLETADO (Q3 2025):$(NC)"
+	@echo "  • Pipeline distribuido ZeroMQ/Protobuf"
+	@echo "  • Captura promiscua con Scapy"
+	@echo "  • Enriquecimiento GeoIP"
+	@echo "  • Detección ML básica"
+	@echo "  • Dashboard web"
+	@echo "  • Cifrado AES-256-GCM"
+	@echo ""
+	@echo "$(YELLOW)🔄 EN DESARROLLO ACTIVO:$(NC)"
+	@echo "  • Dashboard-Firewall integration (click-to-block)"
+	@echo "  • ML classification tuning"
+	@echo "  • Auto-respuesta automática"
+	@echo "  • RAG Engine con Claude"
+	@echo ""
+	@echo "$(BLUE)🎯 PRÓXIMOS HITOS (Q4 2025):$(NC)"
+	@echo "  • Neural trainer operativo"
+	@echo "  • Threat intelligence feeds"
+	@echo "  • Advanced correlation"
+	@echo "  • Multi-region deployment"
+	@echo ""
+	@echo "$(PURPLE)🚀 FUTURO (2026):$(NC)"
+	@echo "  • Auto-scaling inteligente"
+	@echo "  • Kubernetes integration"
+	@echo "  • Quantum-ready encryption"
+	@echo "  • Self-healing infrastructure"
+
+# =============================================================================
+# SETUP Y CONFIGURACIÓN
 # =============================================================================
 setup:
 	@echo "$(BLUE)🔧 Configurando entorno virtual...$(NC)"
@@ -129,30 +235,44 @@ setup:
 		echo "$(GREEN)✅ Entorno virtual creado$(NC)"; \
 	fi
 	@$(ACTIVATE) && $(PYTHON_VENV) -m pip install --upgrade pip
-	@mkdir -p $(PIDS_DIR) $(LOGS_DIR)
+	@mkdir -p $(PIDS_DIR) $(LOGS_DIR) $(DATA_DIR) $(MODELS_DIR)
+	@echo "$(GREEN)✅ Directorios creados$(NC)"
 	@echo "$(GREEN)✅ Setup completado$(NC)"
 
 install: setup
 	@echo "$(BLUE)📦 Instalando dependencias...$(NC)"
 	@$(ACTIVATE) && $(PIP_VENV) install -r requirements.txt
+	@echo "$(BLUE)📦 Instalando librerías específicas...$(NC)"
 	@$(ACTIVATE) && $(PIP_VENV) install joblib scikit-learn xgboost lightgbm
 	@$(ACTIVATE) && $(PIP_VENV) install zmq psutil geoip2 protobuf requests
 	@$(ACTIVATE) && $(PIP_VENV) install fastapi uvicorn websockets
+	@$(ACTIVATE) && $(PIP_VENV) install scapy netifaces
+	@$(ACTIVATE) && $(PIP_VENV) install pandas numpy matplotlib seaborn
+	@$(ACTIVATE) && $(PIP_VENV) install pytest pytest-asyncio
 	@echo "$(GREEN)✅ Dependencias instaladas$(NC)"
 
 setup-perms:
 	@echo "$(BLUE)🔧 Configurando permisos de firewall...$(NC)"
-	@echo "$(YELLOW)Requiere sudo para iptables$(NC)"
-	@sudo bash -c 'echo "$(USER) ALL=(ALL) NOPASSWD: /sbin/iptables" >> /etc/sudoers.d/$(USER)-iptables'
-	@sudo chmod 0440 /etc/sudoers.d/$(USER)-iptables
+	@echo "$(YELLOW)⚠️  Requiere sudo para iptables$(NC)"
+	@sudo bash -c 'echo "$(USER) ALL=(ALL) NOPASSWD: /sbin/iptables" >> /etc/sudoers.d/$(USER)-iptables' || true
+	@sudo chmod 0440 /etc/sudoers.d/$(USER)-iptables || true
 	@echo "$(GREEN)✅ Permisos configurados$(NC)"
-	@sudo -n iptables -L >/dev/null && echo "$(GREEN)✅ Permisos funcionando$(NC)" || echo "$(RED)❌ Error en permisos$(NC)"
+	@sudo -n iptables -L >/dev/null 2>&1 && echo "$(GREEN)✅ Permisos funcionando$(NC)" || echo "$(RED)❌ Error en permisos - ejecutar: sudo make setup-perms$(NC)"
+
+check-deps:
+	@echo "$(BLUE)🔍 Verificando dependencias...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import zmq; print('✅ ZeroMQ disponible')" 2>/dev/null || echo "❌ ZeroMQ falta"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import scapy; print('✅ Scapy disponible')" 2>/dev/null || echo "❌ Scapy falta"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import sklearn; print('✅ Scikit-learn disponible')" 2>/dev/null || echo "❌ Scikit-learn falta"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import geoip2; print('✅ GeoIP2 disponible')" 2>/dev/null || echo "❌ GeoIP2 falta"
+	@$(ACTIVATE) && $(PYTHON_VENV) -c "import fastapi; print('✅ FastAPI disponible')" 2>/dev/null || echo "❌ FastAPI falta"
+	@which sudo >/dev/null && echo "✅ sudo disponible" || echo "❌ sudo falta"
 
 check-geoip:
 	@echo "$(BLUE)🌍 Verificando configuración GeoIP...$(NC)"
 	@if [ -f "GeoLite2-City.mmdb" ]; then \
 		echo "  ✅ Base de datos GeoLite2 encontrada"; \
-		stat -c "%y" GeoLite2-City.mmdb | sed 's/^/  📅 Última modificación: /'; \
+		stat -c "%y" GeoLite2-City.mmdb | sed 's/^/  📅 Última modificación: /' 2>/dev/null || stat -f "%Sm" GeoLite2-City.mmdb | sed 's/^/  📅 Última modificación: /'; \
 	else \
 		echo "  ⚠️  Base de datos GeoLite2 NO encontrada"; \
 		echo "  💡 Se usará ip-api.com como fallback"; \
@@ -163,59 +283,123 @@ check-geoip:
 		echo "  ✅ ip-api.com accesible" || \
 		echo "  ❌ ip-api.com no accesible"
 
+verify:
+	@echo "$(BLUE)🔍 Verificando integridad del sistema...$(NC)"
+	@echo "$(YELLOW)Archivos principales:$(NC)"
+	@for file in $(PROMISCUOUS_AGENT) $(GEOIP_ENRICHER) $(ML_DETECTOR) $(DASHBOARD) $(FIREWALL_AGENT); do \
+		if [ -f "$$file" ]; then \
+			echo "  ✅ $$file"; \
+		else \
+			echo "  ❌ $$file falta"; \
+		fi \
+	done
+	@echo "$(YELLOW)Configuraciones:$(NC)"
+	@for config in $(PROMISCUOUS_CONFIG) $(GEOIP_CONFIG) $(ML_CONFIG) $(DASHBOARD_CONFIG) $(FIREWALL_CONFIG); do \
+		if [ -f "$$config" ]; then \
+			echo "  ✅ $$config"; \
+		else \
+			echo "  ❌ $$config falta"; \
+		fi \
+	done
+	@echo "$(YELLOW)Permisos:$(NC)"
+	@sudo -n iptables -L >/dev/null 2>&1 && echo "  ✅ Permisos firewall OK" || echo "  ❌ Permisos firewall faltan (ejecutar: make setup-perms)"
+	@echo "$(YELLOW)Dependencias:$(NC)"
+	@$(MAKE) check-deps 2>/dev/null | grep -E "(✅|❌)" | sed 's/^/  /'
+
 clean:
-	@echo "$(YELLOW)🧹 Limpiando...$(NC)"
+	@echo "$(YELLOW)🧹 Limpiando sistema...$(NC)"
 	@$(MAKE) stop 2>/dev/null || true
-	@rm -rf $(VENV_NAME) __pycache__ $(PIDS_DIR) $(LOGS_DIR)
-	@find . -name "*.pyc" -delete
-	@find . -name "*.pyo" -delete
+	@echo "  🗑️  Removiendo entorno virtual..."
+	@rm -rf $(VENV_NAME)
+	@echo "  🗑️  Limpiando archivos Python..."
+	@find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+	@find . -name "*.pyc" -delete 2>/dev/null || true
+	@find . -name "*.pyo" -delete 2>/dev/null || true
+	@echo "  🗑️  Limpiando directorios temporales..."
+	@rm -rf $(PIDS_DIR) $(LOGS_DIR) $(DATA_DIR) $(MODELS_DIR)
 	@echo "$(GREEN)✅ Limpieza completada$(NC)"
 
 # =============================================================================
-# SISTEMA PRINCIPAL
+# GESTIÓN DEL SISTEMA PRINCIPAL
 # =============================================================================
 start: install verify check-geoip stop
-	@echo "$(GREEN)🚀 Iniciando Upgraded Happiness...$(NC)"
-	@echo "$(CYAN)====================================$(NC)"
+	@echo "$(GREEN)🚀 Iniciando Sistema Autoinmune Digital v2.0...$(NC)"
+	@echo "$(CYAN)================================================$(NC)"
+	@echo "$(PURPLE)Branch: $(BRANCH)$(NC)"
 	@echo ""
-	@echo "$(BLUE)Iniciando componentes en orden:$(NC)"
+	@echo "$(BLUE)🔄 Iniciando componentes en orden secuencial...$(NC)"
 	@echo ""
 
-	@echo "$(BLUE)1. 🔥 Firewall Agent (Puerto $(FIREWALL_PORT))...$(NC)"
+	@echo "$(BLUE)1. 🛡️  Firewall Agent (Puerto $(FIREWALL_PORT))...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 3
 
-	@echo "$(BLUE)2. 🕵️  Promiscuous Agent (Captura → Puerto $(CAPTURE_PORT))...$(NC)"
+	@echo "$(BLUE)2. 🕵️  Promiscuous Agent → Puerto $(CAPTURE_PORT)...$(NC)"
 	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)
 	@sleep 3
 
-	@echo "$(BLUE)3. 🌍 GeoIP Enricher (Puerto $(CAPTURE_PORT) → $(GEOIP_PORT))...$(NC)"
+	@echo "$(BLUE)3. 🌍 GeoIP Enricher ($(CAPTURE_PORT) → $(GEOIP_PORT))...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
 	@sleep 3
 
-	@echo "$(BLUE)4. 🤖 ML Detector (Puerto $(GEOIP_PORT) → $(ML_PORT))...$(NC)"
+	@echo "$(BLUE)4. 🤖 ML Detector ($(GEOIP_PORT) → $(ML_PORT)) [⚠️ Refinando]...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
 	@sleep 3
 
-	@echo "$(BLUE)5. 📊 Dashboard (Puerto $(ML_PORT) → UI → $(FIREWALL_PORT))...$(NC)"
+	@echo "$(BLUE)5. 📊 Dashboard ($(ML_PORT) → UI $(DASHBOARD_WEB_PORT) → $(FIREWALL_PORT)) [🔄 Mejorando]...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
-	@sleep 3
+	@sleep 5
 
 	@echo ""
 	@echo "$(GREEN)🎉 SISTEMA OPERACIONAL$(NC)"
 	@echo "$(CYAN)========================$(NC)"
-	@echo "$(YELLOW)📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
-	@echo "$(YELLOW)🔥 Firewall: Puerto $(FIREWALL_PORT)$(NC)"
-	@echo "$(YELLOW)📡 Captura: Activa$(NC)"
-	@echo "$(YELLOW)🌍 GeoIP: Activo$(NC)"
-	@echo "$(YELLOW)🤖 ML: Activo$(NC)"
-	@echo "$(YELLOW)🛡️  Auto-respuesta: Activa$(NC)"
+	@echo "$(YELLOW)📊 Dashboard Principal: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+	@echo "$(YELLOW)🛡️  Pipeline: promiscuous → geoip → ml → dashboard → firewall$(NC)"
+	@echo "$(YELLOW)🔐 Cifrado: AES-256-GCM activo$(NC)"
+	@echo "$(YELLOW)📡 Captura: Modo promiscuo activo$(NC)"
+	@echo "$(YELLOW)🌍 GeoIP: Enriquecimiento geográfico$(NC)"
+	@echo "$(YELLOW)🤖 ML: Detección de anomalías$(NC)"
 	@echo ""
-	@echo "$(PURPLE)💡 Haz click en eventos de alto riesgo para bloquear IPs$(NC)"
+	@echo "$(PURPLE)💡 Issues conocidos en desarrollo:$(NC)"
+	@echo "$(PURPLE)   • Click-to-block en dashboard (próxima semana)$(NC)"
+	@echo "$(PURPLE)   • ML classification tuning (sprint actual)$(NC)"
+	@echo "$(PURPLE)   • Auto-respuesta firewall (próximo sprint)$(NC)"
+	@echo ""
 	@$(MAKE) status
 
+start-core: install verify stop
+	@echo "$(GREEN)🚀 Iniciando componentes CORE...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
+	@sleep 2
+	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)
+	@sleep 2
+	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
+	@sleep 2
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
+	@sleep 2
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
+	@echo "$(GREEN)✅ Componentes core iniciados$(NC)"
+
+start-advanced:
+	@echo "$(BLUE)🧠 Iniciando componentes AVANZADOS...$(NC)"
+	@if [ -f "$(NEURAL_TRAINER)" ]; then \
+		echo "$(BLUE)🤖 Neural Trainer...$(NC)"; \
+		$(ACTIVATE) && $(PYTHON_VENV) $(NEURAL_TRAINER) $(NEURAL_CONFIG) > $(NEURAL_LOG) 2>&1 & echo $$! > $(NEURAL_PID); \
+		sleep 2; \
+	else \
+		echo "$(YELLOW)⚠️  Neural Trainer no disponible (🎯 planificado)$(NC)"; \
+	fi
+	@if [ -f "$(RAG_ENGINE)" ]; then \
+		echo "$(BLUE)🗣️  RAG Engine...$(NC)"; \
+		$(ACTIVATE) && $(PYTHON_VENV) $(RAG_ENGINE) $(RAG_CONFIG) > $(RAG_LOG) 2>&1 & echo $$! > $(RAG_PID); \
+		sleep 2; \
+	else \
+		echo "$(YELLOW)⚠️  RAG Engine no disponible (🎯 en diseño)$(NC)"; \
+	fi
+	@echo "$(GREEN)✅ Componentes avanzados iniciados$(NC)"
+
 start-bg: install verify check-geoip stop
-	@echo "$(GREEN)🚀 Iniciando sistema (background)...$(NC)"
+	@echo "$(GREEN)🚀 Iniciando sistema (background mode)...$(NC)"
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
 	@sudo nohup $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)
@@ -226,53 +410,61 @@ start-bg: install verify check-geoip stop
 	@sleep 2
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
 	@echo "$(GREEN)✅ Sistema iniciado en background$(NC)"
-	@echo "$(YELLOW)Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+	@echo "$(YELLOW)📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
 
 stop:
 	@echo "$(YELLOW)🛑 Deteniendo sistema...$(NC)"
-	@echo "$(BLUE)Deteniendo en orden inverso...$(NC)"
+	@echo "$(BLUE)Parada secuencial en orden inverso...$(NC)"
 
-	# 5. Dashboard (último en iniciar, primero en parar)
+	# Advanced components first
+	@-if [ -f $(RAG_PID) ]; then echo "🗣️  Deteniendo RAG Engine..."; kill $$(cat $(RAG_PID)) 2>/dev/null || true; rm -f $(RAG_PID); fi
+	@-if [ -f $(NEURAL_PID) ]; then echo "🤖 Deteniendo Neural Trainer..."; kill $$(cat $(NEURAL_PID)) 2>/dev/null || true; rm -f $(NEURAL_PID); fi
+
+	# Core components (reverse order)
+	@-echo "📊 Deteniendo Dashboard..."
 	@-pkill -f "$(DASHBOARD)" 2>/dev/null || true
 	@-if [ -f $(DASHBOARD_PID) ]; then kill $$(cat $(DASHBOARD_PID)) 2>/dev/null || true; rm -f $(DASHBOARD_PID); fi
 	@sleep 1
 
-	# 4. ML Detector
+	@-echo "🤖 Deteniendo ML Detector..."
 	@-pkill -f "$(ML_DETECTOR)" 2>/dev/null || true
 	@-if [ -f $(ML_PID) ]; then kill $$(cat $(ML_PID)) 2>/dev/null || true; rm -f $(ML_PID); fi
 	@sleep 1
 
-	# 3. GeoIP Enricher
+	@-echo "🌍 Deteniendo GeoIP Enricher..."
 	@-pkill -f "$(GEOIP_ENRICHER)" 2>/dev/null || true
 	@-if [ -f $(GEOIP_PID) ]; then kill $$(cat $(GEOIP_PID)) 2>/dev/null || true; rm -f $(GEOIP_PID); fi
 	@sleep 1
 
-	# 2. Promiscuous Agent (needs sudo)
+	@-echo "🕵️  Deteniendo Promiscuous Agent..."
 	@-pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
 	@-sudo pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
 	@-if [ -f $(PROMISCUOUS_PID) ]; then kill $$(cat $(PROMISCUOUS_PID)) 2>/dev/null || true; rm -f $(PROMISCUOUS_PID); fi
 	@sleep 1
 
-	# 1. Firewall Agent (primero en iniciar, último en parar)
+	@-echo "🛡️  Deteniendo Firewall Agent..."
 	@-pkill -f "$(FIREWALL_AGENT)" 2>/dev/null || true
 	@-if [ -f $(FIREWALL_PID) ]; then kill $$(cat $(FIREWALL_PID)) 2>/dev/null || true; rm -f $(FIREWALL_PID); fi
 
-	@echo "$(GREEN)✅ Sistema detenido$(NC)"
+	@echo "$(GREEN)✅ Sistema detenido correctamente$(NC)"
 
 stop-nuclear:
-	@echo "$(RED)🚨 Ejecutando parada nuclear...$(NC)"
+	@echo "$(RED)🚨 PARADA NUCLEAR ACTIVADA$(NC)"
+	@echo "$(RED)============================$(NC)"
 	@if [ -f $(NUCLEAR_STOP_SCRIPT) ]; then \
 		chmod +x $(NUCLEAR_STOP_SCRIPT); \
 		./$(NUCLEAR_STOP_SCRIPT); \
 	else \
-		echo "$(YELLOW)⚠️ nuclear-stop.sh no encontrado, usando parada básica$(NC)"; \
-		pkill -f "python.*upgraded_happiness" 2>/dev/null || true; \
-		pkill -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
-		pkill -f "python.*$(GEOIP_ENRICHER)" 2>/dev/null || true; \
-		pkill -f "python.*$(ML_DETECTOR)" 2>/dev/null || true; \
-		pkill -f "python.*$(DASHBOARD)" 2>/dev/null || true; \
-		pkill -f "python.*$(FIREWALL_AGENT)" 2>/dev/null || true; \
-		sudo pkill -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
+		echo "$(YELLOW)⚠️  Script nuclear no encontrado, ejecutando parada agresiva...$(NC)"; \
+		pkill -9 -f "python.*upgraded.*happiness" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(GEOIP_ENRICHER)" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(ML_DETECTOR)" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(DASHBOARD)" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(FIREWALL_AGENT)" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(NEURAL_TRAINER)" 2>/dev/null || true; \
+		pkill -9 -f "python.*$(RAG_ENGINE)" 2>/dev/null || true; \
+		sudo pkill -9 -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
 		rm -f $(PIDS_DIR)/*.pid; \
 		echo "$(GREEN)✅ Parada nuclear completada$(NC)"; \
 	fi
@@ -282,75 +474,136 @@ restart: stop
 	@$(MAKE) start
 
 # =============================================================================
-# MONITORIZACIÓN
+# MONITORIZACIÓN Y DEBUGGING
 # =============================================================================
 status:
-	@echo "$(CYAN)📊 Estado del Sistema$(NC)"
-	@echo "$(CYAN)=====================$(NC)"
-	@echo "$(YELLOW)Componentes:$(NC)"
-	@pgrep -f "$(FIREWALL_AGENT)" >/dev/null && echo "  🔥 Firewall Agent: Ejecutándose" || echo "  ⭕ Firewall Agent: Detenido"
-	@pgrep -f "$(PROMISCUOUS_AGENT)" >/dev/null && echo "  🕵️  Promiscuous Agent: Ejecutándose" || echo "  ⭕ Promiscuous Agent: Detenido"
-	@pgrep -f "$(GEOIP_ENRICHER)" >/dev/null && echo "  🌍 GeoIP Enricher: Ejecutándose" || echo "  ⭕ GeoIP Enricher: Detenido"
-	@pgrep -f "$(ML_DETECTOR)" >/dev/null && echo "  🤖 ML Detector: Ejecutándose" || echo "  ⭕ ML Detector: Detenido"
-	@pgrep -f "$(DASHBOARD)" >/dev/null && echo "  📊 Dashboard: Ejecutándose (http://localhost:$(DASHBOARD_WEB_PORT))" || echo "  ⭕ Dashboard: Detenido"
+	@echo "$(CYAN)📊 Estado del Sistema Autoinmune$(NC)"
+	@echo "$(CYAN)===================================$(NC)"
+	@echo "$(YELLOW)🔧 Componentes Core:$(NC)"
+	@pgrep -f "$(FIREWALL_AGENT)" >/dev/null && echo "  🛡️  Firewall Agent: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🛡️  Firewall Agent: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(PROMISCUOUS_AGENT)" >/dev/null && echo "  🕵️  Promiscuous Agent: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🕵️  Promiscuous Agent: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(GEOIP_ENRICHER)" >/dev/null && echo "  🌍 GeoIP Enricher: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🌍 GeoIP Enricher: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(ML_DETECTOR)" >/dev/null && echo "  🤖 ML Detector: $(GREEN)✅ Ejecutándose$(NC) $(YELLOW)(refinando)$(NC)" || echo "  🤖 ML Detector: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(DASHBOARD)" >/dev/null && echo "  📊 Dashboard: $(GREEN)✅ Ejecutándose$(NC) $(YELLOW)(http://localhost:$(DASHBOARD_WEB_PORT))$(NC)" || echo "  📊 Dashboard: $(RED)⭕ Detenido$(NC)"
 	@echo ""
-	@echo "$(YELLOW)Puertos:$(NC)"
-	@lsof -i :$(CAPTURE_PORT) >/dev/null 2>&1 && echo "  📡 Puerto Captura ($(CAPTURE_PORT)): ACTIVO" || echo "  ⭕ Puerto Captura ($(CAPTURE_PORT)): INACTIVO"
-	@lsof -i :$(GEOIP_PORT) >/dev/null 2>&1 && echo "  🌍 Puerto GeoIP ($(GEOIP_PORT)): ACTIVO" || echo "  ⭕ Puerto GeoIP ($(GEOIP_PORT)): INACTIVO"
-	@lsof -i :$(ML_PORT) >/dev/null 2>&1 && echo "  🤖 Puerto ML ($(ML_PORT)): ACTIVO" || echo "  ⭕ Puerto ML ($(ML_PORT)): INACTIVO"
-	@lsof -i :$(FIREWALL_PORT) >/dev/null 2>&1 && echo "  🔥 Puerto Firewall ($(FIREWALL_PORT)): ACTIVO" || echo "  ⭕ Puerto Firewall ($(FIREWALL_PORT)): INACTIVO"
-	@lsof -i :$(DASHBOARD_WEB_PORT) >/dev/null 2>&1 && echo "  📊 Puerto Dashboard ($(DASHBOARD_WEB_PORT)): ACTIVO" || echo "  ⭕ Puerto Dashboard ($(DASHBOARD_WEB_PORT)): INACTIVO"
+	@echo "$(YELLOW)🧠 Componentes Avanzados:$(NC)"
+	@pgrep -f "$(NEURAL_TRAINER)" >/dev/null && echo "  🤖 Neural Trainer: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🤖 Neural Trainer: $(BLUE)🎯 No disponible$(NC)"
+	@pgrep -f "$(RAG_ENGINE)" >/dev/null && echo "  🗣️  RAG Engine: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🗣️  RAG Engine: $(BLUE)🎯 No disponible$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🌐 Puertos de Red:$(NC)"
+	@lsof -i :$(CAPTURE_PORT) >/dev/null 2>&1 && echo "  📡 Captura ($(CAPTURE_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  📡 Captura ($(CAPTURE_PORT)): $(RED)INACTIVO$(NC)"
+	@lsof -i :$(GEOIP_PORT) >/dev/null 2>&1 && echo "  🌍 GeoIP ($(GEOIP_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  🌍 GeoIP ($(GEOIP_PORT)): $(RED)INACTIVO$(NC)"
+	@lsof -i :$(ML_PORT) >/dev/null 2>&1 && echo "  🤖 ML ($(ML_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  🤖 ML ($(ML_PORT)): $(RED)INACTIVO$(NC)"
+	@lsof -i :$(FIREWALL_PORT) >/dev/null 2>&1 && echo "  🛡️  Firewall ($(FIREWALL_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  🛡️  Firewall ($(FIREWALL_PORT)): $(RED)INACTIVO$(NC)"
+	@lsof -i :$(DASHBOARD_WEB_PORT) >/dev/null 2>&1 && echo "  📊 Dashboard Web ($(DASHBOARD_WEB_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  📊 Dashboard Web ($(DASHBOARD_WEB_PORT)): $(RED)INACTIVO$(NC)"
+	@lsof -i :$(RAG_WEB_PORT) >/dev/null 2>&1 && echo "  🗣️  RAG Web ($(RAG_WEB_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  🗣️  RAG Web ($(RAG_WEB_PORT)): $(BLUE)🎯 Planificado$(NC)"
 
 monitor:
 	@echo "$(CYAN)📊 Monitor del Sistema$(NC)"
 	@echo "$(CYAN)=======================$(NC)"
 	@$(MAKE) status
 	@echo ""
-	@echo "$(YELLOW)Actividad Reciente:$(NC)"
-	@if [ -f $(FIREWALL_LOG) ]; then echo "🔥 Firewall:"; tail -3 $(FIREWALL_LOG) | sed 's/^/  /'; echo ""; fi
-	@if [ -f $(GEOIP_LOG) ]; then echo "🌍 GeoIP:"; tail -3 $(GEOIP_LOG) | sed 's/^/  /'; echo ""; fi
-	@if [ -f $(ML_LOG) ]; then echo "🤖 ML:"; tail -3 $(ML_LOG) | sed 's/^/  /'; echo ""; fi
-	@if [ -f $(DASHBOARD_LOG) ]; then echo "📊 Dashboard:"; tail -3 $(DASHBOARD_LOG) | sed 's/^/  /'; fi
+	@echo "$(YELLOW)💹 Actividad Reciente (últimas 3 líneas):$(NC)"
+	@if [ -f $(FIREWALL_LOG) ]; then echo "🛡️  $(FIREWALL_AGENT):"; tail -3 $(FIREWALL_LOG) | sed 's/^/    /' | head -3; echo ""; fi
+	@if [ -f $(GEOIP_LOG) ]; then echo "🌍 $(GEOIP_ENRICHER):"; tail -3 $(GEOIP_LOG) | sed 's/^/    /' | head -3; echo ""; fi
+	@if [ -f $(ML_LOG) ]; then echo "🤖 $(ML_DETECTOR):"; tail -3 $(ML_LOG) | sed 's/^/    /' | head -3; echo ""; fi
+	@if [ -f $(DASHBOARD_LOG) ]; then echo "📊 $(DASHBOARD):"; tail -3 $(DASHBOARD_LOG) | sed 's/^/    /' | head -3; fi
 
 logs:
 	@echo "$(CYAN)📋 Logs del Sistema$(NC)"
 	@echo "$(CYAN)====================$(NC)"
-	@if [ -f $(FIREWALL_LOG) ]; then echo "=== 🔥 Firewall Agent ==="; tail -10 $(FIREWALL_LOG); echo ""; fi
-	@if [ -f $(PROMISCUOUS_LOG) ]; then echo "=== 🕵️  Promiscuous Agent ==="; tail -10 $(PROMISCUOUS_LOG); echo ""; fi
-	@if [ -f $(GEOIP_LOG) ]; then echo "=== 🌍 GeoIP Enricher ==="; tail -10 $(GEOIP_LOG); echo ""; fi
-	@if [ -f $(ML_LOG) ]; then echo "=== 🤖 ML Detector ==="; tail -10 $(ML_LOG); echo ""; fi
-	@if [ -f $(DASHBOARD_LOG) ]; then echo "=== 📊 Dashboard ==="; tail -10 $(DASHBOARD_LOG); fi
+	@if [ -f $(FIREWALL_LOG) ]; then echo "$(YELLOW)=== 🛡️  Firewall Agent ===$(NC)"; tail -10 $(FIREWALL_LOG); echo ""; fi
+	@if [ -f $(PROMISCUOUS_LOG) ]; then echo "$(YELLOW)=== 🕵️  Promiscuous Agent ===$(NC)"; tail -10 $(PROMISCUOUS_LOG); echo ""; fi
+	@if [ -f $(GEOIP_LOG) ]; then echo "$(YELLOW)=== 🌍 GeoIP Enricher ===$(NC)"; tail -10 $(GEOIP_LOG); echo ""; fi
+	@if [ -f $(ML_LOG) ]; then echo "$(YELLOW)=== 🤖 ML Detector ===$(NC)"; tail -10 $(ML_LOG); echo ""; fi
+	@if [ -f $(DASHBOARD_LOG) ]; then echo "$(YELLOW)=== 📊 Dashboard ===$(NC)"; tail -10 $(DASHBOARD_LOG); fi
+	@if [ -f $(NEURAL_LOG) ]; then echo "$(YELLOW)=== 🤖 Neural Trainer ===$(NC)"; tail -10 $(NEURAL_LOG); echo ""; fi
+	@if [ -f $(RAG_LOG) ]; then echo "$(YELLOW)=== 🗣️  RAG Engine ===$(NC)"; tail -10 $(RAG_LOG); fi
+
+logs-tail:
+	@echo "$(CYAN)📋 Siguiendo logs en tiempo real...$(NC)"
+	@echo "$(YELLOW)Ctrl+C para salir$(NC)"
+	@tail -f $(LOGS_DIR)/*.log 2>/dev/null | grep --line-buffered -E "(📊|📨|📤|ERROR|WARNING|🔥|🌍|🤖|📡)" | while read line; do echo "[$(date '+%H:%M:%S')] $$line"; done
+
+logs-errors:
+	@echo "$(CYAN)🚨 Logs de Errores$(NC)"
+	@echo "$(CYAN)==================$(NC)"
+	@grep -i "error\|exception\|traceback\|failed" $(LOGS_DIR)/*.log 2>/dev/null | tail -20 | sed 's/^/  /' || echo "$(GREEN)✅ No se encontraron errores recientes$(NC)"
 
 # =============================================================================
-# VERIFICACIÓN Y UTILIDADES
+# UTILIDADES Y DESARROLLO
 # =============================================================================
-verify:
-	@echo "$(BLUE)🔍 Verificando integridad del sistema...$(NC)"
-	@for file in $(PROMISCUOUS_AGENT) $(GEOIP_ENRICHER) $(ML_DETECTOR) $(DASHBOARD) $(FIREWALL_AGENT); do \
-		if [ -f "$$file" ]; then \
-			echo "  ✅ $$file"; \
-		else \
-			echo "  ❌ $$file falta"; \
-		fi \
-	done
-	@echo "$(BLUE)Verificando configuraciones...$(NC)"
-	@for config in $(PROMISCUOUS_CONFIG) $(GEOIP_CONFIG) $(ML_CONFIG) $(DASHBOARD_CONFIG) $(FIREWALL_CONFIG); do \
-		if [ -f "$$config" ]; then \
-			echo "  ✅ $$config"; \
-		else \
-			echo "  ❌ $$config falta"; \
-		fi \
-	done
-	@echo "$(BLUE)Verificando permisos...$(NC)"
-	@sudo -n iptables -L >/dev/null 2>&1 && echo "  ✅ Permisos firewall OK" || echo "  ❌ Permisos firewall faltan (ejecutar: make setup-perms)"
-
 show-dashboard:
-	@echo "$(BLUE)🌐 Abriendo dashboard...$(NC)"
+	@echo "$(BLUE)🌐 Abriendo dashboard web...$(NC)"
+	@echo "$(YELLOW)URL: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
 	@which open >/dev/null && open http://localhost:$(DASHBOARD_WEB_PORT) || \
 	 which xdg-open >/dev/null && xdg-open http://localhost:$(DASHBOARD_WEB_PORT) || \
 	 echo "💡 Abrir manualmente: http://localhost:$(DASHBOARD_WEB_PORT)"
 
+debug:
+	@echo "$(BLUE)🔧 Modo Debug Interactivo$(NC)"
+	@echo "$(BLUE)============================$(NC)"
+	@echo "$(YELLOW)Sistema:$(NC)"
+	@$(MAKE) status
+	@echo ""
+	@echo "$(YELLOW)Logs recientes:$(NC)"
+	@$(MAKE) logs-errors
+	@echo ""
+	@echo "$(YELLOW)Puertos en uso:$(NC)"
+	@lsof -i :$(CAPTURE_PORT),$(GEOIP_PORT),$(ML_PORT),$(FIREWALL_PORT),$(DASHBOARD_WEB_PORT) 2>/dev/null || echo "  No hay puertos activos"
+	@echo ""
+	@echo "$(YELLOW)Procesos Python:$(NC)"
+	@ps aux | grep -E "(python.*upgraded|python.*$(PROMISCUOUS_AGENT)|python.*$(DASHBOARD))" | grep -v grep || echo "  No hay procesos activos"
+
+test:
+	@echo "$(BLUE)🧪 Ejecutando tests...$(NC)"
+	@if [ -d "tests" ]; then \
+		$(ACTIVATE) && $(PYTHON_VENV) -m pytest tests/ -v; \
+	else \
+		echo "$(YELLOW)⚠️  Directorio tests/ no encontrado$(NC)"; \
+		echo "$(BLUE)💡 Creando estructura de tests básica...$(NC)"; \
+		mkdir -p tests; \
+		echo "# Tests del Sistema Autoinmune" > tests/README.md; \
+		echo "$(GREEN)✅ Estructura creada en tests/$(NC)"; \
+	fi
+
+benchmark:
+	@echo "$(BLUE)📊 Ejecutando benchmarks...$(NC)"
+	@echo "$(YELLOW)Verificando rendimiento del sistema...$(NC)"
+	@$(MAKE) status
+	@echo ""
+	@echo "$(YELLOW)Uso de CPU por proceso:$(NC)"
+	@ps aux | grep -E "(python.*upgraded|python.*promiscuous|python.*geoip|python.*ml_detector|python.*dashboard)" | grep -v grep | awk '{print "  " $$11 ": " $$3 "% CPU, " $$4 "% MEM"}' || echo "  No hay procesos activos"
+	@echo ""
+	@echo "$(YELLOW)Uso de memoria:$(NC)"
+	@free -h | sed 's/^/  /'
+	@echo ""
+	@echo "$(YELLOW)Conexiones de red activas:$(NC)"
+	@netstat -tuln | grep -E ":($(CAPTURE_PORT)|$(GEOIP_PORT)|$(ML_PORT)|$(FIREWALL_PORT)|$(DASHBOARD_WEB_PORT))" | sed 's/^/  /' || echo "  No hay conexiones activas"
+
 # =============================================================================
-# COMANDOS RÁPIDOS
+# COMANDOS DE DESARROLLO
 # =============================================================================
-quick: setup install start show-dashboard
+dev-start: start-core
+	@echo "$(PURPLE)🔧 Modo desarrollo activado$(NC)"
+	@echo "$(PURPLE)Core components iniciados$(NC)"
+	@echo "$(PURPLE)Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+
+dev-stop: stop
+	@echo "$(PURPLE)🔧 Modo desarrollo detenido$(NC)"
+
+dev-restart: dev-stop dev-start
+
+# =============================================================================
+# COMANDO RÁPIDO
+# =============================================================================
+quick: setup install setup-perms start show-dashboard
+	@echo ""
+	@echo "$(GREEN)🎉 QUICK START COMPLETADO$(NC)"
+	@echo "$(GREEN)============================$(NC)"
+	@echo "$(YELLOW)El Sistema Autoinmune Digital está operativo!$(NC)"
+	@echo ""
+	@echo "$(CYAN)📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+	@echo "$(CYAN)🔧 Estado: make status$(NC)"
+	@echo "$(CYAN)📋 Logs: make logs$(NC)"
+	@echo "$(CYAN)🛑 Parar: make stop$(NC)"

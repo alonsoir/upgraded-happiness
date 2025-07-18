@@ -1041,7 +1041,11 @@ class SecurityDashboard:
                         'protocol': event.protocol or 'TCP',
                         'port': event.port or 80,
                         'packets': event.packets,
-                        'bytes': event.bytes
+                        'bytes': event.bytes,
+                        # Añadir clasificación más clara para el frontend
+                        'risk_level': 'high' if event.risk_score > 0.7 else 'medium' if event.risk_score > 0.3 else 'low',
+                        'is_dns': event.target_ip in ['8.8.8.8', '1.1.1.1', '208.67.222.222'] if hasattr(event,
+                                                                                                         'target_ip') else False
                     }
 
                     # Añadir a recent_events manteniendo solo los últimos 100
@@ -1378,9 +1382,9 @@ class SecurityDashboard:
             'latitude': 40.4168 + ((data_length % 200) - 100) / 1000.0,
             'longitude': -3.7038 + ((data_length % 200) - 100) / 1000.0,
 
-            # 🎯 Clasificación de eventos
+            # 🎯 Clasificación de eventos MEJORADA
             'event_type': ['normal', 'suspicious', 'tor_detected', 'malware'][data_length % 4],
-            'risk_score': min(1.0, 0.3 + (data_length % 100) / 100.0),
+            'risk_score': self._calculate_realistic_risk_score(data_length, worker_id),
             'description': f'Basic generated event from protobuf data ({data_length} bytes)',
 
             # 🖥️ Información del sistema operativo
@@ -1535,6 +1539,35 @@ class SecurityDashboard:
             }
 
         return ml_scores
+
+    def _calculate_realistic_risk_score(self, data_length: int, worker_id: int) -> float:
+        """Calcular risk score más realista basado en patrones de red"""
+        # IPs conocidas seguras (DNS públicos, etc.)
+        safe_targets = ['8.8.8.8', '1.1.1.1', '208.67.222.222']
+
+        # Generar IP target simulada basada en data_length
+        ip_suffix = (data_length % 254) + 1
+        simulated_target = f"10.0.0.{ip_suffix}"
+
+        # Lógica de risk scoring más realista
+        base_risk = 0.1  # Riesgo base bajo
+
+        # Factores que aumentan el riesgo
+        if data_length > 1000:  # Paquetes grandes
+            base_risk += 0.2
+
+        if worker_id % 10 == 0:  # 10% de eventos son sospechosos
+            base_risk += 0.3
+
+        if data_length % 7 == 0:  # Patrón específico = malware
+            base_risk += 0.4
+
+        # DNS y tráfico normal = bajo riesgo
+        if ip_suffix in [8, 1, 208]:  # Simula DNS públicos
+            base_risk = 0.05
+
+        # Asegurar que esté entre 0.0 y 1.0
+        return min(1.0, max(0.0, base_risk))
 
     def _get_location_from_coordinates(self, lat: float, lon: float) -> str:
         """Obtener ubicación textual desde coordenadas"""
@@ -1716,12 +1749,17 @@ class SecurityDashboard:
                 # *** PUNTO 1: AÑADIR RUTA /api/metrics ***
                 elif self.path == '/api/metrics':
                     self.serve_metrics_api()
-                elif self.path == '/api/test-firewall':
-                    self.serve_firewall_test_api()
                 elif self.path.startswith('/static/'):
                     self.serve_static_file()
                 else:
                     self.send_error(404, "Página no encontrada")
+
+            def do_POST(self):
+                """Manejar requests POST para funcionalidad firewall"""
+                if self.path == '/api/test-firewall':
+                    self.serve_firewall_test_api()
+                else:
+                    self.send_error(404, "Endpoint POST no encontrado")
 
             # *** PUNTO 1: MÉTODO SERVE_METRICS_API ***
             def serve_metrics_api(self):
