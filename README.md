@@ -156,10 +156,73 @@ python neural_trainer_collector.py neural_trainer_config.json
 ```bash
 python autoinmune_rag_engine.py rag_engine_config.json
 ```
-**Estado**: 🎯 En diseño
-- Integración con Claude
-- Vector database (Chroma)
-- API REST para consultas
+**Estado**: 🎯 Arquitectura definida
+- **TimescaleDB + pgvector**: Series temporales + embeddings vectoriales
+- **Dual Interface**: Natural language (humanos) + Function tools (IAs)
+- **Stored Procedures**: Queries ultra-optimizadas en PostgreSQL
+- **Real-time Updates**: Pipeline ZeroMQ → Vector DB en tiempo real
+- **Multi-tier Storage**: HOT (RAM) + WARM (horas) + COLD (días)
+
+## 🧪 **Testing y Benchmarking**
+
+### **📊 Métricas Críticas de Performance**
+```python
+# Pipeline end-to-end
+pipeline_latency_p95 < 25ms     # Event capture → dashboard
+firewall_response_p95 < 50ms    # Event capture → firewall response
+rag_query_response_p95 < 100ms  # RAG query response time
+vector_search_p95 < 10ms        # Vector similarity search
+
+# Throughput targets
+sustained_events_per_sec >= 1000
+concurrent_rag_queries >= 50
+vector_db_writes_per_sec >= 500
+
+# Security effectiveness
+ml_precision >= 95%             # TP / (TP + FP)
+ml_recall >= 90%               # TP / (TP + FN)
+false_positive_rate < 5%       # Critical threshold
+mean_time_to_detection < 30s   # Critical response time
+```
+
+### **🔥 Chaos Engineering**
+```python
+# Automated resilience testing
+- Random component kills (every 5-15 minutes)
+- Network partition simulation (iptables rules)
+- Resource exhaustion (CPU, memory, disk)
+- ZeroMQ buffer overflow scenarios
+- etcd cluster failure recovery
+- Extreme load spikes (10x normal traffic)
+```
+
+### **⚡ Load Testing Stack**
+```bash
+# Locust-based synthetic traffic
+locust --headless -f attack_simulator.py \
+       --users 1000 --spawn-rate 10 \
+       --host http://localhost:8000
+
+# Attack pattern simulation
+- SSH brute force campaigns
+- Port scanning activities  
+- DDoS traffic simulation
+- Botnet C2 communication
+- Advanced persistent threats (APT)
+```
+
+### **📈 ZeroMQ Buffer Monitoring**
+```python
+# Real-time buffer health monitoring
+zmq_buffer_usage_threshold = 80%  # Warning level
+zmq_buffer_critical = 90%         # Backpressure activation
+
+# Backpressure strategies
+- Priority-based event dropping
+- Batch processing optimization
+- Emergency operator notification
+- Automatic component scaling
+```
 
 ## 🔐 **Sistema de Cifrado**
 
@@ -248,27 +311,35 @@ make clean && make quick
 - 🔄 **[EN PROGRESO]** Click-to-block en dashboard
 - 🔄 **[EN PROGRESO]** ML classification tuning
 - 🎯 **[PLANIFICADO]** Auto-respuesta firewall
-- 🎯 **[PLANIFICADO]** RAG Engine básico
+- 🎯 **[PLANIFICADO]** RAG Engine con TimescaleDB + pgvector
 - 🎯 **[PLANIFICADO]** Neural trainer inicial
+- 🎯 **[PLANIFICADO]** Chaos engineering automation
+- 🎯 **[PLANIFICADO]** Load testing con Locust
 
 #### **Q1 2026 - Advanced Features**
-- 🔮 Auto-scaling inteligente
-- 🔮 Threat intelligence feeds
-- 🔮 Advanced correlation engine
-- 🔮 Multi-region deployment
-- 🔮 Kubernetes integration
+- 🔮 **RAG Multi-tier Architecture**: HOT/WARM/COLD storage optimization
+- 🔮 **Dual Interface RAG**: Natural language + Function tools APIs
+- 🔮 **Auto-scaling inteligente**: Basado en métricas ZeroMQ
+- 🔮 **Threat intelligence feeds**: Integración con feeds externos
+- 🔮 **Advanced correlation engine**: Stored procedures optimizados
+- 🔮 **Multi-region deployment**: Arquitectura distribuida geográficamente
+- 🔮 **Comprehensive benchmarking**: Suite completa de performance tests
 
 #### **Q2 2026 - AI Enhancement**
-- 🔮 Claude-powered threat hunting
-- 🔮 Conversational security analysis
-- 🔮 Predictive threat modeling
-- 🔮 Self-healing infrastructure
+- 🔮 **Claude-powered threat hunting**: RAG conversacional avanzado
+- 🔮 **IA-to-IA optimized protocols**: APIs ultra-eficientes para IAs
+- 🔮 **Predictive threat modeling**: ML predictivo con series temporales
+- 🔮 **Self-healing infrastructure**: Auto-recovery con etcd
+- 🔮 **Real-time vector updates**: Pipeline streaming a vector DB
+- 🔮 **Conversational security analysis**: Interface natural completa
 
 #### **Q3 2026 - Next-Gen**
-- 🔮 Quantum-ready encryption
-- 🔮 Edge computing support
-- 🔮 Zero-trust architecture
-- 🔮 Autonomous security operations
+- 🔮 **Quantum-ready encryption**: Preparación post-cuántica
+- 🔮 **Edge computing support**: Arquitectura híbrida edge/cloud
+- 🔮 **Zero-trust architecture**: Integración completa zero-trust
+- 🔮 **Autonomous security operations**: Sistema completamente autónomo
+- 🔮 **Production-grade benchmarks**: Métricas para entornos críticos
+- 🔮 **Global threat correlation**: Correlación inter-organizacional
 
 ## 📈 **Métricas Actuales**
 
@@ -305,8 +376,22 @@ python -m pytest tests/
 # Integration tests  
 python -m pytest tests/integration/
 
-# Performance tests
+# Performance tests con Locust
 python -m pytest tests/performance/
+locust -f tests/load_testing/attack_simulator.py
+
+# Chaos engineering
+python tests/chaos/chaos_monkey.py --duration 1h
+
+# ZeroMQ buffer stress testing
+python tests/stress/zmq_buffer_overflow.py
+
+# RAG Engine benchmarks
+python tests/benchmarks/rag_performance.py
+python tests/benchmarks/vector_db_latency.py
+
+# End-to-end pipeline testing
+python tests/e2e/full_pipeline_test.py --load 10x
 ```
 
 ### **Debugging Workflow**
@@ -352,6 +437,67 @@ RAG: "Detectamos 47 eventos desde China: 23 SSH brute force,
      15 port scanning, 9 eventos de alto riesgo..."
 ```
 
+## 🗣️ **RAG Engine Arquitectura**
+
+### **Estrategia TimescaleDB + pgvector**
+```sql
+-- Series temporales + embeddings vectoriales
+CREATE TABLE security_events (
+    time TIMESTAMPTZ NOT NULL,
+    event_id UUID,
+    event_vector vector(384),  -- pgvector embeddings
+    source_ip INET,
+    risk_score FLOAT,
+    event_type TEXT,
+    metadata JSONB
+);
+
+-- Hypertable para auto-partitioning temporal
+SELECT create_hypertable('security_events', 'time');
+```
+
+### **Dual Interface Design**
+```python
+# Humanos: Lenguaje natural
+Usuario: "Bloquea todas las IPs chinas que hayan hecho brute force SSH"
+RAG: → Function tool → stored_procedure → firewall_command
+
+# IAs: Function tools optimizados  
+{
+  "function": "rag_security_query",
+  "params": {
+    "query_vector": [0.1, 0.2, ...],
+    "timeframe_minutes": 60,
+    "similarity_threshold": 0.8
+  }
+}
+```
+
+### **Multi-tier Storage Strategy**
+```
+┌─────────────────┐
+│ HOT CACHE       │ ← Últimos 15min (RAM, sin embeddings)
+│ (búsqueda directa)│ ← Latencia: <1ms
+└─────────────────┘
+┌─────────────────┐  
+│ WARM TIER       │ ← 1-24h (pgvector, batch updates)
+│ (vector search) │ ← Latencia: <10ms
+└─────────────────┘
+┌─────────────────┐
+│ COLD TIER       │ ← >24h (compressed, historical)
+│ (analytics)     │ ← Latencia: <100ms
+└─────────────────┘
+```
+
+### **Real-time Pipeline Integration**
+```
+Events → ZeroMQ → RAG Topic → TimescaleDB
+   ↓
+Vector embeddings → Batch processor → pgvector
+   ↓
+Query engine → Multi-tier search → Results
+```
+
 ## 📞 **Soporte y Contribución**
 
 ### **Canal de Desarrollo**
@@ -363,8 +509,11 @@ RAG: "Detectamos 47 eventos desde China: 23 SSH brute force,
 ### **Próximos PRs**
 1. **Dashboard-Firewall Integration** (Próxima semana)
 2. **ML Classification Tuning** (Sprint actual)
-3. **RAG Engine Foundation** (Próximo sprint)
-4. **Neural Trainer Basic** (Mes actual)
+3. **RAG Engine + TimescaleDB Foundation** (Próximo sprint)
+4. **Chaos Engineering Automation** (Próximo sprint)
+5. **Load Testing con Locust** (Sprint actual)
+6. **ZeroMQ Buffer Monitoring** (Próximo sprint)
+7. **Neural Trainer Basic** (Mes actual)
 
 ### **Cómo Contribuir**
 1. Fork del repositorio
