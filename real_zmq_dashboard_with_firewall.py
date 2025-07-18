@@ -1731,7 +1731,7 @@ class SecurityDashboard:
                     self.send_header('Content-type', 'text/html; charset=utf-8')
                     self.send_header('Cache-Control', 'no-cache')
 
-                    # 🗺️ CRÍTICO: CSP permisivo para Leaflet
+                    # 🗺️ CSP ACTUALIZADO: Incluye todos los proveedores de tiles necesarios
                     csp_policy = (
                         "default-src 'self'; "
                         "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
@@ -1740,10 +1740,14 @@ class SecurityDashboard:
                         "https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
                         "img-src 'self' data: blob: "
                         "https://*.tile.openstreetmap.org https://*.openstreetmap.org "
+                        "https://*.basemaps.cartocdn.com https://cartocdn.com "
+                        "https://*.cartodb.com https://cartodb.com "
                         "https://unpkg.com https://cdn.jsdelivr.net; "
                         "connect-src 'self' "
-                        "https://*.tile.openstreetmap.org https://*.openstreetmap.org; "
-                        "font-src 'self' 'unsafe-inline' "
+                        "https://*.tile.openstreetmap.org https://*.openstreetmap.org "
+                        "https://*.basemaps.cartocdn.com https://cartocdn.com "
+                        "https://*.cartodb.com https://cartodb.com; "
+                        "font-src 'self' data: 'unsafe-inline' "
                         "https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;"
                     )
                     self.send_header('Content-Security-Policy', csp_policy)
