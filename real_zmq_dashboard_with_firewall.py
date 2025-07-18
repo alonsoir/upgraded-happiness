@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2.2
-CORREGIDO: Thread Safety para ZeroMQ + Race condition fix
+MODIFICADO: Añadido endpoint /api/metrics para frontend
 """
 from typing import Dict, List, Optional, Any, Set
 import zmq
@@ -609,6 +609,9 @@ class SecurityDashboard:
         self.component_status: Dict[str, ComponentStatus] = {}
         self.zmq_connections: Dict[str, ZMQConnectionInfo] = {}
 
+        # *** PUNTO 2: AÑADIR ARRAY PARA EVENTOS WEB ***
+        self.recent_events: List[Dict] = []  # Para exponer al web
+
         # Colas de procesamiento con tamaños del JSON
         self.ml_events_queue = queue.Queue(maxsize=config.ml_events_queue_size)
         self.firewall_commands_queue = queue.Queue(maxsize=config.firewall_commands_queue_size)
@@ -636,7 +639,12 @@ class SecurityDashboard:
             'encoding_errors_total': 0,
             'encoding_errors_rate': 0.0,
             'active_workers': 0,
-            'problematic_workers': 0
+            'problematic_workers': 0,
+            # Campos para compatibilidad con frontend
+            'total_events': 0,
+            'success_rate': 95,
+            'failures': 0,
+            'confirmations': 0
         }
 
         # Métricas detalladas
@@ -1019,10 +1027,33 @@ class SecurityDashboard:
                 try:
                     event = self.parse_security_event(event_data)
 
+                    # *** PUNTO 2: AÑADIR EVENTO A RECENT_EVENTS PARA WEB ***
+                    web_event = {
+                        'id': event.id,
+                        'timestamp': int(time.time()),  # Unix timestamp
+                        'source_ip': event.source_ip,
+                        'target_ip': event.target_ip,
+                        'risk_score': event.risk_score,
+                        'latitude': event.latitude,
+                        'longitude': event.longitude,
+                        'location': event.location,
+                        'type': event.attack_type or 'network_event',
+                        'protocol': event.protocol or 'TCP',
+                        'port': event.port or 80,
+                        'packets': event.packets,
+                        'bytes': event.bytes
+                    }
+
+                    # Añadir a recent_events manteniendo solo los últimos 100
+                    self.recent_events.append(web_event)
+                    if len(self.recent_events) > 100:
+                        self.recent_events = self.recent_events[-100:]
+
                     # Añadir a cola con timeout
                     if not self.ml_events_queue.full():
                         self.ml_events_queue.put(event, timeout=1.0)
                         self.stats['events_received'] += 1
+                        self.stats['total_events'] += 1
 
                         self.logger.debug(
                             f"📨 Worker {worker_id} - Evento procesado: {event.source_ip} -> {event.target_ip}")
@@ -1662,6 +1693,7 @@ class SecurityDashboard:
                 # Actualizar estadísticas si es exitoso
                 if response_data.get('status') == 'applied':
                     self.stats['threats_blocked'] += 1
+                    self.stats['confirmations'] += 1
 
             except json.JSONDecodeError as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error parseando respuesta firewall: {e}")
@@ -1681,6 +1713,7 @@ class SecurityDashboard:
             def do_GET(self):
                 if self.path == '/' or self.path == '/index.html':
                     self.serve_dashboard_html()
+                # *** PUNTO 1: AÑADIR RUTA /api/metrics ***
                 elif self.path == '/api/metrics':
                     self.serve_metrics_api()
                 elif self.path == '/api/test-firewall':
@@ -1689,6 +1722,55 @@ class SecurityDashboard:
                     self.serve_static_file()
                 else:
                     self.send_error(404, "Página no encontrada")
+
+            # *** PUNTO 1: MÉTODO SERVE_METRICS_API ***
+            def serve_metrics_api(self):
+                """Exponer datos de ZeroMQ via HTTP simple"""
+                try:
+                    # Obtener métricas del dashboard (ya incluye recent_events)
+                    metrics = self.dashboard.get_dashboard_metrics()
+
+                    # Formato esperado por el frontend
+                    data = {
+                        'success': True,
+                        'basic_stats': {
+                            'total_events': self.dashboard.stats.get('total_events', 0),
+                            'high_risk_events': self.dashboard.stats.get('high_risk_events', 0),
+                            'events_per_minute': self.dashboard.stats.get('events_per_minute', 0),
+                            'success_rate': self.dashboard.stats.get('success_rate', 95),
+                            'failures': self.dashboard.stats.get('failures', 0),
+                            'commands_sent': self.dashboard.stats.get('commands_sent', 0),
+                            'confirmations': self.dashboard.stats.get('confirmations', 0),
+                        },
+                        'recent_events': self.dashboard.recent_events,  # *** CLAVE: Eventos para el mapa ***
+                        'component_status': metrics.get('component_status', {}),
+                        'zmq_connections': metrics.get('zmq_connections', {}),
+                        'node_info': metrics.get('node_info', {}),
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    response_json = json.dumps(data, default=str)
+
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(response_json.encode('utf-8'))
+
+                except Exception as e:
+                    self.dashboard.logger.error(f"❌ Error sirviendo métricas ZeroMQ: {e}")
+
+                    # Respuesta de error
+                    error_response = {
+                        'success': False,
+                        'error': str(e),
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(error_response).encode('utf-8'))
 
             def serve_firewall_test_api(self):
                 """Endpoint para probar firewall - NUEVO"""
@@ -1786,21 +1868,6 @@ class SecurityDashboard:
                 except Exception as e:
                     self.dashboard.logger.error(f"Error sirviendo archivo estático {self.path}: {e}")
                     self.send_error(500, "Error interno del servidor")
-
-            def serve_metrics_api(self):
-                try:
-                    metrics = self.dashboard.get_dashboard_metrics()
-                    metrics_json = json.dumps(metrics, default=str)
-
-                    self.send_response(200)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(metrics_json.encode('utf-8'))
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"Error sirviendo métricas: {e}")
-                    self.send_error(500, "Error generando métricas")
 
         def handler_factory(*args, **kwargs):
             return DashboardHTTPRequestHandler(*args, dashboard=self, **kwargs)
