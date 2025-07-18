@@ -1,0 +1,11 @@
+{
+  "version": "20250718_093545",
+  "timestamp": "2025-07-18T09:48:13.353701",
+  "training_metrics": {
+    "training_time": 0.06498312950134277,
+    "samples_count": 200,
+    "mode": "conservative_local"
+  },
+  "model_count": 2,
+  "config_mode": "conservative_local"
+}
