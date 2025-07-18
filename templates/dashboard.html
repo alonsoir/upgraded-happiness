@@ -4,12 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SCADA Dashboard - Arquitectura 3 Puertos</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- 🗺️ Leaflet CSS - DEBE ir antes que el JavaScript -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+
+    <!-- 🎨 Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 🎨 CSS Unificado del Dashboard -->
     <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
     <div class="dashboard-container">
+        <!-- 🖥️ Header -->
         <header class="header">
             <div class="logo">
                 <i class="fas fa-shield-alt"></i>
@@ -29,7 +38,7 @@
                     <span>Firewall</span>
                 </div>
                 <div class="status-indicator" onclick="showSystemInfo()">
-                    <span id="current-time"></span>
+                    <span id="current-time">--:--:--</span>
                 </div>
                 <div class="status-indicator" onclick="showEventsSummary()">
                     <span>Events: <span id="events-counter">0</span></span>
@@ -40,6 +49,7 @@
             </div>
         </header>
 
+        <!-- 🗺️ Área principal del mapa -->
         <main class="main-content">
             <div class="map-controls">
                 <button class="map-control-btn" onclick="clearAllMarkers()" title="Limpiar todos los marcadores del mapa">
@@ -58,15 +68,17 @@
                     <i class="fas fa-vial"></i> Test FW
                 </button>
             </div>
+            <!-- 🌍 CRÍTICO: Contenedor del mapa -->
             <div id="map"></div>
         </main>
 
+        <!-- 📊 Sidebar -->
         <aside class="sidebar">
-            <!-- Información de Arquitectura -->
+            <!-- 🏗️ Información de Arquitectura -->
             <div class="collapsible-section" id="architecture-section">
                 <div class="section-header" onclick="toggleSection('architecture')">
                     <div class="architecture-title">
-                        🏗️ Arquitectura 3 Puertos:
+                        🏗️ Arquitectura 3 Puertos
                         <i class="fas fa-chevron-down toggle-icon" id="architecture-toggle"></i>
                     </div>
                 </div>
@@ -88,7 +100,7 @@
                 </div>
             </div>
 
-            <!-- Estado de Componentes -->
+            <!-- 🔧 Estado de Componentes -->
             <div class="collapsible-section" id="components-section">
                 <div class="section-header" onclick="toggleSection('components')">
                     <div class="section-title">
@@ -163,7 +175,7 @@
                 </div>
             </div>
 
-            <!-- NUEVA SECCIÓN: Eventos Entrantes -->
+            <!-- 📨 Eventos Entrantes -->
             <div class="collapsible-section" id="events-section">
                 <div class="section-header" onclick="toggleSection('events')">
                     <div class="section-title">
@@ -202,7 +214,7 @@
                 </div>
             </div>
 
-            <!-- Contadores Reactivos -->
+            <!-- 📊 Contadores Reactivos -->
             <div class="collapsible-section" id="counters-section">
                 <div class="section-header" onclick="toggleSection('counters')">
                     <div class="section-title">
@@ -232,7 +244,7 @@
                 </div>
             </div>
 
-            <!-- Estado ZeroMQ Reactivo -->
+            <!-- 🔌 Estado ZeroMQ Reactivo -->
             <div class="collapsible-section" id="zmq-section">
                 <div class="section-header" onclick="toggleSection('zmq')">
                     <div class="section-title">
@@ -320,7 +332,7 @@
                 </div>
             </div>
 
-            <!-- Debug Log Interactivo -->
+            <!-- 🐛 Debug Log Interactivo -->
             <div class="collapsible-section" id="debug-section">
                 <div class="section-header" onclick="toggleSection('debug')">
                     <div class="section-title">
@@ -334,11 +346,12 @@
                         <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado</div>
                         <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] ZeroMQ context creado</div>
                         <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del ML Detector...</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Mapa Leaflet inicializado</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Botones de Acción Reactivos -->
+            <!-- 🎛️ Botones de Acción Reactivos -->
             <div class="action-buttons">
                 <button class="btn update" onclick="refreshDashboard()" title="Actualizar todas las métricas">
                     <i class="fas fa-sync"></i> Actualizar
@@ -356,7 +369,7 @@
         </aside>
     </div>
 
-    <!-- Modal para mostrar detalles de eventos -->
+    <!-- 📋 Modal para mostrar detalles de eventos -->
     <div class="modal-overlay" id="modal-overlay" onclick="closeModal()"></div>
     <div class="detail-modal" id="detail-modal">
         <div class="modal-header">
@@ -371,20 +384,63 @@
         </div>
     </div>
 
-    <!-- Indicador de amenaza -->
+    <!-- ⚠️ Indicador de amenaza -->
     <div class="threat-indicator" id="threat-indicator">
         ⚠️ Nueva amenaza detectada!
     </div>
 
-    <!-- Notificaciones toast -->
+    <!-- 📢 Notificaciones toast -->
     <div class="toast-container" id="toast-container"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- 🗺️ Leaflet JavaScript - DEBE ir después del CSS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- 🔧 Dashboard JavaScript -->
     <script src="/static/js/dashboard.js"></script>
+
+    <!-- 🚀 Inicialización -->
     <script>
-        // Inicialización del dashboard
+        // Inicialización del dashboard cuando el DOM esté listo
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 DOM cargado, inicializando dashboard...');
             initializeDashboard();
+        });
+
+        // 🔧 Debug: Detectar errores de CSP
+        window.addEventListener('securitypolicyviolation', function(e) {
+            console.error('🔒 CSP Violation:', e.violatedDirective, e.blockedURI);
+            const debugLog = document.getElementById('debug-log');
+            if (debugLog) {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry error';
+                entry.innerHTML = `[ERROR] CSP Violation: ${e.violatedDirective} - ${e.blockedURI}`;
+                debugLog.appendChild(entry);
+            }
+        });
+
+        // 🔧 Debug: Detectar si Leaflet está disponible
+        window.addEventListener('load', function() {
+            if (typeof L === 'undefined') {
+                console.error('❌ Leaflet no está disponible');
+                const debugLog = document.getElementById('debug-log');
+                if (debugLog) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry error';
+                    entry.innerHTML = '[ERROR] Leaflet library no está disponible';
+                    debugLog.appendChild(entry);
+                }
+            } else {
+                console.log('✅ Leaflet está disponible:', L.version);
+                const debugLog = document.getElementById('debug-log');
+                if (debugLog) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry info';
+                    entry.innerHTML = `[INFO] Leaflet ${L.version} cargado correctamente`;
+                    debugLog.appendChild(entry);
+                }
+            }
         });
     </script>
 </body>
