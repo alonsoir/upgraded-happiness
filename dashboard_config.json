@@ -58,7 +58,7 @@
   },
   "processing": {
     "threads": {
-      "ml_events_consumers": 2,
+      "ml_events_consumers": 1,
       "firewall_command_producers": 1,
       "firewall_response_consumers": 1,
       "description": "Número de hilos de procesamiento para cada tipo de tarea"

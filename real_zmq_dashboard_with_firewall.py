@@ -95,22 +95,24 @@ class EncodingMonitor:
         }
 
     def detect_encoding_type(self, data: bytes) -> str:
-        """Detectar tipo de encoding de los datos"""
+        """Detectar tipo de encoding de los datos - OPTIMIZADO PARA PROTOBUF PRIMERO"""
         if len(data) == 0:
             return 'empty'
 
-        # Verificar UTF-8 válido
-        try:
-            data.decode('utf-8')
-            return 'utf-8'
-        except UnicodeDecodeError:
-            pass
-
-        # Verificar si parece protobuf
+        # 1. PRIMERO: Verificar si parece protobuf (antes de UTF-8)
         if self._looks_like_protobuf(data):
             return 'protobuf'
 
-        # Verificar si es texto en otra codificación
+        # 2. Verificar UTF-8 válido
+        try:
+            decoded = data.decode('utf-8')
+            # Verificar si parece JSON
+            if decoded.strip().startswith(('{', '[')):
+                return 'utf-8'
+        except UnicodeDecodeError:
+            pass
+
+        # 3. Verificar si es texto en otra codificación
         try:
             decoded = data.decode('latin-1')
             if decoded.isprintable() and '{' in decoded:
@@ -118,24 +120,53 @@ class EncodingMonitor:
         except:
             pass
 
-        # Verificar otros formatos binarios
+        # 4. Verificar otros formatos binarios
         if data.startswith(b'\x00') or data.startswith(b'\xff'):
             return 'binary'
 
         return 'corrupted'
 
     def _looks_like_protobuf(self, data: bytes) -> bool:
-        """Detectar si los datos parecen ser protobuf"""
-        if len(data) < 2:
+        """Detectar si los datos parecen ser protobuf - VERSIÓN MEJORADA"""
+        if len(data) < 4:
             return False
 
-        # Patrones típicos de protobuf
+        # Patrones típicos de protobuf - EXPANDIDOS
         protobuf_patterns = [
             b'\x08', b'\x0a', b'\x10', b'\x12', b'\x18', b'\x1a',
-            b'\x20', b'\x22', b'\x28', b'\x2a'
+            b'\x20', b'\x22', b'\x28', b'\x2a', b'\x30', b'\x32',
+            b'\x38', b'\x3a', b'\x40', b'\x42', b'\x48', b'\x4a',
+            b'\x50', b'\x52', b'\x58', b'\x5a', b'\x60', b'\x62'
         ]
 
-        return any(data.startswith(pattern) for pattern in protobuf_patterns)
+        # Verificar si empieza con patrón protobuf
+        starts_with_protobuf = any(data.startswith(pattern) for pattern in protobuf_patterns)
+
+        # Verificación adicional: verificar si NO parece JSON o texto
+        try:
+            # Si se puede decodificar como UTF-8 Y parece JSON, probablemente no es protobuf
+            decoded = data.decode('utf-8')
+            if decoded.strip().startswith(('{', '[')):
+                return False
+        except UnicodeDecodeError:
+            # No se puede decodificar como UTF-8, más probable que sea protobuf
+            pass
+
+        # Verificación adicional: buscar patrones de campo protobuf en los primeros bytes
+        if len(data) >= 10:
+            # Contar bytes que parecen ser field tags de protobuf
+            protobuf_like_bytes = 0
+            for i in range(min(10, len(data))):
+                byte = data[i]
+                # Field numbers y wire types típicos
+                if byte in [0x08, 0x0a, 0x10, 0x12, 0x18, 0x1a, 0x20, 0x22, 0x28, 0x2a]:
+                    protobuf_like_bytes += 1
+
+            # Si hay varios bytes que parecen protobuf, probablemente lo es
+            if protobuf_like_bytes >= 2:
+                return True
+
+        return starts_with_protobuf
 
     def log_encoding_error(self, worker_id: int, worker_type: str,
                            data: bytes, error: Exception, encoding_attempted: str):
@@ -900,7 +931,7 @@ class SecurityDashboard:
     def ml_events_receiver_with_monitoring(self, worker_id: int):
         """Recibir eventos del ML Detector con monitoreo completo"""
         self.logger.info(f"📡 ML Events Receiver {worker_id} iniciado con monitoreo")
-
+        crash_counter = 0
         while self.running:
             try:
                 # Recibir mensaje como bytes
@@ -963,16 +994,24 @@ class SecurityDashboard:
 
     def decode_message_with_monitoring(self, message_bytes: bytes, worker_id: int,
                                        worker_type: str) -> tuple[Optional[str], str]:
-        """Decodificar mensaje con monitoreo completo de errores - CORREGIDO"""
+        """Decodificar mensaje - PROTOBUF PRIMERO para evitar errores UTF-8"""
 
-        # 1. Verificar si es mensaje vacío
         if not message_bytes:
             return None, 'empty'
 
-        # 2. Intentar UTF-8 directo primero
+        # 🔥 CRÍTICO: Detectar protobuf ANTES que UTF-8
+        detected_type = self.encoding_monitor.detect_encoding_type(message_bytes)
+
+        if detected_type == 'protobuf':
+            parsed = self.parse_protobuf_with_monitoring(message_bytes, worker_id)
+            if parsed:
+                return json.dumps(parsed), 'protobuf'
+            else:
+                return None, 'failed'
+
+        # UTF-8 solo si NO es protobuf
         try:
             decoded = message_bytes.decode('utf-8')
-            # Verificar que sea JSON válido
             json.loads(decoded)
             return decoded, 'utf-8'
         except UnicodeDecodeError as e:
@@ -980,24 +1019,13 @@ class SecurityDashboard:
                 worker_id, worker_type, message_bytes, e, 'utf-8'
             )
         except json.JSONDecodeError:
-            # Es UTF-8 válido pero no JSON, podría ser texto plano
             pass
 
-        # 3. Detectar tipo de datos
-        detected_type = self.encoding_monitor.detect_encoding_type(message_bytes)
-
-        # 4. Manejar protobuf de forma específica
-        if detected_type == 'protobuf':
-            parsed = self.parse_protobuf_with_monitoring(message_bytes, worker_id)
-            if parsed:
-                return json.dumps(parsed), 'protobuf'
-
-        # 5. Intentar latin-1 para caracteres especiales
-        elif detected_type == 'latin-1':
+        # latin-1 fallback
+        if detected_type == 'latin-1':
             try:
                 decoded = message_bytes.decode('latin-1')
                 if decoded.strip().startswith('{'):
-                    # Verificar que sea JSON válido
                     json.loads(decoded)
                     return decoded, 'latin-1'
             except Exception as e:
@@ -1005,31 +1033,28 @@ class SecurityDashboard:
                     worker_id, worker_type, message_bytes, e, 'latin-1'
                 )
 
-        # 6. Último recurso - intentar limpiar los datos
+        # Último recurso
         try:
-            # Remover bytes problemáticos
             cleaned_bytes = bytearray()
             for byte in message_bytes:
-                if byte < 128:  # Solo caracteres ASCII
+                if byte < 128:
                     cleaned_bytes.append(byte)
 
             if cleaned_bytes:
                 cleaned = bytes(cleaned_bytes).decode('utf-8', errors='ignore')
                 if len(cleaned.strip()) > 0 and '{' in cleaned and '}' in cleaned:
-                    # Intentar extraer JSON
                     start = cleaned.find('{')
                     end = cleaned.rfind('}') + 1
                     if start >= 0 and end > start:
                         json_part = cleaned[start:end]
-                        json.loads(json_part)  # Verificar validez
+                        json.loads(json_part)
                         return json_part, 'utf-8-cleaned'
-
         except Exception as e:
             self.encoding_monitor.log_encoding_error(
                 worker_id, worker_type, message_bytes, e, 'utf-8-cleaned'
             )
 
-        # 7. Falló todo - registrar error y retornar None
+        # Total failure
         self.encoding_monitor.log_encoding_error(
             worker_id, worker_type, message_bytes,
             Exception(f"All decoding methods failed for {len(message_bytes)} bytes"), 'all-failed'
