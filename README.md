@@ -517,7 +517,7 @@ Query engine → Multi-tier search → Results
 
 ### **Cómo Contribuir**
 1. Fork del repositorio
-2. Checkout de `feature/claude-integration`
+2. Checkout de `main`
 3. Crear branch: `git checkout -b feature/your-feature`
 4. Commit: `git commit -m 'Add your feature'`
 5. Push: `git push origin feature/your-feature`
