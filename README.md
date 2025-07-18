@@ -521,12 +521,15 @@ Query engine → Multi-tier search → Results
 3. Crear branch: `git checkout -b feature/your-feature`
 4. Commit: `git commit -m 'Add your feature'`
 5. Push: `git push origin feature/your-feature`
-6. Crear Pull Request a `feature/claude-integration`
+6. Crear Pull Request a `main`
 
 ---
 
 > **"Un sistema que no solo detecta amenazas, sino que aprende, se adapta y evoluciona como un organismo digital inteligente."** 🧬✨
 
-> **Estado Actual**: 🚀 Pipeline distribuido funcionando → 🔄 Refinando integración → 🎯 Próximo: RAG + Auto-respuesta
+> **Estado Actual**: 🚀 Pipeline distribuido funcionando → 🔄 Refinando integración → 🎯 Próximo: Cifrado/Compresion integrado con etcd, RAG + Auto-respuesta, crear imágenes Docker,
+> crear templates JINJA2, crear mecanismo para hablar con las máquinas virtuales y los contenedores alojados, entrenamiento de mejores redes neuronales basado en datos reales y sintéticos,
+> integrar esos entrenamientos para que sean recurrentes, más allá del que pueda ocurrir con los datos que entran al sistema, hay que evitar falsos positivos, tests de stress masivos,
+> conseguir tracción. Entre medias, fases de refactorizacion para que no se vaya de madre. HELP! 
 
 **Construido con ❤️ por el equipo de Upgraded Happiness**
