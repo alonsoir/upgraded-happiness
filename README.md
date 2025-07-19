@@ -263,7 +263,7 @@ make monitor
 # Parada controlada
 make stop
 
-# Parada nuclear (emergencia)
+# Parada nuclear (emergencia) funciona mejor que stop.
 make stop-nuclear
 
 # Reinicio completo
