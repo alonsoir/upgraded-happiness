@@ -69,7 +69,7 @@ ML_PORT = 5561              # ml_detector → dashboard
 FIREWALL_PORT = 5562        # dashboard → firewall_agent
 
 # Service Ports
-DASHBOARD_WEB_PORT = 8000   # Web UI principal
+DASHBOARD_WEB_PORT = 8080   # Web UI principal
 RAG_WEB_PORT = 8090         # RAG Engine (próximamente)
 NEURAL_PORT = 5563          # Neural trainer (próximamente)
 
@@ -113,7 +113,8 @@ MONITOR_SCRIPT = monitor_autoinmune.sh
         setup-perms verify check-geoip check-deps \
         show-dashboard show-architecture show-roadmap \
         quick debug test benchmark \
-        dev-start dev-stop dev-restart
+        dev-start dev-stop dev-restart \
+        start-improved verify-start status-detailed
 
 # =============================================================================
 # HELP Y DOCUMENTACIÓN
@@ -335,8 +336,24 @@ start: install verify check-geoip stop
 	@sleep 3
 
 	@echo "$(BLUE)2. 🕵️  Promiscuous Agent → Puerto $(CAPTURE_PORT)...$(NC)"
-	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)
+	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)'
 	@sleep 3
+	@echo "🔍 Verificando PID promiscuous_agent..."
+	@if [ -f $(PROMISCUOUS_PID) ]; then \
+		PID=$$(cat $(PROMISCUOUS_PID)); \
+		if ps -p $$PID > /dev/null 2>&1; then \
+			echo "✅ Promiscuous Agent iniciado (PID: $$PID)"; \
+		else \
+			echo "🔄 Buscando PID real..."; \
+			REAL_PID=$$(pgrep -f "$(PROMISCUOUS_AGENT)" | head -1); \
+			if [ -n "$$REAL_PID" ]; then \
+				echo "✅ PID real encontrado: $$REAL_PID"; \
+				echo $$REAL_PID > $(PROMISCUOUS_PID); \
+			else \
+				echo "❌ Promiscuous Agent no encontrado"; \
+			fi \
+		fi \
+	fi
 
 	@echo "$(BLUE)3. 🌍 GeoIP Enricher ($(CAPTURE_PORT) → $(GEOIP_PORT))...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
@@ -365,13 +382,14 @@ start: install verify check-geoip stop
 	@echo "$(PURPLE)   • ML classification tuning (sprint actual)$(NC)"
 	@echo "$(PURPLE)   • Auto-respuesta firewall (próximo sprint)$(NC)"
 	@echo ""
+	@echo "$(PURPLE)   • Recomendacion. Arrancar el script monitor_autoinmune.sh después de darle permisos de ejecución.$(NC)"
 	@$(MAKE) status
 
 start-core: install verify stop
 	@echo "$(GREEN)🚀 Iniciando componentes CORE...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
-	@sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)
+	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)'
 	@sleep 2
 	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
 	@sleep 2
@@ -402,7 +420,7 @@ start-bg: install verify check-geoip stop
 	@echo "$(GREEN)🚀 Iniciando sistema (background mode)...$(NC)"
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
-	@sudo nohup $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)
+	@sudo bash -c 'nohup $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)'
 	@sleep 2
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
 	@sleep 2
@@ -412,66 +430,142 @@ start-bg: install verify check-geoip stop
 	@echo "$(GREEN)✅ Sistema iniciado en background$(NC)"
 	@echo "$(YELLOW)📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
 
+# =============================================================================
+# GESTIÓN DE PARADAS (UNIFICADA)
+# =============================================================================
+
+# Función de parada estándar (secuencial y limpia)
 stop:
 	@echo "$(YELLOW)🛑 Deteniendo sistema...$(NC)"
 	@echo "$(BLUE)Parada secuencial en orden inverso...$(NC)"
 
-	# Advanced components first
+	# Metodo 1: Intentar con PIDs si existen
+	@echo "🔄 Método 1: Deteniendo con PIDs..."
 	@-if [ -f $(RAG_PID) ]; then echo "🗣️  Deteniendo RAG Engine..."; kill $$(cat $(RAG_PID)) 2>/dev/null || true; rm -f $(RAG_PID); fi
 	@-if [ -f $(NEURAL_PID) ]; then echo "🤖 Deteniendo Neural Trainer..."; kill $$(cat $(NEURAL_PID)) 2>/dev/null || true; rm -f $(NEURAL_PID); fi
+	@-if [ -f $(DASHBOARD_PID) ]; then echo "📊 Deteniendo Dashboard..."; kill $$(cat $(DASHBOARD_PID)) 2>/dev/null || true; rm -f $(DASHBOARD_PID); fi
+	@-if [ -f $(ML_PID) ]; then echo "🤖 Deteniendo ML Detector..."; kill $$(cat $(ML_PID)) 2>/dev/null || true; rm -f $(ML_PID); fi
+	@-if [ -f $(GEOIP_PID) ]; then echo "🌍 Deteniendo GeoIP Enricher..."; kill $$(cat $(GEOIP_PID)) 2>/dev/null || true; rm -f $(GEOIP_PID); fi
+	@-if [ -f $(PROMISCUOUS_PID) ]; then echo "🕵️  Deteniendo Promiscuous Agent..."; kill $$(cat $(PROMISCUOUS_PID)) 2>/dev/null || true; sudo kill $$(cat $(PROMISCUOUS_PID)) 2>/dev/null || true; rm -f $(PROMISCUOUS_PID); fi
+	@-if [ -f $(FIREWALL_PID) ]; then echo "🛡️  Deteniendo Firewall Agent..."; kill $$(cat $(FIREWALL_PID)) 2>/dev/null || true; rm -f $(FIREWALL_PID); fi
+	@sleep 2
 
-	# Core components (reverse order)
-	@-echo "📊 Deteniendo Dashboard..."
-	@-pkill -f "$(DASHBOARD)" 2>/dev/null || true
-	@-if [ -f $(DASHBOARD_PID) ]; then kill $$(cat $(DASHBOARD_PID)) 2>/dev/null || true; rm -f $(DASHBOARD_PID); fi
-	@sleep 1
+	# Método 2: pkill por nombre de proceso (más agresivo)
+	@echo "🔄 Método 2: pkill por patrón..."
+	@-echo "📊 Matando Dashboard..."
+	@-pkill -f "real_zmq_dashboard_with_firewall" 2>/dev/null || true
+	@-echo "🤖 Matando ML Detector..."
+	@-pkill -f "lightweight_ml_detector" 2>/dev/null || true
+	@-echo "🌍 Matando GeoIP Enricher..."
+	@-pkill -f "geoip_enricher" 2>/dev/null || true
+	@-echo "🕵️  Matando Promiscuous Agent..."
+	@-pkill -f "promiscuous_agent" 2>/dev/null || true
+	@-sudo pkill -f "promiscuous_agent" 2>/dev/null || true
+	@-echo "🛡️  Matando Firewall Agent..."
+	@-pkill -f "simple_firewall_agent" 2>/dev/null || true
+	@sleep 2
 
-	@-echo "🤖 Deteniendo ML Detector..."
-	@-pkill -f "$(ML_DETECTOR)" 2>/dev/null || true
-	@-if [ -f $(ML_PID) ]; then kill $$(cat $(ML_PID)) 2>/dev/null || true; rm -f $(ML_PID); fi
-	@sleep 1
+	# Método 3: SIGKILL si siguen activos (nuclear)
+	@echo "🔄 Método 3: SIGKILL nuclear..."
+	@-pkill -9 -f "real_zmq_dashboard_with_firewall" 2>/dev/null || true
+	@-pkill -9 -f "lightweight_ml_detector" 2>/dev/null || true
+	@-pkill -9 -f "geoip_enricher" 2>/dev/null || true
+	@-pkill -9 -f "promiscuous_agent" 2>/dev/null || true
+	@-sudo pkill -9 -f "promiscuous_agent" 2>/dev/null || true
+	@-pkill -9 -f "simple_firewall_agent" 2>/dev/null || true
 
-	@-echo "🌍 Deteniendo GeoIP Enricher..."
-	@-pkill -f "$(GEOIP_ENRICHER)" 2>/dev/null || true
-	@-if [ -f $(GEOIP_PID) ]; then kill $$(cat $(GEOIP_PID)) 2>/dev/null || true; rm -f $(GEOIP_PID); fi
-	@sleep 1
-
-	@-echo "🕵️  Deteniendo Promiscuous Agent..."
-	@-pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
-	@-sudo pkill -f "$(PROMISCUOUS_AGENT)" 2>/dev/null || true
-	@-if [ -f $(PROMISCUOUS_PID) ]; then kill $$(cat $(PROMISCUOUS_PID)) 2>/dev/null || true; rm -f $(PROMISCUOUS_PID); fi
-	@sleep 1
-
-	@-echo "🛡️  Deteniendo Firewall Agent..."
-	@-pkill -f "$(FIREWALL_AGENT)" 2>/dev/null || true
-	@-if [ -f $(FIREWALL_PID) ]; then kill $$(cat $(FIREWALL_PID)) 2>/dev/null || true; rm -f $(FIREWALL_PID); fi
+	# Limpiar archivos PID
+	@echo "🧹 Limpiando PIDs..."
+	@-rm -f $(PIDS_DIR)/*.pid
 
 	@echo "$(GREEN)✅ Sistema detenido correctamente$(NC)"
 
+# Comando de emergency stop (nuclear) - VERSIÓN ÚNICA Y MEJORADA
 stop-nuclear:
 	@echo "$(RED)🚨 PARADA NUCLEAR ACTIVADA$(NC)"
-	@echo "$(RED)============================$(NC)"
-	@if [ -f $(NUCLEAR_STOP_SCRIPT) ]; then \
-		chmod +x $(NUCLEAR_STOP_SCRIPT); \
-		./$(NUCLEAR_STOP_SCRIPT); \
-	else \
-		echo "$(YELLOW)⚠️  Script nuclear no encontrado, ejecutando parada agresiva...$(NC)"; \
-		pkill -9 -f "python.*upgraded.*happiness" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(GEOIP_ENRICHER)" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(ML_DETECTOR)" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(DASHBOARD)" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(FIREWALL_AGENT)" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(NEURAL_TRAINER)" 2>/dev/null || true; \
-		pkill -9 -f "python.*$(RAG_ENGINE)" 2>/dev/null || true; \
-		sudo pkill -9 -f "python.*$(PROMISCUOUS_AGENT)" 2>/dev/null || true; \
-		rm -f $(PIDS_DIR)/*.pid; \
-		echo "$(GREEN)✅ Parada nuclear completada$(NC)"; \
-	fi
+	@echo "$(RED)==============================$(NC)"
+
+	# Matar TODOS los procesos Python relacionados
+	@echo "💀 Matando todos los procesos Python del sistema..."
+	@-ps aux | grep -E "python.*upgraded|python.*promiscuous|python.*geoip|python.*ml_detector|python.*dashboard|python.*firewall" | grep -v grep | awk '{print $$2}' | xargs -r kill -9 2>/dev/null || true
+	@-ps aux | grep -E "python.*upgraded|python.*promiscuous|python.*geoip|python.*ml_detector|python.*dashboard|python.*firewall" | grep -v grep | awk '{print $$2}' | xargs -r sudo kill -9 2>/dev/null || true
+
+	# Limpiar procesos sudo colgados
+	@echo "🧹 Limpiando procesos sudo..."
+	@-sudo pkill -9 -f "python.*promiscuous" 2>/dev/null || true
+
+	# Limpiar PIDs
+	@echo "🗑️  Limpiando archivos PID..."
+	@-rm -f $(PIDS_DIR)/*.pid
+
+	# Limpiar puertos ZeroMQ colgados
+	@echo "🔌 Liberando puertos ZeroMQ..."
+	@-lsof -ti:5559,5560,5561,5562,8080 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+
+	@echo "$(GREEN)✅ Parada nuclear completada$(NC)"
 
 restart: stop
 	@sleep 3
 	@$(MAKE) start
+
+# =============================================================================
+# FUNCIONES DE INICIO MEJORADAS
+# =============================================================================
+
+# Start mejorado con PIDs robustos
+start-improved: install verify check-geoip stop
+	@echo "$(GREEN)🚀 Iniciando Sistema Autoinmune Digital v2.0 (Mejorado)...$(NC)"
+	@echo "$(CYAN)========================================================$(NC)"
+
+	@echo "$(BLUE)1. 🛡️  Firewall Agent...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
+	@sleep 3
+
+	@echo "$(BLUE)2. 🕵️  Promiscuous Agent (con sudo)...$(NC)"
+	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)'
+	@sleep 3
+
+	@echo "$(BLUE)3. 🌍 GeoIP Enricher...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
+	@sleep 3
+
+	@echo "$(BLUE)4. 🤖 ML Detector...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
+	@sleep 3
+
+	@echo "$(BLUE)5. 📊 Dashboard...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
+	@sleep 5
+
+	@echo ""
+	@echo "$(GREEN)🎉 VERIFICANDO ESTADO...$(NC)"
+	@$(MAKE) verify-start
+
+# Verificador de inicio
+verify-start:
+	@echo "$(CYAN)🔍 Verificando componentes iniciados...$(NC)"
+	@components_ok=0; \
+	total_components=5; \
+	for pidfile in $(FIREWALL_PID) $(PROMISCUOUS_PID) $(GEOIP_PID) $(ML_PID) $(DASHBOARD_PID); do \
+		if [ -f "$$pidfile" ]; then \
+			PID=$$(cat $$pidfile); \
+			if ps -p $$PID > /dev/null 2>&1; then \
+				components_ok=$$((components_ok + 1)); \
+				echo "  ✅ $$(basename $$pidfile .pid): PID $$PID activo"; \
+			else \
+				echo "  ❌ $$(basename $$pidfile .pid): PID $$PID muerto"; \
+			fi \
+		else \
+			echo "  ❌ $$(basename $$pidfile .pid): Sin PID file"; \
+		fi \
+	done; \
+	echo ""; \
+	echo "📊 Estado: $$components_ok/$$total_components componentes activos"; \
+	if [ "$$components_ok" -eq "$$total_components" ]; then \
+		echo "$(GREEN)🎉 SISTEMA COMPLETAMENTE OPERACIONAL$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  Sistema parcialmente operacional$(NC)"; \
+	fi
 
 # =============================================================================
 # MONITORIZACIÓN Y DEBUGGING
@@ -497,6 +591,27 @@ status:
 	@lsof -i :$(FIREWALL_PORT) >/dev/null 2>&1 && echo "  🛡️  Firewall ($(FIREWALL_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  🛡️  Firewall ($(FIREWALL_PORT)): $(RED)INACTIVO$(NC)"
 	@lsof -i :$(DASHBOARD_WEB_PORT) >/dev/null 2>&1 && echo "  📊 Dashboard Web ($(DASHBOARD_WEB_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  📊 Dashboard Web ($(DASHBOARD_WEB_PORT)): $(RED)INACTIVO$(NC)"
 	@lsof -i :$(RAG_WEB_PORT) >/dev/null 2>&1 && echo "  🗣️  RAG Web ($(RAG_WEB_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  🗣️  RAG Web ($(RAG_WEB_PORT)): $(BLUE)🎯 Planificado$(NC)"
+
+# Status mejorado con PIDs
+status-detailed:
+	@echo "$(CYAN)📊 Estado Detallado del Sistema$(NC)"
+	@echo "$(CYAN)================================$(NC)"
+	@echo ""
+
+	@echo "$(YELLOW)🔧 PIDs guardados:$(NC)"
+	@if [ -d "$(PIDS_DIR)" ]; then \
+		ls -la $(PIDS_DIR)/*.pid 2>/dev/null | awk '{print "  📄 " $$9 ": " $$5 " bytes"}' || echo "  ⚠️  No hay PIDs guardados"; \
+	else \
+		echo "  ❌ Directorio PIDs no existe"; \
+	fi
+	@echo ""
+
+	@echo "$(YELLOW)🏃 Procesos activos:$(NC)"
+	@ps aux | grep -E "python.*upgraded|python.*promiscuous|python.*geoip|python.*ml_detector|python.*dashboard|python.*firewall" | grep -v grep | awk '{print "  🆔 PID " $$2 " (" $$3 "% CPU): " $$11 " " $$12}' || echo "  ⚠️  No hay procesos activos"
+	@echo ""
+
+	@echo "$(YELLOW)🌐 Puertos en uso:$(NC)"
+	@lsof -i :5559,5560,5561,5562,8080 2>/dev/null | grep LISTEN | awk '{print "  🔌 Puerto " $$9 ": " $$1 " (PID " $$2 ")"}' || echo "  ⚠️  No hay puertos activos"
 
 monitor:
 	@echo "$(CYAN)📊 Monitor del Sistema$(NC)"
@@ -576,10 +691,10 @@ benchmark:
 	@ps aux | grep -E "(python.*upgraded|python.*promiscuous|python.*geoip|python.*ml_detector|python.*dashboard)" | grep -v grep | awk '{print "  " $$11 ": " $$3 "% CPU, " $$4 "% MEM"}' || echo "  No hay procesos activos"
 	@echo ""
 	@echo "$(YELLOW)Uso de memoria:$(NC)"
-	@free -h | sed 's/^/  /'
+	@free -h | sed 's/^/  /' 2>/dev/null || echo "  No disponible en macOS"
 	@echo ""
 	@echo "$(YELLOW)Conexiones de red activas:$(NC)"
-	@netstat -tuln | grep -E ":($(CAPTURE_PORT)|$(GEOIP_PORT)|$(ML_PORT)|$(FIREWALL_PORT)|$(DASHBOARD_WEB_PORT))" | sed 's/^/  /' || echo "  No hay conexiones activas"
+	@netstat -tuln 2>/dev/null | grep -E ":($(CAPTURE_PORT)|$(GEOIP_PORT)|$(ML_PORT)|$(FIREWALL_PORT)|$(DASHBOARD_WEB_PORT))" | sed 's/^/  /' || echo "  No hay conexiones activas"
 
 # =============================================================================
 # COMANDOS DE DESARROLLO
