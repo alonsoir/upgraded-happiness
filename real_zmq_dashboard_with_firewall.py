@@ -835,6 +835,120 @@ class SecurityDashboard:
             self.logger.error(f"❌ Error configurando sockets ZeroMQ: {e}")
             raise ConfigurationError(f"Error en configuración ZeroMQ: {e}")
 
+    # Añadir este método temporal al Dashboard para debugging
+    def debug_firewall_connection(self):
+        """Diagnosticar conexión con firewall - MÉTODO TEMPORAL"""
+        self.logger.info("🔍 DIAGNÓSTICO ZeroMQ Dashboard→Firewall")
+        self.logger.info("=" * 60)
+
+        try:
+            # 1. Verificar configuración
+            self.logger.info(f"📋 Configuración Dashboard:")
+            self.logger.info(f"   └── Address: {self.config.firewall_commands_address}")
+            self.logger.info(f"   └── Port: {self.config.firewall_commands_port}")
+            self.logger.info(f"   └── Mode: {self.config.firewall_commands_mode}")
+            self.logger.info(f"   └── Socket Type: {self.config.firewall_commands_socket_type}")
+            self.logger.info(f"   └── HWM: {self.config.firewall_commands_hwm}")
+
+            # 2. Verificar estado del socket
+            socket_info = {
+                'socket_exists': hasattr(self, 'firewall_commands_socket'),
+                'socket_closed': getattr(self.firewall_commands_socket, 'closed', 'unknown') if hasattr(self,
+                                                                                                        'firewall_commands_socket') else 'no_socket',
+            }
+
+            if hasattr(self, 'firewall_commands_socket'):
+                try:
+                    # Obtener opciones del socket
+                    sndhwm = self.firewall_commands_socket.getsockopt(zmq.SNDHWM)
+                    linger = self.firewall_commands_socket.getsockopt(zmq.LINGER)
+                    socket_info.update({
+                        'sndhwm': sndhwm,
+                        'linger': linger,
+                    })
+                except Exception as e:
+                    socket_info['socket_options_error'] = str(e)
+
+            self.logger.info(f"🔌 Estado del Socket: {socket_info}")
+
+            try:
+                # Verificar estadísticas
+                conn_info = self.zmq_connections.get('firewall_commands')
+                if conn_info:
+                    self.logger.info(
+                        f"📊 Stats conexión: {conn_info.total_messages} mensajes, último: {conn_info.last_activity}")
+
+            except zmq.Again:
+                self.logger.error("❌ ERROR: Socket no puede enviar (EAGAIN) - HWM alcanzado o socket desconectado")
+            except zmq.ZMQError as e:
+                self.logger.error(f"❌ ERROR ZMQ: {e}")
+            except Exception as e:
+                self.logger.error(f"❌ ERROR GENERAL: {e}")
+
+            # 4. Verificar endpoint
+            endpoint = f"tcp://{self.config.firewall_commands_address}:{self.config.firewall_commands_port}"
+            self.logger.info(f"🎯 Endpoint completo: {endpoint}")
+
+            # 5. Test de conectividad de red
+            import socket
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((self.config.firewall_commands_address, self.config.firewall_commands_port))
+                sock.close()
+
+                if result == 0:
+                    self.logger.info("✅ Puerto TCP alcanzable")
+                else:
+                    self.logger.error(f"❌ Puerto TCP NO alcanzable (error: {result})")
+
+            except Exception as e:
+                self.logger.error(f"❌ Error test TCP: {e}")
+
+            self.logger.info("=" * 60)
+
+        except Exception as e:
+            self.logger.error(f"💥 Error en diagnóstico: {e}")
+
+    # Modificar test_firewall_connection() para incluir diagnóstico
+    def test_firewall_connection_with_debug(self):
+        """Test con diagnóstico completo"""
+
+        # Primero ejecutar diagnóstico
+        self.debug_firewall_connection()
+
+        # Luego intentar envío real
+        try:
+            self.logger.info("🧪 Enviando comando protobuf...")
+
+            # Simple test message primero
+            simple_test = b"SIMPLE_TEST_123"
+            self.firewall_commands_socket.send(simple_test)
+            self.logger.info("✅ Mensaje simple enviado")
+
+            # Ahora protobuf
+            import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
+
+            command = fw_pb2.FirewallCommand()
+            command.command_id = f"debug_test_{int(time.time())}"
+            command.action = fw_pb2.CommandAction.LIST_RULES
+            command.target_ip = "127.0.0.1"
+            command.dry_run = True
+            command.reason = "Debug test"
+
+            command_bytes = command.SerializeToString()
+            self.logger.info(f"📦 Protobuf serializado: {len(command_bytes)} bytes")
+
+            # Enviar con verificación
+            self.firewall_commands_socket.send(command_bytes)
+            self.logger.info("✅ Protobuf enviado")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error en test con debug: {e}")
+            return False
+
     def start(self):
         """Iniciar el dashboard"""
         self.running = True
@@ -1646,39 +1760,79 @@ class SecurityDashboard:
             return str(os.getpid())
 
     def firewall_commands_processor(self, worker_id: int):
-        """Procesar y enviar comandos de firewall"""
-        self.logger.info(f"🔥 Firewall Commands Processor {worker_id} iniciado")
+        """Procesar y enviar comandos de firewall - CORREGIDO PARA PROTOBUF"""
+        self.logger.info(f"🔥 Firewall Commands Processor {worker_id} iniciado con protobuf")
 
         while self.running:
             try:
                 # Obtener comando de la cola
                 command = self.firewall_commands_queue.get(timeout=1)
 
-                # Enviar comando
-                command_json = json.dumps(asdict(command))
-                self.firewall_commands_socket.send_string(command_json)
+                # Importar protobuf
+                import firewall_commands_pb2 as fw_pb2
+
+                # Convertir comando Python a protobuf
+                proto_command = fw_pb2.FirewallCommand()
+                proto_command.command_id = getattr(command, 'event_id', f"cmd_{int(time.time())}")
+
+                # Mapear action string a enum
+                action_mapping = {
+                    'BLOCK': fw_pb2.CommandAction.BLOCK_IP,
+                    'UNBLOCK': fw_pb2.CommandAction.UNBLOCK_IP,
+                    'test_connection': fw_pb2.CommandAction.LIST_RULES,
+                    'list': fw_pb2.CommandAction.LIST_RULES,
+                    'flush': fw_pb2.CommandAction.FLUSH_RULES
+                }
+
+                action_str = getattr(command, 'action', 'list')
+                proto_command.action = action_mapping.get(action_str, fw_pb2.CommandAction.LIST_RULES)
+
+                proto_command.target_ip = getattr(command, 'target_ip', '127.0.0.1')
+                proto_command.target_port = getattr(command, 'port', 0)
+
+                # Parsear duration string a seconds
+                duration_str = getattr(command, 'duration', '10s')
+                duration_seconds = 10  # default
+                if 's' in duration_str:
+                    duration_seconds = int(duration_str.replace('s', ''))
+                elif 'm' in duration_str:
+                    duration_seconds = int(duration_str.replace('m', '')) * 60
+
+                proto_command.duration_seconds = duration_seconds
+                proto_command.reason = getattr(command, 'reason', 'Dashboard command')
+                proto_command.priority = fw_pb2.CommandPriority.MEDIUM
+                proto_command.dry_run = True  # Siempre dry run para testing
+
+                # ✅ Serializar a protobuf binario
+                command_bytes = proto_command.SerializeToString()
+
+                # ✅ Enviar protobuf binario
+                self.firewall_commands_socket.send(command_bytes)
 
                 # Actualizar estadísticas
                 conn_info = self.zmq_connections['firewall_commands']
                 conn_info.total_messages += 1
-                conn_info.bytes_transferred += len(command_json.encode('utf-8'))
+                conn_info.bytes_transferred += len(command_bytes)
                 conn_info.last_activity = datetime.now()
 
                 self.stats['commands_sent'] += 1
                 self.firewall_commands.append(command)
 
-                self.logger.info(f"🔥 Worker {worker_id} - Comando enviado: {command.action} para {command.target_ip}")
+                self.logger.info(
+                    f"🔥 Worker {worker_id} - Comando protobuf enviado: {action_str} para {proto_command.target_ip}")
 
                 # Marcar tarea como completada
                 self.firewall_commands_queue.task_done()
 
             except queue.Empty:
                 continue
+            except ImportError as e:
+                self.logger.error(f"❌ Worker {worker_id} - Protobuf no disponible: {e}")
             except Exception as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error en firewall commands processor: {e}")
 
     def firewall_responses_receiver_with_monitoring(self, worker_id: int):
-        """Recibir respuestas del Firewall Agent con monitoreo robusto"""
+        """Recibir respuestas del Firewall Agent con monitoreo robusto - CORREGIDO PARA FIREWALL"""
         self.logger.info(f"📥 Firewall Responses Receiver {worker_id} iniciado con monitoreo")
 
         while self.running:
@@ -1690,16 +1844,49 @@ class SecurityDashboard:
                     except zmq.Again:
                         continue  # No hay mensajes
 
-                # Decodificar de manera segura (fuera del lock)
-                response_text, encoding_used = self.decode_message_with_monitoring(
-                    response_bytes, worker_id, 'firewall_responses'
-                )
-                if response_text is None:
-                    continue
+                # ✅ USAR PARSER ESPECÍFICO PARA FIREWALL RESPONSE (NO ML EVENTS)
+                try:
+                    # ✅ Importar protobuf de firewall
+                    import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
+
+                    # ✅ Parsear como FirewallResponse
+                    pb_response = fw_pb2.FirewallResponse()
+                    pb_response.ParseFromString(response_bytes)
+
+                    # ✅ Convertir a dict para procesamiento
+                    response_data = {
+                        'command_id': pb_response.command_id,
+                        'node_id': pb_response.node_id,
+                        'timestamp': pb_response.timestamp,
+                        'success': pb_response.success,
+                        'message': pb_response.message,
+                        'executed_command': getattr(pb_response, 'executed_command', ''),
+                        'execution_time': getattr(pb_response, 'execution_time', 0.0),
+                    }
+
+                    self.logger.info(f"✅ Worker {worker_id} - FirewallResponse parseado: {response_data['command_id']}")
+
+                except Exception as parse_error:
+                    self.logger.error(f"❌ Worker {worker_id} - Error parseando FirewallResponse: {parse_error}")
+                    self.logger.error(f"📦 Data hex: {response_bytes[:50].hex()}")
+
+                    # ✅ Fallback: intentar decodificar como JSON (método anterior)
+                    try:
+                        response_text, encoding_used = self.decode_message_with_monitoring(
+                            response_bytes, worker_id, 'firewall_responses'
+                        )
+                        if response_text:
+                            response_data = json.loads(response_text)
+                            self.logger.info(f"🔄 Worker {worker_id} - Fallback JSON parse exitoso")
+                        else:
+                            continue
+                    except Exception as fallback_error:
+                        self.logger.error(f"❌ Worker {worker_id} - Fallback parse también falló: {fallback_error}")
+                        continue
 
                 # Registrar mensaje exitoso
                 self.encoding_monitor.log_successful_message(
-                    worker_id, 'firewall_responses', len(response_bytes), encoding_used
+                    worker_id, 'firewall_responses', len(response_bytes), 'protobuf'
                 )
 
                 # Actualizar estadísticas
@@ -1708,11 +1895,8 @@ class SecurityDashboard:
                 conn_info.bytes_transferred += len(response_bytes)
                 conn_info.last_activity = datetime.now()
 
-                # Parsear respuesta
-                response_data = json.loads(response_text)
-
                 # Actualizar información de conexión si tenemos datos del remitente
-                if 'node_id' in response_data:
+                if response_data.get('node_id'):
                     self.encoding_monitor.update_connection_info(
                         'firewall_responses',
                         node_id=response_data.get('node_id'),
@@ -1720,16 +1904,21 @@ class SecurityDashboard:
                         version=response_data.get('version')
                     )
 
+                # ✅ LOG MEJORADO CON TODOS LOS CAMPOS
+                command_id = response_data.get('command_id', 'unknown')
+                success = response_data.get('success', False)
+                message = response_data.get('message', 'No message')
+                node_id = response_data.get('node_id', 'unknown_node')
+
                 self.logger.info(
-                    f"📥 Worker {worker_id} - Respuesta firewall: {response_data.get('status', 'unknown')} para {response_data.get('target_ip', 'unknown')}")
+                    f"📥 Worker {worker_id} - Respuesta firewall: {command_id} - Success: {success} - {message} - Node: {node_id}")
 
                 # Actualizar estadísticas si es exitoso
-                if response_data.get('status') == 'applied':
+                if response_data.get('success'):
                     self.stats['threats_blocked'] += 1
                     self.stats['confirmations'] += 1
+                    self.logger.info(f"✅ Worker {worker_id} - Comando firewall exitoso: {command_id}")
 
-            except json.JSONDecodeError as e:
-                self.logger.error(f"❌ Worker {worker_id} - Error parseando respuesta firewall: {e}")
             except Exception as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error en firewall responses receiver: {e}")
                 time.sleep(0.1)
@@ -2194,32 +2383,45 @@ class SecurityDashboard:
         }
 
     def test_firewall_connection(self):
-        """Probar conexión con firewall enviando comando de prueba"""
+        """Probar conexión con firewall enviando comando de prueba - CORREGIDO"""
+        self.debug_firewall_connection()
         try:
-            test_command = FirewallCommand(
-                action="test_connection",
-                target_ip="127.0.0.1",
-                duration="10s",
-                reason="Connection test",
-                risk_score=0.1,
-                timestamp=datetime.now().isoformat(),
-                event_id=f"test_{int(time.time())}",
-                rule_type="test",
-                port=22,
-                protocol="TCP"
-            )
+            # Importar protobuf correcto
+            import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
 
-            # Enviar comando de prueba
-            if not self.firewall_commands_queue.full():
-                self.firewall_commands_queue.put(test_command)
-                self.logger.info("🧪 Comando de prueba enviado al firewall")
-                return True
-            else:
-                self.logger.warning("⚠️ Cola de comandos de firewall llena")
-                return False
+            # Crear comando protobuf correcto
+            command = fw_pb2.FirewallCommand()
+            command.command_id = f"test_{int(time.time())}"
+            command.action = fw_pb2.CommandAction.LIST_RULES  # ✅ ENUM válido
+            command.target_ip = "127.0.0.1"
+            command.target_port = 0
+            command.duration_seconds = 10
+            command.reason = "Dashboard connection test"
+            command.priority = fw_pb2.CommandPriority.LOW
+            command.dry_run = True  # ✅ Solo testing
 
+            # Serializar a protobuf binario
+            command_bytes = command.SerializeToString()
+
+            # Enviar directamente via ZeroMQ (sin cola interna)
+            self.firewall_commands_socket.send(command_bytes)  # ✅ PROTOBUF BINARIO
+
+            self.logger.info("🧪 Comando protobuf enviado al firewall agent")
+            self.stats['commands_sent'] += 1
+
+            # Actualizar estadísticas de conexión
+            conn_info = self.zmq_connections['firewall_commands']
+            conn_info.total_messages += 1
+            conn_info.bytes_transferred += len(command_bytes)
+            conn_info.last_activity = datetime.now()
+
+            return True
+
+        except ImportError as e:
+            self.logger.error(f"❌ Protobuf firewall_commands_pb2 no disponible: {e}")
+            return False
         except Exception as e:
-            self.logger.error(f"❌ Error probando firewall: {e}")
+            self.logger.error(f"❌ Error enviando comando protobuf: {e}")
             return False
 
     def _debug_socket_state(self):
