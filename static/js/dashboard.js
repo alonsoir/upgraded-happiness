@@ -1046,7 +1046,476 @@ function showThreatIndicator(event) {
     }
 }
 
-function showEventDetail(event) {
+// ============================================================================
+// 🚀 MODAL MEJORADO CON RECOMENDACIONES Y ACCIONES
+// ============================================================================
+
+async function showEventDetail(event) {
+    try {
+        // Obtener recomendaciones del backend para este evento
+        const recommendations = await getEventRecommendations(event);
+
+        // Obtener información del agente firewall
+        const firewallAgent = await getFirewallAgentInfo(event);
+
+        const content = `
+            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <!-- Header del evento -->
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
+                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento ZeroMQ</h3>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
+                    </div>
+                </div>
+
+                <!-- Información básica del evento -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <strong>IP Origen:</strong><br>
+                            <span style="color: #ff4444; font-size: 14px;">${event.source_ip}</span>
+                        </div>
+                        <div>
+                            <strong>IP Destino:</strong><br>
+                            <span style="color: #00ff88; font-size: 14px;">${event.target_ip}</span>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Score de Riesgo:</strong><br>
+                            <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
+                                ${(event.risk_score * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div>
+                            <strong>Tipo:</strong><br>
+                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
+                        </div>
+                    </div>
+                    ${event.location ? `
+                        <div style="margin-top: 10px;">
+                            <strong>Ubicación:</strong> ${event.location}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Información del Agente Firewall -->
+                <div style="margin-bottom: 20px; padding: 12px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                    <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                        🔥 Agente Firewall de Destino
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>Nodo:</strong> ${firewallAgent.node_id || 'simple_firewall_agent_001_1752998835'}<br>
+                        <strong>Estado:</strong> <span style="color: ${firewallAgent.status === 'healthy' ? '#00ff88' : '#ffaa00'};">${firewallAgent.status || 'HEALTHY'}</span><br>
+                        <strong>Endpoint:</strong> ${firewallAgent.endpoint || 'tcp://localhost:5580'}<br>
+                        <strong>Reglas Activas:</strong> ${firewallAgent.active_rules || 0}
+                    </div>
+                </div>
+
+                <!-- Sección 1: Recomendaciones (Colapsible) -->
+                <div style="margin-bottom: 20px;">
+                    <div class="modal-section-header" onclick="toggleModalSection('recommendations')" style="background: rgba(0, 255, 136, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #00ff88; font-weight: bold;">
+                            💡 Recomendaciones del Sistema
+                        </span>
+                        <i class="fas fa-chevron-down" id="recommendations-toggle" style="color: #00ff88; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="recommendations-content" style="max-height: 1000px; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-top: none; border-radius: 0 0 4px 4px;">
+                            ${generateRecommendationsHTML(recommendations, event)}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sección 2: Datos ZeroMQ (Colapsible) -->
+                <div>
+                    <div class="modal-section-header" onclick="toggleModalSection('zeromq-data')" style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #666; font-weight: bold;">
+                            📊 Datos ZeroMQ (JSON)
+                        </span>
+                        <i class="fas fa-chevron-down" id="zeromq-data-toggle" style="color: #666; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="zeromq-data-content" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-top: none; border-radius: 0 0 4px 4px;">
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal('Análisis del Evento de Seguridad', content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalles del evento:', error);
+        showSimpleEventDetail(event); // Fallback al modal original
+    }
+}
+
+// ============================================================================
+// 🎯 FUNCIONES PARA RECOMENDACIONES
+// ============================================================================
+
+async function getEventRecommendations(event) {
+    try {
+        const response = await fetch('/api/event-recommendations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                event_id: event.id,
+                source_ip: event.source_ip,
+                target_ip: event.target_ip,
+                risk_score: event.risk_score,
+                type: event.type
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            return data.recommendations || [];
+        } else {
+            console.warn('No se pudieron obtener recomendaciones del backend');
+            return generateDefaultRecommendations(event);
+        }
+    } catch (error) {
+        console.warn('Error obteniendo recomendaciones:', error);
+        return generateDefaultRecommendations(event);
+    }
+}
+
+async function getFirewallAgentInfo(event) {
+    try {
+        const response = await fetch('/api/firewall-agent-info');
+        if (response.ok) {
+            const data = await response.json();
+            return data.agent || {};
+        }
+    } catch (error) {
+        console.warn('Error obteniendo info del agente firewall:', error);
+    }
+
+    return {
+        node_id: 'simple_firewall_agent_001_1752998835',
+        status: 'healthy',
+        endpoint: 'tcp://localhost:5580',
+        active_rules: 0
+    };
+}
+
+function generateDefaultRecommendations(event) {
+    const recommendations = [];
+
+    if (event.risk_score > 0.8) {
+        recommendations.push({
+            id: 'block_source_ip',
+            type: 'BLOCK',
+            priority: 'HIGH',
+            title: 'Bloquear IP de Origen',
+            description: `Bloquear completamente la IP ${event.source_ip} debido al alto riesgo detectado.`,
+            action: 'BLOCK_IP',
+            params: {
+                ip: event.source_ip,
+                duration: '1h',
+                reason: 'High risk score detected'
+            },
+            confidence: 95
+        });
+
+        recommendations.push({
+            id: 'rate_limit',
+            type: 'LIMIT',
+            priority: 'MEDIUM',
+            title: 'Limitar Velocidad',
+            description: `Aplicar rate limiting a la IP ${event.source_ip} en lugar de bloqueo completo.`,
+            action: 'RATE_LIMIT',
+            params: {
+                ip: event.source_ip,
+                limit: '10/min',
+                duration: '30m'
+            },
+            confidence: 80
+        });
+    } else if (event.risk_score > 0.5) {
+        recommendations.push({
+            id: 'monitor_traffic',
+            type: 'MONITOR',
+            priority: 'MEDIUM',
+            title: 'Monitorear Tráfico',
+            description: `Aumentar el monitoreo del tráfico desde ${event.source_ip} hacia ${event.target_ip}.`,
+            action: 'MONITOR',
+            params: {
+                source_ip: event.source_ip,
+                target_ip: event.target_ip,
+                duration: '15m'
+            },
+            confidence: 70
+        });
+    } else {
+        recommendations.push({
+            id: 'log_only',
+            type: 'LOG',
+            priority: 'LOW',
+            title: 'Solo Registrar',
+            description: 'Registrar este evento para análisis posterior sin aplicar restricciones.',
+            action: 'LOG',
+            params: {
+                event_id: event.id,
+                detail_level: 'high'
+            },
+            confidence: 90
+        });
+    }
+
+    return recommendations;
+}
+
+function generateRecommendationsHTML(recommendations, event) {
+    if (!recommendations || recommendations.length === 0) {
+        return `
+            <div style="text-align: center; color: #666; padding: 20px;">
+                <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i>
+                <p>No hay recomendaciones específicas para este evento.</p>
+            </div>
+        `;
+    }
+
+    let html = `
+        <div style="margin-bottom: 15px;">
+            <div style="color: #00ff88; font-size: 12px; margin-bottom: 10px;">
+                📋 El sistema ha analizado este evento y sugiere las siguientes acciones:
+            </div>
+        </div>
+    `;
+
+    recommendations.forEach((rec, index) => {
+        const priorityColors = {
+            'HIGH': '#ff4444',
+            'MEDIUM': '#ffaa00',
+            'LOW': '#00ff88'
+        };
+
+        const typeIcons = {
+            'BLOCK': '🚫',
+            'LIMIT': '⏱️',
+            'MONITOR': '👁️',
+            'LOG': '📝'
+        };
+
+        html += `
+            <div style="margin-bottom: 15px; border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 6px; overflow: hidden;">
+                <!-- Header de la recomendación -->
+                <div style="background: rgba(0, 255, 136, 0.1); padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 14px;">${typeIcons[rec.type] || '⚡'}</span>
+                        <strong style="margin-left: 8px; color: #00ff88;">${rec.title}</strong>
+                        <span style="background: ${priorityColors[rec.priority]}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 9px; margin-left: 10px;">
+                            ${rec.priority}
+                        </span>
+                    </div>
+                    <div style="font-size: 10px; color: #888;">
+                        Confianza: ${rec.confidence || 75}%
+                    </div>
+                </div>
+
+                <!-- Contenido de la recomendación -->
+                <div style="padding: 12px;">
+                    <div style="color: #ccc; font-size: 11px; line-height: 1.4; margin-bottom: 12px;">
+                        ${rec.description}
+                    </div>
+
+                    <!-- Parámetros de la acción -->
+                    ${rec.params ? `
+                        <div style="background: rgba(0, 0, 0, 0.4); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
+                            <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Parámetros:</div>
+                            <div style="font-size: 10px; font-family: monospace;">
+                                ${Object.entries(rec.params).map(([key, value]) =>
+                                    `<span style="color: #00ffff;">${key}:</span> <span style="color: #fff;">${value}</span>`
+                                ).join(' | ')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Botones de acción -->
+                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                        <button onclick="executeRecommendation('${rec.id}', ${JSON.stringify(rec).replace(/"/g, '&quot;')}, '${event.id}')"
+                                style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s ease;">
+                            ✅ Aplicar
+                        </button>
+                        <button onclick="dismissRecommendation('${rec.id}')"
+                                style="background: rgba(255, 170, 0, 0.2); border: 1px solid #ffaa00; color: #ffaa00; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s ease;">
+                            ⏭️ Omitir
+                        </button>
+                        <button onclick="showRecommendationDetails('${rec.id}')"
+                                style="background: rgba(102, 102, 102, 0.2); border: 1px solid #666; color: #666; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s ease;">
+                            ℹ️ Detalles
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+        <div style="margin-top: 20px; padding: 10px; background: rgba(0, 170, 255, 0.1); border-radius: 4px; border-left: 4px solid #00aaff;">
+            <div style="font-size: 10px; color: #00aaff;">
+                <strong>ℹ️ Nota:</strong> Las acciones se enviarán al agente firewall activo.
+                Puedes aplicar múltiples recomendaciones o crear reglas personalizadas.
+            </div>
+        </div>
+    `;
+
+    return html;
+}
+
+// ============================================================================
+// 🎬 FUNCIONES DE ACCIÓN
+// ============================================================================
+
+async function executeRecommendation(recId, recommendation, eventId) {
+    try {
+        console.log('🚀 Ejecutando recomendación:', recId, recommendation);
+
+        showToast('Enviando acción al firewall agent...', 'info');
+
+        // Crear evento de comando en la lista del firewall
+        const commandId = 'rec_' + Date.now();
+        addFirewallEventToList({
+            id: commandId,
+            type: 'command',
+            action: recommendation.action,
+            ip: recommendation.params?.ip || recommendation.params?.source_ip || 'N/A',
+            action_code: getActionCode(recommendation.action),
+            bytes: 64,
+            source: 'Dashboard Recommendation',
+            timestamp: Date.now() / 1000
+        });
+
+        const response = await fetch('/api/execute-recommendation', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                recommendation_id: recId,
+                recommendation: recommendation,
+                event_id: eventId,
+                command_id: commandId
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Añadir respuesta exitosa
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'response',
+                    success: true,
+                    agent: result.agent || 'firewall_agent_001',
+                    result: result.message || `${recommendation.action} aplicada correctamente`,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`✅ Recomendación "${recommendation.title}" aplicada correctamente`, 'success');
+            addDebugLog('info', `Recomendación ${recId} ejecutada: ${recommendation.action}`);
+
+            // Actualizar estadísticas del firewall
+            firewallStats.commandsSent++;
+            firewallStats.responsesOk++;
+            updateElement('firewall-commands-sent', firewallStats.commandsSent);
+            updateElement('firewall-responses-ok', firewallStats.responsesOk);
+
+        } else {
+            // Añadir respuesta de error
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'error',
+                    success: false,
+                    error: result.message || 'Error aplicando recomendación',
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`❌ Error aplicando recomendación: ${result.message}`, 'error');
+            firewallStats.errors++;
+            updateElement('firewall-errors', firewallStats.errors);
+        }
+
+    } catch (error) {
+        console.error('❌ Error ejecutando recomendación:', error);
+
+        // Añadir evento de error de comunicación
+        addFirewallEventToList({
+            id: 'error_' + Date.now(),
+            type: 'error',
+            success: false,
+            error: 'Error de comunicación: ' + error.message,
+            timestamp: Date.now() / 1000
+        });
+
+        showToast(`❌ Error comunicando con firewall: ${error.message}`, 'error');
+        firewallStats.errors++;
+        updateElement('firewall-errors', firewallStats.errors);
+    }
+}
+
+function dismissRecommendation(recId) {
+    showToast(`⏭️ Recomendación ${recId} omitida`, 'info');
+    addDebugLog('info', `Recomendación ${recId} omitida por el usuario`);
+
+    // Opcional: Enviar al backend que se omitió esta recomendación
+    fetch('/api/dismiss-recommendation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recommendation_id: recId })
+    }).catch(err => console.warn('Error enviando dismissal:', err));
+}
+
+function showRecommendationDetails(recId) {
+    showToast(`ℹ️ Mostrando detalles de recomendación ${recId}`, 'info');
+    // Aquí podrías mostrar un sub-modal con más detalles
+}
+
+function getActionCode(action) {
+    const actionCodes = {
+        'BLOCK_IP': 1,
+        'RATE_LIMIT': 2,
+        'MONITOR': 3,
+        'LOG': 7,
+        'UNBLOCK_IP': 4,
+        'LIST_RULES': 7
+    };
+    return actionCodes[action] || 7;
+}
+
+// ============================================================================
+// 🔧 FUNCIONES AUXILIARES
+// ============================================================================
+
+function toggleModalSection(sectionId) {
+    const content = document.getElementById(`${sectionId}-content`);
+    const toggle = document.getElementById(`${sectionId}-toggle`);
+
+    if (content && toggle) {
+        const isCollapsed = content.style.maxHeight === '0px';
+
+        if (isCollapsed) {
+            content.style.maxHeight = '1000px';
+            toggle.style.transform = 'rotate(180deg)';
+        } else {
+            content.style.maxHeight = '0px';
+            toggle.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+// Función fallback para el modal original
+function showSimpleEventDetail(event) {
     const content = `
         <div style="font-family: 'Consolas', monospace;">
             <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento ZeroMQ</h4>
