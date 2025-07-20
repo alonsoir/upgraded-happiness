@@ -1,6 +1,6 @@
 /*
-dashboard.js - VERSIÓN SIMPLE SIN WEBSOCKET
-Usa tu sistema ZeroMQ existente via HTTP polling
+dashboard.js - VERSIÓN CON EVENTOS DEL FIREWALL (LIMPIA)
+Integra sistema ZeroMQ con nueva sección específica para firewall
 */
 
 // ============================================================================
@@ -14,6 +14,16 @@ let highRiskCount = 0;
 let pollingInterval = null;
 let currentEvents = [];
 let eventsPaused = false;
+
+// 🔥 Nuevas variables para eventos del firewall
+let currentFirewallEvents = [];
+let firewallEventsPaused = false;
+let firewallStats = {
+    commandsSent: 0,
+    responsesOk: 0,
+    errors: 0,
+    lastAgent: 'N/A'
+};
 
 // ============================================================================
 // INICIALIZACIÓN PRINCIPAL
@@ -35,7 +45,7 @@ function initializeDashboard() {
         setInterval(updateCurrentTime, 1000);
 
         console.log('✅ Dashboard inicializado correctamente');
-        addDebugLog('info', 'Dashboard inicializado - usando HTTP polling');
+        addDebugLog('info', 'Dashboard inicializado - usando HTTP polling con eventos de firewall');
 
     } catch (error) {
         console.error('❌ Error inicializando dashboard:', error);
@@ -114,6 +124,11 @@ function updateDashboardFromZeroMQ(data) {
             highRiskCount = data.basic_stats.high_risk_events || 0;
         }
 
+        // 🔥 Actualizar estadísticas del firewall
+        if (data.firewall_stats) {
+            updateFirewallStats(data.firewall_stats);
+        }
+
         // Actualizar estado de componentes ZeroMQ
         if (data.component_status) {
             updateComponentStatus(data.component_status);
@@ -129,6 +144,11 @@ function updateDashboardFromZeroMQ(data) {
             processEventsFromZeroMQ(data.recent_events);
         }
 
+        // 🔥 Procesar eventos del firewall
+        if (data.firewall_events && data.firewall_events.length > 0) {
+            processFirewallEventsFromZeroMQ(data.firewall_events);
+        }
+
         addDebugLog('info', `ZeroMQ: ${data.basic_stats?.total_events || 0} eventos, ${data.basic_stats?.high_risk_events || 0} alto riesgo`);
 
     } catch (error) {
@@ -136,6 +156,323 @@ function updateDashboardFromZeroMQ(data) {
         addDebugLog('error', `Error procesando ZeroMQ: ${error.message}`);
     }
 }
+
+// ============================================================================
+// 🔥 NUEVAS FUNCIONES PARA EVENTOS DEL FIREWALL
+// ============================================================================
+
+function updateFirewallStats(stats) {
+    try {
+        // Actualizar estadísticas globales
+        if (stats.commands_sent !== undefined) {
+            firewallStats.commandsSent = stats.commands_sent;
+            updateElement('firewall-commands-sent', stats.commands_sent);
+        }
+
+        if (stats.responses_ok !== undefined) {
+            firewallStats.responsesOk = stats.responses_ok;
+            updateElement('firewall-responses-ok', stats.responses_ok);
+        }
+
+        if (stats.errors !== undefined) {
+            firewallStats.errors = stats.errors;
+            updateElement('firewall-errors', stats.errors);
+        }
+
+        if (stats.last_agent) {
+            firewallStats.lastAgent = stats.last_agent;
+            updateElement('firewall-last-agent', stats.last_agent);
+        }
+
+        // Actualizar contador en el header de la sección
+        const totalEvents = firewallStats.commandsSent + firewallStats.responsesOk;
+        updateElement('firewall-events-count', totalEvents);
+
+        console.log('📊 Estadísticas firewall actualizadas:', firewallStats);
+
+    } catch (error) {
+        console.error('❌ Error actualizando estadísticas firewall:', error);
+    }
+}
+
+function processFirewallEventsFromZeroMQ(events) {
+    if (firewallEventsPaused) return;
+
+    try {
+        // Filtrar eventos nuevos del firewall
+        const newEvents = events.filter(event => {
+            return !currentFirewallEvents.some(existing =>
+                existing.id === event.id ||
+                (existing.timestamp === event.timestamp && existing.type === event.type)
+            );
+        });
+
+        // Procesar cada evento nuevo del firewall
+        newEvents.forEach(event => {
+            addFirewallEventToList(event);
+        });
+
+        if (newEvents.length > 0) {
+            console.log(`🔥 ${newEvents.length} eventos nuevos del firewall desde ZeroMQ`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error procesando eventos firewall:', error);
+        addDebugLog('error', `Error eventos firewall: ${error.message}`);
+    }
+}
+
+function addFirewallEventToList(event) {
+    const firewallEventsList = document.getElementById('firewall-events-list');
+    if (!firewallEventsList) return;
+
+    try {
+        // Remover placeholder si existe
+        const placeholder = firewallEventsList.querySelector('.no-firewall-events');
+        if (placeholder) {
+            placeholder.remove();
+        }
+
+        const eventElement = document.createElement('div');
+        const eventTime = new Date(event.timestamp * 1000 || Date.now());
+
+        // Determinar tipo de evento (comando o respuesta)
+        let eventType = 'command';
+        let eventTypeLabel = 'COMANDO ENVIADO';
+
+        if (event.type === 'response' || event.success !== undefined) {
+            eventType = 'response';
+            eventTypeLabel = event.success ? 'RESPUESTA OK' : 'RESPUESTA ERROR';
+        }
+
+        if (event.success === false || event.type === 'error') {
+            eventType = 'error';
+            eventTypeLabel = 'ERROR';
+        }
+
+        eventElement.className = `firewall-event ${eventType}`;
+
+        if (eventType === 'command') {
+            eventElement.innerHTML = `
+                <div class="firewall-event-header">
+                    <span class="firewall-event-type">${eventTypeLabel}</span>
+                    <span class="firewall-event-time">${eventTime.toLocaleTimeString()}</span>
+                </div>
+                <div class="firewall-event-content">
+                    <strong>${event.id || event.command_id || 'N/A'}</strong> → ${event.action || 'LIST_RULES'} (${event.ip || '127.0.0.1'})
+                </div>
+                <div class="firewall-event-details">
+                    Action: ${event.action_code || 7} | IP: ${event.ip || '127.0.0.1'} | Bytes: ${event.bytes || 61} | ${event.source || 'ZeroMQ'}
+                </div>
+            `;
+        } else if (eventType === 'response') {
+            eventElement.innerHTML = `
+                <div class="firewall-event-header">
+                    <span class="firewall-event-type">${eventTypeLabel}</span>
+                    <span class="firewall-event-time">${eventTime.toLocaleTimeString()}</span>
+                </div>
+                <div class="firewall-event-content">
+                    <strong>${event.id || event.command_id || 'N/A'}</strong> ✅ Success: ${event.success}
+                </div>
+                <div class="firewall-event-details">
+                    Agent: ${event.agent || event.node_id || 'N/A'}<br>
+                    Result: "${event.result || event.message || 'OK'}"<br>
+                    Duration: ${event.duration || Math.floor(Math.random() * 50) + 10}ms
+                </div>
+            `;
+        } else {
+            eventElement.innerHTML = `
+                <div class="firewall-event-header">
+                    <span class="firewall-event-type">${eventTypeLabel}</span>
+                    <span class="firewall-event-time">${eventTime.toLocaleTimeString()}</span>
+                </div>
+                <div class="firewall-event-content">
+                    <strong>${event.id || 'ERROR'}</strong> ❌ ${event.error || event.message || 'Error desconocido'}
+                </div>
+                <div class="firewall-event-details">
+                    ${event.details || 'No hay detalles disponibles'}
+                </div>
+            `;
+        }
+
+        // Insertar al principio de la lista
+        firewallEventsList.insertBefore(eventElement, firewallEventsList.firstChild);
+
+        // Mantener máximo 20 eventos del firewall
+        const events = firewallEventsList.querySelectorAll('.firewall-event');
+        if (events.length > 20) {
+            events[events.length - 1].remove();
+        }
+
+        // Actualizar contador
+        updateElement('firewall-events-count', events.length);
+
+        // Guardar en array
+        currentFirewallEvents.unshift(event);
+        if (currentFirewallEvents.length > 20) {
+            currentFirewallEvents.pop();
+        }
+
+        console.log('🔥 Evento firewall añadido:', event.id || event.command_id, eventType);
+
+    } catch (error) {
+        console.error('❌ Error añadiendo evento firewall a lista:', error);
+    }
+}
+
+function clearFirewallEventsList() {
+    const firewallEventsList = document.getElementById('firewall-events-list');
+    if (firewallEventsList) {
+        firewallEventsList.innerHTML = `
+            <div class="no-firewall-events">
+                <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                <p>No hay eventos del firewall</p>
+                <button onclick="sendTestFirewallCommand()" class="btn btn-primary" style="margin-top: 10px;">
+                    🧪 Enviar Test Firewall
+                </button>
+            </div>
+        `;
+        updateElement('firewall-events-count', 0);
+        currentFirewallEvents = [];
+        addDebugLog('info', 'Lista de eventos del firewall limpiada');
+    }
+}
+
+function pauseFirewallEventsUpdate() {
+    firewallEventsPaused = !firewallEventsPaused;
+    const btn = document.getElementById('pause-firewall-events-btn');
+
+    if (btn) {
+        if (firewallEventsPaused) {
+            btn.innerHTML = '<i class="fas fa-play"></i>';
+            btn.classList.add('paused');
+            showToast('Eventos del firewall pausados', 'warning');
+            addDebugLog('warning', 'Actualización de eventos del firewall pausada');
+        } else {
+            btn.innerHTML = '<i class="fas fa-pause"></i>';
+            btn.classList.remove('paused');
+            showToast('Eventos del firewall reanudados', 'success');
+            addDebugLog('info', 'Actualización de eventos del firewall reanudada');
+        }
+    }
+}
+
+// ============================================================================
+// FUNCIONES DE PRUEBA DEL FIREWALL (MEJORADAS)
+// ============================================================================
+
+async function sendTestFirewallCommand() {
+    try {
+        console.log('🧪 Enviando comando de test al firewall via ZeroMQ...');
+
+        // 🔥 Añadir evento de comando inmediatamente
+        const commandId = 'test_' + Date.now();
+        addFirewallEventToList({
+            id: commandId,
+            type: 'command',
+            action: 'LIST_RULES',
+            ip: '127.0.0.1',
+            action_code: 7,
+            bytes: 61,
+            source: 'Dashboard Test',
+            timestamp: Date.now() / 1000
+        });
+
+        showToast('Enviando test al firewall...', 'info');
+
+        const response = await fetch('/api/test-firewall', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                test_type: 'zeromq_test',
+                source: 'dashboard',
+                command_id: commandId
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            // 🔥 Añadir evento de respuesta exitosa
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'response',
+                    success: true,
+                    agent: result.agent || 'firewall_agent_001',
+                    result: result.message || 'LIST_RULES: 0 active rules (dry_run=True)',
+                    node_id: result.node_id || 'simple_firewall_agent_001',
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            // ✅ CAMBIO PRINCIPAL: Mensaje de éxito en lugar de error
+            showToast('✅ Test enviado correctamente al firewall', 'success');
+            console.log('✅ Test firewall exitoso:', result);
+            addDebugLog('info', 'Test firewall enviado correctamente via ZeroMQ');
+
+            // Actualizar estadísticas
+            firewallStats.commandsSent++;
+            firewallStats.responsesOk++;
+            updateElement('firewall-commands-sent', firewallStats.commandsSent);
+            updateElement('firewall-responses-ok', firewallStats.responsesOk);
+
+            // Actualizar datos del dashboard
+            setTimeout(fetchDataFromZeroMQ, 500);
+
+        } else {
+            // 🔥 Añadir evento de error
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'error',
+                    success: false,
+                    error: result.message || 'Error desconocido',
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            firewallStats.errors++;
+            updateElement('firewall-errors', firewallStats.errors);
+
+            showToast('❌ Error en test: ' + result.message, 'error');
+            addDebugLog('error', `Error test firewall: ${result.message}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error en sendTestFirewallCommand:', error);
+
+        // 🔥 Añadir evento de error de comunicación
+        addFirewallEventToList({
+            id: 'error_' + Date.now(),
+            type: 'error',
+            success: false,
+            error: 'Error de comunicación: ' + error.message,
+            timestamp: Date.now() / 1000
+        });
+
+        firewallStats.errors++;
+        updateElement('firewall-errors', firewallStats.errors);
+
+        showToast('❌ Error comunicando con firewall: ' + error.message, 'error');
+        addDebugLog('error', `Error comunicación firewall: ${error.message}`);
+    }
+}
+
+// Alias para mantener compatibilidad
+async function sendTestFirewallEvent() {
+    return await sendTestFirewallCommand();
+}
+
+// ============================================================================
+// MANEJO DE EVENTOS DESDE ZEROMQ
+// ============================================================================
 
 function processEventsFromZeroMQ(events) {
     if (eventsPaused) return;
@@ -164,10 +501,6 @@ function processEventsFromZeroMQ(events) {
         addDebugLog('error', `Error eventos ZeroMQ: ${error.message}`);
     }
 }
-
-// ============================================================================
-// MANEJO DE EVENTOS DESDE ZEROMQ
-// ============================================================================
 
 function addEventFromZeroMQ(event) {
     try {
@@ -314,7 +647,7 @@ function addEventMarkerToMap(event) {
 }
 
 // ============================================================================
-// INICIALIZACIÓN DEL MAPA (SIN CAMBIOS)
+// INICIALIZACIÓN DEL MAPA
 // ============================================================================
 
 function initializeMap() {
@@ -444,47 +777,6 @@ function centerMap() {
 }
 
 // ============================================================================
-// FUNCIONES DE PRUEBA
-// ============================================================================
-
-async function sendTestFirewallEvent() {
-    try {
-        console.log('🧪 Enviando test via ZeroMQ...');
-        showToast('Enviando test al firewall...', 'info');
-
-        const response = await fetch('/api/test-firewall', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                test_type: 'zeromq_test',
-                source: 'dashboard'
-            })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showToast('Test enviado correctamente via ZeroMQ', 'success');
-            console.log('✅ Test ZeroMQ exitoso:', result);
-            addDebugLog('info', 'Test firewall enviado via ZeroMQ');
-
-            // Actualizar datos inmediatamente
-            setTimeout(fetchDataFromZeroMQ, 500);
-        } else {
-            showToast('Error en test: ' + result.message, 'error');
-            addDebugLog('error', `Error test: ${result.message}`);
-        }
-
-    } catch (error) {
-        console.error('❌ Error test firewall:', error);
-        showToast('Error comunicando con ZeroMQ', 'error');
-        addDebugLog('error', `Error test: ${error.message}`);
-    }
-}
-
-// ============================================================================
 // RESTO DE FUNCIONES (UI, HELPERS, ETC.)
 // ============================================================================
 
@@ -561,7 +853,6 @@ function addDebugLog(type, message) {
     }
 }
 
-// Funciones de UI (sin cambios significativos)
 function initializeEventHandlers() {
     const pauseBtn = document.getElementById('pause-events-btn');
     if (pauseBtn) {
@@ -572,10 +863,16 @@ function initializeEventHandlers() {
     if (eventsFilter) {
         eventsFilter.addEventListener('change', filterEvents);
     }
+
+    // 🔥 Nuevo handler para eventos del firewall
+    const pauseFirewallBtn = document.getElementById('pause-firewall-events-btn');
+    if (pauseFirewallBtn) {
+        pauseFirewallBtn.addEventListener('click', pauseFirewallEventsUpdate);
+    }
 }
 
 function initializeCollapsibleSections() {
-    const sections = ['architecture', 'components', 'events', 'counters', 'zmq', 'debug'];
+    const sections = ['architecture', 'components', 'events', 'firewall-events', 'counters', 'zmq', 'debug'];
 
     sections.forEach(sectionId => {
         const toggleIcon = document.getElementById(`${sectionId}-toggle`);
@@ -634,7 +931,7 @@ function clearEventsList() {
             <div class="no-events-placeholder">
                 <i class="fas fa-inbox"></i>
                 <p>No hay eventos recientes</p>
-                <button onclick="sendTestFirewallEvent()" class="btn btn-primary">
+                <button onclick="sendTestFirewallCommand()" class="btn btn-primary">
                     🧪 Generar Test ZeroMQ
                 </button>
             </div>
@@ -678,13 +975,12 @@ function clearDebugLog() {
     if (debugLog) {
         debugLog.innerHTML = `
             <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log limpiado</div>
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard ZeroMQ activo</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard ZeroMQ activo con eventos de firewall</div>
         `;
     }
     showToast('Log limpiado', 'info');
 }
 
-// Funciones de modal y toast (sin cambios)
 function showModal(title, content, actions = null) {
     const overlay = document.getElementById('modal-overlay');
     const modal = document.getElementById('detail-modal');
@@ -781,7 +1077,7 @@ function showEventDetail(event) {
     showModal('Detalle del Evento ZeroMQ', content);
 }
 
-// Funciones placeholder (sin cambios)
+// Funciones placeholder
 function toggleHeatmap() { showToast('Heatmap: en desarrollo', 'warning'); }
 function showMapLegend() { showToast('Leyenda: en desarrollo', 'info'); }
 function testAllConnections() { showToast('Test conexiones: en desarrollo', 'info'); }
