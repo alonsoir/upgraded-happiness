@@ -17,8 +17,8 @@ El Sistema Autoinmune Digital es una plataforma de seguridad distribuida que emu
 
 ## 🏗️ **Arquitectura del Sistema**
 
-<img width="1575" height="766" alt="Captura de pantalla 2025-07-18 a las 13 06 34" src="https://github.com/user-attachments/assets/705e93cd-cbe3-4876-a935-232e00729818" />
 
+<img width="1575" height="763" alt="pantallazo" src="https://github.com/user-attachments/assets/7dcb9a2f-426b-44b9-97eb-03cb5d98dc7b" />
 
 ```
 📡 CAPTURA DE TRÁFICO
