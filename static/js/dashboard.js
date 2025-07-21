@@ -1,6 +1,7 @@
 /*
-dashboard.js - VERSIÓN LIMPIA SIN LÓGICA DE RECOMENDACIONES
-+ INDICADORES DE COMPONENTES COMPLETOS
+dashboard.js - VERSIÓN CON MODALES FUNCIONALES Y REGLAS JSON
++ BOTONES DE ACCIÓN FIREWALL OPERATIVOS
++ INFORMACIÓN DEL FIREWALL RESPONSABLE
 */
 
 // ============================================================================
@@ -25,7 +26,14 @@ let firewallStats = {
     lastAgent: 'N/A'
 };
 
-// 🔥 NUEVO: Estados de componentes para indicadores
+// 🔥 Variables para reglas de firewall
+let firewallRulesInfo = {
+    rules_count: 0,
+    agents_count: 0,
+    available_actions: []
+};
+
+// 🔥 Estados de componentes para indicadores
 let componentStates = {
     promiscuous_agent: false,
     geoip_enricher: false,
@@ -38,7 +46,7 @@ let componentStates = {
 // ============================================================================
 
 function initializeDashboard() {
-    console.log('🚀 Inicializando Dashboard SCADA...');
+    console.log('🚀 Inicializando Dashboard SCADA con Reglas JSON...');
 
     try {
         initializeMap();
@@ -52,7 +60,7 @@ function initializeDashboard() {
         setInterval(updateCurrentTime, 1000);
 
         console.log('✅ Dashboard inicializado correctamente');
-        addDebugLog('info', 'Dashboard inicializado - comunicación con backend ZeroMQ');
+        addDebugLog('info', 'Dashboard inicializado - comunicación con backend ZeroMQ + Reglas JSON');
 
     } catch (error) {
         console.error('❌ Error inicializando dashboard:', error);
@@ -130,12 +138,18 @@ function updateDashboardFromZeroMQ(data) {
             highRiskCount = data.basic_stats.high_risk_events || 0;
         }
 
+        // 🔥 NUEVO: Actualizar información de reglas de firewall
+        if (data.firewall_rules_info) {
+            firewallRulesInfo = data.firewall_rules_info;
+            addDebugLog('info', `Reglas Firewall: ${firewallRulesInfo.rules_count} reglas, ${firewallRulesInfo.agents_count} agentes`);
+        }
+
         // 🔥 Actualizar estadísticas del firewall
         if (data.firewall_stats) {
             updateFirewallStats(data.firewall_stats);
         }
 
-        // 🔥 NUEVO: Actualizar estados de componentes
+        // 🔥 Actualizar estados de componentes
         updateComponentIndicators(data);
 
         // Actualizar estado de componentes ZeroMQ
@@ -167,7 +181,7 @@ function updateDashboardFromZeroMQ(data) {
 }
 
 // ============================================================================
-// 🔥 NUEVO: LÓGICA DE INDICADORES DE COMPONENTES
+// 🔥 LÓGICA DE INDICADORES DE COMPONENTES
 // ============================================================================
 
 function updateComponentIndicators(data) {
@@ -700,13 +714,16 @@ function addEventMarkerToMap(event) {
 }
 
 // ============================================================================
-// 🚨 MODAL DE EVENTOS - CON INFORMACIÓN DE FIREWALL Y ACCIONES
+// 🚨 MODAL DE EVENTOS - CON INFORMACIÓN DE FIREWALL Y ACCIONES OPERATIVAS
 // ============================================================================
 
 async function showEventDetail(event) {
     try {
-        // 🔥 NUEVO: Obtener información del firewall responsable
+        // 🔥 OBTENER INFORMACIÓN DEL FIREWALL RESPONSABLE DESDE BACKEND
         const firewallInfo = await getResponsibleFirewallInfo(event);
+
+        // 🔥 OBTENER RECOMENDACIÓN BASADA EN RISK_SCORE
+        const recommendedAction = getRecommendedActionForRisk(event.risk_score);
 
         const content = `
             <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
@@ -749,7 +766,20 @@ async function showEventDetail(event) {
                     ` : ''}
                 </div>
 
-                <!-- 🔥 NUEVO: Información del Firewall Responsable -->
+                <!-- 🔥 RECOMENDACIÓN DEL SISTEMA -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
+                        🎯 Recomendación del Sistema
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>Acción Sugerida:</strong> <span style="color: #00ff88;">${recommendedAction.action}</span><br>
+                        <strong>Razón:</strong> ${recommendedAction.description}<br>
+                        <strong>Parámetros:</strong> ${JSON.stringify(recommendedAction.params)}<br>
+                        <strong>Prioridad:</strong> <span style="color: ${recommendedAction.priority === 'HIGH' ? '#ff4444' : recommendedAction.priority === 'MEDIUM' ? '#ffaa00' : '#00ff88'};">${recommendedAction.priority}</span>
+                    </div>
+                </div>
+
+                <!-- 🔥 INFORMACIÓN DEL FIREWALL RESPONSABLE -->
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
                     <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
                         🔥 Firewall Agent Responsable
@@ -759,17 +789,18 @@ async function showEventDetail(event) {
                         <strong>IP del Agente:</strong> ${firewallInfo.agent_ip}<br>
                         <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
                         <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
-                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}
+                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}<br>
+                        <strong>Capacidades:</strong> ${firewallInfo.capabilities ? firewallInfo.capabilities.join(', ') : 'N/A'}
                     </div>
                 </div>
 
-                <!-- 🔥 NUEVO: Acciones Disponibles -->
+                <!-- 🔥 ACCIONES DISPONIBLES DINÁMICAS -->
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
                     <div style="color: #ffaa00; font-weight: bold; margin-bottom: 12px;">
                         ⚡ Acciones Disponibles
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        ${generateFirewallActionButtons(event, firewallInfo)}
+                        ${generateFirewallActionButtonsFromRules(event, firewallInfo)}
                     </div>
                     <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
                         💡 Las acciones se enviarán al firewall agent: <strong style="color: #00ff88;">${firewallInfo.node_id}</strong>
@@ -802,45 +833,39 @@ async function showEventDetail(event) {
 }
 
 // ============================================================================
-// 🔥 NUEVO: FUNCIONES PARA FIREWALL RESPONSABLE Y ACCIONES
+// 🔥 FUNCIONES PARA FIREWALL RESPONSABLE Y ACCIONES OPERATIVAS
 // ============================================================================
 
 async function getResponsibleFirewallInfo(event) {
     try {
-        // 🔥 DETERMINAR QUE FIREWALL ES RESPONSABLE
-        // Por ahora, usamos la información del evento para determinar el firewall
-        // En el futuro con etcd, podremos consultar múltiples firewalls
+        // 🔥 OBTENER INFORMACIÓN REAL DEL BACKEND
+        const response = await fetch('/api/firewall-agent-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event_id: event.id,
+                source_ip: event.source_ip,
+                target_ip: event.target_ip,
+                node_id: event.node_id
+            })
+        });
 
-        const defaultFirewall = {
-            node_id: event.node_id || 'simple_firewall_agent_001',
-            agent_ip: event.source_ip || event.target_ip || '127.0.0.1',
-            status: 'active',
-            active_rules: 0,
-            endpoint: 'tcp://localhost:5580'
-        };
-
-        // Intentar obtener información real del backend
-        try {
-            const response = await fetch('/api/firewall-agent-info', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    event_id: event.id,
-                    source_ip: event.source_ip,
-                    target_ip: event.target_ip,
-                    node_id: event.node_id
-                })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                return data.firewall_info || defaultFirewall;
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.firewall_info) {
+                return data.firewall_info;
             }
-        } catch (error) {
-            console.warn('No se pudo obtener info del firewall del backend:', error);
         }
 
-        return defaultFirewall;
+        // Fallback
+        return {
+            node_id: 'simple_firewall_agent_001',
+            agent_ip: event.source_ip || '127.0.0.1',
+            status: 'active',
+            active_rules: 0,
+            endpoint: 'tcp://localhost:5580',
+            capabilities: ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES']
+        };
 
     } catch (error) {
         console.error('Error obteniendo información del firewall:', error);
@@ -849,64 +874,102 @@ async function getResponsibleFirewallInfo(event) {
             agent_ip: '127.0.0.1',
             status: 'unknown',
             active_rules: 0,
-            endpoint: 'tcp://localhost:5580'
+            endpoint: 'tcp://localhost:5580',
+            capabilities: []
         };
     }
 }
 
-function generateFirewallActionButtons(event, firewallInfo) {
+function getRecommendedActionForRisk(riskScore) {
+    // 🔥 LÓGICA BASADA EN REGLAS JSON (simulada en frontend)
+    const riskPercentage = Math.floor(riskScore * 100);
+
+    if (riskPercentage >= 71) {
+        return {
+            action: 'BLOCK_IP',
+            description: 'Riesgo alto - bloqueo inmediato de IP',
+            params: { duration: 3600, permanent: false },
+            priority: 'HIGH'
+        };
+    } else if (riskPercentage >= 31) {
+        return {
+            action: 'RATE_LIMIT',
+            description: 'Riesgo medio - aplicar rate limiting',
+            params: { requests_per_minute: 10, duration: 600 },
+            priority: 'MEDIUM'
+        };
+    } else {
+        return {
+            action: 'MONITOR',
+            description: 'Riesgo bajo - solo monitorear',
+            params: { duration: 300 },
+            priority: 'LOW'
+        };
+    }
+}
+
+function generateFirewallActionButtonsFromRules(event, firewallInfo) {
     const riskScore = event.risk_score || 0;
+    const capabilities = firewallInfo.capabilities || [];
 
     let buttons = '';
 
-    // 🔥 BLOQUEAR IP (Solo para alto riesgo)
-    if (riskScore > 0.7) {
-        buttons += `
-            <button onclick="executeFirewallAction('BLOCK_IP', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
-                    style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
-                    onmouseover="this.style.background='rgba(255, 68, 68, 0.3)'"
-                    onmouseout="this.style.background='rgba(255, 68, 68, 0.2)'">
-                🚫 Bloquear ${event.source_ip}
-            </button>
-        `;
+    // 🔥 BOTONES DINÁMICOS BASADOS EN REGLAS JSON Y CAPACIDADES
+    if (firewallRulesInfo.available_actions) {
+        firewallRulesInfo.available_actions.forEach(action => {
+            // Verificar si el firewall soporta esta acción
+            if (capabilities.includes(action)) {
+                buttons += generateActionButton(action, event, firewallInfo, riskScore);
+            }
+        });
+    } else {
+        // Fallback: botones básicos
+        if (riskScore > 0.7 && capabilities.includes('BLOCK_IP')) {
+            buttons += generateActionButton('BLOCK_IP', event, firewallInfo, riskScore);
+        }
+        if (riskScore > 0.4 && capabilities.includes('RATE_LIMIT')) {
+            buttons += generateActionButton('RATE_LIMIT', event, firewallInfo, riskScore);
+        }
+        if (capabilities.includes('MONITOR')) {
+            buttons += generateActionButton('MONITOR', event, firewallInfo, riskScore);
+        }
+        if (capabilities.includes('LIST_RULES')) {
+            buttons += generateActionButton('LIST_RULES', event, firewallInfo, riskScore);
+        }
     }
 
-    // 🔥 RATE LIMIT (Para riesgo medio-alto)
-    if (riskScore > 0.4) {
-        buttons += `
-            <button onclick="executeFirewallAction('RATE_LIMIT', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
-                    style="background: rgba(255, 170, 0, 0.2); border: 1px solid #ffaa00; color: #ffaa00; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
-                    onmouseover="this.style.background='rgba(255, 170, 0, 0.3)'"
-                    onmouseout="this.style.background='rgba(255, 170, 0, 0.2)'">
-                ⏱️ Limitar ${event.source_ip}
-            </button>
-        `;
-    }
-
-    // 🔥 MONITOREAR (Siempre disponible)
-    buttons += `
-        <button onclick="executeFirewallAction('MONITOR', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
-                style="background: rgba(0, 170, 255, 0.2); border: 1px solid #00aaff; color: #00aaff; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
-                onmouseover="this.style.background='rgba(0, 170, 255, 0.3)'"
-                onmouseout="this.style.background='rgba(0, 170, 255, 0.2)'">
-            👁️ Monitorear ${event.source_ip}
-        </button>
-    `;
-
-    // 🔥 LISTAR REGLAS (Diagnóstico)
-    buttons += `
-        <button onclick="executeFirewallAction('LIST_RULES', 'all', '${firewallInfo.node_id}', '${event.id}')"
-                style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
-                onmouseover="this.style.background='rgba(0, 255, 136, 0.3)'"
-                onmouseout="this.style.background='rgba(0, 255, 136, 0.2)'">
-            📋 Listar Reglas Activas
-        </button>
-    `;
-
-    return buttons;
+    return buttons || '<div style="color: #666; text-align: center;">No hay acciones disponibles</div>';
 }
 
-async function executeFirewallAction(action, targetIp, firewallNodeId, eventId) {
+function generateActionButton(action, event, firewallInfo, riskScore) {
+    const actionConfig = {
+        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear' },
+        'RATE_LIMIT': { color: '#ffaa00', icon: '⏱️', label: 'Limitar' },
+        'MONITOR': { color: '#00aaff', icon: '👁️', label: 'Monitorear' },
+        'LIST_RULES': { color: '#00ff88', icon: '📋', label: 'Listar Reglas' }
+    };
+
+    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action };
+    const targetIp = action === 'LIST_RULES' ? 'all' : event.source_ip;
+
+    return `
+        <button onclick="executeFirewallActionFromRules('${action}', '${targetIp}', '${firewallInfo.node_id}', '${event.id}')"
+                style="background: rgba(${hexToRgb(config.color)}, 0.2); border: 1px solid ${config.color}; color: ${config.color}; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                onmouseover="this.style.background='rgba(${hexToRgb(config.color)}, 0.3)'"
+                onmouseout="this.style.background='rgba(${hexToRgb(config.color)}, 0.2)'">
+            ${config.icon} ${config.label} ${targetIp !== 'all' ? targetIp : ''}
+        </button>
+    `;
+}
+
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ?
+        `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` :
+        '128, 128, 128';
+}
+
+async function executeFirewallActionFromRules(action, targetIp, firewallNodeId, eventId) {
     try {
         console.log(`🔥 Ejecutando acción ${action} en firewall ${firewallNodeId} para IP ${targetIp}`);
 
@@ -922,11 +985,11 @@ async function executeFirewallAction(action, targetIp, firewallNodeId, eventId) 
             ip: targetIp,
             action_code: getFirewallActionCode(action),
             bytes: 64,
-            source: 'Dashboard Action',
+            source: 'Dashboard Action (Rules)',
             timestamp: Date.now() / 1000
         });
 
-        // 🔥 Enviar acción al backend
+        // 🔥 ENVIAR ACCIÓN AL BACKEND USANDO NUEVO ENDPOINT
         const response = await fetch('/api/execute-firewall-action', {
             method: 'POST',
             headers: {
@@ -938,7 +1001,7 @@ async function executeFirewallAction(action, targetIp, firewallNodeId, eventId) 
                 firewall_node_id: firewallNodeId,
                 event_id: eventId,
                 command_id: commandId,
-                source: 'dashboard_manual_action'
+                source: 'dashboard_manual_action_rules'
             })
         });
 
@@ -962,7 +1025,7 @@ async function executeFirewallAction(action, targetIp, firewallNodeId, eventId) 
             }, 300);
 
             showToast(`✅ ${action} ejecutada en ${firewallNodeId}`, 'success');
-            addDebugLog('info', `Acción ${action} ejecutada para IP ${targetIp} en firewall ${firewallNodeId}`);
+            addDebugLog('info', `Acción ${action} ejecutada para IP ${targetIp} en firewall ${firewallNodeId} usando reglas JSON`);
 
             // Actualizar estadísticas
             firewallStats.commandsSent++;
@@ -1070,7 +1133,7 @@ function showSimpleEventDetail(event) {
 }
 
 // ============================================================================
-// RESTO DE FUNCIONES (SIN CAMBIOS IMPORTANTES)
+// RESTO DE FUNCIONES (IGUAL QUE ANTES)
 // ============================================================================
 
 function initializeMap() {
@@ -1385,7 +1448,7 @@ function refreshDashboard() {
     }
 
     showToast('Dashboard actualizado', 'success');
-    addDebugLog('info', 'Dashboard refrescado - datos backend');
+    addDebugLog('info', 'Dashboard refrescado - datos backend con reglas JSON');
 }
 
 function clearDebugLog() {
@@ -1393,7 +1456,7 @@ function clearDebugLog() {
     if (debugLog) {
         debugLog.innerHTML = `
             <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log limpiado</div>
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard conectado con backend ZeroMQ</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard conectado con backend ZeroMQ + Reglas JSON</div>
         `;
     }
     showToast('Log limpiado', 'info');
