@@ -137,6 +137,53 @@ get_component_info() {
             ;;
     esac
 }
+# Variable para rango de horas a considerar logs "recientes"
+LOG_MAX_AGE_HOURS=24
+
+# Función que lista logs recientes y obtiene métricas solo de ellos
+process_recent_logs_metrics() {
+    local recent_logs
+    recent_logs=$(find "$LOG_DIR" -type f -name "*.log" -mtime -$((LOG_MAX_AGE_HOURS/24)) 2>/dev/null)
+
+    if [ -z "$recent_logs" ]; then
+        echo "⚠️ No se detectaron logs modificados en las últimas $LOG_MAX_AGE_HOURS horas."
+        throughput="N/A"
+        latency="N/A"
+        processed_events="N/A"
+        blocked_ips="N/A"
+        return
+    fi
+
+    # Procesar métricas sobre logs recientes
+    throughput=$(grep -h -oE "[0-9]+\.[0-9]+/s" $recent_logs 2>/dev/null | tail -1)
+    latency=$(grep -h -oE "[0-9]+\.[0-9]*ms" $recent_logs 2>/dev/null | tail -1)
+    processed_events=$(grep -h -oE "Procesados[: ]*[0-9]+" $recent_logs 2>/dev/null | tail -1 | grep -oE "[0-9]+")
+    blocked_ips=$(grep -h -cE "bloqueada|blocked|denied" $(echo "$recent_logs" | grep firewall) 2>/dev/null)
+
+    # Validaciones básicas
+    [ -z "$throughput" ] && throughput="N/A"
+    [ -z "$latency" ] && latency="N/A"
+    [ -z "$processed_events" ] && processed_events="N/A"
+    [ -z "$blocked_ips" ] && blocked_ips="0"
+}
+
+
+# Función para contar puertos ZeroMQ activos (5500-6000 + 8080)
+count_zmq_ports() {
+    local count=$(lsof -iTCP 2>/dev/null \
+        | grep -E ':(5500|5[5-9][0-9]|60[0-0])|:8080' \
+        | grep -v "CLOSE_WAIT" \
+        | awk '{print $9}' \
+        | grep -oE '[0-9]+$' \
+        | sort -u \
+        | wc -l)
+
+    if [ "$count" -gt 0 ]; then
+        echo -e "${GREEN}🧠 Puertos ZeroMQ activos: $count${NC}"
+    else
+        echo -e "${RED}🧠 Puertos ZeroMQ activos: $count${NC}"
+    fi
+}
 
 # Función principal de monitoreo
 monitor_system() {
@@ -259,33 +306,8 @@ monitor_system() {
         local blocked_ips="N/A"
 
         if [ -d "$LOG_DIR" ]; then
-            # Throughput
-            local throughput_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -10 {} \; 2>/dev/null | grep -o "[0-9]\+\.[0-9]/s" | tail -1)
-            if [ -n "$throughput_raw" ]; then
-                throughput="$throughput_raw"
-            fi
-
-            # Latencia
-            local latency_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -10 {} \; 2>/dev/null | grep -o "[0-9]\+\.[0-9]*ms" | tail -1)
-            if [ -n "$latency_raw" ]; then
-                latency="$latency_raw"
-            fi
-
-            # Eventos procesados
-            local events_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -5 {} \; 2>/dev/null | grep -o "Procesados[: ]*[0-9]\+" | tail -1 | grep -o "[0-9]\+")
-            if [ -n "$events_raw" ]; then
-                processed_events="$events_raw"
-            fi
-
-            # IPs bloqueadas (buscar en firewall log) - mejorado
-            local blocked_raw=$(find "$LOG_DIR" -name "*firewall*.log" -exec tail -10 {} \; 2>/dev/null | grep -c "bloqueada\|blocked\|denied" 2>/dev/null)
-            # Validar que blocked_raw es un número
-            if [[ ! "$blocked_raw" =~ ^[0-9]+$ ]]; then
-                blocked_raw=0
-            fi
-            if [ "$blocked_raw" -gt "0" ]; then
-                blocked_ips="$blocked_raw"
-            fi
+        # Aquí llamas a:
+          process_recent_logs_metrics
         fi
 
         printf "%-25s %s\n" "⚡ Throughput:" "$throughput"
@@ -299,19 +321,24 @@ monitor_system() {
         echo -e "${PURPLE}═══════════════════════════════════════${NC}"
 
         # Puertos ZeroMQ activos (mejorado)
-        local zmq_ports=$(netstat -an 2>/dev/null | grep -E "LISTEN.*:(55[0-9][0-9]|8080)" | wc -l | tr -d ' ')
+        local zmq_ports=$(lsof -iTCP 2>/dev/null \
+        | grep -E ':(5500|5[5-9][0-9]|60[0-0])|:8080' \
+        | grep -v "CLOSE_WAIT" \
+        | awk '{print $9}' \
+        | grep -oE '[0-9]+$' \
+        | sort -u \
+        | wc -l)
         # Validar que zmq_ports es un número
         if [[ ! "$zmq_ports" =~ ^[0-9]+$ ]]; then
             zmq_ports=0
         fi
         printf "%-25s " "🔌 Puertos ZeroMQ:"
-        if [ "$zmq_ports" -gt "3" ]; then
-            echo -e "${GREEN}$zmq_ports activos${NC} ✅"
-        elif [ "$zmq_ports" -gt "0" ]; then
-            echo -e "${YELLOW}$zmq_ports activos${NC} ⚠️"
+        if [ "$zmq_ports" -gt 0 ]; then
+          echo -e "${GREEN}$zmq_ports activos${NC} ✅"
         else
-            echo -e "${RED}$zmq_ports activos${NC} ❌"
+          echo -e "${RED}$zmq_ports activos${NC} ❌"
         fi
+
 
         # Conexiones activas (mejorado)
         local active_connections=$(netstat -an 2>/dev/null | grep "ESTABLISHED" | wc -l | tr -d ' ')
