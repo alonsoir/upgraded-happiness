@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Dashboard de Seguridad con ZeroMQ - Backend Principal v2.2.2
-MODIFICADO: Añadido endpoint /api/metrics para frontend
+Dashboard de Seguridad con ZeroMQ - Backend Principal v2.3.0
+AÑADIDO: Reglas de firewall desde JSON + Endpoints para acciones + Lógica desharcodificada
 """
 from typing import Dict, List, Optional, Any, Set
 import zmq
@@ -28,6 +28,169 @@ from collections import defaultdict, deque
 class ConfigurationError(Exception):
     """Error de configuración del dashboard"""
     pass
+
+
+class FirewallRulesError(Exception):
+    """Error en reglas de firewall"""
+    pass
+
+
+@dataclass
+class FirewallRule:
+    """Regla de firewall desde JSON"""
+    risk_range: List[int]
+    action: str
+    description: str
+    params: Dict[str, Any]
+    priority: str = "MEDIUM"
+    dry_run: bool = False
+    enabled: bool = True
+
+
+@dataclass
+class FirewallAgentInfo:
+    """Información de un agente firewall"""
+    node_id: str
+    endpoint: str
+    capabilities: List[str]
+    max_rules: int = 1000
+    default_rule_duration: int = 600
+    status: str = "active"
+    active_rules: int = 0
+
+
+class FirewallRulesEngine:
+    """Motor de reglas de firewall desde JSON"""
+
+    def __init__(self, rules_file: str, logger):
+        self.rules_file = rules_file
+        self.logger = logger
+        self.rules: List[FirewallRule] = []
+        self.manual_actions: Dict[str, Dict] = {}
+        self.firewall_agents: Dict[str, FirewallAgentInfo] = {}
+        self.global_settings: Dict[str, Any] = {}
+        self.last_loaded: Optional[datetime] = None
+
+        # Cargar reglas iniciales
+        self.load_rules()
+
+    def load_rules(self, force_reload: bool = False):
+        """Cargar reglas desde JSON"""
+        try:
+            if not Path(self.rules_file).exists():
+                raise FirewallRulesError(f"❌ Archivo de reglas no encontrado: {self.rules_file}")
+
+            # Verificar si necesita recarga
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(self.rules_file))
+            if not force_reload and self.last_loaded and file_mtime <= self.last_loaded:
+                self.logger.debug("📋 Reglas ya están actualizadas")
+                return
+
+            with open(self.rules_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            firewall_config = data.get('firewall_rules', {})
+
+            # Cargar reglas principales
+            self.rules.clear()
+            for rule_data in firewall_config.get('rules', []):
+                if rule_data.get('enabled', True):
+                    rule = FirewallRule(
+                        risk_range=rule_data['risk_range'],
+                        action=rule_data['action'],
+                        description=rule_data['description'],
+                        params=rule_data.get('params', {}),
+                        priority=rule_data.get('priority', 'MEDIUM'),
+                        dry_run=rule_data.get('dry_run', False),
+                        enabled=rule_data.get('enabled', True)
+                    )
+                    self.rules.append(rule)
+
+            # Cargar acciones manuales
+            self.manual_actions = firewall_config.get('manual_actions', {})
+
+            # Cargar agentes firewall
+            self.firewall_agents.clear()
+            for node_id, agent_data in firewall_config.get('firewall_agents', {}).items():
+                agent_info = FirewallAgentInfo(
+                    node_id=agent_data['node_id'],
+                    endpoint=agent_data['endpoint'],
+                    capabilities=agent_data.get('capabilities', []),
+                    max_rules=agent_data.get('max_rules', 1000),
+                    default_rule_duration=agent_data.get('default_rule_duration', 600)
+                )
+                self.firewall_agents[node_id] = agent_info
+
+            # Cargar configuración global
+            self.global_settings = firewall_config.get('global_settings', {})
+
+            self.last_loaded = datetime.now()
+
+            self.logger.info(
+                f"✅ Reglas de firewall cargadas: {len(self.rules)} reglas, {len(self.firewall_agents)} agentes")
+            self.logger.info(f"📋 Versión: {firewall_config.get('version', 'unknown')}")
+
+        except json.JSONDecodeError as e:
+            raise FirewallRulesError(f"❌ Error parseando JSON: {e}")
+        except Exception as e:
+            raise FirewallRulesError(f"❌ Error cargando reglas: {e}")
+
+    def get_recommended_action_for_risk(self, risk_score: float) -> Optional[FirewallRule]:
+        """Obtener acción recomendada basada en risk_score"""
+        try:
+            # Convertir risk_score (0.0-1.0) a porcentaje (0-100)
+            risk_percentage = int(risk_score * 100)
+
+            # Buscar regla que coincida con el rango de riesgo
+            for rule in self.rules:
+                if rule.enabled and rule.risk_range[0] <= risk_percentage <= rule.risk_range[1]:
+                    self.logger.debug(f"🎯 Regla encontrada para riesgo {risk_percentage}%: {rule.action}")
+                    return rule
+
+            # Si no hay regla específica, usar MONITOR por defecto
+            self.logger.warning(f"⚠️ No hay regla para riesgo {risk_percentage}%, usando MONITOR")
+            return self._get_default_monitor_rule()
+
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo acción recomendada: {e}")
+            return self._get_default_monitor_rule()
+
+    def get_manual_action_info(self, action: str) -> Optional[Dict]:
+        """Obtener información de acción manual"""
+        return self.manual_actions.get(action)
+
+    def get_firewall_agent_by_node_id(self, node_id: str) -> Optional[FirewallAgentInfo]:
+        """Obtener información de agente por node_id"""
+        return self.firewall_agents.get(node_id)
+
+    def get_default_firewall_agent(self) -> Optional[FirewallAgentInfo]:
+        """Obtener primer agente disponible como default"""
+        if self.firewall_agents:
+            return list(self.firewall_agents.values())[0]
+        return None
+
+    def _get_default_monitor_rule(self) -> FirewallRule:
+        """Regla por defecto de monitoreo"""
+        return FirewallRule(
+            risk_range=[0, 100],
+            action="MONITOR",
+            description="Regla por defecto - monitoreo",
+            params={"duration": 300},
+            priority="LOW",
+            dry_run=True,
+            enabled=True
+        )
+
+    def reload_if_changed(self):
+        """Recargar reglas si el archivo cambió"""
+        try:
+            if Path(self.rules_file).exists():
+                file_mtime = datetime.fromtimestamp(os.path.getmtime(self.rules_file))
+                if self.last_loaded and file_mtime > self.last_loaded:
+                    self.logger.info("🔄 Archivo de reglas modificado, recargando...")
+                    self.load_rules(force_reload=True)
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando cambios en reglas: {e}")
 
 
 @dataclass
@@ -371,6 +534,7 @@ class SecurityEvent:
     ml_models_scores: Optional[Dict] = None
     # Campos adicionales del protobuf
     protobuf_data: Optional[Dict] = None
+    node_id: Optional[str] = None
 
     def __post_init__(self):
         if self.timestamp is None:
@@ -389,6 +553,7 @@ class FirewallCommand:
     rule_type: str = "iptables"
     port: Optional[int] = None
     protocol: Optional[str] = None
+    firewall_node_id: Optional[str] = None
 
 
 @dataclass
@@ -579,11 +744,14 @@ class DashboardConfig:
 
 
 class SecurityDashboard:
-    """Dashboard principal de seguridad con thread safety para ZMQ"""
+    """Dashboard principal de seguridad con reglas de firewall JSON"""
 
-    def __init__(self, config: DashboardConfig):
+    def __init__(self, config: DashboardConfig, firewall_rules_file: str):
         self.config = config
         self.logger = DashboardLogger(config.node_id, config.logging_config)
+
+        # 🔥 NUEVO: Motor de reglas de firewall con ruta específica
+        self.firewall_rules_engine = FirewallRulesEngine(firewall_rules_file, self.logger)
 
         # Inicializar monitor de encoding
         self.encoding_monitor = EncodingMonitor(self.logger)
@@ -670,17 +838,18 @@ class SecurityDashboard:
         self.setup_zmq_sockets_with_monitoring()
 
     def _verify_required_files(self):
-        """Verificar que existan los archivos requeridos"""
+        """Verificar que existan los archivos requeridos del sistema"""
         required_files = [
             'templates/dashboard.html',
             'static/css/dashboard.css'
+            # 🔥 NOTA: firewall_rules.json se valida en main() con ruta específica
         ]
 
         for file_path in required_files:
             if not Path(file_path).exists():
                 raise ConfigurationError(f"❌ Archivo requerido no encontrado: {file_path}")
 
-        self.logger.info("✅ Archivos requeridos verificados")
+        self.logger.info("✅ Archivos requeridos del sistema verificados")
 
     def setup_zmq_sockets_with_monitoring(self):
         """Setup ZMQ con configuración más conservadora para evitar crashes"""
@@ -961,6 +1130,14 @@ class SecurityDashboard:
         self.logger.info(f"🐍 Python: {sys.version.split()[0]}")
         self.logger.info(f"💾 PID: {os.getpid()}")
 
+        # 🔥 NUEVO: Log información de reglas de firewall
+        try:
+            rules_count = len(self.firewall_rules_engine.rules)
+            agents_count = len(self.firewall_rules_engine.firewall_agents)
+            self.logger.info(f"🔥 Reglas de Firewall: {rules_count} reglas, {agents_count} agentes")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error mostrando info de reglas: {e}")
+
         # Mostrar configuración de red
         self.log_network_configuration()
 
@@ -1156,6 +1333,7 @@ class SecurityDashboard:
                         'port': event.port or 80,
                         'packets': event.packets,
                         'bytes': event.bytes,
+                        'node_id': event.node_id,  # 🔥 NUEVO: Incluir node_id
                         # Añadir clasificación más clara para el frontend
                         'risk_level': 'high' if event.risk_score > 0.7 else 'medium' if event.risk_score > 0.3 else 'low',
                         'is_dns': event.target_ip in ['8.8.8.8', '1.1.1.1', '208.67.222.222'] if hasattr(event,
@@ -1732,7 +1910,8 @@ class SecurityDashboard:
             port=data.get('port', data.get('dst_port')),
             protocol=data.get('protocol'),
             ml_models_scores=data.get('ml_models_scores'),
-            protobuf_data=data  # Guardar todos los datos del protobuf
+            protobuf_data=data,  # Guardar todos los datos del protobuf
+            node_id=data.get('node_id')  # 🔥 NUEVO: Incluir node_id
         )
 
     def get_safe_dashboard_pid(self, event=None) -> str:
@@ -1760,76 +1939,115 @@ class SecurityDashboard:
             return str(os.getpid())
 
     def firewall_commands_processor(self, worker_id: int):
-        """Procesar y enviar comandos de firewall - CORREGIDO PARA PROTOBUF"""
-        self.logger.info(f"🔥 Firewall Commands Processor {worker_id} iniciado con protobuf")
+        """Procesar y enviar comandos de firewall - CORREGIDO PARA PROTOBUF CON REGLAS JSON"""
+        self.logger.info(f"🔥 Firewall Commands Processor {worker_id} iniciado con reglas JSON")
 
         while self.running:
             try:
                 # Obtener comando de la cola
                 command = self.firewall_commands_queue.get(timeout=1)
 
-                # Importar protobuf
-                import firewall_commands_pb2 as fw_pb2
-
-                # Convertir comando Python a protobuf
-                proto_command = fw_pb2.FirewallCommand()
-                proto_command.command_id = getattr(command, 'event_id', f"cmd_{int(time.time())}")
-
-                # Mapear action string a enum
-                action_mapping = {
-                    'BLOCK': fw_pb2.CommandAction.BLOCK_IP,
-                    'UNBLOCK': fw_pb2.CommandAction.UNBLOCK_IP,
-                    'test_connection': fw_pb2.CommandAction.LIST_RULES,
-                    'list': fw_pb2.CommandAction.LIST_RULES,
-                    'flush': fw_pb2.CommandAction.FLUSH_RULES
-                }
-
-                action_str = getattr(command, 'action', 'list')
-                proto_command.action = action_mapping.get(action_str, fw_pb2.CommandAction.LIST_RULES)
-
-                proto_command.target_ip = getattr(command, 'target_ip', '127.0.0.1')
-                proto_command.target_port = getattr(command, 'port', 0)
-
-                # Parsear duration string a seconds
-                duration_str = getattr(command, 'duration', '10s')
-                duration_seconds = 10  # default
-                if 's' in duration_str:
-                    duration_seconds = int(duration_str.replace('s', ''))
-                elif 'm' in duration_str:
-                    duration_seconds = int(duration_str.replace('m', '')) * 60
-
-                proto_command.duration_seconds = duration_seconds
-                proto_command.reason = getattr(command, 'reason', 'Dashboard command')
-                proto_command.priority = fw_pb2.CommandPriority.MEDIUM
-                proto_command.dry_run = True  # Siempre dry run para testing
-
-                # ✅ Serializar a protobuf binario
-                command_bytes = proto_command.SerializeToString()
-
-                # ✅ Enviar protobuf binario
-                self.firewall_commands_socket.send(command_bytes)
-
-                # Actualizar estadísticas
-                conn_info = self.zmq_connections['firewall_commands']
-                conn_info.total_messages += 1
-                conn_info.bytes_transferred += len(command_bytes)
-                conn_info.last_activity = datetime.now()
-
-                self.stats['commands_sent'] += 1
-                self.firewall_commands.append(command)
-
-                self.logger.info(
-                    f"🔥 Worker {worker_id} - Comando protobuf enviado: {action_str} para {proto_command.target_ip}")
+                # 🔥 NUEVO: Crear comando usando reglas JSON
+                self._send_firewall_command_with_rules(command, worker_id)
 
                 # Marcar tarea como completada
                 self.firewall_commands_queue.task_done()
 
             except queue.Empty:
                 continue
-            except ImportError as e:
-                self.logger.error(f"❌ Worker {worker_id} - Protobuf no disponible: {e}")
             except Exception as e:
                 self.logger.error(f"❌ Worker {worker_id} - Error en firewall commands processor: {e}")
+
+    def _send_firewall_command_with_rules(self, command: FirewallCommand, worker_id: int):
+        """Enviar comando de firewall usando configuración de reglas JSON"""
+        try:
+            # Importar protobuf
+            import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
+
+            # Convertir comando Python a protobuf
+            proto_command = fw_pb2.FirewallCommand()
+            proto_command.command_id = getattr(command, 'event_id', f"cmd_{int(time.time())}")
+
+            # Mapear action string a enum
+            action_mapping = {
+                'BLOCK_IP': fw_pb2.CommandAction.BLOCK_IP,
+                'UNBLOCK_IP': fw_pb2.CommandAction.UNBLOCK_IP,
+                'RATE_LIMIT': fw_pb2.CommandAction.RATE_LIMIT,
+                'MONITOR': fw_pb2.CommandAction.MONITOR,
+                'LIST_RULES': fw_pb2.CommandAction.LIST_RULES,
+                'FLUSH_RULES': fw_pb2.CommandAction.FLUSH_RULES
+            }
+
+            action_str = getattr(command, 'action', 'LIST_RULES')
+            proto_command.action = action_mapping.get(action_str, fw_pb2.CommandAction.LIST_RULES)
+
+            proto_command.target_ip = getattr(command, 'target_ip', '127.0.0.1')
+            proto_command.target_port = getattr(command, 'port', 0)
+
+            # 🔥 NUEVO: Obtener parámetros desde reglas JSON
+            manual_action_info = self.firewall_rules_engine.get_manual_action_info(action_str)
+            if manual_action_info and 'params' in manual_action_info:
+                params = manual_action_info['params']
+                proto_command.duration_seconds = params.get('duration', 600)
+            else:
+                # Fallback: parsear duration string
+                duration_str = getattr(command, 'duration', '10m')
+                proto_command.duration_seconds = self._parse_duration_to_seconds(duration_str)
+
+            proto_command.reason = getattr(command, 'reason', 'Dashboard command from JSON rules')
+
+            # 🔥 NUEVO: Priority desde reglas JSON
+            if manual_action_info:
+                priority_str = manual_action_info.get('priority', 'MEDIUM')
+                priority_mapping = {
+                    'LOW': fw_pb2.CommandPriority.LOW,
+                    'MEDIUM': fw_pb2.CommandPriority.MEDIUM,
+                    'HIGH': fw_pb2.CommandPriority.HIGH
+                }
+                proto_command.priority = priority_mapping.get(priority_str, fw_pb2.CommandPriority.MEDIUM)
+            else:
+                proto_command.priority = fw_pb2.CommandPriority.MEDIUM
+
+            # 🔥 NUEVO: Dry run basado en configuración global
+            global_settings = self.firewall_rules_engine.global_settings
+            proto_command.dry_run = global_settings.get('require_confirmation_above_risk', 80) > 50
+
+            # ✅ Serializar a protobuf binario
+            command_bytes = proto_command.SerializeToString()
+
+            # ✅ Enviar protobuf binario
+            self.firewall_commands_socket.send(command_bytes)
+
+            # Actualizar estadísticas
+            conn_info = self.zmq_connections['firewall_commands']
+            conn_info.total_messages += 1
+            conn_info.bytes_transferred += len(command_bytes)
+            conn_info.last_activity = datetime.now()
+
+            self.stats['commands_sent'] += 1
+            self.firewall_commands.append(command)
+
+            self.logger.info(
+                f"🔥 Worker {worker_id} - Comando protobuf enviado con reglas JSON: {action_str} para {proto_command.target_ip}")
+
+        except ImportError as e:
+            self.logger.error(f"❌ Worker {worker_id} - Protobuf no disponible: {e}")
+        except Exception as e:
+            self.logger.error(f"❌ Worker {worker_id} - Error enviando comando con reglas: {e}")
+
+    def _parse_duration_to_seconds(self, duration_str: str) -> int:
+        """Convertir string de duración a segundos"""
+        try:
+            if 's' in duration_str:
+                return int(duration_str.replace('s', ''))
+            elif 'm' in duration_str:
+                return int(duration_str.replace('m', '')) * 60
+            elif 'h' in duration_str:
+                return int(duration_str.replace('h', '')) * 3600
+            else:
+                return int(duration_str)  # Asumir segundos
+        except (ValueError, AttributeError):
+            return 600  # Default 10 minutos
 
     def firewall_responses_receiver_with_monitoring(self, worker_id: int):
         """Recibir respuestas del Firewall Agent con monitoreo robusto - CORREGIDO PARA FIREWALL"""
@@ -1935,7 +2153,6 @@ class SecurityDashboard:
             def do_GET(self):
                 if self.path == '/' or self.path == '/index.html':
                     self.serve_dashboard_html()
-                # *** PUNTO 1: AÑADIR RUTA /api/metrics ***
                 elif self.path == '/api/metrics':
                     self.serve_metrics_api()
                 elif self.path.startswith('/static/'):
@@ -1947,10 +2164,14 @@ class SecurityDashboard:
                 """Manejar requests POST para funcionalidad firewall"""
                 if self.path == '/api/test-firewall':
                     self.serve_firewall_test_api()
+                # 🔥 NUEVOS ENDPOINTS
+                elif self.path == '/api/firewall-agent-info':
+                    self.serve_firewall_agent_info_api()
+                elif self.path == '/api/execute-firewall-action':
+                    self.serve_execute_firewall_action_api()
                 else:
                     self.send_error(404, "Endpoint POST no encontrado")
 
-            # *** PUNTO 1: MÉTODO SERVE_METRICS_API ***
             def serve_metrics_api(self):
                 """Exponer datos de ZeroMQ via HTTP simple"""
                 try:
@@ -1999,14 +2220,107 @@ class SecurityDashboard:
                     self.end_headers()
                     self.wfile.write(json.dumps(error_response).encode('utf-8'))
 
-            def serve_firewall_test_api(self):
-                """Endpoint para probar firewall - NUEVO"""
+            # 🔥 NUEVO ENDPOINT: Información del firewall agent responsable
+            def serve_firewall_agent_info_api(self):
+                """Obtener información del firewall agent responsable para un evento"""
                 try:
-                    success = self.dashboard.test_firewall_connection()
+                    content_length = int(self.headers.get('Content-Length', 0))
+                    if content_length > 0:
+                        post_data = self.rfile.read(content_length)
+                        request_data = json.loads(post_data.decode('utf-8'))
+                    else:
+                        request_data = {}
+
+                    # 🔥 DETERMINAR FIREWALL RESPONSABLE
+                    firewall_info = self.dashboard.get_responsible_firewall_info(request_data)
+
+                    response_data = {
+                        'success': True,
+                        'firewall_info': firewall_info,
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    response_json = json.dumps(response_data)
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(response_json.encode('utf-8'))
+
+                except Exception as e:
+                    self.dashboard.logger.error(f"❌ Error en firewall-agent-info: {e}")
+
+                    error_response = {
+                        'success': False,
+                        'error': str(e),
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(error_response).encode('utf-8'))
+
+            # 🔥 NUEVO ENDPOINT: Ejecutar acción específica en firewall
+            def serve_execute_firewall_action_api(self):
+                """Ejecutar acción específica en firewall usando reglas JSON"""
+                try:
+                    content_length = int(self.headers.get('Content-Length', 0))
+                    if content_length > 0:
+                        post_data = self.rfile.read(content_length)
+                        request_data = json.loads(post_data.decode('utf-8'))
+                    else:
+                        request_data = {}
+
+                    # 🔥 VALIDAR DATOS DE LA REQUEST
+                    required_fields = ['action', 'target_ip', 'firewall_node_id']
+                    for field in required_fields:
+                        if field not in request_data:
+                            raise ValueError(f"Campo requerido faltante: {field}")
+
+                    # 🔥 EJECUTAR ACCIÓN USANDO REGLAS JSON
+                    result = self.dashboard.execute_firewall_action_from_request(request_data)
+
+                    response_data = {
+                        'success': result['success'],
+                        'message': result['message'],
+                        'command_id': result.get('command_id', 'unknown'),
+                        'agent': result.get('agent', request_data['firewall_node_id']),
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    response_json = json.dumps(response_data)
+
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.end_headers()
+                    self.wfile.write(response_json.encode('utf-8'))
+
+                except Exception as e:
+                    self.dashboard.logger.error(f"❌ Error en execute-firewall-action: {e}")
+
+                    error_response = {
+                        'success': False,
+                        'message': f'Error ejecutando acción: {str(e)}',
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(error_response).encode('utf-8'))
+
+            def serve_firewall_test_api(self):
+                """Endpoint para probar firewall - MEJORADO CON REGLAS JSON"""
+                try:
+                    # 🔥 USAR REGLAS JSON PARA COMANDO DE TEST
+                    success = self.dashboard.test_firewall_connection_with_rules()
 
                     response_data = {
                         'success': success,
-                        'message': 'Comando de prueba enviado' if success else 'Error enviando comando',
+                        'message': 'Comando de prueba enviado usando reglas JSON' if success else 'Error enviando comando',
                         'timestamp': datetime.now().isoformat(),
                         'test_id': f"test_{int(time.time())}"
                     }
@@ -2112,6 +2426,167 @@ class SecurityDashboard:
         web_thread.daemon = True
         web_thread.start()
 
+    # 🔥 NUEVOS MÉTODOS PARA LÓGICA DE FIREWALL CON REGLAS JSON
+
+    def get_responsible_firewall_info(self, request_data: dict) -> dict:
+        """Determinar información del firewall responsable para un evento"""
+        try:
+            # 🔥 OBTENER NODE_ID DEL EVENTO O REQUEST
+            event_node_id = request_data.get('node_id') or request_data.get('event_node_id')
+
+            # 🔥 INTENTAR ENCONTRAR FIREWALL ESPECÍFICO POR NODE_ID
+            if event_node_id:
+                firewall_agent = self.firewall_rules_engine.get_firewall_agent_by_node_id(event_node_id)
+                if firewall_agent:
+                    return {
+                        'node_id': firewall_agent.node_id,
+                        'agent_ip': request_data.get('source_ip', '127.0.0.1'),
+                        'status': firewall_agent.status,
+                        'active_rules': firewall_agent.active_rules,
+                        'endpoint': firewall_agent.endpoint,
+                        'capabilities': firewall_agent.capabilities,
+                        'max_rules': firewall_agent.max_rules
+                    }
+
+            # 🔥 FALLBACK: Usar firewall por defecto
+            default_agent = self.firewall_rules_engine.get_default_firewall_agent()
+            if default_agent:
+                return {
+                    'node_id': default_agent.node_id,
+                    'agent_ip': request_data.get('source_ip', '127.0.0.1'),
+                    'status': default_agent.status,
+                    'active_rules': default_agent.active_rules,
+                    'endpoint': default_agent.endpoint,
+                    'capabilities': default_agent.capabilities,
+                    'max_rules': default_agent.max_rules
+                }
+
+            # 🔥 ÚLTIMO RECURSO: Información básica
+            return {
+                'node_id': 'simple_firewall_agent_001',
+                'agent_ip': request_data.get('source_ip', '127.0.0.1'),
+                'status': 'active',
+                'active_rules': 0,
+                'endpoint': 'tcp://localhost:5580',
+                'capabilities': ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES'],
+                'max_rules': 1000
+            }
+
+        except Exception as e:
+            self.logger.error(f"❌ Error obteniendo info firewall responsable: {e}")
+            return {
+                'node_id': 'unknown_firewall',
+                'agent_ip': '127.0.0.1',
+                'status': 'unknown',
+                'active_rules': 0,
+                'endpoint': 'tcp://localhost:5580',
+                'capabilities': [],
+                'max_rules': 0
+            }
+
+    def execute_firewall_action_from_request(self, request_data: dict) -> dict:
+        """Ejecutar acción de firewall desde request del frontend usando reglas JSON"""
+        try:
+            action = request_data['action']
+            target_ip = request_data['target_ip']
+            firewall_node_id = request_data['firewall_node_id']
+            event_id = request_data.get('event_id', 'manual_action')
+            command_id = request_data.get('command_id', f"manual_{int(time.time())}")
+
+            # 🔥 VERIFICAR SI LA ACCIÓN ESTÁ PERMITIDA SEGÚN REGLAS JSON
+            manual_action_info = self.firewall_rules_engine.get_manual_action_info(action)
+            if not manual_action_info:
+                return {
+                    'success': False,
+                    'message': f'Acción {action} no está definida en reglas JSON',
+                    'command_id': command_id
+                }
+
+            # 🔥 VERIFICAR CAPACIDADES DEL FIREWALL AGENT
+            firewall_agent = self.firewall_rules_engine.get_firewall_agent_by_node_id(firewall_node_id)
+            if firewall_agent and action not in firewall_agent.capabilities:
+                return {
+                    'success': False,
+                    'message': f'Firewall {firewall_node_id} no soporta acción {action}',
+                    'command_id': command_id
+                }
+
+            # 🔥 CREAR COMANDO CON PARÁMETROS DE REGLAS JSON
+            command = FirewallCommand(
+                action=action,
+                target_ip=target_ip,
+                duration=str(manual_action_info['params'].get('duration', 600)) + 's',
+                reason=f"Manual action: {manual_action_info['description']}",
+                risk_score=request_data.get('risk_score', 0.5),
+                timestamp=datetime.now().isoformat(),
+                event_id=event_id,
+                firewall_node_id=firewall_node_id
+            )
+
+            # 🔥 AÑADIR A COLA PARA PROCESAMIENTO
+            if not self.firewall_commands_queue.full():
+                self.firewall_commands_queue.put(command, timeout=1.0)
+
+                self.logger.info(f"🔥 Acción {action} encolada para {firewall_node_id}: {target_ip}")
+
+                return {
+                    'success': True,
+                    'message': f'Acción {action} enviada a {firewall_node_id}',
+                    'command_id': command_id,
+                    'agent': firewall_node_id
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': 'Cola de comandos firewall llena',
+                    'command_id': command_id
+                }
+
+        except Exception as e:
+            self.logger.error(f"❌ Error ejecutando acción firewall: {e}")
+            return {
+                'success': False,
+                'message': str(e),
+                'command_id': request_data.get('command_id', 'unknown')
+            }
+
+    def test_firewall_connection_with_rules(self):
+        """Test de firewall usando configuración de reglas JSON"""
+        try:
+            self.logger.info("🧪 Test firewall con reglas JSON...")
+
+            # 🔥 OBTENER CONFIGURACIÓN DE TEST DESDE REGLAS JSON
+            list_rules_info = self.firewall_rules_engine.get_manual_action_info('LIST_RULES')
+            default_agent = self.firewall_rules_engine.get_default_firewall_agent()
+
+            if not default_agent:
+                self.logger.error("❌ No hay agentes firewall configurados en JSON")
+                return False
+
+            # 🔥 CREAR COMANDO DE TEST USANDO REGLAS JSON
+            test_request = {
+                'action': 'LIST_RULES',
+                'target_ip': '127.0.0.1',
+                'firewall_node_id': default_agent.node_id,
+                'event_id': f"test_{int(time.time())}",
+                'command_id': f"test_rules_{int(time.time())}",
+                'source': 'dashboard_test_with_rules'
+            }
+
+            # 🔥 EJECUTAR TEST
+            result = self.execute_firewall_action_from_request(test_request)
+
+            if result['success']:
+                self.logger.info(f"✅ Test firewall exitoso con reglas JSON: {result['message']}")
+                return True
+            else:
+                self.logger.error(f"❌ Test firewall falló: {result['message']}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ Error en test firewall con reglas: {e}")
+            return False
+
     def start_periodic_updates(self):
         """Iniciar actualizaciones periódicas según configuración JSON"""
 
@@ -2121,6 +2596,10 @@ class SecurityDashboard:
                     self.update_statistics()
                     self.update_zmq_connection_stats()
                     self.check_component_health()
+
+                    # 🔥 NUEVO: Verificar cambios en reglas de firewall
+                    self.firewall_rules_engine.reload_if_changed()
+
                     time.sleep(self.config.stats_interval)
                 except Exception as e:
                     self.logger.error(f"❌ Error en actualizaciones periódicas: {e}")
@@ -2360,7 +2839,14 @@ class SecurityDashboard:
             # NUEVO: Indicador de prueba de firewall
             'firewall_test_available': True,
             # NUEVO: Debug counters para ZMQ threading
-            'debug_counters': self.debug_counters
+            'debug_counters': self.debug_counters,
+            # 🔥 NUEVO: Información de reglas de firewall
+            'firewall_rules_info': {
+                'rules_count': len(self.firewall_rules_engine.rules),
+                'agents_count': len(self.firewall_rules_engine.firewall_agents),
+                'last_loaded': self.firewall_rules_engine.last_loaded.isoformat() if self.firewall_rules_engine.last_loaded else None,
+                'available_actions': list(self.firewall_rules_engine.manual_actions.keys())
+            }
         }
 
     def _get_component_connectivity(self, connection_id: str) -> Dict:
@@ -2383,46 +2869,8 @@ class SecurityDashboard:
         }
 
     def test_firewall_connection(self):
-        """Probar conexión con firewall enviando comando de prueba - CORREGIDO"""
-        self.debug_firewall_connection()
-        try:
-            # Importar protobuf correcto
-            import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
-
-            # Crear comando protobuf correcto
-            command = fw_pb2.FirewallCommand()
-            command.command_id = f"test_{int(time.time())}"
-            command.action = fw_pb2.CommandAction.LIST_RULES  # ✅ ENUM válido
-            command.target_ip = "127.0.0.1"
-            command.target_port = 0
-            command.duration_seconds = 10
-            command.reason = "Dashboard connection test"
-            command.priority = fw_pb2.CommandPriority.LOW
-            command.dry_run = True  # ✅ Solo testing
-
-            # Serializar a protobuf binario
-            command_bytes = command.SerializeToString()
-
-            # Enviar directamente via ZeroMQ (sin cola interna)
-            self.firewall_commands_socket.send(command_bytes)  # ✅ PROTOBUF BINARIO
-
-            self.logger.info("🧪 Comando protobuf enviado al firewall agent")
-            self.stats['commands_sent'] += 1
-
-            # Actualizar estadísticas de conexión
-            conn_info = self.zmq_connections['firewall_commands']
-            conn_info.total_messages += 1
-            conn_info.bytes_transferred += len(command_bytes)
-            conn_info.last_activity = datetime.now()
-
-            return True
-
-        except ImportError as e:
-            self.logger.error(f"❌ Protobuf firewall_commands_pb2 no disponible: {e}")
-            return False
-        except Exception as e:
-            self.logger.error(f"❌ Error enviando comando protobuf: {e}")
-            return False
+        """Método legacy - delegado a versión con reglas"""
+        return self.test_firewall_connection_with_rules()
 
     def _debug_socket_state(self):
         """Método para debugging del estado de sockets"""
@@ -2499,15 +2947,31 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # Verificar archivo de configuración
-    if len(sys.argv) != 2:
-        print("❌ Uso: python real_zmq_dashboard_with_firewall.py <config.json>")
+    # 🔥 NUEVO: Verificar ambos archivos de configuración
+    if len(sys.argv) != 3:
+        print("❌ Uso: python real_zmq_dashboard_with_firewall.py <dashboard_config.json> <firewall_rules.json>")
+        print("📋 Ambos archivos son obligatorios:")
+        print("   • dashboard_config.json: Configuración del sistema (ZMQ, threads, monitoring)")
+        print("   • firewall_rules.json: Reglas dinámicas del firewall")
         sys.exit(1)
 
     config_file = sys.argv[1]
+    firewall_rules_file = sys.argv[2]
+
+    # 🔥 VALIDACIÓN PREVIA: Verificar que ambos archivos existen
+    if not Path(config_file).exists():
+        print(f"❌ ERROR: Archivo de configuración no encontrado: {config_file}")
+        print("🔧 Verificar la ruta del archivo de configuración del dashboard")
+        sys.exit(1)
+
+    if not Path(firewall_rules_file).exists():
+        print(f"❌ ERROR: Archivo de reglas no encontrado: {firewall_rules_file}")
+        print("🔧 Verificar la ruta del archivo de reglas del firewall")
+        sys.exit(1)
 
     try:
-        # Cargar configuración (FALLA si hay errores)
+        # Cargar configuración del sistema (FALLA si hay errores)
+        print(f"📋 Cargando configuración del sistema desde: {config_file}")
         config = DashboardConfig(config_file)
 
         # Crear directorios necesarios
@@ -2517,13 +2981,24 @@ def main():
         Path("static/css").mkdir(parents=True, exist_ok=True)
         Path("static/js").mkdir(parents=True, exist_ok=True)
 
-        # Crear y iniciar dashboard
-        dashboard = SecurityDashboard(config)
+        # 🔥 NUEVO: Crear dashboard con ruta específica de reglas
+        print(f"🔥 Cargando reglas de firewall desde: {firewall_rules_file}")
+        dashboard = SecurityDashboard(config, firewall_rules_file)
         dashboard.start()
 
     except ConfigurationError as e:
-        print(f"💥 ERROR DE CONFIGURACIÓN: {e}")
-        print("🔧 Verificar archivo JSON y campos requeridos")
+        print(f"💥 ERROR DE CONFIGURACIÓN DEL SISTEMA: {e}")
+        print(f"🔧 Verificar archivo: {config_file}")
+        print("📋 Campos requeridos: network, zmq, processing, monitoring, logging")
+        sys.exit(1)
+    except FirewallRulesError as e:
+        print(f"🔥 ERROR DE REGLAS DE FIREWALL: {e}")
+        print(f"🔧 Verificar archivo: {firewall_rules_file}")
+        print("📋 Campos requeridos: firewall_rules.rules, firewall_rules.manual_actions")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"💥 ERROR DE FORMATO JSON: {e}")
+        print("🔧 Verificar sintaxis JSON en ambos archivos")
         sys.exit(1)
     except Exception as e:
         print(f"💥 ERROR FATAL: {e}")
