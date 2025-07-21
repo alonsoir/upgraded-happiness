@@ -1,6 +1,6 @@
 /*
-dashboard.js - VERSIÓN CON EVENTOS DEL FIREWALL (LIMPIA)
-Integra sistema ZeroMQ con nueva sección específica para firewall
+dashboard.js - VERSIÓN LIMPIA SIN LÓGICA DE RECOMENDACIONES
++ INDICADORES DE COMPONENTES COMPLETOS
 */
 
 // ============================================================================
@@ -15,7 +15,7 @@ let pollingInterval = null;
 let currentEvents = [];
 let eventsPaused = false;
 
-// 🔥 Nuevas variables para eventos del firewall
+// 🔥 Variables para eventos del firewall
 let currentFirewallEvents = [];
 let firewallEventsPaused = false;
 let firewallStats = {
@@ -23,6 +23,14 @@ let firewallStats = {
     responsesOk: 0,
     errors: 0,
     lastAgent: 'N/A'
+};
+
+// 🔥 NUEVO: Estados de componentes para indicadores
+let componentStates = {
+    promiscuous_agent: false,
+    geoip_enricher: false,
+    ml_detector: false,
+    firewall_agent: false
 };
 
 // ============================================================================
@@ -33,19 +41,18 @@ function initializeDashboard() {
     console.log('🚀 Inicializando Dashboard SCADA...');
 
     try {
-        // Inicializar componentes principales
         initializeMap();
         initializeEventHandlers();
         initializeCollapsibleSections();
 
-        // *** CAMBIO PRINCIPAL: HTTP Polling en lugar de WebSocket ***
+        // HTTP Polling para conectar con backend
         startSimplePolling();
 
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
 
         console.log('✅ Dashboard inicializado correctamente');
-        addDebugLog('info', 'Dashboard inicializado - usando HTTP polling con eventos de firewall');
+        addDebugLog('info', 'Dashboard inicializado - comunicación con backend ZeroMQ');
 
     } catch (error) {
         console.error('❌ Error inicializando dashboard:', error);
@@ -54,11 +61,11 @@ function initializeDashboard() {
 }
 
 // ============================================================================
-// HTTP POLLING SIMPLE (REEMPLAZA WEBSOCKET)
+// HTTP POLLING PARA BACKEND
 // ============================================================================
 
 function startSimplePolling() {
-    console.log('📡 Iniciando polling HTTP simple...');
+    console.log('📡 Iniciando polling HTTP al backend...');
 
     // Llamada inicial
     fetchDataFromZeroMQ();
@@ -66,7 +73,7 @@ function startSimplePolling() {
     // Polling cada 2 segundos
     pollingInterval = setInterval(fetchDataFromZeroMQ, 2000);
 
-    addDebugLog('info', 'HTTP polling iniciado - conectando con ZeroMQ');
+    addDebugLog('info', 'HTTP polling iniciado - conectando con backend ZeroMQ');
 }
 
 async function fetchDataFromZeroMQ() {
@@ -86,26 +93,26 @@ async function fetchDataFromZeroMQ() {
         const data = await response.json();
 
         if (data.success) {
-            // Procesar datos de tu sistema ZeroMQ
+            // Procesar datos del backend
             updateDashboardFromZeroMQ(data);
             updateConnectionStatus('api', 'connected');
 
-            console.log('📊 Datos ZeroMQ recibidos:', data.basic_stats);
+            console.log('📊 Datos backend recibidos:', data.basic_stats);
 
         } else {
             throw new Error(data.error || 'Error en respuesta API');
         }
 
     } catch (error) {
-        console.error('❌ Error conectando con ZeroMQ:', error);
+        console.error('❌ Error conectando con backend:', error);
         updateConnectionStatus('api', 'error');
-        addDebugLog('error', `Error ZeroMQ: ${error.message}`);
+        addDebugLog('error', `Error backend: ${error.message}`);
     }
 }
 
 function updateDashboardFromZeroMQ(data) {
     try {
-        // Actualizar métricas básicas desde ZeroMQ
+        // Actualizar métricas básicas
         if (data.basic_stats) {
             updateElement('events-per-min', data.basic_stats.events_per_minute || 0);
             updateElement('high-risk-count', data.basic_stats.high_risk_events || 0);
@@ -116,7 +123,6 @@ function updateDashboardFromZeroMQ(data) {
             updateElement('commands-count', data.basic_stats.commands_sent || 0);
             updateElement('confirmations-count', data.basic_stats.confirmations || 0);
 
-            // Actualizar contadores en header
             updateElement('events-counter', data.basic_stats.total_events || 0);
             updateElement('confirmations-counter', data.basic_stats.confirmations || 0);
 
@@ -129,6 +135,9 @@ function updateDashboardFromZeroMQ(data) {
             updateFirewallStats(data.firewall_stats);
         }
 
+        // 🔥 NUEVO: Actualizar estados de componentes
+        updateComponentIndicators(data);
+
         // Actualizar estado de componentes ZeroMQ
         if (data.component_status) {
             updateComponentStatus(data.component_status);
@@ -139,7 +148,7 @@ function updateDashboardFromZeroMQ(data) {
             updateZMQStatus(data.zmq_connections);
         }
 
-        // Procesar eventos recientes de ZeroMQ
+        // Procesar eventos recientes
         if (data.recent_events && data.recent_events.length > 0) {
             processEventsFromZeroMQ(data.recent_events);
         }
@@ -149,21 +158,94 @@ function updateDashboardFromZeroMQ(data) {
             processFirewallEventsFromZeroMQ(data.firewall_events);
         }
 
-        addDebugLog('info', `ZeroMQ: ${data.basic_stats?.total_events || 0} eventos, ${data.basic_stats?.high_risk_events || 0} alto riesgo`);
+        addDebugLog('info', `Backend: ${data.basic_stats?.total_events || 0} eventos, ${data.basic_stats?.high_risk_events || 0} alto riesgo`);
 
     } catch (error) {
-        console.error('❌ Error procesando datos ZeroMQ:', error);
-        addDebugLog('error', `Error procesando ZeroMQ: ${error.message}`);
+        console.error('❌ Error procesando datos backend:', error);
+        addDebugLog('error', `Error procesando backend: ${error.message}`);
     }
 }
 
 // ============================================================================
-// 🔥 NUEVAS FUNCIONES PARA EVENTOS DEL FIREWALL
+// 🔥 NUEVO: LÓGICA DE INDICADORES DE COMPONENTES
+// ============================================================================
+
+function updateComponentIndicators(data) {
+    try {
+        // 🔥 PROMISCUOUS AGENT: Verde si hay flujo de eventos
+        const hasEventFlow = data.recent_events && data.recent_events.length > 0;
+        componentStates.promiscuous_agent = hasEventFlow;
+        updateStatusIndicator('promiscuous-agent-status', hasEventFlow);
+
+        // 🔥 GEOIP ENRICHER: Verde si eventos tienen lat/lon
+        let hasGeoData = false;
+        if (data.recent_events && data.recent_events.length > 0) {
+            hasGeoData = data.recent_events.some(event =>
+                event.latitude && event.longitude &&
+                event.latitude !== 0 && event.longitude !== 0
+            );
+        }
+        componentStates.geoip_enricher = hasGeoData;
+        updateStatusIndicator('geoip-enricher-status', hasGeoData);
+
+        // 🔥 ML DETECTOR: Verde si hay comunicación ZeroMQ activa
+        const mlConnected = data.zmq_connections &&
+                           data.zmq_connections.ml_events &&
+                           data.zmq_connections.ml_events.status === 'active';
+        componentStates.ml_detector = mlConnected;
+        updateStatusIndicator('ml-detector-status', mlConnected);
+
+        // 🔥 FIREWALL AGENT: Verde si hay comunicación de comandos/respuestas
+        const fwConnected = data.zmq_connections &&
+                           data.zmq_connections.firewall_commands &&
+                           data.zmq_connections.firewall_commands.status === 'active';
+        componentStates.firewall_agent = fwConnected;
+        updateStatusIndicator('firewall-agent-status', fwConnected);
+
+        // 🔥 ESTADO GENERAL: Connected si todos están verdes
+        updateOverallConnectionStatus();
+
+        console.log('🔄 Estados componentes:', componentStates);
+
+    } catch (error) {
+        console.error('❌ Error actualizando indicadores componentes:', error);
+    }
+}
+
+function updateOverallConnectionStatus() {
+    const allConnected = Object.values(componentStates).every(state => state === true);
+    const someConnected = Object.values(componentStates).some(state => state === true);
+
+    const overallStatus = document.getElementById('overall-status');
+    const overallText = document.getElementById('overall-status-text');
+
+    if (overallStatus && overallText) {
+        if (allConnected) {
+            overallStatus.className = 'status-dot connected';
+            overallText.textContent = 'Connected';
+        } else if (someConnected) {
+            overallStatus.className = 'status-dot warning';
+            overallText.textContent = 'Parcial';
+        } else {
+            overallStatus.className = 'status-dot disconnected';
+            overallText.textContent = 'Desconectado';
+        }
+    }
+}
+
+function updateStatusIndicator(elementId, connected) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.className = `status-dot ${connected ? 'connected' : 'disconnected'}`;
+    }
+}
+
+// ============================================================================
+// EVENTOS DEL FIREWALL (SIN CAMBIOS)
 // ============================================================================
 
 function updateFirewallStats(stats) {
     try {
-        // Actualizar estadísticas globales
         if (stats.commands_sent !== undefined) {
             firewallStats.commandsSent = stats.commands_sent;
             updateElement('firewall-commands-sent', stats.commands_sent);
@@ -184,7 +266,6 @@ function updateFirewallStats(stats) {
             updateElement('firewall-last-agent', stats.last_agent);
         }
 
-        // Actualizar contador en el header de la sección
         const totalEvents = firewallStats.commandsSent + firewallStats.responsesOk;
         updateElement('firewall-events-count', totalEvents);
 
@@ -199,7 +280,6 @@ function processFirewallEventsFromZeroMQ(events) {
     if (firewallEventsPaused) return;
 
     try {
-        // Filtrar eventos nuevos del firewall
         const newEvents = events.filter(event => {
             return !currentFirewallEvents.some(existing =>
                 existing.id === event.id ||
@@ -207,13 +287,12 @@ function processFirewallEventsFromZeroMQ(events) {
             );
         });
 
-        // Procesar cada evento nuevo del firewall
         newEvents.forEach(event => {
             addFirewallEventToList(event);
         });
 
         if (newEvents.length > 0) {
-            console.log(`🔥 ${newEvents.length} eventos nuevos del firewall desde ZeroMQ`);
+            console.log(`🔥 ${newEvents.length} eventos nuevos del firewall desde backend`);
         }
 
     } catch (error) {
@@ -227,7 +306,6 @@ function addFirewallEventToList(event) {
     if (!firewallEventsList) return;
 
     try {
-        // Remover placeholder si existe
         const placeholder = firewallEventsList.querySelector('.no-firewall-events');
         if (placeholder) {
             placeholder.remove();
@@ -236,7 +314,6 @@ function addFirewallEventToList(event) {
         const eventElement = document.createElement('div');
         const eventTime = new Date(event.timestamp * 1000 || Date.now());
 
-        // Determinar tipo de evento (comando o respuesta)
         let eventType = 'command';
         let eventTypeLabel = 'COMANDO ENVIADO';
 
@@ -262,7 +339,7 @@ function addFirewallEventToList(event) {
                     <strong>${event.id || event.command_id || 'N/A'}</strong> → ${event.action || 'LIST_RULES'} (${event.ip || '127.0.0.1'})
                 </div>
                 <div class="firewall-event-details">
-                    Action: ${event.action_code || 7} | IP: ${event.ip || '127.0.0.1'} | Bytes: ${event.bytes || 61} | ${event.source || 'ZeroMQ'}
+                    Action: ${event.action_code || 7} | IP: ${event.ip || '127.0.0.1'} | Bytes: ${event.bytes || 61} | ${event.source || 'Backend'}
                 </div>
             `;
         } else if (eventType === 'response') {
@@ -295,19 +372,15 @@ function addFirewallEventToList(event) {
             `;
         }
 
-        // Insertar al principio de la lista
         firewallEventsList.insertBefore(eventElement, firewallEventsList.firstChild);
 
-        // Mantener máximo 20 eventos del firewall
         const events = firewallEventsList.querySelectorAll('.firewall-event');
         if (events.length > 20) {
             events[events.length - 1].remove();
         }
 
-        // Actualizar contador
         updateElement('firewall-events-count', events.length);
 
-        // Guardar en array
         currentFirewallEvents.unshift(event);
         if (currentFirewallEvents.length > 20) {
             currentFirewallEvents.pop();
@@ -358,14 +431,13 @@ function pauseFirewallEventsUpdate() {
 }
 
 // ============================================================================
-// FUNCIONES DE PRUEBA DEL FIREWALL (MEJORADAS)
+// TEST FIREWALL (SIN CAMBIOS)
 // ============================================================================
 
 async function sendTestFirewallCommand() {
     try {
-        console.log('🧪 Enviando comando de test al firewall via ZeroMQ...');
+        console.log('🧪 Enviando comando de test al firewall via backend...');
 
-        // 🔥 Añadir evento de comando inmediatamente
         const commandId = 'test_' + Date.now();
         addFirewallEventToList({
             id: commandId,
@@ -399,7 +471,6 @@ async function sendTestFirewallCommand() {
         const result = await response.json();
 
         if (result.success) {
-            // 🔥 Añadir evento de respuesta exitosa
             setTimeout(() => {
                 addFirewallEventToList({
                     id: commandId,
@@ -412,22 +483,18 @@ async function sendTestFirewallCommand() {
                 });
             }, 300);
 
-            // ✅ CAMBIO PRINCIPAL: Mensaje de éxito en lugar de error
             showToast('✅ Test enviado correctamente al firewall', 'success');
             console.log('✅ Test firewall exitoso:', result);
-            addDebugLog('info', 'Test firewall enviado correctamente via ZeroMQ');
+            addDebugLog('info', 'Test firewall enviado correctamente via backend');
 
-            // Actualizar estadísticas
             firewallStats.commandsSent++;
             firewallStats.responsesOk++;
             updateElement('firewall-commands-sent', firewallStats.commandsSent);
             updateElement('firewall-responses-ok', firewallStats.responsesOk);
 
-            // Actualizar datos del dashboard
             setTimeout(fetchDataFromZeroMQ, 500);
 
         } else {
-            // 🔥 Añadir evento de error
             setTimeout(() => {
                 addFirewallEventToList({
                     id: commandId,
@@ -448,7 +515,6 @@ async function sendTestFirewallCommand() {
     } catch (error) {
         console.error('❌ Error en sendTestFirewallCommand:', error);
 
-        // 🔥 Añadir evento de error de comunicación
         addFirewallEventToList({
             id: 'error_' + Date.now(),
             type: 'error',
@@ -465,20 +531,19 @@ async function sendTestFirewallCommand() {
     }
 }
 
-// Alias para mantener compatibilidad
+// Alias para compatibilidad
 async function sendTestFirewallEvent() {
     return await sendTestFirewallCommand();
 }
 
 // ============================================================================
-// MANEJO DE EVENTOS DESDE ZEROMQ
+// MANEJO DE EVENTOS DESDE BACKEND
 // ============================================================================
 
 function processEventsFromZeroMQ(events) {
     if (eventsPaused) return;
 
     try {
-        // Filtrar eventos nuevos que no hemos visto
         const newEvents = events.filter(event => {
             return !currentEvents.some(existing =>
                 existing.id === event.id ||
@@ -487,30 +552,27 @@ function processEventsFromZeroMQ(events) {
             );
         });
 
-        // Procesar cada evento nuevo
         newEvents.forEach(event => {
             addEventFromZeroMQ(event);
         });
 
         if (newEvents.length > 0) {
-            console.log(`📨 ${newEvents.length} eventos nuevos desde ZeroMQ`);
+            console.log(`📨 ${newEvents.length} eventos nuevos desde backend`);
         }
 
     } catch (error) {
-        console.error('❌ Error procesando eventos ZeroMQ:', error);
-        addDebugLog('error', `Error eventos ZeroMQ: ${error.message}`);
+        console.error('❌ Error procesando eventos backend:', error);
+        addDebugLog('error', `Error eventos backend: ${error.message}`);
     }
 }
 
 function addEventFromZeroMQ(event) {
     try {
-        // Validar evento
         if (!event.source_ip || !event.target_ip) {
-            console.warn('⚠️ Evento ZeroMQ incompleto:', event);
+            console.warn('⚠️ Evento backend incompleto:', event);
             return;
         }
 
-        // Asegurar campos requeridos
         if (typeof event.risk_score !== 'number') {
             event.risk_score = 0.5;
         }
@@ -525,18 +587,16 @@ function addEventFromZeroMQ(event) {
             addEventMarkerToMap(event);
         }
 
-        // Añadir a la lista de eventos
         addEventToEventsList(event);
 
-        // Mostrar indicador si es alto riesgo
         if (event.risk_score > 0.8) {
             showThreatIndicator(event);
         }
 
-        console.log('🚨 Evento ZeroMQ procesado:', event.source_ip, '→', event.target_ip);
+        console.log('🚨 Evento backend procesado:', event.source_ip, '→', event.target_ip);
 
     } catch (error) {
-        console.error('❌ Error añadiendo evento ZeroMQ:', error);
+        console.error('❌ Error añadiendo evento backend:', error);
         addDebugLog('error', `Error evento: ${error.message}`);
     }
 }
@@ -546,7 +606,6 @@ function addEventToEventsList(event) {
     if (!eventsList) return;
 
     try {
-        // Remover placeholder si existe
         const placeholder = eventsList.querySelector('.no-events-placeholder');
         if (placeholder) {
             placeholder.remove();
@@ -559,7 +618,6 @@ function addEventToEventsList(event) {
         eventElement.className = `event-item risk-${riskLevel} new-event`;
         eventElement.onclick = () => showEventDetail(event);
 
-        // Convertir timestamp
         const eventTime = new Date(event.timestamp * 1000);
 
         eventElement.innerHTML = `
@@ -569,23 +627,19 @@ function addEventToEventsList(event) {
             </div>
             <div class="event-details">
                 <div><span class="event-source">${event.source_ip}</span> → <span class="event-target">${event.target_ip}</span></div>
-                <div class="event-type">${event.type || 'ZeroMQ Event'}</div>
+                <div class="event-type">${event.type || 'Backend Event'}</div>
             </div>
         `;
 
-        // Insertar al principio
         eventsList.insertBefore(eventElement, eventsList.firstChild);
 
-        // Mantener máximo 50 eventos
         const events = eventsList.querySelectorAll('.event-item');
         if (events.length > 50) {
             events[events.length - 1].remove();
         }
 
-        // Actualizar contador
         updateElement('live-events-count', events.length);
 
-        // Guardar en array
         currentEvents.unshift(event);
         if (currentEvents.length > 50) {
             currentEvents.pop();
@@ -618,11 +672,11 @@ function addEventMarkerToMap(event) {
             fillOpacity: 0.6
         }).bindPopup(`
             <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                <b>🚨 Evento ZeroMQ</b><br>
+                <b>🚨 Evento Backend</b><br>
                 <strong>Origen:</strong> ${event.source_ip}<br>
                 <strong>Destino:</strong> ${event.target_ip}<br>
                 <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
-                <strong>Tipo:</strong> ${event.type || 'ZeroMQ'}<br>
+                <strong>Tipo:</strong> ${event.type || 'Backend'}<br>
                 <strong>Ubicación:</strong> ${event.location || 'No disponible'}<br>
                 <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
             </div>
@@ -631,7 +685,6 @@ function addEventMarkerToMap(event) {
         marker._isEventMarker = true;
         markers.push(marker);
 
-        // Auto-remover después de 5 minutos
         setTimeout(() => {
             if (map.hasLayer(marker)) {
                 map.removeLayer(marker);
@@ -639,7 +692,7 @@ function addEventMarkerToMap(event) {
             }
         }, 5 * 60 * 1000);
 
-        console.log('📍 Marcador ZeroMQ añadido:', event.source_ip);
+        console.log('📍 Marcador backend añadido:', event.source_ip);
 
     } catch (error) {
         console.error('❌ Error añadiendo marcador:', error);
@@ -647,7 +700,377 @@ function addEventMarkerToMap(event) {
 }
 
 // ============================================================================
-// INICIALIZACIÓN DEL MAPA
+// 🚨 MODAL DE EVENTOS - CON INFORMACIÓN DE FIREWALL Y ACCIONES
+// ============================================================================
+
+async function showEventDetail(event) {
+    try {
+        // 🔥 NUEVO: Obtener información del firewall responsable
+        const firewallInfo = await getResponsibleFirewallInfo(event);
+
+        const content = `
+            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <!-- Header del evento -->
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
+                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad</h3>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
+                    </div>
+                </div>
+
+                <!-- Información básica del evento -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <strong>IP Origen:</strong><br>
+                            <span style="color: #ff4444; font-size: 14px;">${event.source_ip}</span>
+                        </div>
+                        <div>
+                            <strong>IP Destino:</strong><br>
+                            <span style="color: #00ff88; font-size: 14px;">${event.target_ip}</span>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Score de Riesgo:</strong><br>
+                            <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
+                                ${(event.risk_score * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div>
+                            <strong>Tipo:</strong><br>
+                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
+                        </div>
+                    </div>
+                    ${event.location ? `
+                        <div style="margin-top: 10px;">
+                            <strong>Ubicación:</strong> ${event.location}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- 🔥 NUEVO: Información del Firewall Responsable -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
+                        🔥 Firewall Agent Responsable
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>Node ID:</strong> ${firewallInfo.node_id}<br>
+                        <strong>IP del Agente:</strong> ${firewallInfo.agent_ip}<br>
+                        <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
+                        <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
+                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}
+                    </div>
+                </div>
+
+                <!-- 🔥 NUEVO: Acciones Disponibles -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 12px;">
+                        ⚡ Acciones Disponibles
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        ${generateFirewallActionButtons(event, firewallInfo)}
+                    </div>
+                    <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
+                        💡 Las acciones se enviarán al firewall agent: <strong style="color: #00ff88;">${firewallInfo.node_id}</strong>
+                    </div>
+                </div>
+
+                <!-- Datos del evento (JSON) -->
+                <div>
+                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleEventData()">
+                        <span style="color: #666; font-weight: bold;">
+                            📊 Datos del Evento (JSON)
+                        </span>
+                        <i class="fas fa-chevron-down" id="event-data-toggle" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="event-data-content" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal('Análisis del Evento de Seguridad', content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalles del evento:', error);
+        showSimpleEventDetail(event);
+    }
+}
+
+// ============================================================================
+// 🔥 NUEVO: FUNCIONES PARA FIREWALL RESPONSABLE Y ACCIONES
+// ============================================================================
+
+async function getResponsibleFirewallInfo(event) {
+    try {
+        // 🔥 DETERMINAR QUE FIREWALL ES RESPONSABLE
+        // Por ahora, usamos la información del evento para determinar el firewall
+        // En el futuro con etcd, podremos consultar múltiples firewalls
+
+        const defaultFirewall = {
+            node_id: event.node_id || 'simple_firewall_agent_001',
+            agent_ip: event.source_ip || event.target_ip || '127.0.0.1',
+            status: 'active',
+            active_rules: 0,
+            endpoint: 'tcp://localhost:5580'
+        };
+
+        // Intentar obtener información real del backend
+        try {
+            const response = await fetch('/api/firewall-agent-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    event_id: event.id,
+                    source_ip: event.source_ip,
+                    target_ip: event.target_ip,
+                    node_id: event.node_id
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return data.firewall_info || defaultFirewall;
+            }
+        } catch (error) {
+            console.warn('No se pudo obtener info del firewall del backend:', error);
+        }
+
+        return defaultFirewall;
+
+    } catch (error) {
+        console.error('Error obteniendo información del firewall:', error);
+        return {
+            node_id: 'unknown_firewall',
+            agent_ip: '127.0.0.1',
+            status: 'unknown',
+            active_rules: 0,
+            endpoint: 'tcp://localhost:5580'
+        };
+    }
+}
+
+function generateFirewallActionButtons(event, firewallInfo) {
+    const riskScore = event.risk_score || 0;
+
+    let buttons = '';
+
+    // 🔥 BLOQUEAR IP (Solo para alto riesgo)
+    if (riskScore > 0.7) {
+        buttons += `
+            <button onclick="executeFirewallAction('BLOCK_IP', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                    onmouseover="this.style.background='rgba(255, 68, 68, 0.3)'"
+                    onmouseout="this.style.background='rgba(255, 68, 68, 0.2)'">
+                🚫 Bloquear ${event.source_ip}
+            </button>
+        `;
+    }
+
+    // 🔥 RATE LIMIT (Para riesgo medio-alto)
+    if (riskScore > 0.4) {
+        buttons += `
+            <button onclick="executeFirewallAction('RATE_LIMIT', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    style="background: rgba(255, 170, 0, 0.2); border: 1px solid #ffaa00; color: #ffaa00; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                    onmouseover="this.style.background='rgba(255, 170, 0, 0.3)'"
+                    onmouseout="this.style.background='rgba(255, 170, 0, 0.2)'">
+                ⏱️ Limitar ${event.source_ip}
+            </button>
+        `;
+    }
+
+    // 🔥 MONITOREAR (Siempre disponible)
+    buttons += `
+        <button onclick="executeFirewallAction('MONITOR', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                style="background: rgba(0, 170, 255, 0.2); border: 1px solid #00aaff; color: #00aaff; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                onmouseover="this.style.background='rgba(0, 170, 255, 0.3)'"
+                onmouseout="this.style.background='rgba(0, 170, 255, 0.2)'">
+            👁️ Monitorear ${event.source_ip}
+        </button>
+    `;
+
+    // 🔥 LISTAR REGLAS (Diagnóstico)
+    buttons += `
+        <button onclick="executeFirewallAction('LIST_RULES', 'all', '${firewallInfo.node_id}', '${event.id}')"
+                style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                onmouseover="this.style.background='rgba(0, 255, 136, 0.3)'"
+                onmouseout="this.style.background='rgba(0, 255, 136, 0.2)'">
+            📋 Listar Reglas Activas
+        </button>
+    `;
+
+    return buttons;
+}
+
+async function executeFirewallAction(action, targetIp, firewallNodeId, eventId) {
+    try {
+        console.log(`🔥 Ejecutando acción ${action} en firewall ${firewallNodeId} para IP ${targetIp}`);
+
+        // 🔥 Mostrar feedback inmediato
+        showToast(`Enviando ${action} a ${firewallNodeId}...`, 'info');
+
+        // 🔥 Añadir evento a la lista del firewall
+        const commandId = `action_${Date.now()}`;
+        addFirewallEventToList({
+            id: commandId,
+            type: 'command',
+            action: action,
+            ip: targetIp,
+            action_code: getFirewallActionCode(action),
+            bytes: 64,
+            source: 'Dashboard Action',
+            timestamp: Date.now() / 1000
+        });
+
+        // 🔥 Enviar acción al backend
+        const response = await fetch('/api/execute-firewall-action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: action,
+                target_ip: targetIp,
+                firewall_node_id: firewallNodeId,
+                event_id: eventId,
+                command_id: commandId,
+                source: 'dashboard_manual_action'
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            // 🔥 Añadir respuesta exitosa
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'response',
+                    success: true,
+                    agent: result.agent || firewallNodeId,
+                    result: result.message || `${action} ejecutada correctamente`,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`✅ ${action} ejecutada en ${firewallNodeId}`, 'success');
+            addDebugLog('info', `Acción ${action} ejecutada para IP ${targetIp} en firewall ${firewallNodeId}`);
+
+            // Actualizar estadísticas
+            firewallStats.commandsSent++;
+            firewallStats.responsesOk++;
+            updateElement('firewall-commands-sent', firewallStats.commandsSent);
+            updateElement('firewall-responses-ok', firewallStats.responsesOk);
+
+            // Cerrar modal después de acción exitosa
+            setTimeout(() => {
+                closeModal();
+            }, 2000);
+
+        } else {
+            // 🔥 Añadir respuesta de error
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'error',
+                    success: false,
+                    error: result.message || 'Error ejecutando acción',
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`❌ Error en ${action}: ${result.message}`, 'error');
+            firewallStats.errors++;
+            updateElement('firewall-errors', firewallStats.errors);
+        }
+
+    } catch (error) {
+        console.error(`❌ Error ejecutando acción ${action}:`, error);
+
+        // 🔥 Añadir evento de error
+        addFirewallEventToList({
+            id: 'error_' + Date.now(),
+            type: 'error',
+            success: false,
+            error: `Error comunicación: ${error.message}`,
+            timestamp: Date.now() / 1000
+        });
+
+        showToast(`❌ Error comunicando con firewall: ${error.message}`, 'error');
+        firewallStats.errors++;
+        updateElement('firewall-errors', firewallStats.errors);
+    }
+}
+
+function getFirewallActionCode(action) {
+    const actionCodes = {
+        'BLOCK_IP': 1,
+        'RATE_LIMIT': 2,
+        'MONITOR': 3,
+        'LIST_RULES': 7,
+        'UNBLOCK_IP': 4
+    };
+    return actionCodes[action] || 7;
+}
+
+function toggleEventData() {
+    const content = document.getElementById('event-data-content');
+    const toggle = document.getElementById('event-data-toggle');
+
+    if (content && toggle) {
+        const isCollapsed = content.style.maxHeight === '0px' || content.style.maxHeight === '';
+
+        if (isCollapsed) {
+            content.style.maxHeight = '300px';
+            toggle.style.transform = 'rotate(180deg)';
+        } else {
+            content.style.maxHeight = '0px';
+            toggle.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+function showSimpleEventDetail(event) {
+    const content = `
+        <div style="font-family: 'Consolas', monospace;">
+            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento de Seguridad</h4>
+
+            <div style="margin-bottom: 10px;">
+                <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>IP Origen:</strong> <span style="color: #ff4444;">${event.source_ip}</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>IP Destino:</strong> <span style="color: #00ff88;">${event.target_ip}</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Score de Riesgo:</strong> <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'};">${(event.risk_score * 100).toFixed(1)}%</span>
+            </div>
+
+            ${event.type ? `<div style="margin-bottom: 10px;"><strong>Tipo:</strong> ${event.type}</div>` : ''}
+            ${event.location ? `<div style="margin-bottom: 10px;"><strong>Ubicación:</strong> ${event.location}</div>` : ''}
+
+            <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.6); border-radius: 4px;">
+                <strong>Datos del Evento:</strong><br>
+                <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify(event, null, 2)}</pre>
+            </div>
+        </div>
+    `;
+
+    showModal('Detalle del Evento', content);
+}
+
+// ============================================================================
+// RESTO DE FUNCIONES (SIN CAMBIOS IMPORTANTES)
 // ============================================================================
 
 function initializeMap() {
@@ -704,15 +1127,15 @@ function addInitialMarkers() {
 
     try {
         const madridMarker = L.marker([40.4168, -3.7038])
-            .bindPopup('<b>🖥️ Dashboard Principal</b><br>Madrid, España<br>ZeroMQ Dashboard')
+            .bindPopup('<b>🖥️ Dashboard Principal</b><br>Madrid, España<br>Backend Dashboard')
             .addTo(map);
 
         const barcelonaMarker = L.marker([41.3851, 2.1734])
-            .bindPopup('<b>🔄 Nodo Remoto</b><br>Barcelona, España<br>ZeroMQ Node')
+            .bindPopup('<b>🔄 Nodo Remoto</b><br>Barcelona, España<br>ML Detector Node')
             .addTo(map);
 
         const sevillaMarker = L.marker([37.3886, -5.9823])
-            .bindPopup('<b>🔥 Firewall Agent</b><br>Sevilla, España<br>ZeroMQ Firewall')
+            .bindPopup('<b>🔥 Firewall Agent</b><br>Sevilla, España<br>Firewall Agent')
             .addTo(map);
 
         markers.push(madridMarker, barcelonaMarker, sevillaMarker);
@@ -739,7 +1162,7 @@ function handleMapError(error) {
 }
 
 // ============================================================================
-// CONTROLES DEL MAPA
+// RESTO DE FUNCIONES AUXILIARES (IGUAL QUE ANTES)
 // ============================================================================
 
 function clearAllMarkers() {
@@ -775,10 +1198,6 @@ function centerMap() {
         console.error('❌ Error centrando mapa:', error);
     }
 }
-
-// ============================================================================
-// RESTO DE FUNCIONES (UI, HELPERS, ETC.)
-// ============================================================================
 
 function updateComponentStatus(components) {
     Object.keys(components).forEach(componentName => {
@@ -864,7 +1283,6 @@ function initializeEventHandlers() {
         eventsFilter.addEventListener('change', filterEvents);
     }
 
-    // 🔥 Nuevo handler para eventos del firewall
     const pauseFirewallBtn = document.getElementById('pause-firewall-events-btn');
     if (pauseFirewallBtn) {
         pauseFirewallBtn.addEventListener('click', pauseFirewallEventsUpdate);
@@ -932,7 +1350,7 @@ function clearEventsList() {
                 <i class="fas fa-inbox"></i>
                 <p>No hay eventos recientes</p>
                 <button onclick="sendTestFirewallCommand()" class="btn btn-primary">
-                    🧪 Generar Test ZeroMQ
+                    🧪 Generar Test Backend
                 </button>
             </div>
         `;
@@ -967,7 +1385,7 @@ function refreshDashboard() {
     }
 
     showToast('Dashboard actualizado', 'success');
-    addDebugLog('info', 'Dashboard refrescado - datos ZeroMQ');
+    addDebugLog('info', 'Dashboard refrescado - datos backend');
 }
 
 function clearDebugLog() {
@@ -975,7 +1393,7 @@ function clearDebugLog() {
     if (debugLog) {
         debugLog.innerHTML = `
             <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log limpiado</div>
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard ZeroMQ activo con eventos de firewall</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard conectado con backend ZeroMQ</div>
         `;
     }
     showToast('Log limpiado', 'info');
@@ -1035,7 +1453,7 @@ function showThreatIndicator(event) {
     const indicator = document.getElementById('threat-indicator');
     if (indicator) {
         indicator.innerHTML = `
-            ⚠️ Amenaza ZeroMQ detectada!<br>
+            ⚠️ Amenaza detectada!<br>
             <small>${event.source_ip} → ${event.target_ip}</small>
         `;
         indicator.classList.add('show');
@@ -1044,506 +1462,6 @@ function showThreatIndicator(event) {
             indicator.classList.remove('show');
         }, 5000);
     }
-}
-
-// ============================================================================
-// 🚀 MODAL MEJORADO CON RECOMENDACIONES Y ACCIONES
-// ============================================================================
-
-async function showEventDetail(event) {
-    try {
-        // Obtener recomendaciones del backend para este evento
-        const recommendations = await getEventRecommendations(event);
-
-        // Obtener información del agente firewall
-        const firewallAgent = await getFirewallAgentInfo(event);
-
-        const content = `
-            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
-                <!-- Header del evento -->
-                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
-                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento ZeroMQ</h3>
-                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
-                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
-                    </div>
-                </div>
-
-                <!-- Información básica del evento -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                        <div>
-                            <strong>IP Origen:</strong><br>
-                            <span style="color: #ff4444; font-size: 14px;">${event.source_ip}</span>
-                        </div>
-                        <div>
-                            <strong>IP Destino:</strong><br>
-                            <span style="color: #00ff88; font-size: 14px;">${event.target_ip}</span>
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <strong>Score de Riesgo:</strong><br>
-                            <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
-                                ${(event.risk_score * 100).toFixed(1)}%
-                            </span>
-                        </div>
-                        <div>
-                            <strong>Tipo:</strong><br>
-                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
-                        </div>
-                    </div>
-                    ${event.location ? `
-                        <div style="margin-top: 10px;">
-                            <strong>Ubicación:</strong> ${event.location}
-                        </div>
-                    ` : ''}
-                </div>
-
-                <!-- Información del Agente Firewall -->
-                <div style="margin-bottom: 20px; padding: 12px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
-                    <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
-                        🔥 Agente Firewall de Destino
-                    </div>
-                    <div style="font-size: 11px; line-height: 1.4;">
-                        <strong>Nodo:</strong> ${firewallAgent.node_id || 'simple_firewall_agent_001_1752998835'}<br>
-                        <strong>Estado:</strong> <span style="color: ${firewallAgent.status === 'healthy' ? '#00ff88' : '#ffaa00'};">${firewallAgent.status || 'HEALTHY'}</span><br>
-                        <strong>Endpoint:</strong> ${firewallAgent.endpoint || 'tcp://localhost:5580'}<br>
-                        <strong>Reglas Activas:</strong> ${firewallAgent.active_rules || 0}
-                    </div>
-                </div>
-
-                <!-- Sección 1: Recomendaciones (Colapsible) -->
-                <div style="margin-bottom: 20px;">
-                    <div class="modal-section-header" onclick="toggleModalSection('recommendations')" style="background: rgba(0, 255, 136, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #00ff88; font-weight: bold;">
-                            💡 Recomendaciones del Sistema
-                        </span>
-                        <i class="fas fa-chevron-down" id="recommendations-toggle" style="color: #00ff88; transition: transform 0.3s ease;"></i>
-                    </div>
-                    <div id="recommendations-content" style="max-height: 1000px; overflow: hidden; transition: all 0.3s ease;">
-                        <div style="padding: 15px; background: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.2); border-top: none; border-radius: 0 0 4px 4px;">
-                            ${generateRecommendationsHTML(recommendations, event)}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sección 2: Datos ZeroMQ (Colapsible) -->
-                <div>
-                    <div class="modal-section-header" onclick="toggleModalSection('zeromq-data')" style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #666; font-weight: bold;">
-                            📊 Datos ZeroMQ (JSON)
-                        </span>
-                        <i class="fas fa-chevron-down" id="zeromq-data-toggle" style="color: #666; transition: transform 0.3s ease;"></i>
-                    </div>
-                    <div id="zeromq-data-content" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
-                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-top: none; border-radius: 0 0 4px 4px;">
-                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        showModal('Análisis del Evento de Seguridad', content);
-
-    } catch (error) {
-        console.error('❌ Error mostrando detalles del evento:', error);
-        showSimpleEventDetail(event); // Fallback al modal original
-    }
-}
-
-// ============================================================================
-// 🎯 FUNCIONES PARA RECOMENDACIONES
-// ============================================================================
-
-async function getEventRecommendations(event) {
-    try {
-        const response = await fetch('/api/event-recommendations', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                event_id: event.id,
-                source_ip: event.source_ip,
-                target_ip: event.target_ip,
-                risk_score: event.risk_score,
-                type: event.type
-            })
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            return data.recommendations || [];
-        } else {
-            console.warn('No se pudieron obtener recomendaciones del backend');
-            return generateDefaultRecommendations(event);
-        }
-    } catch (error) {
-        console.warn('Error obteniendo recomendaciones:', error);
-        return generateDefaultRecommendations(event);
-    }
-}
-
-async function getFirewallAgentInfo(event) {
-    try {
-        const response = await fetch('/api/firewall-agent-info');
-        if (response.ok) {
-            const data = await response.json();
-            return data.agent || {};
-        }
-    } catch (error) {
-        console.warn('Error obteniendo info del agente firewall:', error);
-    }
-
-    return {
-        node_id: 'simple_firewall_agent_001_1752998835',
-        status: 'healthy',
-        endpoint: 'tcp://localhost:5580',
-        active_rules: 0
-    };
-}
-
-function generateDefaultRecommendations(event) {
-    const recommendations = [];
-
-    if (event.risk_score > 0.8) {
-        recommendations.push({
-            id: 'block_source_ip',
-            type: 'BLOCK',
-            priority: 'HIGH',
-            title: 'Bloquear IP de Origen',
-            description: `Bloquear completamente la IP ${event.source_ip} debido al alto riesgo detectado.`,
-            action: 'BLOCK_IP',
-            params: {
-                ip: event.source_ip,
-                duration: '1h',
-                reason: 'High risk score detected'
-            },
-            confidence: 95
-        });
-
-        recommendations.push({
-            id: 'rate_limit',
-            type: 'LIMIT',
-            priority: 'MEDIUM',
-            title: 'Limitar Velocidad',
-            description: `Aplicar rate limiting a la IP ${event.source_ip} en lugar de bloqueo completo.`,
-            action: 'RATE_LIMIT',
-            params: {
-                ip: event.source_ip,
-                limit: '10/min',
-                duration: '30m'
-            },
-            confidence: 80
-        });
-    } else if (event.risk_score > 0.5) {
-        recommendations.push({
-            id: 'monitor_traffic',
-            type: 'MONITOR',
-            priority: 'MEDIUM',
-            title: 'Monitorear Tráfico',
-            description: `Aumentar el monitoreo del tráfico desde ${event.source_ip} hacia ${event.target_ip}.`,
-            action: 'MONITOR',
-            params: {
-                source_ip: event.source_ip,
-                target_ip: event.target_ip,
-                duration: '15m'
-            },
-            confidence: 70
-        });
-    } else {
-        recommendations.push({
-            id: 'log_only',
-            type: 'LOG',
-            priority: 'LOW',
-            title: 'Solo Registrar',
-            description: 'Registrar este evento para análisis posterior sin aplicar restricciones.',
-            action: 'LOG',
-            params: {
-                event_id: event.id,
-                detail_level: 'high'
-            },
-            confidence: 90
-        });
-    }
-
-    return recommendations;
-}
-
-function generateRecommendationsHTML(recommendations, event) {
-    if (!recommendations || recommendations.length === 0) {
-        return `
-            <div style="text-align: center; color: #666; padding: 20px;">
-                <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i>
-                <p>No hay recomendaciones específicas para este evento.</p>
-            </div>
-        `;
-    }
-
-    let html = `
-        <div style="margin-bottom: 15px;">
-            <div style="color: #00ff88; font-size: 12px; margin-bottom: 10px;">
-                📋 El sistema ha analizado este evento y sugiere las siguientes acciones:
-            </div>
-        </div>
-    `;
-
-    recommendations.forEach((rec, index) => {
-        const priorityColors = {
-            'HIGH': '#ff4444',
-            'MEDIUM': '#ffaa00',
-            'LOW': '#00ff88'
-        };
-
-        const typeIcons = {
-            'BLOCK': '🚫',
-            'LIMIT': '⏱️',
-            'MONITOR': '👁️',
-            'LOG': '📝'
-        };
-
-        html += `
-            <div style="margin-bottom: 15px; border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 6px; overflow: hidden;">
-                <!-- Header de la recomendación -->
-                <div style="background: rgba(0, 255, 136, 0.1); padding: 10px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="font-size: 14px;">${typeIcons[rec.type] || '⚡'}</span>
-                        <strong style="margin-left: 8px; color: #00ff88;">${rec.title}</strong>
-                        <span style="background: ${priorityColors[rec.priority]}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 9px; margin-left: 10px;">
-                            ${rec.priority}
-                        </span>
-                    </div>
-                    <div style="font-size: 10px; color: #888;">
-                        Confianza: ${rec.confidence || 75}%
-                    </div>
-                </div>
-
-                <!-- Contenido de la recomendación -->
-                <div style="padding: 12px;">
-                    <div style="color: #ccc; font-size: 11px; line-height: 1.4; margin-bottom: 12px;">
-                        ${rec.description}
-                    </div>
-
-                    <!-- Parámetros de la acción -->
-                    ${rec.params ? `
-                        <div style="background: rgba(0, 0, 0, 0.4); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
-                            <div style="font-size: 10px; color: #888; margin-bottom: 5px;">Parámetros:</div>
-                            <div style="font-size: 10px; font-family: monospace;">
-                                ${Object.entries(rec.params).map(([key, value]) =>
-                                    `<span style="color: #00ffff;">${key}:</span> <span style="color: #fff;">${value}</span>`
-                                ).join(' | ')}
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    <!-- Botones de acción -->
-                    <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                        <button onclick="executeRecommendation('${rec.id}', ${JSON.stringify(rec).replace(/"/g, '&quot;')}, '${event.id}')"
-                                style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s ease;">
-                            ✅ Aplicar
-                        </button>
-                        <button onclick="dismissRecommendation('${rec.id}')"
-                                style="background: rgba(255, 170, 0, 0.2); border: 1px solid #ffaa00; color: #ffaa00; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s ease;">
-                            ⏭️ Omitir
-                        </button>
-                        <button onclick="showRecommendationDetails('${rec.id}')"
-                                style="background: rgba(102, 102, 102, 0.2); border: 1px solid #666; color: #666; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; transition: all 0.2s ease;">
-                            ℹ️ Detalles
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-
-    html += `
-        <div style="margin-top: 20px; padding: 10px; background: rgba(0, 170, 255, 0.1); border-radius: 4px; border-left: 4px solid #00aaff;">
-            <div style="font-size: 10px; color: #00aaff;">
-                <strong>ℹ️ Nota:</strong> Las acciones se enviarán al agente firewall activo.
-                Puedes aplicar múltiples recomendaciones o crear reglas personalizadas.
-            </div>
-        </div>
-    `;
-
-    return html;
-}
-
-// ============================================================================
-// 🎬 FUNCIONES DE ACCIÓN
-// ============================================================================
-
-async function executeRecommendation(recId, recommendation, eventId) {
-    try {
-        console.log('🚀 Ejecutando recomendación:', recId, recommendation);
-
-        showToast('Enviando acción al firewall agent...', 'info');
-
-        // Crear evento de comando en la lista del firewall
-        const commandId = 'rec_' + Date.now();
-        addFirewallEventToList({
-            id: commandId,
-            type: 'command',
-            action: recommendation.action,
-            ip: recommendation.params?.ip || recommendation.params?.source_ip || 'N/A',
-            action_code: getActionCode(recommendation.action),
-            bytes: 64,
-            source: 'Dashboard Recommendation',
-            timestamp: Date.now() / 1000
-        });
-
-        const response = await fetch('/api/execute-recommendation', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                recommendation_id: recId,
-                recommendation: recommendation,
-                event_id: eventId,
-                command_id: commandId
-            })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            // Añadir respuesta exitosa
-            setTimeout(() => {
-                addFirewallEventToList({
-                    id: commandId,
-                    type: 'response',
-                    success: true,
-                    agent: result.agent || 'firewall_agent_001',
-                    result: result.message || `${recommendation.action} aplicada correctamente`,
-                    timestamp: Date.now() / 1000
-                });
-            }, 300);
-
-            showToast(`✅ Recomendación "${recommendation.title}" aplicada correctamente`, 'success');
-            addDebugLog('info', `Recomendación ${recId} ejecutada: ${recommendation.action}`);
-
-            // Actualizar estadísticas del firewall
-            firewallStats.commandsSent++;
-            firewallStats.responsesOk++;
-            updateElement('firewall-commands-sent', firewallStats.commandsSent);
-            updateElement('firewall-responses-ok', firewallStats.responsesOk);
-
-        } else {
-            // Añadir respuesta de error
-            setTimeout(() => {
-                addFirewallEventToList({
-                    id: commandId,
-                    type: 'error',
-                    success: false,
-                    error: result.message || 'Error aplicando recomendación',
-                    timestamp: Date.now() / 1000
-                });
-            }, 300);
-
-            showToast(`❌ Error aplicando recomendación: ${result.message}`, 'error');
-            firewallStats.errors++;
-            updateElement('firewall-errors', firewallStats.errors);
-        }
-
-    } catch (error) {
-        console.error('❌ Error ejecutando recomendación:', error);
-
-        // Añadir evento de error de comunicación
-        addFirewallEventToList({
-            id: 'error_' + Date.now(),
-            type: 'error',
-            success: false,
-            error: 'Error de comunicación: ' + error.message,
-            timestamp: Date.now() / 1000
-        });
-
-        showToast(`❌ Error comunicando con firewall: ${error.message}`, 'error');
-        firewallStats.errors++;
-        updateElement('firewall-errors', firewallStats.errors);
-    }
-}
-
-function dismissRecommendation(recId) {
-    showToast(`⏭️ Recomendación ${recId} omitida`, 'info');
-    addDebugLog('info', `Recomendación ${recId} omitida por el usuario`);
-
-    // Opcional: Enviar al backend que se omitió esta recomendación
-    fetch('/api/dismiss-recommendation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recommendation_id: recId })
-    }).catch(err => console.warn('Error enviando dismissal:', err));
-}
-
-function showRecommendationDetails(recId) {
-    showToast(`ℹ️ Mostrando detalles de recomendación ${recId}`, 'info');
-    // Aquí podrías mostrar un sub-modal con más detalles
-}
-
-function getActionCode(action) {
-    const actionCodes = {
-        'BLOCK_IP': 1,
-        'RATE_LIMIT': 2,
-        'MONITOR': 3,
-        'LOG': 7,
-        'UNBLOCK_IP': 4,
-        'LIST_RULES': 7
-    };
-    return actionCodes[action] || 7;
-}
-
-// ============================================================================
-// 🔧 FUNCIONES AUXILIARES
-// ============================================================================
-
-function toggleModalSection(sectionId) {
-    const content = document.getElementById(`${sectionId}-content`);
-    const toggle = document.getElementById(`${sectionId}-toggle`);
-
-    if (content && toggle) {
-        const isCollapsed = content.style.maxHeight === '0px';
-
-        if (isCollapsed) {
-            content.style.maxHeight = '1000px';
-            toggle.style.transform = 'rotate(180deg)';
-        } else {
-            content.style.maxHeight = '0px';
-            toggle.style.transform = 'rotate(0deg)';
-        }
-    }
-}
-
-// Función fallback para el modal original
-function showSimpleEventDetail(event) {
-    const content = `
-        <div style="font-family: 'Consolas', monospace;">
-            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento ZeroMQ</h4>
-
-            <div style="margin-bottom: 10px;">
-                <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
-            </div>
-            <div style="margin-bottom: 10px;">
-                <strong>IP Origen:</strong> <span style="color: #ff4444;">${event.source_ip}</span>
-            </div>
-            <div style="margin-bottom: 10px;">
-                <strong>IP Destino:</strong> <span style="color: #00ff88;">${event.target_ip}</span>
-            </div>
-            <div style="margin-bottom: 10px;">
-                <strong>Score de Riesgo:</strong> <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'};">${(event.risk_score * 100).toFixed(1)}%</span>
-            </div>
-
-            ${event.type ? `<div style="margin-bottom: 10px;"><strong>Tipo:</strong> ${event.type}</div>` : ''}
-            ${event.location ? `<div style="margin-bottom: 10px;"><strong>Ubicación:</strong> ${event.location}</div>` : ''}
-
-            <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.6); border-radius: 4px;">
-                <strong>Datos ZeroMQ:</strong><br>
-                <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify(event, null, 2)}</pre>
-            </div>
-        </div>
-    `;
-
-    showModal('Detalle del Evento ZeroMQ', content);
 }
 
 // Funciones placeholder
