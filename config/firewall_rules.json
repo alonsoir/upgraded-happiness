@@ -1,0 +1,26 @@
+{
+  "firewall_rules": {
+    "version": "1.0",
+    "last_updated": "2025-07-21T10:00:00Z",
+    "rules": [
+      {
+        "risk_range": [0, 30],
+        "action": "MONITOR",
+        "description": "Bajo riesgo - solo monitorear",
+        "params": {"duration": 300}
+      },
+      {
+        "risk_range": [31, 70],
+        "action": "RATE_LIMIT",
+        "description": "Riesgo medio - rate limiting",
+        "params": {"requests_per_minute": 10, "duration": 600}
+      },
+      {
+        "risk_range": [71, 100],
+        "action": "BLOCK_IP",
+        "description": "Alto riesgo - bloqueo inmediato",
+        "params": {"duration": 3600, "permanent": false}
+      }
+    ]
+  }
+}
