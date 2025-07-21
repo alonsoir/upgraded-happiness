@@ -1,6 +1,7 @@
 /*
 dashboard.css
 SCADA Dashboard CSS Unificado - Estilo Terminal/Matrix con Soporte para Mapa
++ COMPONENTES COMPLETOS (Promiscuous Agent, GeoIP Enricher, etc.)
 */
 
 * {
@@ -32,7 +33,7 @@ body {
 }
 
 /* ============================================================================
-   HEADER
+   HEADER - CON INDICADORES DE COMPONENTES EXPANDIDOS
    ============================================================================ */
 
 .header {
@@ -66,19 +67,21 @@ body {
 
 .status-indicators {
     display: flex;
-    gap: 20px;
+    gap: 15px;
     align-items: center;
-    font-size: 11px;
+    font-size: 10px;
+    flex-wrap: wrap;
 }
 
 .status-indicator {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     cursor: pointer;
     padding: 2px 6px;
     border-radius: 3px;
     transition: all 0.3s ease;
+    white-space: nowrap;
 }
 
 .status-indicator:hover {
@@ -91,6 +94,7 @@ body {
     height: 8px;
     border-radius: 50%;
     animation: pulse 2s infinite;
+    transition: all 0.3s ease;
 }
 
 .status-dot.connecting {
@@ -103,9 +107,14 @@ body {
     box-shadow: 0 0 8px #00ff00;
 }
 
-.status-dot.error {
+.status-dot.disconnected {
     background-color: #ff4444;
     box-shadow: 0 0 8px #ff4444;
+}
+
+.status-dot.warning {
+    background-color: #ffaa00;
+    box-shadow: 0 0 8px #ffaa00;
 }
 
 .status-dot.inactive {
@@ -116,6 +125,23 @@ body {
     0% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.6; transform: scale(1.1); }
     100% { opacity: 1; transform: scale(1); }
+}
+
+/* 🔥 ESTILOS ESPECÍFICOS PARA COMPONENTES EN HEADER */
+.status-indicator span {
+    font-size: 9px;
+    font-weight: 500;
+}
+
+/* Estado general más prominente */
+.status-indicator:first-child {
+    background: rgba(0, 170, 255, 0.1);
+    border: 1px solid rgba(0, 170, 255, 0.3);
+    font-weight: bold;
+}
+
+.status-indicator:first-child span {
+    font-size: 10px;
 }
 
 /* ============================================================================
@@ -635,6 +661,147 @@ body {
 }
 
 /* ============================================================================
+   🔥 COMPONENTES - ESTILOS COMPLETOS CON NUEVOS COMPONENTES
+   ============================================================================ */
+
+.component-item {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: rgba(0, 20, 0, 0.4);
+    border-radius: 4px;
+    border-left: 4px solid;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.component-item:hover {
+    background: rgba(0, 30, 0, 0.6);
+    transform: translateX(3px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 🔥 PROMISCUOUS AGENT - Color violeta/púrpura */
+.component-item.promiscuous-agent {
+    border-left-color: #8b00ff;
+    background: rgba(139, 0, 255, 0.05);
+}
+
+.component-item.promiscuous-agent:hover {
+    background: rgba(139, 0, 255, 0.15);
+    box-shadow: 0 3px 10px rgba(139, 0, 255, 0.2);
+}
+
+/* 🔥 GEOIP ENRICHER - Color cyan/turquesa */
+.component-item.geoip-enricher {
+    border-left-color: #00ffff;
+    background: rgba(0, 255, 255, 0.05);
+}
+
+.component-item.geoip-enricher:hover {
+    background: rgba(0, 255, 255, 0.15);
+    box-shadow: 0 3px 10px rgba(0, 255, 255, 0.2);
+}
+
+/* ML DETECTOR - Color rojo */
+.component-item.ml-detector {
+    border-left-color: #ff4444;
+}
+
+/* FIREWALL AGENT - Color verde */
+.component-item.firewall-agent {
+    border-left-color: #00ff00;
+}
+
+/* DASHBOARD - Color azul */
+.component-item.dashboard {
+    border-left-color: #0088ff;
+}
+
+.component-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.component-name {
+    font-weight: bold;
+    color: #00ffff;
+    font-size: 11px;
+    text-shadow: 0 0 3px #00ffff;
+}
+
+/* 🔥 NOMBRES ESPECÍFICOS POR COMPONENTE */
+.component-item.promiscuous-agent .component-name {
+    color: #bb88ff;
+    text-shadow: 0 0 3px #bb88ff;
+}
+
+.component-item.geoip-enricher .component-name {
+    color: #88ffff;
+    text-shadow: 0 0 3px #88ffff;
+}
+
+.component-health {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+.component-health.healthy {
+    background: #004400;
+    color: #00ff00;
+    box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+}
+
+.component-health.warning {
+    background: #444400;
+    color: #ffaa00;
+    box-shadow: 0 0 5px rgba(255, 170, 0, 0.3);
+}
+
+.component-health.critical {
+    background: #440000;
+    color: #ff4444;
+    box-shadow: 0 0 5px rgba(255, 68, 68, 0.3);
+}
+
+.component-metrics {
+    font-size: 9px;
+    color: #cccccc;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.component-metrics div {
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+.component-metrics div:hover {
+    background: rgba(0, 255, 255, 0.1);
+    color: #00ffff;
+}
+
+.component-metrics span {
+    color: #00ffff;
+    font-weight: bold;
+}
+
+/* 🔥 MÉTRICAS ESPECÍFICAS POR COMPONENTE */
+.component-item.promiscuous-agent .component-metrics span {
+    color: #bb88ff;
+}
+
+.component-item.geoip-enricher .component-metrics span {
+    color: #88ffff;
+}
+
+/* ============================================================================
    CONTADORES
    ============================================================================ */
 
@@ -850,102 +1017,6 @@ body {
 }
 
 .detail-row span:last-child {
-    color: #00ffff;
-    font-weight: bold;
-}
-
-/* ============================================================================
-   COMPONENTES
-   ============================================================================ */
-
-.component-item {
-    margin-bottom: 12px;
-    padding: 12px;
-    background: rgba(0, 20, 0, 0.4);
-    border-radius: 4px;
-    border-left: 4px solid;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.component-item:hover {
-    background: rgba(0, 30, 0, 0.6);
-    transform: translateX(3px);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-}
-
-.component-item.ml-detector {
-    border-left-color: #ff4444;
-}
-
-.component-item.firewall-agent {
-    border-left-color: #00ff00;
-}
-
-.component-item.dashboard {
-    border-left-color: #0088ff;
-}
-
-.component-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.component-name {
-    font-weight: bold;
-    color: #00ffff;
-    font-size: 11px;
-    text-shadow: 0 0 3px #00ffff;
-}
-
-.component-health {
-    font-size: 9px;
-    padding: 2px 8px;
-    border-radius: 3px;
-    font-weight: bold;
-}
-
-.component-health.healthy {
-    background: #004400;
-    color: #00ff00;
-    box-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
-}
-
-.component-health.warning {
-    background: #444400;
-    color: #ffaa00;
-    box-shadow: 0 0 5px rgba(255, 170, 0, 0.3);
-}
-
-.component-health.critical {
-    background: #440000;
-    color: #ff4444;
-    box-shadow: 0 0 5px rgba(255, 68, 68, 0.3);
-}
-
-.component-metrics {
-    font-size: 9px;
-    color: #cccccc;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-}
-
-.component-metrics div {
-    cursor: pointer;
-    padding: 3px 6px;
-    border-radius: 2px;
-    transition: all 0.3s ease;
-}
-
-.component-metrics div:hover {
-    background: rgba(0, 255, 255, 0.1);
-    color: #00ffff;
-}
-
-.component-metrics span {
     color: #00ffff;
     font-weight: bold;
 }
@@ -1311,6 +1382,16 @@ body {
     .main-content {
         min-width: 500px;
     }
+
+    /* Header más compacto en pantallas medianas */
+    .status-indicators {
+        gap: 10px;
+        font-size: 9px;
+    }
+
+    .status-indicator span {
+        font-size: 8px;
+    }
 }
 
 @media (max-width: 900px) {
@@ -1359,6 +1440,21 @@ body {
         font-size: 9px;
         padding: 3px 6px;
     }
+
+    /* Header responsive para móviles */
+    .status-indicators {
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 8px;
+    }
+
+    .status-indicator {
+        padding: 1px 4px;
+    }
+
+    .logo span {
+        font-size: 12px;
+    }
 }
 
 @media (max-width: 768px) {
@@ -1372,12 +1468,27 @@ body {
     }
 
     .status-indicators {
-        gap: 10px;
-        font-size: 10px;
+        gap: 5px;
+        font-size: 8px;
     }
 
     .logo span {
         display: none;
+    }
+
+    /* Componentes más compactos en móvil */
+    .component-item {
+        padding: 8px;
+        margin-bottom: 8px;
+    }
+
+    .component-metrics {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+
+    .counters-section {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -1410,6 +1521,16 @@ body {
 .glow-blue {
     color: #0088ff;
     text-shadow: 0 0 5px #0088ff;
+}
+
+.glow-purple {
+    color: #8b00ff;
+    text-shadow: 0 0 5px #8b00ff;
+}
+
+.glow-cyan {
+    color: #00ffff;
+    text-shadow: 0 0 5px #00ffff;
 }
 
 /* ============================================================================
@@ -1497,7 +1618,7 @@ body {
 }
 
 /* ============================================================================
-   🔥 EVENTOS DEL FIREWALL - ESTILOS ESPECÍFICOS
+   🔥 EVENTOS DEL FIREWALL - ESTILOS ESPECÍFICOS (SIN CAMBIOS)
    ============================================================================ */
 
 /* Sección específica para eventos del firewall */
@@ -1926,9 +2047,4 @@ body {
 .firewall-warning {
     color: #ffaa00 !important;
     text-shadow: 0 0 3px #ffaa00;
-}
-
-.firewall-command {
-    color: #00aaff !important;
-    text-shadow: 0 0 3px #00aaff;
 }

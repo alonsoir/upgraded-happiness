@@ -25,18 +25,31 @@
                 <span>SCADA Dashboard - Arquitectura 3 Puertos</span>
             </div>
             <div class="status-indicators">
-                <div class="status-indicator" onclick="showConnectionDetails('connecting')">
-                    <div class="status-dot connecting" id="status-connecting"></div>
-                    <span>Connecting...</span>
+                <!-- 🔥 ESTADO GENERAL -->
+                <div class="status-indicator" onclick="showConnectionDetails('overall')">
+                    <div class="status-dot connecting" id="overall-status"></div>
+                    <span id="overall-status-text">Connecting...</span>
+                </div>
+
+                <!-- 🔥 COMPONENTES ESPECÍFICOS -->
+                <div class="status-indicator" onclick="showConnectionDetails('promiscuous-agent')">
+                    <div class="status-dot disconnected" id="promiscuous-agent-status"></div>
+                    <span>Promiscuous Agent</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('geoip-enricher')">
+                    <div class="status-dot disconnected" id="geoip-enricher-status"></div>
+                    <span>GeoIP Enricher</span>
                 </div>
                 <div class="status-indicator" onclick="showConnectionDetails('ml-detector')">
-                    <div class="status-dot connected" id="status-ml-detector"></div>
+                    <div class="status-dot disconnected" id="ml-detector-status"></div>
                     <span>ML Detector</span>
                 </div>
-                <div class="status-indicator" onclick="showConnectionDetails('firewall')">
-                    <div class="status-dot connected" id="status-firewall"></div>
-                    <span>Firewall</span>
+                <div class="status-indicator" onclick="showConnectionDetails('firewall-agent')">
+                    <div class="status-dot disconnected" id="firewall-agent-status"></div>
+                    <span>Firewall Agent</span>
                 </div>
+
+                <!-- INFO DEL SISTEMA -->
                 <div class="status-indicator" onclick="showSystemInfo()">
                     <span id="current-time">--:--:--</span>
                 </div>
@@ -110,6 +123,51 @@
                     </div>
                 </div>
                 <div class="section-content" id="components-content">
+                    <!-- 🔥 PROMISCUOUS AGENT -->
+                    <div class="component-item promiscuous-agent" onclick="showComponentDetail('promiscuous-agent')">
+                        <div class="component-header">
+                            <span class="component-name">Promiscuous Agent</span>
+                            <span class="component-health healthy" id="promiscuous-agent-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('promiscuous-agent-packets', event)">
+                                Packets: <span id="promiscuous-agent-packets">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-interfaces', event)">
+                                Interfaces: <span id="promiscuous-agent-interfaces">eth0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-filtered', event)">
+                                Filtered: <span id="promiscuous-agent-filtered">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-rate', event)">
+                                Rate: <span id="promiscuous-agent-rate">0 pkt/s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔥 GEOIP ENRICHER -->
+                    <div class="component-item geoip-enricher" onclick="showComponentDetail('geoip-enricher')">
+                        <div class="component-header">
+                            <span class="component-name">GeoIP Enricher</span>
+                            <span class="component-health warning" id="geoip-enricher-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('geoip-enricher-lookups', event)">
+                                Lookups: <span id="geoip-enricher-lookups">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-cached', event)">
+                                Cached: <span id="geoip-enricher-cached">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-enriched', event)">
+                                Enriched: <span id="geoip-enricher-enriched">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-latency', event)">
+                                Latency: <span id="geoip-enricher-latency">0ms</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ML DETECTOR -->
                     <div class="component-item ml-detector" onclick="showComponentDetail('ml-detector')">
                         <div class="component-header">
                             <span class="component-name">ML Detector</span>
@@ -131,6 +189,7 @@
                         </div>
                     </div>
 
+                    <!-- FIREWALL AGENT -->
                     <div class="component-item firewall-agent" onclick="showComponentDetail('firewall-agent')">
                         <div class="component-header">
                             <span class="component-name">Firewall Agent</span>
@@ -152,6 +211,7 @@
                         </div>
                     </div>
 
+                    <!-- DASHBOARD -->
                     <div class="component-item dashboard" onclick="showComponentDetail('dashboard')">
                         <div class="component-header">
                             <span class="component-name">Dashboard</span>
@@ -400,9 +460,9 @@
                 </div>
                 <div class="section-content" id="debug-content">
                     <div class="debug-log" id="debug-log" onclick="showDebugLogDetail()">
-                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado con eventos de firewall</div>
-                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] ZeroMQ context creado</div>
-                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del ML Detector...</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado con componentes distribuidos</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Backend ZeroMQ conectado</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del pipeline...</div>
                         <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Mapa Leaflet inicializado</div>
                     </div>
                 </div>
