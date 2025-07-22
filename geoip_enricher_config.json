@@ -1,12 +1,12 @@
 {
   "component": {
     "name": "geoip_enricher",
-    "version": "2.1.0",
+    "version": "3.0.0",
     "mode": "distributed_vertical",
-    "description": "GeoIP Enricher - Geolocates target_ip (attackers) AND source_ip with public IP discovery"
+    "description": "GeoIP Enricher v3.0.0 - Geolocates target_ip (attackers) AND source_ip with public IP discovery + protobuf v3 support"
   },
-  "node_id": "geoip_enricher_vertical_001",
-  "version": "2.1.0",
+  "node_id": "geoip_enricher_v3_001",
+  "version": "3.0.0",
   "component_type": "geoip_enricher",
 
   "_comment_network": "🔌 Red optimizada - CRÍTICO: CONNECT a promiscuous, BIND para ML",
@@ -16,14 +16,14 @@
       "port": 5559,
       "mode": "connect",
       "socket_type": "PULL",
-      "description": "Recibe eventos protobuf del promiscuous_agent (i9 8-cores optimized)"
+      "description": "Recibe eventos protobuf v3.0.0 del promiscuous_agent"
     },
     "output_socket": {
       "address": "localhost",
       "port": 5560,
       "mode": "bind",
       "socket_type": "PUSH",
-      "description": "Envía eventos enriquecidos al lightweight_ml_detector (32GB RAM optimized)"
+      "description": "Envía eventos enriquecidos v3.0.0 al lightweight_ml_detector"
     }
   },
 
@@ -58,7 +58,7 @@
     }
   },
 
-  "_comment_processing": "⚙️ CRÍTICO: Configuración de qué IPs geoposicionar",
+  "_comment_processing": "⚙️ CRÍTICO: Configuración de qué IPs geoposicionar v3.0.0",
   "processing": {
     "threads": 3,
     "send_threads": 1,
@@ -67,7 +67,7 @@
     "queue_timeout_seconds": 1.0,
     "performance_mode": "conservative_i9",
 
-    "_comment_geoip_targets": "🎯 NUEVO: Configurar qué IPs enriquecer",
+    "_comment_geoip_targets": "🎯 v3.0.0: Configurar qué IPs enriquecer",
     "geolocate_source_ip": true,
     "geolocate_target_ip": true,
     "prioritize_target_ip": true,
@@ -92,7 +92,7 @@
     }
   },
 
-  "_comment_geoip": "🌍 Configuración GeoIP mejorada + timeout_seconds",
+  "_comment_geoip": "🌍 Configuración GeoIP v3.0.0 con mock optimizado",
   "geoip": {
     "lookup_method": "mock",
     "performance_mode": "conservative",
@@ -101,7 +101,7 @@
     "cache_ttl_seconds": 1800,
     "timeout_seconds": 5,
 
-    "_comment_coordinates": "📍 Coordenadas por defecto mejoradas",
+    "_comment_coordinates": "📍 Coordenadas por defecto Madrid (mock)",
     "mock_coordinates": [40.4168, -3.7038],
     "use_default_coordinates_on_failure": true,
     "default_coordinates": [40.4168, -3.7038],
@@ -140,7 +140,7 @@
     }
   },
 
-  "_comment_ip_handling": "🌐 NUEVO: Manejo avanzado de IPs con discovery público",
+  "_comment_ip_handling": "🌐 v3.0.0: Manejo avanzado de IPs con discovery público",
   "ip_handling": {
     "private_ip_ranges": [
       "10.0.0.0/8",
@@ -167,7 +167,7 @@
     }
   },
 
-  "_comment_enrichment": "🔍 NUEVO: Configuración de enriquecimiento avanzado",
+  "_comment_enrichment": "🔍 v3.0.0: Configuración de enriquecimiento avanzado",
   "enrichment": {
     "add_city_info": true,
     "add_country_info": true,
@@ -183,7 +183,7 @@
     }
   },
 
-  "_comment_filtering": "🔍 NUEVO: Filtros de eventos",
+  "_comment_filtering": "🔍 v3.0.0: Filtros de eventos",
   "filtering": {
     "skip_localhost": false,
     "skip_private_networks": false,
@@ -193,7 +193,7 @@
     "whitelist_ips": []
   },
 
-  "_comment_output": "📤 NUEVO: Configuración de salida",
+  "_comment_output": "📤 v3.0.0: Configuración de salida",
   "output": {
     "include_original_event": true,
     "add_processing_metadata": true,
@@ -202,14 +202,15 @@
     "compress_output": false
   },
 
+  "_comment_logging": "📝 CRÍTICO: Logging dual habilitado (consola + archivo)",
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [i9-VERTICAL] - %(message)s",
-    "_comment_file_logging": "📝 MEJORADO: Logging a archivo habilitado",
     "handlers": {
       "console": {
         "enabled": true,
-        "level": "INFO"
+        "level": "INFO",
+        "_comment": "Consola para monitoreo en tiempo real"
       },
       "file": {
         "enabled": true,
@@ -217,7 +218,8 @@
         "level": "DEBUG",
         "max_size": "25MB",
         "backup_count": 3,
-        "rotation": "time"
+        "rotation": "time",
+        "_comment": "Archivo para análisis histórico y debugging"
       }
     },
     "performance_logging": {
@@ -228,6 +230,7 @@
     }
   },
 
+  "_comment_monitoring": "📊 v3.0.0: Monitoreo con nuevas métricas duales",
   "monitoring": {
     "stats_interval_seconds": 15,
     "detailed_metrics": true,
@@ -267,7 +270,7 @@
     }
   },
 
-  "_comment_performance": "⚡ NUEVO: Configuración de rendimiento",
+  "_comment_performance": "⚡ v3.0.0: Configuración de rendimiento optimizada",
   "performance": {
     "enable_async_processing": true,
     "connection_pool_size": 10,
@@ -276,6 +279,7 @@
     "backoff_factor": 2
   },
 
+  "_comment_distributed": "🌐 v3.0.0: Configuración distribuida upgraded-happiness",
   "distributed": {
     "cluster_name": "upgraded-happiness-cluster",
     "component_role": "enricher_vertical",
@@ -308,6 +312,7 @@
     }
   },
 
+  "_comment_security": "🔒 v3.0.0: Seguridad y validación",
   "security": {
     "input_validation": {
       "enabled": true,
@@ -326,7 +331,7 @@
     "input_sanitization": true
   },
 
-  "_comment_debugging": "🐛 NUEVO: Configuración de debugging mejorada",
+  "_comment_debugging": "🐛 v3.0.0: Configuración de debugging mejorada",
   "debugging": {
     "enabled": true,
     "log_coordinates": true,
@@ -335,12 +340,23 @@
     "detailed_error_logging": true
   },
 
-  "_comment_integration": "🔗 NUEVO: Integración con dashboard",
+  "_comment_integration": "🔗 v3.0.0: Integración con dashboard",
   "integration": {
     "dashboard_reporting": true,
     "metrics_export": true,
     "status_updates": true,
     "heartbeat_interval": 30
+  },
+
+  "_comment_v3_features": "🆕 Nuevas características v3.0.0",
+  "v3_features": {
+    "dual_geoip_enrichment": true,
+    "protobuf_v3_support": true,
+    "enhanced_logging": true,
+    "public_ip_discovery": true,
+    "geographic_analysis": true,
+    "dual_coordinate_fields": true,
+    "_comment": "Características específicas de la versión 3.0.0"
   },
 
   "debug": {
