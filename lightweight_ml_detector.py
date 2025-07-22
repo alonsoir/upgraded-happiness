@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-lightweight_ml_detector.py - VERSIÓN CONSERVADORA COMPATIBLE CON DASHBOARD
-🤖 Enhanced ML Detector para Upgraded-Happiness - CONFIGURACIÓN LOCAL ESTABLE
+lightweight_ml_detector_v3.py - VERSIÓN CONSERVADORA COMPATIBLE CON PROTOBUF v3.0.0
+🤖 Enhanced ML Detector para Upgraded-Happiness - CONFIGURACIÓN LOCAL ESTABLE v3
+- Soporte completo para network_event_extended_v3_pb2
+- Enriquecimiento GeoIP dual (source + target) compatible
 - Configuración ZMQ conservadora compatible con dashboard thread-safe
 - Validación estricta de tamaño de mensajes (MAXMSGSIZE: 10000)
 - Backpressure agresivo para evitar saturación del dashboard
 - Solo 2 algoritmos ML ligeros: Isolation Forest + K-Means
 - Timeouts y buffers compatible con dashboard (LINGER=0, timeout=500ms)
 - Colas pequeñas para uso eficiente de memoria local
+- Logging dual: consola + archivo
 """
 
 import zmq
@@ -30,19 +33,22 @@ from collections import deque, defaultdict
 from typing import Dict, Any, Optional, Tuple, List
 from threading import Event
 
-# 📦 Protobuf - USAR VERSIÓN ACTUALIZADA v2
+# 📦 Protobuf v3.0.0 - NUEVA VERSIÓN CON ENRIQUECIMIENTO DUAL
 try:
     import src.protocols.protobuf.network_event_extended_v3_pb2 as NetworkEventProto
 
     PROTOBUF_AVAILABLE = True
+    PROTOBUF_VERSION = "v3.0.0"
 except ImportError:
     try:
         from src.protocols.protobuf import network_event_extended_v3_pb2 as NetworkEventProto
 
         PROTOBUF_AVAILABLE = True
+        PROTOBUF_VERSION = "v3.0.0"
     except ImportError:
-        print("⚠️ Protobuf network_event_extended_v2 no disponible")
+        print("⚠️ Protobuf network_event_extended_v3 no disponible")
         PROTOBUF_AVAILABLE = False
+        PROTOBUF_VERSION = "none"
 
 # 📦 ML Libraries - SOLO 2 algoritmos ligeros para local
 try:
@@ -56,6 +62,61 @@ try:
 except ImportError:
     print("⚠️ Scikit-learn no disponible - ML deshabilitado")
     ML_AVAILABLE = False
+
+
+def calculate_distance(coord1: Tuple[float, float], coord2: Tuple[float, float]) -> float:
+    """Calcular distancia haversine entre dos coordenadas"""
+    if not coord1 or not coord2 or coord1 == (0, 0) or coord2 == (0, 0):
+        return 0.0
+
+    lat1, lon1 = math.radians(coord1[0]), math.radians(coord1[1])
+    lat2, lon2 = math.radians(coord2[0]), math.radians(coord2[1])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+
+    return 6371 * c  # Radio de la Tierra en km
+
+
+def categorize_distance(distance_km: float) -> str:
+    """Categorizar distancia geográfica"""
+    if distance_km < 50:
+        return "local"
+    elif distance_km < 500:
+        return "regional"
+    elif distance_km < 2000:
+        return "national"
+    else:
+        return "international"
+
+
+def calculate_geo_anomaly(event) -> float:
+    """Calcular score de anomalía geográfica basado en campos v3"""
+    score = 0.0
+
+    # Factor de distancia
+    if hasattr(event, 'geographic_distance_km') and event.geographic_distance_km > 0:
+        if event.geographic_distance_km > 10000:  # > 10,000 km
+            score += 0.4
+        elif event.geographic_distance_km > 5000:  # > 5,000 km
+            score += 0.2
+
+    # Factor de país diferente
+    if hasattr(event, 'same_country') and not event.same_country:
+        score += 0.3
+
+    # Factor de enriquecimiento fallback
+    if hasattr(event, 'fallback_coordinates_used') and event.fallback_coordinates_used:
+        score += 0.2
+
+    # Factor de IP pública descubierta (puede ser proxy/VPN)
+    if hasattr(event, 'public_ip_discovered') and event.public_ip_discovered:
+        score += 0.1
+
+    return min(1.0, score)
 
 
 class ModelPersistenceManager:
@@ -106,7 +167,8 @@ class ModelPersistenceManager:
                 "timestamp": datetime.now().isoformat(),
                 "training_metrics": training_metrics or {},
                 "model_count": len([m for m in models.values() if m is not None]),
-                "config_mode": "conservative_local"
+                "config_mode": "conservative_local_v3",
+                "protobuf_version": PROTOBUF_VERSION
             }
 
             metadata_file = version_dir / "metadata.json"
@@ -166,13 +228,15 @@ class ModelPersistenceManager:
             raise RuntimeError(f"❌ Error cargando modelos: {e}")
 
 
-class ConservativeMLDetector:
+class ConservativeMLDetectorV3:
     """
-    Detector ML conservador compatible con dashboard thread-safe
+    Detector ML conservador compatible con protobuf v3.0.0 y dashboard thread-safe
+    - Soporte completo para enriquecimiento GeoIP dual (source + target)
     - Solo 2 algoritmos ML ligeros para local
     - Configuración ZMQ compatible con dashboard conservador
     - Validación estricta de tamaño de mensajes
     - Backpressure agresivo para estabilidad
+    - Logging dual: consola + archivo
     """
 
     def __init__(self, config_file: str):
@@ -186,7 +250,7 @@ class ConservativeMLDetector:
         self.start_time = time.time()
 
         # 📝 Setup logging PRIMERO
-        self.setup_logging()
+        self.setup_dual_logging()
 
         # 🔌 Setup ZeroMQ CONSERVADOR compatible con dashboard
         self.context = zmq.Context()
@@ -228,7 +292,8 @@ class ConservativeMLDetector:
             'backpressure_activations': 0, 'queue_overflows': 0, 'dropped_events': 0,
             'buffer_full_errors': 0, 'send_errors': 0, 'send_timeouts': 0,
             'oversized_messages': 0, 'message_validation_errors': 0,
-            'pipeline_latency_total': 0.0, 'start_time': time.time()
+            'pipeline_latency_total': 0.0, 'start_time': time.time(),
+            'v3_dual_enriched': 0, 'v3_geographic_analysis': 0, 'v3_ip_discovery': 0
         }
 
         # 🎛️ Control
@@ -253,12 +318,13 @@ class ConservativeMLDetector:
         if self.persistence_manager:
             self._load_existing_models()
 
-        self.logger.info(f"🤖 Conservative ML Detector inicializado")
+        self.logger.info(f"🤖 Conservative ML Detector v3 inicializado")
         self.logger.info(f"   🏷️ Node ID: {self.node_id}")
         self.logger.info(f"   🔢 PID: {self.process_id}")
+        self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
         self.logger.info(f"   🧠 Algoritmos: {list(self.models.keys())} (conservador)")
         self.logger.info(f"   💾 Persistencia: {'✅' if self.persistence_manager else '❌'}")
-        self.logger.info(f"   🔒 Modo: CONSERVADOR - Compatible con dashboard thread-safe")
+        self.logger.info(f"   🔒 Modo: CONSERVADOR v3 - Enriquecimiento dual compatible")
 
     def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
         """Carga configuración conservadora estricta"""
@@ -283,7 +349,7 @@ class ConservativeMLDetector:
         issues = []
 
         if not PROTOBUF_AVAILABLE:
-            issues.append("❌ Protobuf network_event_extended_v2 no disponible")
+            issues.append("❌ Protobuf network_event_extended_v3 no disponible")
 
         if not ML_AVAILABLE:
             issues.append("❌ Scikit-learn no disponible - modelos ML deshabilitados")
@@ -292,25 +358,51 @@ class ConservativeMLDetector:
             for issue in issues:
                 print(issue)
             if not PROTOBUF_AVAILABLE:
-                raise RuntimeError("❌ Protobuf es crítico para el funcionamiento")
+                raise RuntimeError("❌ Protobuf v3 es crítico para el funcionamiento")
 
-    def setup_logging(self):
-        """Setup logging conservador"""
+    def setup_dual_logging(self):
+        """Setup logging dual: consola + archivo"""
         log_config = self.config["logging"]
         level = getattr(logging, log_config["level"].upper())
         log_format = log_config["format"].format(node_id=self.node_id, pid=self.process_id)
         formatter = logging.Formatter(log_format)
 
-        if log_config.get("file"):
-            handler = logging.FileHandler(log_config["file"])
-        else:
-            handler = logging.StreamHandler()
-
-        handler.setFormatter(formatter)
-        self.logger = logging.getLogger(f"ml_detector_{self.node_id}")
+        # Crear logger principal
+        self.logger = logging.getLogger(f"ml_detector_v3_{self.node_id}")
         self.logger.setLevel(level)
-        self.logger.addHandler(handler)
+        self.logger.handlers.clear()  # Limpiar handlers existentes
+
+        # 📺 Handler para consola (siempre activo)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(formatter)
+        console_handler.setLevel(level)
+        self.logger.addHandler(console_handler)
+
+        # 📁 Handler para archivo (si está configurado)
+        if log_config.get("file"):
+            # Crear directorio si no existe
+            log_file = Path(log_config["file"])
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # Configurar rotación si está especificada
+            if log_config.get("max_file_size_mb") and log_config.get("backup_count"):
+                from logging.handlers import RotatingFileHandler
+                file_handler = RotatingFileHandler(
+                    log_config["file"],
+                    maxBytes=log_config["max_file_size_mb"] * 1024 * 1024,
+                    backupCount=log_config["backup_count"]
+                )
+            else:
+                file_handler = logging.FileHandler(log_config["file"])
+
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(level)
+            self.logger.addHandler(file_handler)
+
+            self.logger.info(f"📁 Logging a archivo: {log_config['file']}")
+
         self.logger.propagate = False
+        self.logger.info("📺 Logging dual configurado: consola + archivo")
 
     def setup_conservative_sockets(self):
         """🔒 Configuración ZMQ CONSERVADORA compatible con dashboard"""
@@ -358,7 +450,7 @@ class ConservativeMLDetector:
             output_address = f"tcp://*:{output_config['port']}"
             self.output_socket.bind(output_address)
 
-            self.logger.info(f"🔌 Sockets ZMQ CONSERVADORES configurados:")
+            self.logger.info(f"🔌 Sockets ZMQ CONSERVADORES v3 configurados:")
             self.logger.info(f"   📥 Input: CONNECT to {input_address}")
             self.logger.info(f"   📤 Output: BIND on {output_address}")
             self.logger.info(f"   🔒 LINGER: 0ms (cierre inmediato como dashboard)")
@@ -378,13 +470,13 @@ class ConservativeMLDetector:
         self.protobuf_queue = Queue(maxsize=proc_config["protobuf_queue_size"])
         self.enriched_queue = Queue(maxsize=proc_config["internal_queue_size"])
 
-        self.logger.info(f"📋 Colas conservadoras configuradas:")
+        self.logger.info(f"📋 Colas conservadoras v3 configuradas:")
         self.logger.info(f"   📦 Protobuf queue: {proc_config['protobuf_queue_size']} (pequeña)")
         self.logger.info(f"   🤖 Enriched queue: {proc_config['internal_queue_size']} (pequeña)")
 
     def _load_existing_models(self):
         """Cargar modelos existentes conservadores"""
-        self.logger.info("🔍 Buscando modelos ML conservadores...")
+        self.logger.info("🔍 Buscando modelos ML conservadores v3...")
         try:
             loaded_models, loaded_processors = self.persistence_manager.load_models()
 
@@ -399,7 +491,7 @@ class ConservativeMLDetector:
 
                 self.models_trained = True
                 active_models = [k for k, v in self.models.items() if v is not None]
-                self.logger.info(f"✅ Modelos conservadores cargados: {active_models}")
+                self.logger.info(f"✅ Modelos conservadores v3 cargados: {active_models}")
             else:
                 self.logger.info("💡 No hay modelos guardados - entrenamiento automático activado")
         except Exception as e:
@@ -407,7 +499,7 @@ class ConservativeMLDetector:
 
     def receive_protobuf_events(self):
         """Thread de recepción con backpressure AGRESIVO"""
-        self.logger.info("📡 Iniciando recepción protobuf CONSERVADORA...")
+        self.logger.info("📡 Iniciando recepción protobuf v3 CONSERVADORA...")
 
         consecutive_errors = 0
         queue_full_count = 0
@@ -474,8 +566,8 @@ class ConservativeMLDetector:
                 time.sleep(0.05)
 
     def process_protobuf_events(self):
-        """Thread de procesamiento ML CONSERVADOR"""
-        self.logger.info("⚙️ Iniciando procesamiento ML CONSERVADOR...")
+        """Thread de procesamiento ML CONSERVADOR con soporte v3"""
+        self.logger.info("⚙️ Iniciando procesamiento ML v3 CONSERVADOR...")
 
         queue_timeout = self.config["processing"]["queue_timeout_seconds"]
         max_processing_time = self.config["processing"].get("max_processing_time", 1.0)
@@ -486,7 +578,7 @@ class ConservativeMLDetector:
                 start_time = time.time()
 
                 # 🔒 Verificar timeout de procesamiento
-                enriched_protobuf = self.enrich_protobuf_event_with_conservative_ml(protobuf_data)
+                enriched_protobuf = self.enrich_protobuf_event_with_v3_ml(protobuf_data)
 
                 processing_time = time.time() - start_time
 
@@ -510,12 +602,12 @@ class ConservativeMLDetector:
             except Empty:
                 continue
             except Exception as e:
-                self.logger.error(f"❌ Error procesamiento conservador: {e}")
+                self.logger.error(f"❌ Error procesamiento conservador v3: {e}")
                 self.stats['processing_errors'] += 1
 
     def send_enriched_events(self):
         """Thread de envío con validación ESTRICTA"""
-        self.logger.info("📤 Iniciando envío CONSERVADOR...")
+        self.logger.info("📤 Iniciando envío v3 CONSERVADOR...")
 
         queue_timeout = self.config["processing"]["queue_timeout_seconds"]
         max_message_size = self.config["zmq"].get("max_message_size", 10000)
@@ -542,33 +634,56 @@ class ConservativeMLDetector:
             except Empty:
                 continue
             except Exception as e:
-                self.logger.error(f"❌ Error envío conservador: {e}")
+                self.logger.error(f"❌ Error envío conservador v3: {e}")
 
-    def enrich_protobuf_event_with_conservative_ml(self, protobuf_data: bytes) -> Optional[bytes]:
-        """Enriquecimiento ML CONSERVADOR - solo 2 algoritmos ligeros"""
+    def enrich_protobuf_event_with_v3_ml(self, protobuf_data: bytes) -> Optional[bytes]:
+        """Enriquecimiento ML CONSERVADOR con soporte completo protobuf v3.0.0"""
         if not PROTOBUF_AVAILABLE:
             return None
 
         try:
-            # 📦 Deserializar evento
+            # 📦 Deserializar evento v3
             event = NetworkEventProto.NetworkEvent()
             event.ParseFromString(protobuf_data)
-            # 🆕 Usar campos duales si disponibles
-            if event.dual_enrichment_success:
-                source_location = (event.source_latitude, event.source_longitude)
-                target_location = (event.target_latitude, event.target_longitude)
 
-                # Calcular métricas geográficas
-                distance = calculate_distance(source_location, target_location)
-                event.geographic_distance_km = distance
-                event.distance_category = categorize_distance(distance)
-                event.same_country = (event.source_country_code == event.target_country_code)
+            # 🆕 PROCESAMIENTO ESPECÍFICO v3.0.0
+            # Verificar si tiene enriquecimiento dual exitoso
+            has_dual_enrichment = getattr(event, 'dual_enrichment_success', False)
 
-                # Score de anomalía geográfica
-                event.geographic_anomaly_score = calculate_geo_anomaly(event)
+            if has_dual_enrichment:
+                self.stats['v3_dual_enriched'] += 1
 
-            # 🤖 Extraer features SIMPLIFICADAS
-            features = self._extract_conservative_ml_features(event)
+                # Obtener coordenadas duales
+                source_location = (
+                    getattr(event, 'source_latitude', 0),
+                    getattr(event, 'source_longitude', 0)
+                )
+                target_location = (
+                    getattr(event, 'target_latitude', 0),
+                    getattr(event, 'target_longitude', 0)
+                )
+
+                # Calcular métricas geográficas v3 si no están ya calculadas
+                if not getattr(event, 'geographic_distance_km', 0):
+                    distance = calculate_distance(source_location, target_location)
+                    event.geographic_distance_km = distance
+                    event.distance_category = categorize_distance(distance)
+                    event.same_country = (
+                            getattr(event, 'source_country_code', '') ==
+                            getattr(event, 'target_country_code', '')
+                    )
+                    self.stats['v3_geographic_analysis'] += 1
+
+                # Score de anomalía geográfica v3
+                if not getattr(event, 'geographic_anomaly_score', 0):
+                    event.geographic_anomaly_score = calculate_geo_anomaly(event)
+
+            # Verificar discovery de IP pública
+            if getattr(event, 'public_ip_discovered', False):
+                self.stats['v3_ip_discovery'] += 1
+
+            # 🤖 Extraer features SIMPLIFICADAS con soporte v3
+            features = self._extract_v3_conservative_ml_features(event)
             if features is None:
                 self.stats['processing_errors'] += 1
                 return None
@@ -582,13 +697,13 @@ class ConservativeMLDetector:
             # 🔄 Actualizar estadísticas
             self.stats['ml_predictions'] += 1
 
-            if anomaly_score > self.ml_config.get("anomaly_threshold", 0.6):
+            if anomaly_score > self.ml_config.get("anomaly_threshold", 0.85):
                 self.stats['anomalies_detected'] += 1
 
-            if risk_score > self.ml_config.get("high_risk_threshold", 0.8):
+            if risk_score > self.ml_config.get("high_risk_threshold", 0.95):
                 self.stats['high_risk_events'] += 1
 
-            # ✅ Enriquecer evento - PRESERVAR TODO del geoip_enricher
+            # ✅ Enriquecer evento v3 - PRESERVAR TODO del geoip_enricher
             enriched_event = NetworkEventProto.NetworkEvent()
             enriched_event.CopyFrom(event)
 
@@ -596,51 +711,67 @@ class ConservativeMLDetector:
             enriched_event.anomaly_score = self._sanitize_float(anomaly_score)
             enriched_event.risk_score = self._sanitize_float(risk_score)
 
-            # 🆔 Información del ML detector conservador
+            # 🆔 Información del ML detector conservador v3
             enriched_event.ml_detector_pid = self.process_id
             enriched_event.ml_detector_timestamp = int(time.time() * 1000)
 
-            # 📊 Pipeline tracking simplificado
-            if enriched_event.geoip_enricher_timestamp > 0:
+            # 📊 Pipeline tracking v3
+            if hasattr(enriched_event, 'geoip_enricher_timestamp') and enriched_event.geoip_enricher_timestamp > 0:
                 pipeline_latency = enriched_event.ml_detector_timestamp - enriched_event.geoip_enricher_timestamp
                 enriched_event.processing_latency_ms = float(pipeline_latency)
 
-            # 🎯 Path del pipeline
+            # 🎯 Path del pipeline v3
             if enriched_event.pipeline_path:
-                enriched_event.pipeline_path += "->ml_conservative"
+                enriched_event.pipeline_path += "->ml_v3_conservative"
             else:
-                enriched_event.pipeline_path = "geoip->ml_conservative"
+                enriched_event.pipeline_path = "geoip_v3->ml_v3_conservative"
 
             enriched_event.pipeline_hops += 1
 
-            # 🏷️ Tag conservador
-            enriched_event.component_tags.append(f"ml_conservative_{self.node_id}")
+            # 🏷️ Tag conservador v3
+            enriched_event.component_tags.append(f"ml_v3_conservative_{self.node_id}")
 
-            # 📝 Descripción simplificada
+            # 📝 Descripción con información v3
+            description_parts = []
             if risk_score > 0.7:
-                enriched_event.description = f"🚨 ML Risk: {risk_score:.2f} | {enriched_event.description or ''}"
+                description_parts.append(f"🚨 ML Risk: {risk_score:.2f}")
             elif anomaly_score > 0.6:
-                enriched_event.description = f"⚠️ ML Anomaly: {anomaly_score:.2f} | {enriched_event.description or ''}"
+                description_parts.append(f"⚠️ ML Anomaly: {anomaly_score:.2f}")
+
+            # Añadir información geográfica v3 si está disponible
+            if has_dual_enrichment:
+                geo_distance = getattr(event, 'geographic_distance_km', 0)
+                if geo_distance > 0:
+                    category = getattr(event, 'distance_category', 'unknown')
+                    description_parts.append(f"🌍 {category} ({geo_distance:.0f}km)")
+
+            if description_parts:
+                new_desc = " | ".join(description_parts)
+                existing_desc = enriched_event.description or ""
+                enriched_event.description = f"{new_desc} | {existing_desc}" if existing_desc else new_desc
 
             enriched_event.component_status = "healthy"
+
+            # 🔧 Metadatos v3
+            enriched_event.protobuf_schema_version = "v3.0.0"
 
             return enriched_event.SerializeToString()
 
         except Exception as e:
             self.stats['processing_errors'] += 1
-            self.logger.error(f"❌ Error enriquecimiento conservador: {e}")
+            self.logger.error(f"❌ Error enriquecimiento conservador v3: {e}")
             return None
 
-    def _extract_conservative_ml_features(self, event) -> Optional[np.ndarray]:
-        """Extrae features SIMPLIFICADAS - siempre 17 para compatibilidad"""
+    def _extract_v3_conservative_ml_features(self, event) -> Optional[np.ndarray]:
+        """Extrae features SIMPLIFICADAS con soporte v3 - siempre 20 features"""
         try:
             features = []
 
             # 📊 Features básicas (4)
             features.extend([
-                float(event.packet_size or 0),
-                float(event.dest_port or 0),
-                float(event.src_port or 0),
+                float(getattr(event, 'packet_size', 0) or 0),
+                float(getattr(event, 'dest_port', 0) or 0),
+                float(getattr(event, 'src_port', 0) or 0),
                 float(self._protocol_to_numeric(getattr(event, 'protocol', '')))
             ])
 
@@ -653,55 +784,61 @@ class ConservativeMLDetector:
             ])
 
             # 🌐 Features de IP simplificadas (2)
-            source_ip = event.source_ip or ""
-            target_ip = event.target_ip or ""
+            source_ip = getattr(event, 'source_ip', '') or ""
+            target_ip = getattr(event, 'target_ip', '') or ""
             features.extend([
                 float(len(set(source_ip.replace('.', ''))) / max(len(source_ip), 1)),
                 float(len(set(target_ip.replace('.', ''))) / max(len(target_ip), 1))
             ])
 
             # 🚪 Features de puertos (2)
-            self.port_stats[event.src_port] += 1
-            self.port_stats[event.dest_port] += 1
+            src_port = getattr(event, 'src_port', 0) or 0
+            dest_port = getattr(event, 'dest_port', 0) or 0
+            self.port_stats[src_port] += 1
+            self.port_stats[dest_port] += 1
             features.extend([
-                float(min(self.port_stats[event.src_port], 100)),  # Limitado para estabilidad
-                float(min(self.port_stats[event.dest_port], 100))
+                float(min(self.port_stats[src_port], 100)),  # Limitado para estabilidad
+                float(min(self.port_stats[dest_port], 100))
             ])
 
-            # 🌍 Features de GeoIP (4)
-            has_geoip = 1 if (event.latitude != 0 and event.longitude != 0) else 0
-            lat_abs = abs(event.latitude) if has_geoip else 0
-            lon_abs = abs(event.longitude) if has_geoip else 0
-            distance = math.sqrt(lat_abs ** 2 + lon_abs ** 2) if has_geoip else 0
+            # 🌍 Features de GeoIP legacy (4) - compatibilidad hacia atrás
+            has_legacy_geoip = 1 if (getattr(event, 'latitude', 0) != 0 and getattr(event, 'longitude', 0) != 0) else 0
+            lat_abs = abs(getattr(event, 'latitude', 0)) if has_legacy_geoip else 0
+            lon_abs = abs(getattr(event, 'longitude', 0)) if has_legacy_geoip else 0
+            distance = math.sqrt(lat_abs ** 2 + lon_abs ** 2) if has_legacy_geoip else 0
 
-            features.extend([float(has_geoip), float(lat_abs), float(lon_abs), float(distance)])
+            features.extend([float(has_legacy_geoip), float(lat_abs), float(lon_abs), float(distance)])
 
-            # 🔧 Features adicionales (2)
-            features.extend([
-                float(1 if event.dest_port in [22, 23, 80, 443, 135, 139, 445] else 0),
-                float(len(event.event_id or "") % 100) / 100.0
-            ])
+            # 🆕 Features v3 específicas (5) - NUEVAS
+            has_dual_enrichment = float(1 if getattr(event, 'dual_enrichment_success', False) else 0)
+            geographic_distance = float(getattr(event, 'geographic_distance_km', 0) or 0)
+            same_country = float(1 if getattr(event, 'same_country', False) else 0)
+            public_ip_discovered = float(1 if getattr(event, 'public_ip_discovered', False) else 0)
+            geographic_anomaly = float(getattr(event, 'geographic_anomaly_score', 0) or 0)
 
-            # ✅ Verificar longitud exacta (17)
+            features.extend([has_dual_enrichment, geographic_distance / 1000.0,  # Normalizar km
+                             same_country, public_ip_discovered, geographic_anomaly])
+
+            # ✅ Verificar longitud exacta (20)
             final_features = np.array(features)
-            if len(final_features) != 17:
-                # 🔧 Ajustar a 17 exactamente
-                if len(final_features) < 17:
-                    padding = np.zeros(17 - len(final_features))
+            if len(final_features) != 20:
+                # 🔧 Ajustar a 20 exactamente
+                if len(final_features) < 20:
+                    padding = np.zeros(20 - len(final_features))
                     final_features = np.concatenate([final_features, padding])
                 else:
-                    final_features = final_features[:17]
+                    final_features = final_features[:20]
 
             return final_features
 
         except Exception as e:
-            self.logger.error(f"❌ Error extrayendo features conservadoras: {e}")
-            return np.zeros(17)  # Fallback seguro
+            self.logger.error(f"❌ Error extrayendo features v3 conservadoras: {e}")
+            return np.zeros(20)  # Fallback seguro
 
     def _protocol_to_numeric(self, protocol: str) -> int:
         """Convierte protocolo a numérico"""
         protocol_map = {'tcp': 6, 'udp': 17, 'icmp': 1, 'http': 80, 'https': 443}
-        return protocol_map.get(protocol.lower(), 0)
+        return protocol_map.get(str(protocol).lower(), 0)
 
     def _predict_with_conservative_ml(self, features: np.ndarray) -> Tuple[float, float]:
         """Predicción con SOLO 2 algoritmos conservadores"""
@@ -752,7 +889,7 @@ class ConservativeMLDetector:
             return self._conservative_heuristic_prediction(features)
 
     def _conservative_heuristic_prediction(self, features: np.ndarray) -> Tuple[float, float]:
-        """Predicción heurística CONSERVADORA"""
+        """Predicción heurística CONSERVADORA con features v3"""
         try:
             if len(features) < 4:
                 return 0.0, 0.0
@@ -764,13 +901,26 @@ class ConservativeMLDetector:
 
             # Heurísticas conservadoras simples
             if packet_size > 1500 or packet_size < 20:
-                anomaly_score += 0.2
+                anomaly_score += 0.1  # Reducido para ser más conservador
 
             if dest_port in [22, 23, 135, 139, 445]:
-                risk_score += 0.3
+                risk_score += 0.2  # Reducido para ser más conservador
 
             if dest_port > 49152:
-                anomaly_score += 0.1
+                anomaly_score += 0.05
+
+            # Heurísticas v3 específicas si hay features adicionales
+            if len(features) >= 20:
+                # Feature 15: has_dual_enrichment
+                # Feature 16: geographic_distance (normalizada)
+                # Feature 19: geographic_anomaly
+                if features[15] > 0:  # Tiene enriquecimiento dual
+                    geo_distance = features[16] * 1000  # Desnormalizar
+                    if geo_distance > 10:  # > 10,000 km
+                        anomaly_score += 0.1
+
+                    if len(features) > 19 and features[19] > 0.5:  # Alto score de anomalía geográfica
+                        risk_score += 0.15
 
             return min(anomaly_score, 1.0), min(risk_score, 1.0)
 
@@ -792,12 +942,12 @@ class ConservativeMLDetector:
         )
 
         if should_train:
-            self.logger.info("🔧 Entrenamiento automático conservador...")
+            self.logger.info("🔧 Entrenamiento automático conservador v3...")
             self._train_conservative_models()
             self.last_training_time = current_time
 
     def _train_conservative_models(self):
-        """Entrenar SOLO 2 modelos conservadores"""
+        """Entrenar SOLO 2 modelos conservadores con features v3"""
         try:
             if len(self.training_data) < 50:
                 return
@@ -805,7 +955,7 @@ class ConservativeMLDetector:
             start_time = time.time()
             X = np.array(list(self.training_data))
 
-            self.logger.info(f"🔧 Entrenando 2 algoritmos conservadores con {len(X)} muestras...")
+            self.logger.info(f"🔧 Entrenando 2 algoritmos conservadores v3 con {len(X)} muestras...")
 
             # Preprocesamiento simple
             X_scaled = self.processors['scaler'].fit_transform(X)
@@ -822,7 +972,7 @@ class ConservativeMLDetector:
                     n_jobs=1  # Solo 1 job para local
                 )
                 self.models['isolation_forest'].fit(X_scaled)
-                self.logger.info("✅ Isolation Forest conservador entrenado")
+                self.logger.info("✅ Isolation Forest conservador v3 entrenado")
 
             # 2️⃣ K-Means (conservador)
             if models_config["kmeans"]["enabled"]:
@@ -833,26 +983,28 @@ class ConservativeMLDetector:
                     n_init=kmeans_config["n_init"]  # Ya reducido en config
                 )
                 self.models['kmeans'].fit(X_scaled)
-                self.logger.info("✅ K-Means conservador entrenado")
+                self.logger.info("✅ K-Means conservador v3 entrenado")
 
             training_time = time.time() - start_time
             self.stats['training_sessions'] += 1
 
-            self.logger.info(f"✅ 2 algoritmos conservadores entrenados en {training_time:.2f}s")
+            self.logger.info(f"✅ 2 algoritmos conservadores v3 entrenados en {training_time:.2f}s")
 
             # 💾 Guardar modelos
             if self.persistence_manager:
                 training_metrics = {
                     "training_time": training_time,
                     "samples_count": len(X),
-                    "mode": "conservative_local"
+                    "mode": "conservative_local_v3",
+                    "protobuf_version": PROTOBUF_VERSION,
+                    "feature_count": X.shape[1]
                 }
                 self.persistence_manager.save_models(self.models, self.processors, training_metrics)
 
             self.models_trained = True
 
         except Exception as e:
-            self.logger.error(f"❌ Error entrenamiento conservador: {e}")
+            self.logger.error(f"❌ Error entrenamiento conservador v3: {e}")
 
     def send_event_with_conservative_backpressure(self, enriched_data: bytes) -> bool:
         """Envío con backpressure MUY AGRESIVO"""
@@ -900,7 +1052,7 @@ class ConservativeMLDetector:
             return 0.0
 
     def monitor_conservative_performance(self):
-        """Monitoreo de performance CONSERVADOR"""
+        """Monitoreo de performance CONSERVADOR v3"""
         monitoring_config = self.config["monitoring"]
         interval = monitoring_config["stats_interval_seconds"]
 
@@ -909,12 +1061,12 @@ class ConservativeMLDetector:
             if not self.running:
                 break
 
-            self._log_conservative_stats()
+            self._log_conservative_v3_stats()
             self._check_conservative_alerts()
 
-    def _log_conservative_stats(self):
-        """Log estadísticas conservadoras"""
-        self.logger.info(f"📊 Conservative ML Stats:")
+    def _log_conservative_v3_stats(self):
+        """Log estadísticas conservadoras v3"""
+        self.logger.info(f"📊 Conservative ML v3 Stats:")
         self.logger.info(f"   📨 Recibidos: {self.stats['received']}")
         self.logger.info(f"   🤖 Procesados: {self.stats['processed']}")
         self.logger.info(f"   📤 Enviados: {self.stats['sent']}")
@@ -925,12 +1077,16 @@ class ConservativeMLDetector:
         self.logger.info(f"   🗑️ Descartados: {self.stats['dropped_events']}")
         self.logger.info(f"   📏 Oversized: {self.stats['oversized_messages']}")
         self.logger.info(f"   ⏰ Send timeouts: {self.stats['send_timeouts']}")
+        self.logger.info(f"   🆕 v3 Dual enriched: {self.stats['v3_dual_enriched']}")
+        self.logger.info(f"   🌍 v3 Geo analysis: {self.stats['v3_geographic_analysis']}")
+        self.logger.info(f"   🔍 v3 IP discovery: {self.stats['v3_ip_discovery']}")
         self.logger.info(f"   📋 Colas: protobuf={self.protobuf_queue.qsize()}, enriched={self.enriched_queue.qsize()}")
 
         # Reset stats
         for key in ['received', 'processed', 'sent', 'ml_predictions', 'anomalies_detected',
                     'high_risk_events', 'backpressure_activations', 'dropped_events',
-                    'oversized_messages', 'send_timeouts']:
+                    'oversized_messages', 'send_timeouts', 'v3_dual_enriched',
+                    'v3_geographic_analysis', 'v3_ip_discovery']:
             self.stats[key] = 0
 
     def _check_conservative_alerts(self):
@@ -945,57 +1101,59 @@ class ConservativeMLDetector:
         max_usage = alerts.get("max_queue_usage_percent", 40.0) / 100.0
 
         if protobuf_usage > max_usage:
-            self.logger.warning(f"🚨 ALERTA CONSERVADORA: Protobuf queue {protobuf_usage * 100:.1f}% llena")
+            self.logger.warning(f"🚨 ALERTA CONSERVADORA v3: Protobuf queue {protobuf_usage * 100:.1f}% llena")
 
         if enriched_usage > max_usage:
-            self.logger.warning(f"🚨 ALERTA CONSERVADORA: Enriched queue {enriched_usage * 100:.1f}% llena")
+            self.logger.warning(f"🚨 ALERTA CONSERVADORA v3: Enriched queue {enriched_usage * 100:.1f}% llena")
 
         # 🚨 Alertas de mensajes oversized
         max_violations = alerts.get("max_message_size_violations", 5)
         if self.stats.get('oversized_messages', 0) > max_violations:
-            self.logger.warning(f"🚨 ALERTA: Demasiados mensajes oversized ({self.stats['oversized_messages']})")
+            self.logger.warning(f"🚨 ALERTA v3: Demasiados mensajes oversized ({self.stats['oversized_messages']})")
 
         # 🚨 Alertas de timeouts
         max_timeouts = alerts.get("max_send_timeouts", 10)
         if self.stats.get('send_timeouts', 0) > max_timeouts:
-            self.logger.warning(f"🚨 ALERTA: Demasiados send timeouts ({self.stats['send_timeouts']})")
+            self.logger.warning(f"🚨 ALERTA v3: Demasiados send timeouts ({self.stats['send_timeouts']})")
 
     def run(self):
-        """Ejecutar detector ML CONSERVADOR"""
-        self.logger.info("🚀 Iniciando Conservative ML Detector...")
+        """Ejecutar detector ML CONSERVADOR v3"""
+        self.logger.info("🚀 Iniciando Conservative ML Detector v3...")
 
         threads = []
 
         # Thread de recepción
-        recv_thread = threading.Thread(target=self.receive_protobuf_events, name="ConservativeReceiver")
+        recv_thread = threading.Thread(target=self.receive_protobuf_events, name="ConservativeReceiver_v3")
         threads.append(recv_thread)
 
         # Thread de procesamiento (solo 1 para local)
-        proc_thread = threading.Thread(target=self.process_protobuf_events, name="ConservativeProcessor")
+        proc_thread = threading.Thread(target=self.process_protobuf_events, name="ConservativeProcessor_v3")
         threads.append(proc_thread)
 
         # Thread de envío (solo 1 para local)
-        send_thread = threading.Thread(target=self.send_enriched_events, name="ConservativeSender")
+        send_thread = threading.Thread(target=self.send_enriched_events, name="ConservativeSender_v3")
         threads.append(send_thread)
 
         # Thread de monitoreo
-        monitor_thread = threading.Thread(target=self.monitor_conservative_performance, name="ConservativeMonitor")
+        monitor_thread = threading.Thread(target=self.monitor_conservative_performance, name="ConservativeMonitor_v3")
         threads.append(monitor_thread)
 
         # 🚀 Iniciar threads
         for thread in threads:
             thread.start()
 
-        self.logger.info(f"✅ Conservative ML Detector iniciado:")
+        self.logger.info(f"✅ Conservative ML Detector v3 iniciado:")
         self.logger.info(f"   🧵 Threads: {len(threads)} (conservador)")
         self.logger.info(f"   🧠 Algoritmos: Isolation Forest + K-Means")
+        self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
+        self.logger.info(f"   🌍 Enriquecimiento: Dual GeoIP v3 compatible")
         self.logger.info(f"   🔒 Modo: ULTRA CONSERVADOR para estabilidad local")
 
         try:
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.logger.info("🛑 Deteniendo Conservative ML Detector...")
+            self.logger.info("🛑 Deteniendo Conservative ML Detector v3...")
 
         self.shutdown(threads)
 
@@ -1005,7 +1163,7 @@ class ConservativeMLDetector:
         self.stop_event.set()
 
         runtime = time.time() - self.stats['start_time']
-        self.logger.info(f"📊 Runtime conservador: {runtime:.1f}s")
+        self.logger.info(f"📊 Runtime conservador v3: {runtime:.1f}s")
 
         # Esperar threads con timeout corto
         for thread in threads:
@@ -1018,21 +1176,21 @@ class ConservativeMLDetector:
             self.output_socket.close()
         self.context.term()
 
-        self.logger.info("✅ Conservative ML Detector cerrado correctamente")
+        self.logger.info("✅ Conservative ML Detector v3 cerrado correctamente")
 
 
 # 🚀 Main
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("❌ Uso: python lightweight_ml_detector_conservative.py <config.json>")
-        print("💡 Ejemplo: python lightweight_ml_detector_conservative.py ml_detector_conservative_config.json")
+        print("❌ Uso: python lightweight_ml_detector_v3.py <config.json>")
+        print("💡 Ejemplo: python lightweight_ml_detector_v3.py ml_detector_v3_config.json")
         sys.exit(1)
 
     config_file = sys.argv[1]
 
     try:
-        detector = ConservativeMLDetector(config_file)
+        detector = ConservativeMLDetectorV3(config_file)
         detector.run()
     except Exception as e:
-        print(f"❌ Error fatal conservador: {e}")
+        print(f"❌ Error fatal conservador v3: {e}")
         sys.exit(1)
