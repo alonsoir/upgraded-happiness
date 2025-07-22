@@ -1763,6 +1763,93 @@ function showThreatIndicator(event) {
     }
 }
 
+// 🆕 Función para procesar eventos con coordenadas duales
+function processEventWithDualGeoIP(event) {
+    const dualGeoIP = event.dual_geoip;
+
+    if (!dualGeoIP) {
+        // Fallback a comportamiento legacy
+        return processLegacyEvent(event);
+    }
+
+    const markers = [];
+
+    // 🏠 Marcador fuente (víctima/nosotros) - AZUL
+    if (dualGeoIP.source && dualGeoIP.source.enriched) {
+        markers.push({
+            type: 'source',
+            lat: dualGeoIP.source.latitude,
+            lng: dualGeoIP.source.longitude,
+            city: dualGeoIP.source.city,
+            country: dualGeoIP.source.country,
+            ip: event.source_ip,
+            color: '#0066CC',    // Azul para víctima
+            icon: '🏠',
+            title: `Víctima: ${event.source_ip}`,
+            subtitle: `${dualGeoIP.source.city}, ${dualGeoIP.source.country}`
+        });
+    }
+
+    // 🎯 Marcador destino (atacante) - ROJO
+    if (dualGeoIP.target && dualGeoIP.target.enriched) {
+        markers.push({
+            type: 'target',
+            lat: dualGeoIP.target.latitude,
+            lng: dualGeoIP.target.longitude,
+            city: dualGeoIP.target.city,
+            country: dualGeoIP.target.country,
+            ip: event.target_ip,
+            color: '#CC0000',    // Rojo para atacante
+            icon: '🎯',
+            title: `Atacante: ${event.target_ip}`,
+            subtitle: `${dualGeoIP.target.city}, ${dualGeoIP.target.country}`
+        });
+    }
+
+    // 📏 Línea de conexión si tenemos ambos puntos
+    let connectionLine = null;
+    if (markers.length === 2) {
+        connectionLine = {
+            from: [dualGeoIP.source.latitude, dualGeoIP.source.longitude],
+            to: [dualGeoIP.target.latitude, dualGeoIP.target.longitude],
+            distance: dualGeoIP.distance_km,
+            sameCountry: dualGeoIP.same_country,
+            color: dualGeoIP.same_country ? '#FFA500' : '#FF0000',  // Naranja local, rojo internacional
+            weight: 2,
+            animated: true
+        };
+    }
+
+    return {
+        markers: markers,
+        connectionLine: connectionLine,
+        metadata: {
+            dualSuccess: dualGeoIP.success,
+            distance: dualGeoIP.distance_km,
+            sameCountry: dualGeoIP.same_country,
+            ipDiscovery: event.ip_discovery
+        }
+    };
+}
+
+// 🗺️ Función para agregar al mapa
+function addEventToMap(event) {
+    const processed = processEventWithDualGeoIP(event);
+
+    // Agregar marcadores
+    processed.markers.forEach(marker => {
+        addMarkerToMap(marker);
+    });
+
+    // Agregar línea de conexión
+    if (processed.connectionLine) {
+        addConnectionLineToMap(processed.connectionLine);
+    }
+
+    // Actualizar estadísticas
+    updateDashboardStats(processed.metadata);
+}
+
 // Funciones placeholder
 function toggleHeatmap() { showToast('Heatmap: en desarrollo', 'warning'); }
 function showMapLegend() { showToast('Leyenda: en desarrollo', 'info'); }

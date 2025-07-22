@@ -1442,7 +1442,7 @@ class SecurityDashboard:
         try:
             # Importar protobuf modules correctos
             try:
-                import src.protocols.protobuf.network_event_extended_v2_pb2 as network_pb2
+                import src.protocols.protobuf.network_event_extended_v3_pb2 as network_pb2
 
                 # Intentar parsear como NetworkEvent (NO NetworkEventExtended)
                 event = network_pb2.NetworkEvent()
@@ -1559,6 +1559,7 @@ class SecurityDashboard:
                     'ml_models_scores': self._extract_ml_scores_from_metadata(
                         dict(getattr(event, 'component_metadata', {}))
                     )
+
                 }
                 # Después de la línea donde se crea parsed_event, añadir:
                 # Validación adicional de PIDs para evitar problemas de encoding
