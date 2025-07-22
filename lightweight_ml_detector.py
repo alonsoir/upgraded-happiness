@@ -32,12 +32,12 @@ from threading import Event
 
 # 📦 Protobuf - USAR VERSIÓN ACTUALIZADA v2
 try:
-    import network_event_extended_v2_pb2 as NetworkEventProto
+    import src.protocols.protobuf.network_event_extended_v3_pb2 as NetworkEventProto
 
     PROTOBUF_AVAILABLE = True
 except ImportError:
     try:
-        from src.protocols.protobuf import network_event_extended_v2_pb2 as NetworkEventProto
+        from src.protocols.protobuf import network_event_extended_v3_pb2 as NetworkEventProto
 
         PROTOBUF_AVAILABLE = True
     except ImportError:
@@ -553,6 +553,19 @@ class ConservativeMLDetector:
             # 📦 Deserializar evento
             event = NetworkEventProto.NetworkEvent()
             event.ParseFromString(protobuf_data)
+            # 🆕 Usar campos duales si disponibles
+            if event.dual_enrichment_success:
+                source_location = (event.source_latitude, event.source_longitude)
+                target_location = (event.target_latitude, event.target_longitude)
+
+                # Calcular métricas geográficas
+                distance = calculate_distance(source_location, target_location)
+                event.geographic_distance_km = distance
+                event.distance_category = categorize_distance(distance)
+                event.same_country = (event.source_country_code == event.target_country_code)
+
+                # Score de anomalía geográfica
+                event.geographic_anomaly_score = calculate_geo_anomaly(event)
 
             # 🤖 Extraer features SIMPLIFICADAS
             features = self._extract_conservative_ml_features(event)

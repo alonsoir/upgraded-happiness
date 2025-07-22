@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+// ✅ PACKAGE PARA EVENTOS DE RED DISTRIBUIDOS v3.0.0
+// 🚨 NUEVA VERSION: Soporte para enriquecimiento GeoIP dual (source + target)
+// 🔄 COMPATIBLE: 100% compatible hacia atrás con v2
+package network.events.distributed;
+
+// Comando para generar código Python:
+// protoc --python_out=. network_event_extended_v3.proto
+
+message NetworkEvent {
+    // 🔍 Identificación del evento
+    string event_id = 1;
+    int64 timestamp = 2;
+
+    // 🌐 Información de red básica
+    string source_ip = 3;
+    string target_ip = 4;
+    int32 packet_size = 5;
+    int32 dest_port = 6;
+    int32 src_port = 7;
+    string protocol = 8;              // "tcp", "udp", "icmp", etc.
+
+    // 🤖 Identificación del agente (legacy - mantener compatibilidad)
+    string agent_id = 9;
+
+    // 📊 Métricas y scoring
+    float anomaly_score = 10;
+    double latitude = 11;             // 🔄 LEGACY: Coordenadas primarias (compatibilidad)
+    double longitude = 12;            // 🔄 LEGACY: Se mantiene para componentes antiguos
+
+    // 🎯 Clasificación de eventos
+    string event_type = 13;           // "normal", "suspicious", "tor_detected", etc.
+    float risk_score = 14;
+    string description = 15;
+
+    // 🖥️ Información del sistema operativo
+    string so_identifier = 16;        // "linux_ufw", "linux_iptables", "windows_firewall", "darwin_pf"
+
+    // 🏠 Información del nodo (handshake inicial)
+    string node_hostname = 17;        // Hostname del nodo
+    string os_version = 18;           // "Ubuntu 22.04", "Windows 11", etc.
+    string firewall_status = 19;      // "active", "inactive", "unknown"
+    string agent_version = 20;        // Versión del agente
+    bool is_initial_handshake = 21;   // true solo en el primer evento del nodo
+
+    // 🆔 CAMPOS DISTRIBUIDOS - CRÍTICOS PARA ETCD
+    string node_id = 22;              // Identificador único asignado por etcd
+    int32 process_id = 23;            // PID del proceso dentro del contenedor
+    string container_id = 24;         // ID del contenedor (Docker/Podman) - opcional
+    string cluster_name = 25;         // Nombre del cluster distribuido - opcional
+
+    // 🔄 Estado del componente distribuido
+    string component_status = 26;     // "healthy", "degraded", "initializing"
+    int64 uptime_seconds = 27;        // Tiempo de vida del componente
+
+    // 📈 Métricas de performance del nodo
+    int32 queue_depth = 28;           // Profundidad de cola interna
+    float cpu_usage_percent = 29;     // Uso de CPU del componente
+    float memory_usage_mb = 30;       // Uso de memoria en MB
+
+    // 🔧 Configuración dinámica
+    string config_version = 31;       // Versión de configuración aplicada
+    int64 config_timestamp = 32;      // Timestamp de última actualización de config
+
+    // 🌍 Enriquecimiento GeoIP (LEGACY - compatibilidad v2)
+    bool geoip_enriched = 33;         // Indica si ha pasado por enriquecimiento GeoIP
+    string enrichment_node = 34;      // node_id del nodo que enriqueció
+    int64 enrichment_timestamp = 35;  // Timestamp del enriquecimiento
+
+    // 🔧 PIDS DE COMPONENTES DISTRIBUIDOS - TRACKING DEL PIPELINE
+    int32 promiscuous_pid = 36;       // PID del promiscuous_agent que capturó
+    int32 geoip_enricher_pid = 37;    // PID del geoip_enricher que enriqueció
+    int32 ml_detector_pid = 38;       // PID del ml_detector que analizó
+    int32 dashboard_pid = 39;         // PID del dashboard que visualizó
+    int32 firewall_pid = 40;          // PID del firewall que aplicó reglas
+
+    // 📊 TIMESTAMPS DE PROCESAMIENTO POR COMPONENTE
+    int64 promiscuous_timestamp = 41;     // Cuando fue capturado
+    int64 geoip_enricher_timestamp = 42;  // Cuando fue enriquecido con GeoIP
+    int64 ml_detector_timestamp = 43;     // Cuando fue analizado por ML
+    int64 dashboard_timestamp = 44;       // Cuando fue mostrado en dashboard
+    int64 firewall_timestamp = 45;        // Cuando fue procesado por firewall
+
+    // 🎯 MÉTRICAS DE PIPELINE DISTRIBUIDO
+    float processing_latency_ms = 46;     // Latencia total de procesamiento
+    int32 pipeline_hops = 47;             // Número de saltos en el pipeline
+    string pipeline_path = 48;            // Ruta del evento: "promiscuous->geoip->ml->dashboard"
+
+    // 🔄 CONTROL DE FLUJO DISTRIBUIDO
+    int32 retry_count = 49;               // Número de reintentos en el pipeline
+    string last_error = 50;               // Último error encontrado
+    bool requires_reprocessing = 51;      // Indica si necesita reprocesamiento
+
+    // 🏷️ TAGS Y METADATOS DISTRIBUIDOS
+    repeated string component_tags = 52;  // Tags añadidos por cada componente
+    map<string, string> component_metadata = 53; // Metadata adicional por componente
+
+    // 🆕 CAMPOS NUEVOS v3.0.0 - ENRIQUECIMIENTO GEOIP DUAL
+    // =====================================================
+
+    // 🎯 COORDENADAS DUALES - SEPARADAS PARA SOURCE Y TARGET
+    double source_latitude = 54;         // 🏠 Coordenadas de source_ip (víctima/nosotros)
+    double source_longitude = 55;        // 🏠 Longitud de source_ip
+    double target_latitude = 56;         // 🎯 Coordenadas de target_ip (atacante)
+    double target_longitude = 57;        // 🎯 Longitud de target_ip
+
+    // 🌍 INFORMACIÓN GEOGRÁFICA RICA
+    string source_city = 58;             // 🏠 Ciudad del source_ip
+    string source_country = 59;          // 🏠 País del source_ip
+    string source_country_code = 60;     // 🏠 Código de país (ES, US, etc.)
+    string source_region = 61;           // 🏠 Región/estado del source_ip
+    string source_timezone = 62;         // 🏠 Zona horaria del source_ip
+
+    string target_city = 63;             // 🎯 Ciudad del target_ip
+    string target_country = 64;          // 🎯 País del target_ip
+    string target_country_code = 65;     // 🎯 Código de país (ES, US, etc.)
+    string target_region = 66;           // 🎯 Región/estado del target_ip
+    string target_timezone = 67;         // 🎯 Zona horaria del target_ip
+
+    // 🔍 ESTADO DE ENRIQUECIMIENTO v3.0.0
+    bool source_ip_enriched = 68;        // ✅ Si source_ip fue geoposicionada exitosamente
+    bool target_ip_enriched = 69;        // ✅ Si target_ip fue geoposicionada exitosamente
+    string geoip_primary_source = 70;    // "source" | "target" | "none" - cuál se usó como primaria
+    bool dual_enrichment_success = 71;   // ✅ Si ambas IPs fueron enriquecidas exitosamente
+
+    // 🌐 DISCOVERY DE IP PÚBLICA v3.0.0
+    bool public_ip_discovered = 72;      // ✅ Si se descubrió IP pública para source_ip privada
+    string original_source_ip = 73;      // 📝 IP source original antes de discovery (si era privada)
+    string discovered_public_ip = 74;    // 🌐 IP pública descubierta (para source_ip privadas)
+    string ip_discovery_service = 75;    // 🔗 Servicio usado: "api.ipify.org", "ifconfig.me", etc.
+    int64 ip_discovery_timestamp = 76;   // ⏰ Timestamp del discovery de IP pública
+
+    // 📏 ANÁLISIS GEOGRÁFICO v3.0.0
+    double geographic_distance_km = 77;  // 📏 Distancia entre source y target en km
+    string distance_category = 78;       // 📊 "local", "regional", "national", "international"
+    bool same_country = 79;              // 🏳️ Si source y target están en el mismo país
+    bool same_continent = 80;            // 🌍 Si source y target están en el mismo continente
+
+    // 🔧 METADATOS DE ENRIQUECIMIENTO v3.0.0
+    string geoip_enricher_version = 81;  // 📝 Versión del enricher: "2.1.0", etc.
+    string geoip_method = 82;            // 🔧 Método usado: "mock", "maxmind", "api", etc.
+    bool fallback_coordinates_used = 83; // ⚠️ Si se usaron coordenadas de fallback
+    string geoip_data_source = 84;       // 📊 Fuente de datos: "GeoLite2", "ipapi", etc.
+
+    // 🎯 ISP Y INFORMACIÓN DE RED v3.0.0 (OPCIONAL - para futuras extensiones)
+    string source_isp = 85;              // 🏢 ISP del source_ip
+    string target_isp = 86;              // 🏢 ISP del target_ip
+    string source_asn = 87;              // 🔢 ASN del source_ip
+    string target_asn = 88;              // 🔢 ASN del target_ip
+
+    // 🚨 INFORMACIÓN DE AMENAZAS v3.0.0 (OPCIONAL - para ML detector)
+    bool target_is_tor_exit = 89;        // 🔍 Si target_ip es nodo de salida Tor
+    bool target_is_known_malicious = 90; // ⚠️ Si target_ip está en blacklist conocida
+    string threat_intelligence_source = 91; // 📊 Fuente de intel: "internal", "external", etc.
+    float geographic_anomaly_score = 92; // 📊 Score de anomalía geográfica (0.0-1.0)
+
+    // 🔄 COMPATIBILIDAD Y VERSIONADO
+    string protobuf_schema_version = 93; // 📝 Versión del esquema: "v3.0.0"
+    bool legacy_compatibility_mode = 94; // 🔄 Si está en modo compatibilidad con v2
+    repeated string deprecated_fields = 95; // 📋 Campos deprecados que aún se procesan
+
+    // 📊 MÉTRICAS DE RENDIMIENTO ESPECÍFICAS v3.0.0
+    float geoip_lookup_latency_ms = 96;  // ⏱️ Latencia del lookup GeoIP en ms
+    int32 cache_hits_count = 97;         // 🗄️ Número de cache hits durante enriquecimiento
+    int32 cache_misses_count = 98;       // ❌ Número de cache misses durante enriquecimiento
+    float enrichment_success_rate = 99;  // 📊 Tasa de éxito del enriquecimiento (0.0-1.0)
+
+    // 🏷️ RESERVA PARA FUTURAS EXTENSIONES
+    // Fields 100-110 reserved for future GeoIP enhancements
+    reserved 100 to 110;
+    reserved "future_geoip_field_1", "future_geoip_field_2";
+}

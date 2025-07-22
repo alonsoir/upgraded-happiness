@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-geoip_enricher_vertical.py - Enriquecedor GeoIP optimizado para escalado vertical
-🌍 Enhanced GeoIP Enricher para Upgraded-Happiness (VERTICAL SCALING)
+geoip_enricher_vertical_v2.1.0.py - Enriquecedor GeoIP optimizado para escalado vertical
+🌍 Enhanced GeoIP Enricher para Upgraded-Happiness (VERTICAL SCALING v2.1.0)
+- 🚨 BUG FIX CRÍTICO: source_ip → target_ip para geoposicionar atacantes
+- 🌐 NUEVO: Discovery automático de IP pública
+- 🎯 NUEVO: Enriquecimiento dual (source_ip + target_ip)
 - Optimizado para i9 8-cores + 32GB RAM
 - Lee configuraciones de escalado vertical desde JSON
 - Backpressure adaptativo según CPU y memoria
@@ -20,6 +23,9 @@ import os
 import socket
 import psutil
 import math
+import urllib.request
+import urllib.error
+import ipaddress
 from queue import Queue, Empty
 from datetime import datetime
 from pathlib import Path
@@ -29,12 +35,12 @@ from threading import Event
 
 # 📦 Protobuf - USAR VERSIÓN ACTUALIZADA v2
 try:
-    import network_event_extended_v2_pb2 as NetworkEventProto
+    from src.protocols.protobuf import network_event_extended_v3_pb2 as NetworkEventProto
 
     PROTOBUF_AVAILABLE = True
 except ImportError:
     try:
-        from src.protocols.protobuf import network_event_extended_v2_pb2 as NetworkEventProto
+        from src.protocols.protobuf import network_event_extended_v3_pb2 as NetworkEventProto
 
         PROTOBUF_AVAILABLE = True
     except ImportError:
@@ -48,6 +54,114 @@ try:
     CACHE_AVAILABLE = True
 except ImportError:
     CACHE_AVAILABLE = False
+
+
+class PublicIPDiscovery:
+    """Descubrimiento y cache de IP pública"""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config.get("ip_handling", {}).get("public_ip_discovery", {})
+        self.enabled = self.config.get("enabled", False)
+        self.services = self.config.get("services", ["https://api.ipify.org"])
+        self.timeout = self.config.get("timeout", 10)
+        self.cache_duration = self.config.get("cache_duration", 3600)
+
+        # Cache
+        self._cached_public_ip = None
+        self._cache_timestamp = 0
+
+        self.logger = logging.getLogger("PublicIPDiscovery")
+
+    def get_public_ip(self) -> Optional[str]:
+        """Obtiene IP pública con cache"""
+        if not self.enabled:
+            return None
+
+        # 🗄️ Verificar cache
+        now = time.time()
+        if (self._cached_public_ip and
+                (now - self._cache_timestamp) < self.cache_duration):
+            return self._cached_public_ip
+
+        # 🌐 Obtener IP pública de servicios
+        for service in self.services:
+            try:
+                ip = self._fetch_public_ip(service)
+                if ip:
+                    self._cached_public_ip = ip
+                    self._cache_timestamp = now
+                    self.logger.debug(f"✅ IP pública obtenida de {service}: {ip}")
+                    return ip
+            except Exception as e:
+                self.logger.warning(f"❌ Error obteniendo IP de {service}: {e}")
+                continue
+
+        self.logger.error("❌ No se pudo obtener IP pública de ningún servicio")
+        return None
+
+    def _fetch_public_ip(self, service_url: str) -> Optional[str]:
+        """Obtiene IP pública de un servicio específico"""
+        try:
+            request = urllib.request.Request(service_url)
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                ip = response.read().decode("utf-8").strip()
+
+                # Validar que es una IP válida
+                ipaddress.ip_address(ip)
+                return ip
+
+        except (urllib.error.URLError, urllib.error.HTTPError,
+                ValueError, OSError) as e:
+            raise Exception(f"Error fetching from {service_url}: {e}")
+
+
+class IPAddressHandler:
+    """Manejo avanzado de direcciones IP"""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config.get("ip_handling", {})
+        self.private_ranges = [
+            ipaddress.ip_network(range_str)
+            for range_str in self.config.get("private_ip_ranges", [])
+        ]
+        self.fallback_coords = self.config.get("fallback_coordinates", {})
+
+        # Discovery de IP pública
+        self.public_ip_discovery = PublicIPDiscovery(config)
+
+        self.logger = logging.getLogger("IPAddressHandler")
+
+    def is_private_ip(self, ip_str: str) -> bool:
+        """Verifica si una IP es privada"""
+        try:
+            ip = ipaddress.ip_address(ip_str)
+            return any(ip in network for network in self.private_ranges)
+        except ValueError:
+            return False
+
+    def resolve_source_ip_coordinates(self, source_ip: str) -> Optional[Tuple[float, float]]:
+        """Resuelve coordenadas para source_ip (nuestra IP)"""
+        if self.is_private_ip(source_ip):
+            # Si es IP privada, obtener IP pública
+            public_ip = self.public_ip_discovery.get_public_ip()
+            if public_ip:
+                self.logger.debug(f"🌐 Resolviendo IP pública {public_ip} para source_ip privada {source_ip}")
+                return public_ip
+            else:
+                # Usar coordenadas de fallback (Sevilla)
+                self.logger.debug(f"📍 Usando coordenadas de fallback para source_ip {source_ip}")
+                return (self.fallback_coords.get("latitude"),
+                        self.fallback_coords.get("longitude"))
+        else:
+            # IP pública directa
+            return source_ip
+
+    def resolve_target_ip_coordinates(self, target_ip: str) -> Optional[str]:
+        """Resuelve coordenadas para target_ip (atacante)"""
+        if self.is_private_ip(target_ip):
+            self.logger.warning(f"⚠️ target_ip es privada: {target_ip} - posible error en captura")
+            return None
+        return target_ip
 
 
 class VerticalScalingManager:
@@ -145,7 +259,10 @@ class VerticalScalingManager:
 
 class DistributedGeoIPEnricherVertical:
     """
-    GeoIP Enricher distribuido optimizado para escalado vertical
+    GeoIP Enricher distribuido optimizado para escalado vertical v2.1.0
+    - 🚨 BUG FIX: Geoposiciona target_ip (atacantes) en lugar de source_ip
+    - 🌐 Discovery automático de IP pública para source_ip
+    - 🎯 Enriquecimiento dual con metadata completa
     - Configuración específica para i9 8-cores + 32GB RAM
     - Backpressure adaptativo según CPU/memoria
     - Batch processing inteligente
@@ -171,6 +288,9 @@ class DistributedGeoIPEnricherVertical:
 
         # 📝 Setup logging desde configuración (PRIMERO)
         self.setup_logging()
+
+        # 🌐 NUEVO v2.1.0: Inicializar handler de IPs
+        self.ip_handler = IPAddressHandler(self.config)
 
         # 🔌 Setup ZeroMQ con optimizaciones verticales
         self.context = zmq.Context()
@@ -211,7 +331,12 @@ class DistributedGeoIPEnricherVertical:
             'cpu_aware_delays': 0,
             'memory_pressure_reductions': 0,
             'start_time': time.time(),
-            'last_stats_time': time.time()
+            'last_stats_time': time.time(),
+            # NUEVO v2.1.0: Estadísticas de enriquecimiento dual
+            'source_ip_enriched': 0,
+            'target_ip_enriched': 0,
+            'dual_enriched': 0,
+            'public_ip_discoveries': 0
         }
 
         # 🎛️ Control
@@ -225,12 +350,26 @@ class DistributedGeoIPEnricherVertical:
         # ✅ Verificar dependencias críticas
         self._verify_dependencies()
 
-        self.logger.info(f"🌍 Distributed GeoIP Enricher VERTICAL inicializado")
+        # 🌐 NUEVO v2.1.0: Log configuración de enriquecimiento
+        self._log_v210_configuration()
+
+        self.logger.info(f"🌍 Distributed GeoIP Enricher VERTICAL v2.1.0 inicializado")
         self.logger.info(f"   🏷️ Node ID: {self.node_id}")
         self.logger.info(f"   🔢 PID: {self.process_id}")
         self.logger.info(f"   📄 Config: {config_file}")
         self.logger.info(f"   🏗️ Escalado vertical: ✅")
         self.logger.info(f"   🖥️ Hardware profile: {self.vertical_manager.hardware_profile}")
+        self.logger.info(f"   🚨 Bug fix aplicado: source_ip → target_ip ✅")
+
+    def _log_v210_configuration(self):
+        """Log configuración específica v2.1.0"""
+        processing_config = self.config.get("processing", {})
+        self.logger.info("🎯 Configuración de enriquecimiento v2.1.0:")
+        self.logger.info(f"   🏠 source_ip: {'✅' if processing_config.get('geolocate_source_ip') else '❌'}")
+        self.logger.info(f"   🎯 target_ip: {'✅' if processing_config.get('geolocate_target_ip') else '❌'}")
+        self.logger.info(
+            f"   ⭐ Prioridad: {'target_ip' if processing_config.get('prioritize_target_ip') else 'source_ip'}")
+        self.logger.info(f"   🌐 IP pública discovery: {'✅' if self.ip_handler.public_ip_discovery.enabled else '❌'}")
 
     def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
         """Carga configuración SIN proporcionar defaults"""
@@ -306,18 +445,34 @@ class DistributedGeoIPEnricherVertical:
         )
         formatter = logging.Formatter(log_format)
 
-        # 🔧 Configurar handler
-        if log_config.get("file"):
-            handler = logging.FileHandler(log_config["file"])
-        else:
-            handler = logging.StreamHandler()
-
-        handler.setFormatter(formatter)
-
-        # 📋 Setup logger
+        # 🔧 Configurar handlers
         self.logger = logging.getLogger(f"geoip_enricher_{self.node_id}")
         self.logger.setLevel(level)
-        self.logger.addHandler(handler)
+
+        # Clear existing handlers
+        for handler in self.logger.handlers[:]:
+            self.logger.removeHandler(handler)
+
+        # Console handler
+        handlers_config = log_config.get("handlers", {})
+        console_config = handlers_config.get("console", {})
+        if console_config.get("enabled", True):
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            console_handler.setLevel(getattr(logging, console_config.get("level", "INFO").upper()))
+            self.logger.addHandler(console_handler)
+
+        # File handler
+        file_config = handlers_config.get("file", {})
+        if file_config.get("enabled", False):
+            file_path = file_config.get("path", "logs/geoip_enricher.log")
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            file_handler = logging.FileHandler(file_path)
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(getattr(logging, file_config.get("level", "DEBUG").upper()))
+            self.logger.addHandler(file_handler)
+
         self.logger.propagate = False
 
     def setup_sockets_vertical(self):
@@ -529,7 +684,10 @@ class DistributedGeoIPEnricherVertical:
                 self.stats['processing_errors'] += 1
 
     def enrich_protobuf_event_vertical(self, protobuf_data: bytes) -> Optional[bytes]:
-        """Enriquece evento protobuf con optimizaciones verticales"""
+        """
+        🚨 VERSIÓN CORREGIDA v2.1.0 - Enriquece tanto source_ip como target_ip
+        BUG FIX CRÍTICO: source_ip → target_ip para geoposicionar atacantes
+        """
         if not PROTOBUF_AVAILABLE:
             raise RuntimeError("❌ Protobuf no disponible")
 
@@ -538,45 +696,131 @@ class DistributedGeoIPEnricherVertical:
             event = NetworkEventProto.NetworkEvent()
             event.ParseFromString(protobuf_data)
 
-            # 🌍 Realizar lookup GeoIP con optimizaciones verticales
-            coordinates = self.lookup_geoip_coordinates_vertical(event.source_ip)
+            # 🔧 Configuración de procesamiento
+            processing_config = self.config.get("processing", {})
+            geolocate_source = processing_config.get("geolocate_source_ip", True)
+            geolocate_target = processing_config.get("geolocate_target_ip", True)
+            prioritize_target = processing_config.get("prioritize_target_ip", True)
 
-            if coordinates:
-                # ✅ Enriquecimiento exitoso
-                event.latitude = coordinates[0]
-                event.longitude = coordinates[1]
+            # 🌍 Variables para coordenadas
+            source_coordinates = None
+            target_coordinates = None
+            primary_coordinates = None
+
+            # 🎯 CORRECCIÓN CRÍTICA: Geoposicionar target_ip (atacante)
+            if geolocate_target and event.target_ip:
+                target_ip_to_lookup = self.ip_handler.resolve_target_ip_coordinates(event.target_ip)
+                if target_ip_to_lookup:
+                    target_coordinates = self.lookup_geoip_coordinates_vertical(target_ip_to_lookup)
+                    if target_coordinates:
+                        self.stats['target_ip_enriched'] += 1
+                        self.logger.debug(f"✅ target_ip geoposicionada: {event.target_ip} → {target_coordinates}")
+                    else:
+                        self.logger.warning(f"❌ No se pudo geoposicionar target_ip: {event.target_ip}")
+
+            # 🏠 Geoposicionar source_ip (nuestra IP)
+            if geolocate_source and event.source_ip:
+                source_ip_resolved = self.ip_handler.resolve_source_ip_coordinates(event.source_ip)
+                if isinstance(source_ip_resolved, tuple):
+                    # Ya son coordenadas (fallback)
+                    source_coordinates = source_ip_resolved
+                    self.stats['source_ip_enriched'] += 1
+                elif isinstance(source_ip_resolved, str):
+                    # Es una IP para lookup
+                    source_coordinates = self.lookup_geoip_coordinates_vertical(source_ip_resolved)
+                    if source_coordinates:
+                        self.stats['source_ip_enriched'] += 1
+                        if self.ip_handler.public_ip_discovery.enabled:
+                            self.stats['public_ip_discoveries'] += 1
+
+                if source_coordinates:
+                    self.logger.debug(f"✅ source_ip geoposicionada: {event.source_ip} → {source_coordinates}")
+
+            # 🎯 Determinar coordenadas primarias según prioridad
+            if prioritize_target and target_coordinates:
+                primary_coordinates = target_coordinates
+                self.logger.debug("🎯 Usando target_ip como coordenadas primarias")
+            elif source_coordinates:
+                primary_coordinates = source_coordinates
+                self.logger.debug("🏠 Usando source_ip como coordenadas primarias")
+            elif target_coordinates:
+                primary_coordinates = target_coordinates
+                self.logger.debug("🎯 Fallback a target_ip como coordenadas primarias")
+
+            # ✅ Aplicar coordenadas primarias al evento
+            if primary_coordinates:
+                event.latitude = primary_coordinates[0]
+                event.longitude = primary_coordinates[1]
                 event.geoip_enriched = True
                 event.enrichment_node = self.node_id
                 event.enrichment_timestamp = int(time.time() * 1000)
 
-                # 🆔 Información vertical específica
+                # 🔍 Metadata de enriquecimiento v2.1.0
+                event.component_metadata["geoip_source_enriched"] = str(bool(source_coordinates))
+                event.component_metadata["geoip_target_enriched"] = str(bool(target_coordinates))
+                event.component_metadata["geoip_primary_source"] = "target" if (
+                            prioritize_target and target_coordinates) else "source"
+
+                # 📊 Coordenadas adicionales si están disponibles v3.0.0
+                if source_coordinates:
+                    event.source_latitude = source_coordinates[0]
+                    event.source_longitude = source_coordinates[1]
+                    event.source_ip_enriched = True
+                    # Agregar ciudad, país si disponible
+                    event.source_city = "Sevilla"  # Del config o lookup
+                    event.source_country = "Spain"
+                    event.source_country_code = "ES"
+
+                if target_coordinates:
+                    event.target_latitude = target_coordinates[0]
+                    event.target_longitude = target_coordinates[1]
+                    event.target_ip_enriched = True
+                # 🎯 METADATOS v3.0.0
+                event.geoip_primary_source = "target" if prioritize_target else "source"
+                event.dual_enrichment_success = bool(source_coordinates and target_coordinates)
+                event.geoip_enricher_version = "2.1.0"
+                event.protobuf_schema_version = "v3.0.0"
+
+                # 🎯 METADATOS v3.0.0
+                event.geoip_primary_source = "target" if prioritize_target else "source"
+                event.dual_enrichment_success = bool(source_coordinates and target_coordinates)
+                event.geoip_enricher_version = "2.1.0"
+                event.protobuf_schema_version = "v3.0.0"
+
+                # 📊 Estadísticas de enriquecimiento dual
+                if source_coordinates and target_coordinates:
+                    self.stats['dual_enriched'] += 1
+
+                # 🆔 Información específica
                 event.geoip_enricher_pid = self.process_id
                 event.geoip_enricher_timestamp = int(time.time() * 1000)
 
-                # 📊 Métricas del pipeline vertical
+                # 📊 Métricas del pipeline
                 if event.promiscuous_timestamp > 0:
                     pipeline_latency = event.geoip_enricher_timestamp - event.promiscuous_timestamp
                     event.processing_latency_ms = float(pipeline_latency)
 
                 # 🎯 Path del pipeline
                 if event.pipeline_path:
-                    event.pipeline_path += "->geoip_vertical"
+                    event.pipeline_path += "->geoip_v2.1.0"
                 else:
-                    event.pipeline_path = "promiscuous->geoip_vertical"
+                    event.pipeline_path = "promiscuous->geoip_v2.1.0"
 
                 event.pipeline_hops += 1
 
-                # 🏷️ Tags verticales
-                event.component_tags.append(f"geoip_enricher_vertical_{self.node_id}")
+                # 🏷️ Tags v2.1.0
+                event.component_tags.append(f"geoip_enricher_v210_{self.node_id}")
+                event.component_metadata["geoip_version"] = "2.1.0"
+                event.component_metadata["dual_ip_enrichment"] = "true"
                 event.component_metadata["hardware_profile"] = self.vertical_manager.hardware_profile
                 event.component_metadata["vertical_optimized"] = "true"
 
             else:
-                # ❌ Lookup fallido
+                # ❌ Enrichment fallido
                 self.stats['failed_lookups'] += 1
                 event.geoip_enriched = False
 
-                # 🔧 Coordenadas por defecto
+                # 🔧 Coordenadas por defecto si están configuradas
                 geoip_config = self.config["geoip"]
                 if geoip_config.get("use_default_coordinates_on_failure", False):
                     default_coords = geoip_config["default_coordinates"]
@@ -586,14 +830,14 @@ class DistributedGeoIPEnricherVertical:
                     event.component_metadata["geoip_source"] = "default"
 
             # 🔄 Estado del componente
-            event.component_status = "healthy_vertical"
+            event.component_status = "healthy_v210"
 
             # 🔄 Serializar evento enriquecido
             return event.SerializeToString()
 
         except Exception as e:
             self.stats['protobuf_errors'] += 1
-            self.logger.error(f"❌ Error enriquecimiento vertical: {e}")
+            self.logger.error(f"❌ Error enriquecimiento v2.1.0: {e}")
             return None
 
     def lookup_geoip_coordinates_vertical(self, ip_address: str) -> Optional[Tuple[float, float]]:
@@ -713,7 +957,7 @@ class DistributedGeoIPEnricherVertical:
             self._check_performance_alerts_vertical()
 
     def _log_performance_stats_vertical(self):
-        """Log de estadísticas con métricas verticales"""
+        """Log de estadísticas con métricas verticales v2.1.0"""
         now = time.time()
         interval = now - self.stats['last_stats_time']
 
@@ -735,10 +979,19 @@ class DistributedGeoIPEnricherVertical:
         vertical_metrics = self.vertical_manager.vertical_metrics
         cpu_avg = sum(vertical_metrics['cpu_per_core']) / len(vertical_metrics['cpu_per_core'])
 
-        self.logger.info(f"📊 GeoIP Enricher VERTICAL Stats:")
+        # 📊 Métricas de enriquecimiento dual v2.1.0
+        source_rate = self.stats['source_ip_enriched'] / interval if interval > 0 else 0
+        target_rate = self.stats['target_ip_enriched'] / interval if interval > 0 else 0
+        dual_rate = self.stats['dual_enriched'] / interval if interval > 0 else 0
+
+        self.logger.info(f"📊 GeoIP Enricher VERTICAL v2.1.0 Stats:")
         self.logger.info(f"   📨 Recibidos: {self.stats['received']} ({recv_rate:.1f}/s)")
         self.logger.info(f"   🌍 Enriquecidos: {self.stats['enriched']} ({enrich_rate:.1f}/s)")
         self.logger.info(f"   📤 Enviados: {self.stats['sent']} ({send_rate:.1f}/s)")
+        self.logger.info(f"   🎯 target_ip enriquecidas: {self.stats['target_ip_enriched']} ({target_rate:.1f}/s)")
+        self.logger.info(f"   🏠 source_ip enriquecidas: {self.stats['source_ip_enriched']} ({source_rate:.1f}/s)")
+        self.logger.info(f"   🌐 Enriquecimiento dual: {self.stats['dual_enriched']} ({dual_rate:.1f}/s)")
+        self.logger.info(f"   🔍 IP públicas descubiertas: {self.stats['public_ip_discoveries']}")
         self.logger.info(f"   🗄️ Cache: {cache_hit_rate:.1f}% hit rate")
         self.logger.info(f"   ⏱️ Latencia promedio: {avg_latency:.1f}ms")
         self.logger.info(f"   🖥️ CPU promedio: {cpu_avg:.1f}%")
@@ -751,7 +1004,8 @@ class DistributedGeoIPEnricherVertical:
         # Reset stats
         for key in ['received', 'enriched', 'sent', 'failed_lookups', 'cache_hits', 'cache_misses',
                     'buffer_errors', 'backpressure_activations', 'queue_overflows', 'protobuf_errors',
-                    'vertical_optimizations_applied', 'cpu_aware_delays']:
+                    'vertical_optimizations_applied', 'cpu_aware_delays', 'source_ip_enriched',
+                    'target_ip_enriched', 'dual_enriched', 'public_ip_discoveries']:
             self.stats[key] = 0
 
         self.stats['pipeline_latency_total'] = 0.0
@@ -770,7 +1024,7 @@ class DistributedGeoIPEnricherVertical:
 
         memory_pressure = vertical_metrics['memory_pressure'] * 100
         memory_threshold = alerts.get("max_memory_usage_mb", 1024) / (
-                    self.vertical_manager.memory_total_gb * 1024) * 100
+                self.vertical_manager.memory_total_gb * 1024) * 100
         if memory_pressure > memory_threshold:
             self.logger.warning(f"🚨 ALERTA VERTICAL: Presión de memoria alta ({memory_pressure:.1f}%)")
 
@@ -780,7 +1034,7 @@ class DistributedGeoIPEnricherVertical:
 
     def run(self):
         """Ejecutar el enriquecedor vertical"""
-        self.logger.info("🚀 Iniciando Distributed GeoIP Enricher VERTICAL...")
+        self.logger.info("🚀 Iniciando Distributed GeoIP Enricher VERTICAL v2.1.0...")
 
         threads = []
 
@@ -808,18 +1062,19 @@ class DistributedGeoIPEnricherVertical:
         for thread in threads:
             thread.start()
 
-        self.logger.info(f"✅ GeoIP Enricher VERTICAL iniciado con {len(threads)} threads")
+        self.logger.info(f"✅ GeoIP Enricher VERTICAL v2.1.0 iniciado con {len(threads)} threads")
         self.logger.info(f"   📡 Recepción: 1 thread")
         self.logger.info(
             f"   ⚙️ Procesamiento: {num_threads} threads (optimizado para {self.vertical_manager.cpu_count} cores)")
         self.logger.info(f"   📤 Envío: {num_send_threads} threads")
         self.logger.info(f"   🖥️ Hardware: {self.vertical_manager.hardware_profile}")
+        self.logger.info(f"   🚨 Bug fix aplicado: target_ip geoposicionamiento ✅")
 
         try:
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.logger.info("🛑 Deteniendo GeoIP Enricher VERTICAL...")
+            self.logger.info("🛑 Deteniendo GeoIP Enricher VERTICAL v2.1.0...")
 
         self.shutdown(threads)
 
@@ -846,7 +1101,7 @@ class DistributedGeoIPEnricherVertical:
         self.stop_event.set()
 
         runtime = time.time() - self.stats['start_time']
-        self.logger.info(f"📊 Stats finales VERTICAL - Runtime: {runtime:.1f}s")
+        self.logger.info(f"📊 Stats finales VERTICAL v2.1.0 - Runtime: {runtime:.1f}s")
 
         for thread in threads:
             thread.join(timeout=5)
@@ -857,14 +1112,14 @@ class DistributedGeoIPEnricherVertical:
             self.output_socket.close()
         self.context.term()
 
-        self.logger.info("✅ Distributed GeoIP Enricher VERTICAL cerrado correctamente")
+        self.logger.info("✅ Distributed GeoIP Enricher VERTICAL v2.1.0 cerrado correctamente")
 
 
 # 🚀 Main
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("❌ Uso: python geoip_enricher.py <config.json>")
-        print("💡 Ejemplo: python geoip_enricher.py geoip_enricher_config.json")
+        print("❌ Uso: python geoip_enricher_vertical_v2.1.0.py <config.json>")
+        print("💡 Ejemplo: python geoip_enricher_vertical_v2.1.0.py geoip_enricher_config_v2.1.0.json")
         sys.exit(1)
 
     config_file = sys.argv[1]

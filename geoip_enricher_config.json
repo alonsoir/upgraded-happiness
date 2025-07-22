@@ -1,13 +1,15 @@
 {
   "component": {
     "name": "geoip_enricher",
-    "version": "2.0.0",
-    "mode": "distributed_vertical"
+    "version": "2.1.0",
+    "mode": "distributed_vertical",
+    "description": "GeoIP Enricher - Geolocates target_ip (attackers) AND source_ip with public IP discovery"
   },
   "node_id": "geoip_enricher_vertical_001",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "component_type": "geoip_enricher",
 
+  "_comment_network": "🔌 Red optimizada - CRÍTICO: CONNECT a promiscuous, BIND para ML",
   "network": {
     "input_socket": {
       "address": "localhost",
@@ -56,6 +58,7 @@
     }
   },
 
+  "_comment_processing": "⚙️ CRÍTICO: Configuración de qué IPs geoposicionar",
   "processing": {
     "threads": 3,
     "send_threads": 1,
@@ -63,6 +66,17 @@
     "protobuf_queue_size": 500,
     "queue_timeout_seconds": 1.0,
     "performance_mode": "conservative_i9",
+
+    "_comment_geoip_targets": "🎯 NUEVO: Configurar qué IPs enriquecer",
+    "geolocate_source_ip": true,
+    "geolocate_target_ip": true,
+    "prioritize_target_ip": true,
+    "handle_private_ips": true,
+    "resolve_public_ip_for_private": true,
+    "max_events_per_batch": 100,
+    "batch_timeout_ms": 50,
+    "worker_threads": 4,
+
     "vertical_scaling": {
       "optimized_for_i9_8cores": true,
       "memory_pool_size_mb": 256,
@@ -78,15 +92,20 @@
     }
   },
 
+  "_comment_geoip": "🌍 Configuración GeoIP mejorada + timeout_seconds",
   "geoip": {
     "lookup_method": "mock",
     "performance_mode": "conservative",
     "cache_enabled": true,
-    "cache_size": 5000,
+    "cache_size": 10000,
     "cache_ttl_seconds": 1800,
+    "timeout_seconds": 5,
+
+    "_comment_coordinates": "📍 Coordenadas por defecto mejoradas",
     "mock_coordinates": [40.4168, -3.7038],
     "use_default_coordinates_on_failure": true,
     "default_coordinates": [40.4168, -3.7038],
+
     "vertical_optimizations": {
       "preload_common_ips": false,
       "memory_mapped_database": false,
@@ -95,11 +114,12 @@
       "optimized_for_32gb_ram": false
     },
     "maxmind": {
-      "database_path": "/opt/geoip/GeoLite2-City.mmdb",
+      "database_path": "data/GeoLite2-City.mmdb",
       "enabled": false,
       "auto_update": false,
       "fallback_to_country": true,
-      "connection_pool_size": 8
+      "connection_pool_size": 8,
+      "fallback_database": "data/GeoLite2-Country.mmdb"
     },
     "api": {
       "url": "https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}",
@@ -120,12 +140,86 @@
     }
   },
 
+  "_comment_ip_handling": "🌐 NUEVO: Manejo avanzado de IPs con discovery público",
+  "ip_handling": {
+    "private_ip_ranges": [
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16",
+      "127.0.0.0/8"
+    ],
+    "public_ip_discovery": {
+      "enabled": true,
+      "services": [
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com"
+      ],
+      "cache_duration": 3600,
+      "timeout": 10,
+      "_comment": "🔄 Cache de 1 hora para IP pública"
+    },
+    "fallback_coordinates": {
+      "latitude": 37.3886,
+      "longitude": -5.9823,
+      "city": "Sevilla",
+      "country": "Spain"
+    }
+  },
+
+  "_comment_enrichment": "🔍 NUEVO: Configuración de enriquecimiento avanzado",
+  "enrichment": {
+    "add_city_info": true,
+    "add_country_info": true,
+    "add_region_info": true,
+    "add_timezone": true,
+    "add_isp_info": false,
+    "add_threat_intel": false,
+    "calculate_distance": true,
+    "base_location": {
+      "latitude": 37.3886,
+      "longitude": -5.9823,
+      "name": "Sevilla, Spain"
+    }
+  },
+
+  "_comment_filtering": "🔍 NUEVO: Filtros de eventos",
+  "filtering": {
+    "skip_localhost": false,
+    "skip_private_networks": false,
+    "min_risk_score": 0.0,
+    "required_fields": ["source_ip", "target_ip"],
+    "blacklist_ips": [],
+    "whitelist_ips": []
+  },
+
+  "_comment_output": "📤 NUEVO: Configuración de salida",
+  "output": {
+    "include_original_event": true,
+    "add_processing_metadata": true,
+    "coordinate_precision": 4,
+    "timestamp_format": "unix",
+    "compress_output": false
+  },
+
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [i9-VERTICAL] - %(message)s",
-    "file": null,
-    "max_file_size_mb": 100,
-    "backup_count": 5,
+    "_comment_file_logging": "📝 MEJORADO: Logging a archivo habilitado",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "path": "logs/geoip_enricher.log",
+        "level": "DEBUG",
+        "max_size": "25MB",
+        "backup_count": 3,
+        "rotation": "time"
+      }
+    },
     "performance_logging": {
       "enabled": true,
       "log_slow_requests": true,
@@ -137,6 +231,12 @@
   "monitoring": {
     "stats_interval_seconds": 15,
     "detailed_metrics": true,
+    "health_check_interval": 30,
+    "metrics_collection": true,
+    "performance_tracking": true,
+    "error_threshold": 10,
+    "alert_on_database_errors": true,
+
     "vertical_scaling_metrics": {
       "track_cpu_per_core": true,
       "track_memory_pressure": true,
@@ -165,6 +265,15 @@
       "prometheus_port": 9090,
       "export_interval_seconds": 60
     }
+  },
+
+  "_comment_performance": "⚡ NUEVO: Configuración de rendimiento",
+  "performance": {
+    "enable_async_processing": true,
+    "connection_pool_size": 10,
+    "request_timeout": 5,
+    "retry_attempts": 3,
+    "backoff_factor": 2
   },
 
   "distributed": {
@@ -207,11 +316,31 @@
       "sanitize_ip_addresses": true
     },
     "rate_limiting": {
-      "enabled": false,
+      "enabled": true,
       "max_events_per_second": 2000,
+      "max_requests_per_second": 1000,
       "burst_capacity": 4000,
       "penalty_duration_seconds": 60
-    }
+    },
+    "validate_ip_format": true,
+    "input_sanitization": true
+  },
+
+  "_comment_debugging": "🐛 NUEVO: Configuración de debugging mejorada",
+  "debugging": {
+    "enabled": true,
+    "log_coordinates": true,
+    "log_processing_time": true,
+    "log_cache_hits": true,
+    "detailed_error_logging": true
+  },
+
+  "_comment_integration": "🔗 NUEVO: Integración con dashboard",
+  "integration": {
+    "dashboard_reporting": true,
+    "metrics_export": true,
+    "status_updates": true,
+    "heartbeat_interval": 30
   },
 
   "debug": {

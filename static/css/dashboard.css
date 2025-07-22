@@ -2235,3 +2235,61 @@ body {
     color: #ffaa00 !important;
     text-shadow: 0 0 3px #ffaa00;
 }
+
+/* 🎯 Marcadores duales */
+.marker-source {
+    background-color: #0066CC;
+    border: 2px solid #004499;
+    color: white;
+}
+
+.marker-target {
+    background-color: #CC0000;
+    border: 2px solid #990000;
+    color: white;
+}
+
+/* 📏 Líneas de conexión */
+.connection-line-local {
+    stroke: #FFA500;
+    stroke-width: 2px;
+    stroke-dasharray: 5,5;
+}
+
+.connection-line-international {
+    stroke: #FF0000;
+    stroke-width: 3px;
+    animation: dash 2s linear infinite;
+}
+
+/* 📊 Panel de información dual */
+.dual-geoip-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.source-info, .target-info {
+    flex: 1;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.source-info {
+    background: rgba(0, 102, 204, 0.1);
+    border-left: 3px solid #0066CC;
+}
+
+.target-info {
+    background: rgba(204, 0, 0, 0.1);
+    border-left: 3px solid #CC0000;
+}
+
+/* 🌐 Indicador de IP discovery */
+.ip-discovery-badge {
+    background: #28a745;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+}
