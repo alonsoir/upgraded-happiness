@@ -1,7 +1,6 @@
 /*
-dashboard.css
-SCADA Dashboard CSS Unificado - Estilo Terminal/Matrix con Soporte para Mapa
-+ COMPONENTES COMPLETOS (Promiscuous Agent, GeoIP Enricher, etc.)
+dashboard.css - VERSIÓN CON MODALES DRAGGEABLES Y UX MEJORADA
++ BOTONES GOOGLE MAPS + MODALES REPOSITIONABLES + SCROLLBARS
 */
 
 * {
@@ -1150,7 +1149,7 @@ body {
 }
 
 /* ============================================================================
-   MODAL
+   🚀 MODAL DRAGGEABLE Y MEJORADO
    ============================================================================ */
 
 .modal-overlay {
@@ -1174,13 +1173,29 @@ body {
     border: 2px solid #00ff00;
     border-radius: 8px;
     padding: 0;
-    max-width: 80%;
-    max-height: 80%;
+    max-width: 85%;
+    max-height: 85%;
+    min-width: 700px;
+    min-height: 400px;
     overflow: hidden;
     z-index: 10000;
     display: none;
     animation: slideIn 0.3s ease;
     box-shadow: 0 10px 30px rgba(0, 255, 0, 0.3);
+    resize: both; /* ✅ Permite redimensionar */
+    /* ✅ Variables para posición draggeable */
+    --modal-x: 0px;
+    --modal-y: 0px;
+}
+
+/* ✅ Cuando el modal es draggeable, usar las variables CSS */
+.detail-modal.dragging {
+    transform: translate(var(--modal-x), var(--modal-y)) !important;
+    transition: none !important;
+}
+
+.detail-modal.positioned {
+    transform: translate(var(--modal-x), var(--modal-y)) !important;
 }
 
 @keyframes fadeIn {
@@ -1199,6 +1214,7 @@ body {
     }
 }
 
+/* ✅ HEADER DRAGGEABLE CON CONTROLES */
 .modal-header {
     background: rgba(0, 80, 0, 0.3);
     padding: 15px 20px;
@@ -1206,37 +1222,118 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    /* ✅ CRÍTICO: Cursor para arrastrar */
+    cursor: move;
+    user-select: none;
+    position: relative;
+}
+
+.modal-header:hover {
+    background: rgba(0, 100, 0, 0.4);
 }
 
 .modal-header h3 {
     color: #00ff88;
     font-size: 14px;
     text-shadow: 0 0 5px #00ff88;
+    flex: 1;
+    margin: 0;
+}
+
+/* ✅ CONTROLES DEL MODAL (Minimizar, Maximizar, Cerrar) */
+.modal-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.modal-control-btn {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid #333;
+    color: #00ff88;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 10px;
+    transition: all 0.3s ease;
+    min-width: 24px;
+    text-align: center;
+}
+
+.modal-control-btn:hover {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: #00ff88;
+    transform: scale(1.1);
+}
+
+.modal-control-btn.minimize {
+    color: #ffaa00;
+}
+
+.modal-control-btn.minimize:hover {
+    background: rgba(255, 170, 0, 0.1);
+    border-color: #ffaa00;
+}
+
+.modal-control-btn.maximize {
+    color: #0088ff;
+}
+
+.modal-control-btn.maximize:hover {
+    background: rgba(0, 136, 255, 0.1);
+    border-color: #0088ff;
 }
 
 .close-btn {
     background: none;
     border: none;
     color: #ff4444;
-    font-size: 20px;
+    font-size: 16px;
     cursor: pointer;
     transition: all 0.3s ease;
-    padding: 5px;
+    padding: 4px 8px;
     line-height: 1;
+    border-radius: 3px;
 }
 
 .close-btn:hover {
     color: #ff6666;
+    background: rgba(255, 68, 68, 0.1);
     transform: scale(1.2);
     text-shadow: 0 0 10px #ff4444;
 }
 
+/* ✅ CONTENIDO CON SCROLLBAR PERSONALIZADO */
 .modal-content {
     padding: 20px;
-    max-height: 400px;
+    max-height: 500px;
     overflow-y: auto;
+    overflow-x: hidden;
     font-size: 11px;
     line-height: 1.5;
+    /* ✅ Scrollbar personalizado */
+    scrollbar-width: thin;
+    scrollbar-color: #00ff88 #333;
+}
+
+/* ✅ Scrollbar WebKit para el contenido del modal */
+.modal-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 136, 0.6);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 255, 136, 0.8);
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 255, 136, 0.8);
 }
 
 .modal-actions {
@@ -1245,6 +1342,61 @@ body {
     display: flex;
     gap: 10px;
     justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+/* ✅ ESTADOS DEL MODAL */
+.detail-modal.minimized {
+    height: 50px !important;
+    max-height: 50px !important;
+    overflow: hidden;
+}
+
+.detail-modal.minimized .modal-content,
+.detail-modal.minimized .modal-actions {
+    display: none;
+}
+
+.detail-modal.maximized {
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    transform: none !important;
+    border-radius: 0 !important;
+}
+
+.detail-modal.maximized .modal-content {
+    max-height: calc(100vh - 140px);
+}
+
+/* ✅ BOTÓN GOOGLE MAPS STREET VIEW */
+.google-maps-btn {
+    background: rgba(234, 67, 53, 0.2);
+    border: 1px solid #ea4335;
+    color: #ea4335;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    margin: 5px;
+}
+
+.google-maps-btn:hover {
+    background: rgba(234, 67, 53, 0.3);
+    border-color: #ea4335;
+    transform: scale(1.05);
+    box-shadow: 0 3px 10px rgba(234, 67, 53, 0.3);
+}
+
+.google-maps-btn i {
+    margin-right: 5px;
 }
 
 /* ============================================================================
@@ -1383,6 +1535,11 @@ body {
         min-width: 500px;
     }
 
+    .detail-modal {
+        min-width: 600px;
+        max-width: 90%;
+    }
+
     /* Header más compacto en pantallas medianas */
     .status-indicators {
         gap: 10px;
@@ -1408,6 +1565,12 @@ body {
     .main-content {
         min-width: 100%;
         min-height: 300px;
+    }
+
+    .detail-modal {
+        min-width: 90%;
+        max-width: 95%;
+        max-height: 90%;
     }
 
     .map-controls {
@@ -1467,6 +1630,15 @@ body {
         min-height: 250px !important;
     }
 
+    .detail-modal {
+        min-width: 95%;
+        max-width: 98%;
+        max-height: 95%;
+        top: 2.5% !important;
+        left: 1% !important;
+        transform: none !important;
+    }
+
     .status-indicators {
         gap: 5px;
         font-size: 8px;
@@ -1489,6 +1661,21 @@ body {
 
     .counters-section {
         grid-template-columns: 1fr;
+    }
+
+    /* Modal controls más pequeños en móvil */
+    .modal-control-btn {
+        font-size: 8px;
+        padding: 2px 4px;
+    }
+
+    .modal-header {
+        padding: 10px 15px;
+    }
+
+    .modal-content {
+        padding: 15px;
+        max-height: 400px;
     }
 }
 
