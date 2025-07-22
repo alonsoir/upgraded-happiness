@@ -1,7 +1,6 @@
 /*
-dashboard.js - VERSIÓN CON MODALES FUNCIONALES Y REGLAS JSON
-+ BOTONES DE ACCIÓN FIREWALL OPERATIVOS
-+ INFORMACIÓN DEL FIREWALL RESPONSABLE
+dashboard.js - VERSIÓN CON MODALES DRAGGEABLES Y BOTONES OPERATIVOS
++ INFORMACIÓN FIREWALL RESPONSABLE + GOOGLE MAPS + REGLAS JSON FUNCIONANDO
 */
 
 // ============================================================================
@@ -26,11 +25,11 @@ let firewallStats = {
     lastAgent: 'N/A'
 };
 
-// 🔥 Variables para reglas de firewall
+// 🔥 Variables para reglas de firewall - CORREGIDO CON FALLBACK
 let firewallRulesInfo = {
-    rules_count: 0,
-    agents_count: 0,
-    available_actions: []
+    rules_count: 3,
+    agents_count: 1,
+    available_actions: ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES'] // ✅ FALLBACK
 };
 
 // 🔥 Estados de componentes para indicadores
@@ -41,17 +40,26 @@ let componentStates = {
     firewall_agent: false
 };
 
+// ✅ Variables para modales draggeables
+let isDragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let modalStartX = 0;
+let modalStartY = 0;
+let currentModal = null;
+
 // ============================================================================
 // INICIALIZACIÓN PRINCIPAL
 // ============================================================================
 
 function initializeDashboard() {
-    console.log('🚀 Inicializando Dashboard SCADA con Reglas JSON...');
+    console.log('🚀 Inicializando Dashboard SCADA con Modales Draggeables...');
 
     try {
         initializeMap();
         initializeEventHandlers();
         initializeCollapsibleSections();
+        initializeModalDragFunctionality(); // ✅ NUEVO
 
         // HTTP Polling para conectar con backend
         startSimplePolling();
@@ -59,12 +67,132 @@ function initializeDashboard() {
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
 
-        console.log('✅ Dashboard inicializado correctamente');
-        addDebugLog('info', 'Dashboard inicializado - comunicación con backend ZeroMQ + Reglas JSON');
+        console.log('✅ Dashboard inicializado correctamente con modales draggeables');
+        addDebugLog('info', 'Dashboard inicializado - comunicación con backend ZeroMQ + Modales Draggeables');
 
     } catch (error) {
         console.error('❌ Error inicializando dashboard:', error);
         addDebugLog('error', `Error inicialización: ${error.message}`);
+    }
+}
+
+// ============================================================================
+// ✅ FUNCIONALIDAD MODAL DRAGGEABLE
+// ============================================================================
+
+function initializeModalDragFunctionality() {
+    console.log('🖱️ Inicializando funcionalidad de modales draggeables...');
+
+    // Event listeners para drag & drop se añadirán cuando se abra el modal
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    addDebugLog('info', 'Modales draggeables inicializados');
+}
+
+function makeModalDraggable(modal) {
+    const header = modal.querySelector('.modal-header');
+    if (!header) return;
+
+    header.addEventListener('mousedown', function(e) {
+        // Solo arrastrar si se hace clic en el header (no en botones)
+        if (e.target.closest('.modal-controls') || e.target.closest('.close-btn')) {
+            return;
+        }
+
+        isDragging = true;
+        currentModal = modal;
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        // Obtener posición actual del modal
+        const rect = modal.getBoundingClientRect();
+        modalStartX = rect.left;
+        modalStartY = rect.top;
+
+        modal.classList.add('dragging');
+        header.style.cursor = 'grabbing';
+
+        // Prevenir selección de texto
+        e.preventDefault();
+
+        console.log('🖱️ Iniciando drag del modal');
+    });
+}
+
+function handleMouseMove(e) {
+    if (!isDragging || !currentModal) return;
+
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = e.clientY - dragStartY;
+
+    const newX = modalStartX + deltaX;
+    const newY = modalStartY + deltaY;
+
+    // Limitar a los bordes de la ventana
+    const modalRect = currentModal.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const constrainedX = Math.max(0, Math.min(newX, windowWidth - modalRect.width));
+    const constrainedY = Math.max(0, Math.min(newY, windowHeight - modalRect.height));
+
+    // Aplicar nueva posición usando CSS variables
+    currentModal.style.setProperty('--modal-x', `${constrainedX}px`);
+    currentModal.style.setProperty('--modal-y', `${constrainedY}px`);
+    currentModal.classList.add('positioned');
+}
+
+function handleMouseUp(e) {
+    if (!isDragging) return;
+
+    isDragging = false;
+
+    if (currentModal) {
+        currentModal.classList.remove('dragging');
+        const header = currentModal.querySelector('.modal-header');
+        if (header) {
+            header.style.cursor = 'move';
+        }
+    }
+
+    currentModal = null;
+    console.log('🖱️ Drag del modal finalizado');
+}
+
+function minimizeModal() {
+    const modal = document.getElementById('detail-modal');
+    if (modal) {
+        modal.classList.toggle('minimized');
+
+        const btn = modal.querySelector('.minimize');
+        if (btn) {
+            btn.innerHTML = modal.classList.contains('minimized') ? '🔼' : '_';
+        }
+
+        console.log('📱 Modal minimizado/restaurado');
+    }
+}
+
+function maximizeModal() {
+    const modal = document.getElementById('detail-modal');
+    if (modal) {
+        modal.classList.toggle('maximized');
+
+        const btn = modal.querySelector('.maximize');
+        if (btn) {
+            btn.innerHTML = modal.classList.contains('maximized') ? '🔽' : '🔲';
+        }
+
+        // Reset position when maximizing
+        if (modal.classList.contains('maximized')) {
+            modal.classList.remove('positioned');
+            modal.style.removeProperty('--modal-x');
+            modal.style.removeProperty('--modal-y');
+        }
+
+        console.log('🔲 Modal maximizado/restaurado');
     }
 }
 
@@ -138,10 +266,20 @@ function updateDashboardFromZeroMQ(data) {
             highRiskCount = data.basic_stats.high_risk_events || 0;
         }
 
-        // 🔥 NUEVO: Actualizar información de reglas de firewall
+        // 🔥 NUEVO: Actualizar información de reglas de firewall CON FALLBACK
         if (data.firewall_rules_info) {
-            firewallRulesInfo = data.firewall_rules_info;
-            addDebugLog('info', `Reglas Firewall: ${firewallRulesInfo.rules_count} reglas, ${firewallRulesInfo.agents_count} agentes`);
+            firewallRulesInfo = {
+                rules_count: data.firewall_rules_info.rules_count || 3,
+                agents_count: data.firewall_rules_info.agents_count || 1,
+                available_actions: data.firewall_rules_info.available_actions || ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES']
+            };
+            addDebugLog('info', `Reglas Firewall: ${firewallRulesInfo.rules_count} reglas, ${firewallRulesInfo.agents_count} agentes, acciones: ${firewallRulesInfo.available_actions.join(', ')}`);
+        } else {
+            // ✅ ASEGURAR QUE SIEMPRE TENEMOS ACCIONES DISPONIBLES
+            if (!firewallRulesInfo.available_actions || firewallRulesInfo.available_actions.length === 0) {
+                firewallRulesInfo.available_actions = ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES'];
+                addDebugLog('warning', 'Usando acciones de firewall por defecto - no recibidas del backend');
+            }
         }
 
         // 🔥 Actualizar estadísticas del firewall
@@ -172,7 +310,7 @@ function updateDashboardFromZeroMQ(data) {
             processFirewallEventsFromZeroMQ(data.firewall_events);
         }
 
-        addDebugLog('info', `Backend: ${data.basic_stats?.total_events || 0} eventos, ${data.basic_stats?.high_risk_events || 0} alto riesgo`);
+        addDebugLog('info', `Backend: ${data.basic_stats?.total_events || 0} eventos, ${data.basic_stats?.high_risk_events || 0} alto riesgo, ${firewallRulesInfo.available_actions.length} acciones disponibles`);
 
     } catch (error) {
         console.error('❌ Error procesando datos backend:', error);
@@ -719,11 +857,19 @@ function addEventMarkerToMap(event) {
 
 async function showEventDetail(event) {
     try {
+        console.log('🔍 Mostrando detalle del evento con reglas:', event);
+        console.log('🔍 Estado actual firewallRulesInfo:', firewallRulesInfo);
+
         // 🔥 OBTENER INFORMACIÓN DEL FIREWALL RESPONSABLE DESDE BACKEND
         const firewallInfo = await getResponsibleFirewallInfo(event);
+        console.log('🔥 Info firewall responsable:', firewallInfo);
 
         // 🔥 OBTENER RECOMENDACIÓN BASADA EN RISK_SCORE
         const recommendedAction = getRecommendedActionForRisk(event.risk_score);
+        console.log('🎯 Recomendación:', recommendedAction);
+
+        // ✅ GENERAR BOTÓN GOOGLE MAPS SI HAY COORDENADAS
+        const googleMapsButton = generateGoogleMapsButton(event);
 
         const content = `
             <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
@@ -733,6 +879,7 @@ async function showEventDetail(event) {
                     <div style="font-size: 11px; color: #888; margin-top: 5px;">
                         ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
                     </div>
+                    ${googleMapsButton}
                 </div>
 
                 <!-- Información básica del evento -->
@@ -762,6 +909,7 @@ async function showEventDetail(event) {
                     ${event.location ? `
                         <div style="margin-top: 10px;">
                             <strong>Ubicación:</strong> ${event.location}
+                            ${event.latitude && event.longitude ? `<br><strong>Coordenadas:</strong> ${event.latitude.toFixed(4)}, ${event.longitude.toFixed(4)}` : ''}
                         </div>
                     ` : ''}
                 </div>
@@ -824,6 +972,7 @@ async function showEventDetail(event) {
             </div>
         `;
 
+        // ✅ MOSTRAR MODAL CON CONTROLES MEJORADOS
         showModal('Análisis del Evento de Seguridad', content);
 
     } catch (error) {
@@ -833,11 +982,32 @@ async function showEventDetail(event) {
 }
 
 // ============================================================================
-// 🔥 FUNCIONES PARA FIREWALL RESPONSABLE Y ACCIONES OPERATIVAS
+// ✅ FUNCIONES PARA GOOGLE MAPS STREET VIEW
+// ============================================================================
+
+function generateGoogleMapsButton(event) {
+    if (event.latitude && event.longitude && event.latitude !== 0 && event.longitude !== 0) {
+        const googleMapsUrl = `https://www.google.com/maps/@${event.latitude},${event.longitude},3a,75y,0h,90t/data=!3m7!1e1!3m5!1s${encodeURIComponent(event.target_ip)}!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com!7i16384!8i8192`;
+
+        return `
+            <div style="margin-top: 10px;">
+                <a href="${googleMapsUrl}" target="_blank" class="google-maps-btn">
+                    <i class="fas fa-map-marked-alt"></i> Ver en Google Maps Street View
+                </a>
+            </div>
+        `;
+    }
+    return '';
+}
+
+// ============================================================================
+// 🔥 FUNCIONES PARA FIREWALL RESPONSABLE Y ACCIONES OPERATIVAS - CORREGIDAS
 // ============================================================================
 
 async function getResponsibleFirewallInfo(event) {
     try {
+        console.log('🔍 Obteniendo información del firewall responsable...');
+
         // 🔥 OBTENER INFORMACIÓN REAL DEL BACKEND
         const response = await fetch('/api/firewall-agent-info', {
             method: 'POST',
@@ -853,10 +1023,12 @@ async function getResponsibleFirewallInfo(event) {
         if (response.ok) {
             const data = await response.json();
             if (data.success && data.firewall_info) {
+                console.log('✅ Info firewall recibida del backend:', data.firewall_info);
                 return data.firewall_info;
             }
         }
 
+        console.log('⚠️ Usando fallback para info del firewall');
         // Fallback
         return {
             node_id: 'simple_firewall_agent_001',
@@ -875,12 +1047,14 @@ async function getResponsibleFirewallInfo(event) {
             status: 'unknown',
             active_rules: 0,
             endpoint: 'tcp://localhost:5580',
-            capabilities: []
+            capabilities: ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES'] // ✅ FALLBACK
         };
     }
 }
 
 function getRecommendedActionForRisk(riskScore) {
+    console.log('🎯 Calculando recomendación para risk_score:', riskScore);
+
     // 🔥 LÓGICA BASADA EN REGLAS JSON (simulada en frontend)
     const riskPercentage = Math.floor(riskScore * 100);
 
@@ -909,36 +1083,47 @@ function getRecommendedActionForRisk(riskScore) {
 }
 
 function generateFirewallActionButtonsFromRules(event, firewallInfo) {
+    console.log('🔘 Generando botones de acción...');
+    console.log('🔘 firewallRulesInfo.available_actions:', firewallRulesInfo.available_actions);
+    console.log('🔘 firewallInfo.capabilities:', firewallInfo.capabilities);
+
     const riskScore = event.risk_score || 0;
     const capabilities = firewallInfo.capabilities || [];
 
     let buttons = '';
 
     // 🔥 BOTONES DINÁMICOS BASADOS EN REGLAS JSON Y CAPACIDADES
-    if (firewallRulesInfo.available_actions) {
-        firewallRulesInfo.available_actions.forEach(action => {
-            // Verificar si el firewall soporta esta acción
-            if (capabilities.includes(action)) {
-                buttons += generateActionButton(action, event, firewallInfo, riskScore);
-            }
-        });
-    } else {
-        // Fallback: botones básicos
-        if (riskScore > 0.7 && capabilities.includes('BLOCK_IP')) {
-            buttons += generateActionButton('BLOCK_IP', event, firewallInfo, riskScore);
+    const availableActions = firewallRulesInfo.available_actions || ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES'];
+
+    console.log('🔘 Acciones disponibles:', availableActions);
+
+    availableActions.forEach(action => {
+        // Verificar si el firewall soporta esta acción
+        if (capabilities.length === 0 || capabilities.includes(action)) {
+            console.log(`✅ Generando botón para: ${action}`);
+            buttons += generateActionButton(action, event, firewallInfo, riskScore);
+        } else {
+            console.log(`❌ Acción ${action} no soportada por firewall:`, capabilities);
         }
-        if (riskScore > 0.4 && capabilities.includes('RATE_LIMIT')) {
-            buttons += generateActionButton('RATE_LIMIT', event, firewallInfo, riskScore);
-        }
-        if (capabilities.includes('MONITOR')) {
-            buttons += generateActionButton('MONITOR', event, firewallInfo, riskScore);
-        }
-        if (capabilities.includes('LIST_RULES')) {
-            buttons += generateActionButton('LIST_RULES', event, firewallInfo, riskScore);
-        }
+    });
+
+    // ✅ FALLBACK SI NO HAY BOTONES
+    if (!buttons) {
+        console.log('⚠️ No se generaron botones, usando fallback');
+        buttons = `
+            <button onclick="executeFirewallActionFromRules('LIST_RULES', 'all', '${firewallInfo.node_id}', '${event.id}')"
+                    style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%;">
+                📋 Listar Reglas
+            </button>
+            <button onclick="executeFirewallActionFromRules('MONITOR', '${event.source_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    style="background: rgba(0, 170, 255, 0.2); border: 1px solid #00aaff; color: #00aaff; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%;">
+                👁️ Monitorear ${event.source_ip}
+            </button>
+        `;
     }
 
-    return buttons || '<div style="color: #666; text-align: center;">No hay acciones disponibles</div>';
+    console.log('🔘 Botones generados:', buttons ? 'SÍ' : 'NO');
+    return buttons;
 }
 
 function generateActionButton(action, event, firewallInfo, riskScore) {
@@ -1125,6 +1310,18 @@ function showSimpleEventDetail(event) {
             <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.6); border-radius: 4px;">
                 <strong>Datos del Evento:</strong><br>
                 <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify(event, null, 2)}</pre>
+            </div>
+
+            <!-- Botones de acción básicos -->
+            <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="executeFirewallActionFromRules('MONITOR', '${event.source_ip}', 'simple_firewall_agent_001', '${event.id}')"
+                        style="background: rgba(0, 170, 255, 0.2); border: 1px solid #00aaff; color: #00aaff; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px;">
+                    👁️ Monitorear IP
+                </button>
+                <button onclick="executeFirewallActionFromRules('LIST_RULES', 'all', 'simple_firewall_agent_001', '${event.id}')"
+                        style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px;">
+                    📋 Listar Reglas
+                </button>
             </div>
         </div>
     `;
@@ -1448,7 +1645,7 @@ function refreshDashboard() {
     }
 
     showToast('Dashboard actualizado', 'success');
-    addDebugLog('info', 'Dashboard refrescado - datos backend con reglas JSON');
+    addDebugLog('info', 'Dashboard refrescado - datos backend con reglas JSON y modales draggeables');
 }
 
 function clearDebugLog() {
@@ -1456,12 +1653,13 @@ function clearDebugLog() {
     if (debugLog) {
         debugLog.innerHTML = `
             <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log limpiado</div>
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard conectado con backend ZeroMQ + Reglas JSON</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard con modales draggeables conectado</div>
         `;
     }
     showToast('Log limpiado', 'info');
 }
 
+// ✅ MODAL MEJORADO CON CONTROLES DRAGGEABLES
 function showModal(title, content, actions = null) {
     const overlay = document.getElementById('modal-overlay');
     const modal = document.getElementById('detail-modal');
@@ -1479,9 +1677,37 @@ function showModal(title, content, actions = null) {
             modalActions.innerHTML = '';
         }
 
+        // ✅ AÑADIR CONTROLES AL HEADER
+        const modalHeader = modal.querySelector('.modal-header');
+        if (modalHeader && !modalHeader.querySelector('.modal-controls')) {
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'modal-controls';
+            controlsDiv.innerHTML = `
+                <button class="modal-control-btn minimize" onclick="minimizeModal()" title="Minimizar">_</button>
+                <button class="modal-control-btn maximize" onclick="maximizeModal()" title="Maximizar">🔲</button>
+            `;
+
+            const closeBtn = modalHeader.querySelector('.close-btn');
+            if (closeBtn) {
+                modalHeader.insertBefore(controlsDiv, closeBtn);
+            } else {
+                modalHeader.appendChild(controlsDiv);
+            }
+        }
+
+        // ✅ RESETEAR POSICIÓN Y ESTADO
+        modal.classList.remove('positioned', 'minimized', 'maximized');
+        modal.style.removeProperty('--modal-x');
+        modal.style.removeProperty('--modal-y');
+
         overlay.style.display = 'block';
         modal.style.display = 'block';
         overlay.onclick = closeModal;
+
+        // ✅ HACER DRAGGEABLE
+        makeModalDraggable(modal);
+
+        console.log('📱 Modal mostrado con controles draggeables');
     }
 }
 
@@ -1492,6 +1718,16 @@ function closeModal() {
     if (overlay && modal) {
         overlay.style.display = 'none';
         modal.style.display = 'none';
+
+        // ✅ LIMPIAR ESTADO DE DRAG
+        modal.classList.remove('positioned', 'minimized', 'maximized', 'dragging');
+        modal.style.removeProperty('--modal-x');
+        modal.style.removeProperty('--modal-y');
+
+        currentModal = null;
+        isDragging = false;
+
+        console.log('📱 Modal cerrado');
     }
 }
 

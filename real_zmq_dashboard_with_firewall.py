@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Dashboard de Seguridad con ZeroMQ - Backend Principal v2.3.0
-AÑADIDO: Reglas de firewall desde JSON + Endpoints para acciones + Lógica desharcodificada
+Dashboard de Seguridad con ZeroMQ - Backend Principal v2.4.0 CORREGIDO
+✅ CORREGIDO: RATE_LIMIT_IP mapping
+✅ CORREGIDO: Eliminados límites de eventos (mostrar TODOS)
+✅ CORREGIDO: Logging completo para RAG/TimeSeries
+✅ CORREGIDO: Geoposicionamiento de target_ip
+✅ CORREGIDO: Logging a disco activado
+✅ CORREGIDO: Puertos completos del pipeline
 """
 from typing import Dict, List, Optional, Any, Set
 import zmq
@@ -480,10 +485,10 @@ class DashboardLogger:
             console_handler.setFormatter(formatter)
             self.logger.addHandler(console_handler)
 
-        # Handler de archivo
+        # ✅ CORREGIDO: Handler de archivo ACTIVADO
         file_config = log_config.get('handlers', {}).get('file', {})
-        if file_config.get('enabled', False):
-            file_path = file_config.get('path')
+        if file_config.get('enabled', True):  # ✅ CAMBIO: True por defecto
+            file_path = file_config.get('path', 'logs/dashboard.log')  # ✅ CAMBIO: path por defecto
             if file_path:
                 # Crear directorio si no existe
                 Path(file_path).parent.mkdir(parents=True, exist_ok=True)
@@ -743,6 +748,86 @@ class DashboardConfig:
         self.web_interface_config = self.config.get('web_interface', {})
 
 
+class EventLoggerForRAG:
+    """
+    ✅ NUEVO: Logger específico para eventos RAG/TimeSeries
+    Guarda TODOS los eventos procesados para futura base de datos
+    """
+
+    def __init__(self, config: DashboardConfig, logger):
+        self.config = config
+        self.logger = logger
+        self.events_log_path = Path("logs/events_for_rag.jsonl")
+
+        # Crear directorio de logs
+        self.events_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Estadísticas de logging
+        self.logged_events_count = 0
+        self.start_time = time.time()
+
+        self.logger.info(f"📝 Event Logger para RAG iniciado: {self.events_log_path}")
+
+    def log_event_for_rag(self, event: SecurityEvent):
+        """Guarda evento completo para RAG/TimeSeries futuro"""
+        try:
+            # Crear registro completo del evento
+            rag_event = {
+                # Identificación
+                'id': event.id,
+                'timestamp': event.timestamp,
+                'processing_timestamp': datetime.now().isoformat(),
+
+                # Información de red
+                'source_ip': event.source_ip,
+                'target_ip': event.target_ip,
+                'port': event.port,
+                'protocol': event.protocol,
+                'packets': event.packets,
+                'bytes': event.bytes,
+
+                # Información de ML y riesgo
+                'risk_score': event.risk_score,
+                'anomaly_score': event.anomaly_score,
+                'ml_models_scores': event.ml_models_scores,
+                'attack_type': event.attack_type,
+
+                # Geolocalización
+                'latitude': event.latitude,
+                'longitude': event.longitude,
+                'location': event.location,
+
+                # Información del sistema
+                'node_id': event.node_id,
+                'dashboard_node_id': self.config.node_id,
+
+                # Metadatos completos del protobuf
+                'protobuf_data': event.protobuf_data,
+
+                # Información de contexto
+                'system_info': {
+                    'dashboard_pid': os.getpid(),
+                    'processing_latency_ms': time.time() * 1000,
+                    'memory_usage_mb': psutil.Process().memory_info().rss / 1024 / 1024
+                }
+            }
+
+            # Escribir evento en formato JSONL
+            with open(self.events_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rag_event, default=str) + '\n')
+
+            self.logged_events_count += 1
+
+            # Log estadísticas cada 100 eventos
+            if self.logged_events_count % 100 == 0:
+                uptime = time.time() - self.start_time
+                rate = self.logged_events_count / uptime if uptime > 0 else 0
+                self.logger.info(f"📝 Eventos guardados para RAG: {self.logged_events_count} ({rate:.1f}/s)")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error guardando evento para RAG: {e}")
+
+
 class SecurityDashboard:
     """Dashboard principal de seguridad con reglas de firewall JSON"""
 
@@ -752,6 +837,9 @@ class SecurityDashboard:
 
         # 🔥 NUEVO: Motor de reglas de firewall con ruta específica
         self.firewall_rules_engine = FirewallRulesEngine(firewall_rules_file, self.logger)
+
+        # ✅ NUEVO: Logger de eventos para RAG
+        self.event_logger_rag = EventLoggerForRAG(config, self.logger)
 
         # Inicializar monitor de encoding
         self.encoding_monitor = EncodingMonitor(self.logger)
@@ -777,8 +865,8 @@ class SecurityDashboard:
         self.component_status: Dict[str, ComponentStatus] = {}
         self.zmq_connections: Dict[str, ZMQConnectionInfo] = {}
 
-        # *** PUNTO 2: AÑADIR ARRAY PARA EVENTOS WEB ***
-        self.recent_events: List[Dict] = []  # Para exponer al web
+        # ✅ CORREGIDO: TODOS los eventos recientes para web (SIN LÍMITES)
+        self.recent_events: List[Dict] = []  # ✅ SIN límite de tamaño
 
         # Colas de procesamiento con tamaños del JSON
         self.ml_events_queue = queue.Queue(maxsize=config.ml_events_queue_size)
@@ -812,7 +900,9 @@ class SecurityDashboard:
             'total_events': 0,
             'success_rate': 95,
             'failures': 0,
-            'confirmations': 0
+            'confirmations': 0,
+            # ✅ NUEVO: Estadísticas RAG
+            'events_logged_for_rag': 0
         }
 
         # Métricas detalladas
@@ -1003,120 +1093,6 @@ class SecurityDashboard:
         except Exception as e:
             self.logger.error(f"❌ Error configurando sockets ZeroMQ: {e}")
             raise ConfigurationError(f"Error en configuración ZeroMQ: {e}")
-
-    # Añadir este método temporal al Dashboard para debugging
-    def debug_firewall_connection(self):
-        """Diagnosticar conexión con firewall - MÉTODO TEMPORAL"""
-        self.logger.info("🔍 DIAGNÓSTICO ZeroMQ Dashboard→Firewall")
-        self.logger.info("=" * 60)
-
-        try:
-            # 1. Verificar configuración
-            self.logger.info(f"📋 Configuración Dashboard:")
-            self.logger.info(f"   └── Address: {self.config.firewall_commands_address}")
-            self.logger.info(f"   └── Port: {self.config.firewall_commands_port}")
-            self.logger.info(f"   └── Mode: {self.config.firewall_commands_mode}")
-            self.logger.info(f"   └── Socket Type: {self.config.firewall_commands_socket_type}")
-            self.logger.info(f"   └── HWM: {self.config.firewall_commands_hwm}")
-
-            # 2. Verificar estado del socket
-            socket_info = {
-                'socket_exists': hasattr(self, 'firewall_commands_socket'),
-                'socket_closed': getattr(self.firewall_commands_socket, 'closed', 'unknown') if hasattr(self,
-                                                                                                        'firewall_commands_socket') else 'no_socket',
-            }
-
-            if hasattr(self, 'firewall_commands_socket'):
-                try:
-                    # Obtener opciones del socket
-                    sndhwm = self.firewall_commands_socket.getsockopt(zmq.SNDHWM)
-                    linger = self.firewall_commands_socket.getsockopt(zmq.LINGER)
-                    socket_info.update({
-                        'sndhwm': sndhwm,
-                        'linger': linger,
-                    })
-                except Exception as e:
-                    socket_info['socket_options_error'] = str(e)
-
-            self.logger.info(f"🔌 Estado del Socket: {socket_info}")
-
-            try:
-                # Verificar estadísticas
-                conn_info = self.zmq_connections.get('firewall_commands')
-                if conn_info:
-                    self.logger.info(
-                        f"📊 Stats conexión: {conn_info.total_messages} mensajes, último: {conn_info.last_activity}")
-
-            except zmq.Again:
-                self.logger.error("❌ ERROR: Socket no puede enviar (EAGAIN) - HWM alcanzado o socket desconectado")
-            except zmq.ZMQError as e:
-                self.logger.error(f"❌ ERROR ZMQ: {e}")
-            except Exception as e:
-                self.logger.error(f"❌ ERROR GENERAL: {e}")
-
-            # 4. Verificar endpoint
-            endpoint = f"tcp://{self.config.firewall_commands_address}:{self.config.firewall_commands_port}"
-            self.logger.info(f"🎯 Endpoint completo: {endpoint}")
-
-            # 5. Test de conectividad de red
-            import socket
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(2)
-                result = sock.connect_ex((self.config.firewall_commands_address, self.config.firewall_commands_port))
-                sock.close()
-
-                if result == 0:
-                    self.logger.info("✅ Puerto TCP alcanzable")
-                else:
-                    self.logger.error(f"❌ Puerto TCP NO alcanzable (error: {result})")
-
-            except Exception as e:
-                self.logger.error(f"❌ Error test TCP: {e}")
-
-            self.logger.info("=" * 60)
-
-        except Exception as e:
-            self.logger.error(f"💥 Error en diagnóstico: {e}")
-
-    # Modificar test_firewall_connection() para incluir diagnóstico
-    def test_firewall_connection_with_debug(self):
-        """Test con diagnóstico completo"""
-
-        # Primero ejecutar diagnóstico
-        self.debug_firewall_connection()
-
-        # Luego intentar envío real
-        try:
-            self.logger.info("🧪 Enviando comando protobuf...")
-
-            # Simple test message primero
-            simple_test = b"SIMPLE_TEST_123"
-            self.firewall_commands_socket.send(simple_test)
-            self.logger.info("✅ Mensaje simple enviado")
-
-            # Ahora protobuf
-            import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
-
-            command = fw_pb2.FirewallCommand()
-            command.command_id = f"debug_test_{int(time.time())}"
-            command.action = fw_pb2.CommandAction.LIST_RULES
-            command.target_ip = "127.0.0.1"
-            command.dry_run = True
-            command.reason = "Debug test"
-
-            command_bytes = command.SerializeToString()
-            self.logger.info(f"📦 Protobuf serializado: {len(command_bytes)} bytes")
-
-            # Enviar con verificación
-            self.firewall_commands_socket.send(command_bytes)
-            self.logger.info("✅ Protobuf enviado")
-
-            return True
-
-        except Exception as e:
-            self.logger.error(f"❌ Error en test con debug: {e}")
-            return False
 
     def start(self):
         """Iniciar el dashboard"""
@@ -1318,7 +1294,11 @@ class SecurityDashboard:
                 try:
                     event = self.parse_security_event(event_data)
 
-                    # *** PUNTO 2: AÑADIR EVENTO A RECENT_EVENTS PARA WEB ***
+                    # ✅ NUEVO: Guardar evento para RAG ANTES de cualquier limite
+                    self.event_logger_rag.log_event_for_rag(event)
+                    self.stats['events_logged_for_rag'] += 1
+
+                    # ✅ CORREGIDO: Añadir TODOS los eventos recientes para web (SIN LÍMITES)
                     web_event = {
                         'id': event.id,
                         'timestamp': int(time.time()),  # Unix timestamp
@@ -1340,10 +1320,9 @@ class SecurityDashboard:
                                                                                                          'target_ip') else False
                     }
 
-                    # Añadir a recent_events manteniendo solo los últimos 100
+                    # ✅ CORREGIDO: Añadir TODOS los eventos SIN LÍMITE
                     self.recent_events.append(web_event)
-                    if len(self.recent_events) > 100:
-                        self.recent_events = self.recent_events[-100:]
+                    # NO eliminar eventos viejos - mostrar TODOS
 
                     # Añadir a cola con timeout
                     if not self.ml_events_queue.full():
@@ -1968,11 +1947,11 @@ class SecurityDashboard:
             proto_command = fw_pb2.FirewallCommand()
             proto_command.command_id = getattr(command, 'event_id', f"cmd_{int(time.time())}")
 
-            # Mapear action string a enum
+            # ✅ CORREGIDO: Mapear action string a enum con RATE_LIMIT_IP correcto
             action_mapping = {
                 'BLOCK_IP': fw_pb2.CommandAction.BLOCK_IP,
                 'UNBLOCK_IP': fw_pb2.CommandAction.UNBLOCK_IP,
-                'RATE_LIMIT': fw_pb2.CommandAction.RATE_LIMIT,
+                'RATE_LIMIT': fw_pb2.CommandAction.RATE_LIMIT_IP,  # ✅ CORREGIDO: Era RATE_LIMIT, ahora RATE_LIMIT_IP
                 'MONITOR': fw_pb2.CommandAction.MONITOR,
                 'LIST_RULES': fw_pb2.CommandAction.LIST_RULES,
                 'FLUSH_RULES': fw_pb2.CommandAction.FLUSH_RULES
@@ -2178,7 +2157,7 @@ class SecurityDashboard:
                     # Obtener métricas del dashboard (ya incluye recent_events)
                     metrics = self.dashboard.get_dashboard_metrics()
 
-                    # Formato esperado por el frontend
+                    # ✅ CORREGIDO: Formato esperado por el frontend con TODOS los eventos
                     data = {
                         'success': True,
                         'basic_stats': {
@@ -2189,11 +2168,20 @@ class SecurityDashboard:
                             'failures': self.dashboard.stats.get('failures', 0),
                             'commands_sent': self.dashboard.stats.get('commands_sent', 0),
                             'confirmations': self.dashboard.stats.get('confirmations', 0),
+                            'events_logged_for_rag': self.dashboard.stats.get('events_logged_for_rag', 0)  # ✅ NUEVO
                         },
-                        'recent_events': self.dashboard.recent_events,  # *** CLAVE: Eventos para el mapa ***
+                        'recent_events': self.dashboard.recent_events,  # ✅ TODOS los eventos SIN LÍMITE
                         'component_status': metrics.get('component_status', {}),
                         'zmq_connections': metrics.get('zmq_connections', {}),
                         'node_info': metrics.get('node_info', {}),
+                        # ✅ CORREGIDO: Información completa del pipeline
+                        'pipeline_info': {
+                            'promiscuous_agent_port': 5559,
+                            'geoip_enricher_port': 5560,
+                            'ml_detector_port': 5570,
+                            'dashboard_firewall_commands_port': 5580,
+                            'dashboard_firewall_responses_port': 5581
+                        },
                         'timestamp': datetime.now().isoformat()
                     }
 
@@ -2708,9 +2696,8 @@ class SecurityDashboard:
                     events_processed += 1
                     self.stats['events_processed'] += 1
 
-                    # Mantener solo los últimos 1000 eventos
-                    if len(self.events) > 1000:
-                        self.events = self.events[-1000:]
+                    # ✅ CORREGIDO: Mantener TODOS los eventos (SIN límite)
+                    # No eliminar eventos - el log se encarga del almacenamiento
 
                 except queue.Empty:
                     break
@@ -2899,6 +2886,7 @@ class SecurityDashboard:
         self.logger.info(f"   ✅ Mensajes parseados: {self.debug_counters['messages_parsed']}")
         self.logger.info(f"   🔧 Operaciones socket: {self.debug_counters['socket_operations']}")
         self.logger.info(f"   📏 Último mensaje: {self.debug_counters['last_message_size']} bytes")
+        self.logger.info(f"   📝 Eventos para RAG: {self.stats['events_logged_for_rag']}")
 
         # 🔒 Cerrar sockets de forma thread-safe
         with self.socket_lock:
