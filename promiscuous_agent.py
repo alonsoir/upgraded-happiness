@@ -1,4 +1,10 @@
-# promiscuous_agent.py - Agente distribuido con captura real y protobuf
+#!/usr/bin/env python3
+"""
+promiscuous_agent_v3.py - Agente distribuido con captura real y protobuf v3.0.0
+🆕 ACTUALIZADO: Soporte para NetworkEvent v3.0.0
+🔄 COMPATIBLE: Funciona con pipeline v3 y componentes v2
+🚀 MEJORADO: Usa nuevos campos v3 para mejor tracking
+"""
 
 import zmq
 import time
@@ -24,26 +30,28 @@ except ImportError:
     print("⚠️ Scapy no disponible - usando modo simulación")
     SCAPY_AVAILABLE = False
 
-# 📦 Protobuf - asume que ya se generó el código Python
+# 📦 Protobuf v3.0.0 - ACTUALIZADO
 try:
-    # Importar el protobuf generado
-    # protoc --python_out=. network_event_extended_v2.proto
-    import src.protocols.protobuf.network_event_extended_v2_pb2 as NetworkEventProto
+    # 🆕 CAMBIO CRÍTICO: Importar protobuf v3
+    import src.protocols.protobuf.network_event_extended_v3_pb2 as NetworkEventProto
 
     PROTOBUF_AVAILABLE = True
+    PROTOBUF_VERSION = "v3.0.0"
 except ImportError:
-    print("⚠️ Protobuf no disponible - generar con: protoc --python_out=. network_event_extended_v2.proto")
+    print("⚠️ Protobuf v3 no disponible - generar con: protoc --python_out=. network_event_extended_v3.proto")
     PROTOBUF_AVAILABLE = False
+    PROTOBUF_VERSION = "unavailable"
 
 
 class DistributedPromiscuousAgent:
     """
-    Agente promiscuo distribuido completamente configurable desde JSON
+    Agente promiscuo distribuido completamente configurable desde JSON v3.0.0
     - Captura real de paquetes de red
-    - Serialización protobuf
+    - Serialización protobuf v3.0.0 con nuevos campos
     - node_id y PID para gestión distribuida
     - Backpressure configurable
     - Sin valores hardcodeados
+    - 🆕 Soporte completo para nuevos campos v3
     """
 
     def __init__(self, config_file: str):
@@ -75,7 +83,7 @@ class DistributedPromiscuousAgent:
         queue_size = self.config["processing"]["internal_queue_size"]
         self.packet_queue = Queue(maxsize=queue_size)
 
-        # 📊 Métricas
+        # 📊 Métricas actualizadas para v3
         self.stats = {
             'captured': 0,
             'processed': 0,
@@ -86,6 +94,9 @@ class DistributedPromiscuousAgent:
             'backpressure_activations': 0,
             'queue_overflows': 0,
             'protobuf_errors': 0,
+            'v3_events_created': 0,  # 🆕 Eventos v3 creados
+            'handshakes_sent': 0,  # 🆕 Handshakes enviados
+            'pipeline_events': 0,  # 🆕 Eventos normales del pipeline
             'start_time': time.time(),
             'last_stats_time': time.time()
         }
@@ -98,10 +109,11 @@ class DistributedPromiscuousAgent:
         # ✅ Verificar dependencias críticas
         self._verify_dependencies()
 
-        self.logger.info(f"🚀 Distributed Promiscuous Agent inicializado")
+        self.logger.info(f"🚀 Distributed Promiscuous Agent v3.0.0 inicializado")
         self.logger.info(f"   🏷️ Node ID: {self.node_id}")
         self.logger.info(f"   🔢 PID: {self.process_id}")
         self.logger.info(f"   📄 Config: {config_file}")
+        self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
 
     def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
         """Carga configuración SIN proporcionar defaults"""
@@ -207,7 +219,7 @@ class DistributedPromiscuousAgent:
                 issues.append("❌ Scapy requerido para captura real - pip install scapy")
 
         if not PROTOBUF_AVAILABLE:
-            issues.append("❌ Protobuf no generado - ejecutar: protoc --python_out=. network_event_extended_v2.proto")
+            issues.append("❌ Protobuf v3 no generado - ejecutar: protoc --python_out=. network_event_extended_v3.proto")
 
         if issues:
             for issue in issues:
@@ -277,6 +289,7 @@ class DistributedPromiscuousAgent:
             self.logger.info(f"   📡 {connection_info}")
             self.logger.info(f"   🔌 Tipo: {socket_type_str}")
             self.logger.info(f"   🌊 SNDHWM: {zmq_config['sndhwm']}")
+            self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
             self.logger.info(f"   📝 Descripción: {output_socket_config.get('description', 'N/A')}")
 
         except Exception as e:
@@ -311,12 +324,15 @@ class DistributedPromiscuousAgent:
         self.logger.propagate = False
 
     def create_network_event(self, packet_data: Dict[str, Any], is_handshake: bool = False) -> bytes:
-        """Crea evento protobuf desde datos de paquete - CORREGIDO para llenar todos los campos"""
+        """
+        Crea evento protobuf v3.0.0 desde datos de paquete
+        🆕 ACTUALIZADO: Usa nuevos campos v3 para mejor tracking
+        """
         if not PROTOBUF_AVAILABLE:
-            raise RuntimeError("❌ Protobuf no disponible")
+            raise RuntimeError("❌ Protobuf v3 no disponible")
 
         try:
-            # 📦 Crear evento protobuf
+            # 📦 Crear evento protobuf v3.0.0
             event = NetworkEventProto.NetworkEvent()
 
             # 🆔 Identificación única
@@ -369,10 +385,16 @@ class DistributedPromiscuousAgent:
                 # 📊 Descripción de handshake
                 event.description = f"Initial handshake from {self.node_id}"
                 event.event_type = "handshake"
+
+                # 📊 Contabilizar handshake
+                self.stats['handshakes_sent'] += 1
             else:
                 event.is_initial_handshake = False
                 event.description = f"Packet captured from {event.source_ip} to {event.target_ip}"
                 event.event_type = "network_traffic"
+
+                # 📊 Contabilizar evento normal
+                self.stats['pipeline_events'] += 1
 
             # 🔧 CAMPOS DE PIPELINE DISTRIBUIDO (POSICIONES 36-45) - CORREGIDOS
 
@@ -414,7 +436,8 @@ class DistributedPromiscuousAgent:
                 "promiscuous",
                 "packet_capture",
                 f"node_{self.node_id}",
-                f"pid_{self.process_id}"
+                f"pid_{self.process_id}",
+                "protobuf_v3"  # 🆕 Indicar que usa v3
             ])
 
             # Metadatos del componente
@@ -424,21 +447,42 @@ class DistributedPromiscuousAgent:
             metadata["config_file"] = self.config_file
             metadata["queue_size"] = str(self.packet_queue.qsize())
             metadata["processing_thread"] = str(threading.current_thread().name)
+            metadata["protobuf_version"] = PROTOBUF_VERSION  # 🆕 Versión del protobuf
+
+            # ============================================================
+            # 🆕 CAMPOS NUEVOS v3.0.0 - APROVECHAR DONDE SEA APROPIADO
+            # ============================================================
+
+            # 🔄 VERSIONADO Y COMPATIBILIDAD (campos 93-95)
+            event.protobuf_schema_version = "v3.0.0"
+            event.legacy_compatibility_mode = False  # Usando v3 nativo
+            # deprecated_fields se deja vacío por ahora
+
+            # 📊 MÉTRICAS DE RENDIMIENTO (campos 96-99) - Solo campos disponibles
+            # geoip_lookup_latency_ms = 0 (no aplicable aquí)
+            # cache_hits_count = 0 (no aplicable aquí)
+            # cache_misses_count = 0 (no aplicable aquí)
+            # enrichment_success_rate = 0 (no aplicable aquí)
 
             # 🔄 Serializar a bytes
             serialized_data = event.SerializeToString()
 
+            # 📊 Contabilizar evento v3 creado
+            self.stats['v3_events_created'] += 1
+
             # 📊 Log de debugging para verificar campos críticos
-            self.logger.debug(f"📦 Protobuf creado - Tamaño: {len(serialized_data)} bytes")
+            self.logger.debug(f"📦 Protobuf v3 creado - Tamaño: {len(serialized_data)} bytes")
             self.logger.debug(f"   🔢 promiscuous_pid: {event.promiscuous_pid}")
             self.logger.debug(f"   ⏰ promiscuous_timestamp: {event.promiscuous_timestamp}")
             self.logger.debug(f"   🛤️ pipeline_path: {event.pipeline_path}")
+            self.logger.debug(f"   📦 schema_version: {event.protobuf_schema_version}")
+            self.logger.debug(f"   🏷️ event_type: {event.event_type}")
 
             return serialized_data
 
         except Exception as e:
             self.stats['protobuf_errors'] += 1
-            self.logger.error(f"❌ Error creando evento protobuf: {e}")
+            self.logger.error(f"❌ Error creando evento protobuf v3: {e}")
             raise
 
     def _get_so_identifier(self) -> str:
@@ -553,10 +597,11 @@ class DistributedPromiscuousAgent:
         interface = capture_config["interface"]
         filter_expr = capture_config.get("filter_expression", "")
 
-        self.logger.info(f"🎯 Iniciando captura de paquetes:")
+        self.logger.info(f"🎯 Iniciando captura de paquetes v3.0.0:")
         self.logger.info(f"   📡 Interface: {interface}")
         self.logger.info(f"   🔍 Filtro: {filter_expr or 'sin filtro'}")
         self.logger.info(f"   🎭 Promiscuo: {capture_config['promiscuous_mode']}")
+        self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
 
         try:
             # 🎣 Iniciar captura con Scapy
@@ -575,14 +620,14 @@ class DistributedPromiscuousAgent:
         """Thread para procesar paquetes de la cola"""
         queue_timeout = self.config["processing"]["queue_timeout_seconds"]
 
-        self.logger.info("⚙️ Iniciando thread de procesamiento de paquetes")
+        self.logger.info("⚙️ Iniciando thread de procesamiento de paquetes v3.0.0")
 
         while self.running:
             try:
                 # 📋 Obtener paquete de la cola
                 packet_data = self.packet_queue.get(timeout=queue_timeout)
 
-                # 📦 Crear evento protobuf
+                # 📦 Crear evento protobuf v3.0.0
                 protobuf_data = self.create_network_event(packet_data)
 
                 # 📤 Enviar con backpressure
@@ -600,7 +645,7 @@ class DistributedPromiscuousAgent:
                 self.logger.error(f"❌ Error procesando paquete: {e}")
 
     def send_handshake(self):
-        """Envía handshake inicial del nodo"""
+        """Envía handshake inicial del nodo v3.0.0"""
         if self.handshake_sent:
             return
 
@@ -623,7 +668,7 @@ class DistributedPromiscuousAgent:
 
             if success:
                 self.handshake_sent = True
-                self.logger.info(f"🤝 Handshake enviado exitosamente")
+                self.logger.info(f"🤝 Handshake v3.0.0 enviado exitosamente")
             else:
                 self.logger.warning(f"⚠️ Error enviando handshake")
 
@@ -684,7 +729,7 @@ class DistributedPromiscuousAgent:
         return True
 
     def monitor_performance(self):
-        """Thread de monitoreo de performance"""
+        """Thread de monitoreo de performance v3.0.0"""
         monitoring_config = self.config["monitoring"]
         interval = monitoring_config["stats_interval_seconds"]
 
@@ -693,11 +738,11 @@ class DistributedPromiscuousAgent:
             if not self.running:
                 break
 
-            self._log_performance_stats()
+            self._log_performance_stats_v3()
             self._check_performance_alerts()
 
-    def _log_performance_stats(self):
-        """Log de estadísticas de performance"""
+    def _log_performance_stats_v3(self):
+        """Log de estadísticas de performance v3.0.0"""
         now = time.time()
         interval = now - self.stats['last_stats_time']
 
@@ -706,16 +751,20 @@ class DistributedPromiscuousAgent:
         process_rate = self.stats['processed'] / interval if interval > 0 else 0
         send_rate = self.stats['sent'] / interval if interval > 0 else 0
 
-        self.logger.info(f"📊 Performance Stats:")
+        self.logger.info(f"📊 Performance Stats v3.0.0:")
         self.logger.info(f"   📡 Capturados: {self.stats['captured']} ({capture_rate:.1f}/s)")
         self.logger.info(f"   ⚙️ Procesados: {self.stats['processed']} ({process_rate:.1f}/s)")
         self.logger.info(f"   📤 Enviados: {self.stats['sent']} ({send_rate:.1f}/s)")
         self.logger.info(f"   🗑️ Descartados: {self.stats['dropped']}")
         self.logger.info(f"   📋 Cola: {self.packet_queue.qsize()}")
         self.logger.info(f"   🔄 Backpressure: {self.stats['backpressure_activations']}")
+        self.logger.info(f"   📦 Eventos v3 creados: {self.stats['v3_events_created']}")
+        self.logger.info(f"   🤝 Handshakes: {self.stats['handshakes_sent']}")
+        self.logger.info(f"   🛤️ Pipeline events: {self.stats['pipeline_events']}")
 
         # 🔄 Reset stats para próximo intervalo
-        for key in ['captured', 'processed', 'sent', 'dropped', 'backpressure_activations']:
+        for key in ['captured', 'processed', 'sent', 'dropped', 'backpressure_activations',
+                    'v3_events_created', 'handshakes_sent', 'pipeline_events']:
             self.stats[key] = 0
 
         self.stats['last_stats_time'] = now
@@ -733,8 +782,8 @@ class DistributedPromiscuousAgent:
             self.logger.warning(f"🚨 ALERTA: Cola interna llena ({queue_usage * 100:.1f}%)")
 
     def run(self):
-        """Ejecutar el agente distribuido"""
-        self.logger.info("🚀 Iniciando Distributed Promiscuous Agent...")
+        """Ejecutar el agente distribuido v3.0.0"""
+        self.logger.info("🚀 Iniciando Distributed Promiscuous Agent v3.0.0...")
 
         # 🤝 Enviar handshake inicial
         self.send_handshake()
@@ -759,26 +808,31 @@ class DistributedPromiscuousAgent:
         capture_thread.start()
         threads.append(capture_thread)
 
-        self.logger.info(f"✅ Agent iniciado con {len(threads)} threads")
+        self.logger.info(f"✅ Agent v3.0.0 iniciado con {len(threads)} threads")
+        self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
+        self.logger.info(f"   🏷️ Node ID: {self.node_id}")
 
         try:
             # 🔄 Mantener vivo el proceso principal
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.logger.info("🛑 Deteniendo Agent...")
+            self.logger.info("🛑 Deteniendo Agent v3.0.0...")
 
         # 🛑 Cierre graceful
         self.shutdown(threads)
 
     def shutdown(self, threads):
-        """Cierre graceful del agente"""
+        """Cierre graceful del agente v3.0.0"""
         self.running = False
         self.stop_event.set()
 
         # 📊 Stats finales
         runtime = time.time() - self.stats['start_time']
-        self.logger.info(f"📊 Stats finales - Runtime: {runtime:.1f}s")
+        total_v3_events = self.stats.get('v3_events_created', 0)
+
+        self.logger.info(f"📊 Stats finales v3.0.0 - Runtime: {runtime:.1f}s")
+        self.logger.info(f"   📦 Total eventos v3 creados: {total_v3_events}")
 
         # 🧵 Esperar threads
         for thread in threads:
@@ -789,14 +843,14 @@ class DistributedPromiscuousAgent:
             self.socket.close()
         self.context.term()
 
-        self.logger.info("✅ Distributed Promiscuous Agent cerrado correctamente")
+        self.logger.info("✅ Distributed Promiscuous Agent v3.0.0 cerrado correctamente")
 
 
 # 🚀 Main
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("❌ Uso: python promiscuous_agent.py <config.json>")
-        print("💡 Ejemplo: python promiscuous_agent.py enhanced_agent_config.json")
+        print("❌ Uso: python promiscuous_agent_v3.py <config.json>")
+        print("💡 Ejemplo: python promiscuous_agent_v3.py enhanced_agent_config.json")
         sys.exit(1)
 
     config_file = sys.argv[1]
@@ -806,4 +860,7 @@ if __name__ == "__main__":
         agent.run()
     except Exception as e:
         print(f"❌ Error fatal: {e}")
+        import traceback
+
+        traceback.print_exc()
         sys.exit(1)
