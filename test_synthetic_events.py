@@ -33,13 +33,10 @@ def get_risk_score(X_new, models, scaler, columns, weights=None, config=None):
         km_distances = models["kmeans"].transform(X_scaled)
         km_score = np.min(km_distances, axis=1)
         anomaly_threshold = joblib.load("models/kmeans_anomaly_threshold.pkl")
-        scores["kmeans"] = np.clip(km_score / (anomaly_threshold + 1e-10), 0, 1)
+        scores["kmeans"] = np.clip(1 - (km_score / (anomaly_threshold + 1e-10)), 0, 1)
     if models.get("one_class_svm"):
         svm_score = models["one_class_svm"].decision_function(X_scaled)
         scores["one_class_svm"] = np.clip((svm_score + 1) / 2, 0, 1)
-    if models.get("local_outlier_factor"):
-        lof_score = models["local_outlier_factor"].decision_function(X_scaled)
-        scores["local_outlier_factor"] = np.clip((lof_score + 1) / 2, 0, 1)
     if models.get("random_forest"):
         rf_score = models["random_forest"].predict_proba(X_scaled)[:, 1]
         scores["random_forest"] = rf_score
@@ -57,28 +54,28 @@ def get_risk_score(X_new, models, scaler, columns, weights=None, config=None):
 
 def main():
     models = {k: joblib.load(f"models/{k}_model.pkl") for k in
-              ["isolation_forest", "kmeans", "one_class_svm", "local_outlier_factor", "random_forest"]}
+              ["isolation_forest", "kmeans", "one_class_svm", "random_forest"]}
     scaler = joblib.load("models/scaler.pkl")
     with open("config-ml-trainer.json") as f:
         config = json.load(f)
 
     events = [
         {'type': 'Normal',
-         'data': [0, 0, 0, 0, 0, 0, 0, 0, 0, 1000, 1000, 12345, 0, 0, 0, 0, 80, 0x10, 1, 64, 1000, 0, 0, 0, 0, 0, 0, 0,
-                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+         'data': [0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 12345, 0, 0, 0, 0, 80, 0x10, 1, 64, 100, 0, 0, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
         {'type': 'DDoS',
-         'data': [0, 0, 0, 0, 0, 0, 2000, 0, 0, 2000000, 2000000, 12345, 0, 0, 1, 0, 80, 0x02, 0, 2000, 2000, 0, 0, 0,
+         'data': [0, 0, 0, 0, 0, 0, 3000, 0, 0, 3000000, 3000000, 12345, 0, 0, 1, 0, 80, 0x02, 0, 3000, 3000, 0, 0, 0,
                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
         {'type': 'Port_Scan',
          'data': [0, 0, 0, 0, 0, 0, 0, 0, 0, 1000, 1000, 12345, 0, 0, 1, 0, 445, 0x02, 0, 64, 1000, 0, 0, 0, 0, 0, 0, 0,
                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
         {'type': 'MQTT_Attack',
-         'data': [0, 0, 0, 0, 0, 0, 0, 0, 0, 1000, 1000, 12345, 0, 0, 0, 0, 1883, 0x10, 1, 128, 1000, 0, 0, 0, 0, 0, 0,
-                  0, 0, 0, 1, 0x10, 0x10, 64, 0, 1, 4, 32, 3, 0, 0, 0]}
+         'data': [0, 0, 0, 0, 0, 0, 0, 0, 0, 1000, 1000, 12345, 0, 0, 0, 0, 1883, 0x10, 1, 256, 1000, 0, 0, 0, 0, 0, 0,
+                  0, 0, 0, 1, 0x10, 0x10, 128, 0, 2, 4, 64, 3, 0, 0, 0]}
     ]
 
     new_events_path = "data/new_events.csv"
-    weights = [0.1, 0.1, 0.1, 0.1, 0.6]
+    weights = [0.1, 0.1, 0.1, 0.7]
     for event in events:
         df_event = pd.DataFrame([event['data']], columns=used_columns)
         risk_score, is_anomaly, is_high_risk, scores = get_risk_score(df_event, models, scaler, used_columns, weights,

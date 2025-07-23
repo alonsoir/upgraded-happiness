@@ -1633,17 +1633,17 @@ class SecurityDashboard:
             return None
 
     def _convert_protobuf_v3_to_dict(self, event, worker_id: int, data_length: int) -> dict:
-        """Convertir protobuf V3 del ML Detector a diccionario completo"""
+        """Convertir protobuf V3 del ML Detector a diccionario completo - VERSIÓN COMPLETA V3"""
         current_time = int(time.time() * 1000)
 
-        # ✅ CAMPOS ESPECÍFICOS DEL PROTOBUF V3
+        # ✅ CAMPOS ESPECÍFICOS DEL PROTOBUF V3 - TODOS LOS CAMPOS
         parsed_event = {
-            # 🔍 Identificación del evento
+            # 🔍 Identificación del evento (1-2)
             'id': getattr(event, 'event_id', '') or str(current_time) + f"_{worker_id}",
             'event_id': getattr(event, 'event_id', ''),
             'timestamp': getattr(event, 'timestamp', current_time),
 
-            # 🌐 Información de red básica (V3)
+            # 🌐 Información de red básica (3-8)
             'source_ip': getattr(event, 'source_ip', '127.0.0.1'),
             'target_ip': getattr(event, 'target_ip', '127.0.0.1'),
             'packet_size': getattr(event, 'packet_size', 0),
@@ -1651,111 +1651,300 @@ class SecurityDashboard:
             'src_port': getattr(event, 'src_port', 0),
             'protocol': getattr(event, 'protocol', 'TCP'),
             'port': getattr(event, 'dest_port', 80),
-            'attack_type': getattr(event, 'event_type', 'unknown'),
 
-            # 🤖 Identificación del agente
+            # 🤖 Identificación del agente (9)
             'agent_id': getattr(event, 'agent_id', ''),
 
-            # 📊 Métricas y scoring
+            # 📊 Métricas y scoring (10-12) - LEGACY CAMPOS
             'anomaly_score': float(getattr(event, 'anomaly_score', 0.0)),
-            'latitude': getattr(event, 'latitude', None),
-            'longitude': getattr(event, 'longitude', None),
+            'latitude': getattr(event, 'latitude', None),  # LEGACY para compatibilidad
+            'longitude': getattr(event, 'longitude', None),  # LEGACY para compatibilidad
 
-            # 🎯 Clasificación de eventos
+            # 🎯 Clasificación de eventos (13-15)
             'event_type': getattr(event, 'event_type', 'unknown'),
             'risk_score': float(getattr(event, 'risk_score', 0.5)),
             'description': getattr(event, 'description', ''),
+            'attack_type': getattr(event, 'event_type', 'unknown'),
 
-            # 🖥️ Información del sistema operativo
+            # 🖥️ Información del sistema operativo (16)
             'so_identifier': getattr(event, 'so_identifier', ''),
 
-            # 🏠 Información del nodo
+            # 🏠 Información del nodo (17-21)
             'node_hostname': getattr(event, 'node_hostname', ''),
             'os_version': getattr(event, 'os_version', ''),
             'firewall_status': getattr(event, 'firewall_status', 'unknown'),
             'agent_version': getattr(event, 'agent_version', 'V3'),
             'is_initial_handshake': bool(getattr(event, 'is_initial_handshake', False)),
 
-            # 🆔 CAMPOS DISTRIBUIDOS
+            # 🆔 CAMPOS DISTRIBUIDOS (22-25)
             'node_id': getattr(event, 'node_id', self.config.node_id),
             'process_id': int(getattr(event, 'process_id', 0)),
             'container_id': getattr(event, 'container_id', ''),
             'cluster_name': getattr(event, 'cluster_name', ''),
 
-            # 🔄 Estado del componente
+            # 🔄 Estado del componente (26-27)
             'component_status': getattr(event, 'component_status', 'healthy'),
             'uptime_seconds': int(getattr(event, 'uptime_seconds', 0)),
 
-            # 📈 Métricas de performance
+            # 📈 Métricas de performance (28-30)
             'queue_depth': int(getattr(event, 'queue_depth', 0)),
             'cpu_usage_percent': float(getattr(event, 'cpu_usage_percent', 0.0)),
             'memory_usage_mb': float(getattr(event, 'memory_usage_mb', 0.0)),
 
-            # 🔧 Configuración dinámica
+            # 🔧 Configuración dinámica (31-32)
             'config_version': getattr(event, 'config_version', 'V3'),
             'config_timestamp': int(getattr(event, 'config_timestamp', current_time)),
 
-            # 🌍 Enriquecimiento GeoIP
+            # 🌍 Enriquecimiento GeoIP (33-35) - LEGACY
             'geoip_enriched': bool(getattr(event, 'geoip_enriched', True)),
             'enrichment_node': getattr(event, 'enrichment_node', 'ml_detector_v3'),
             'enrichment_timestamp': int(getattr(event, 'enrichment_timestamp', current_time)),
 
-            # 🔧 PIDS DE COMPONENTES
+            # 🔧 PIDS DE COMPONENTES (36-40)
             'promiscuous_pid': int(getattr(event, 'promiscuous_pid', 0)),
             'geoip_enricher_pid': int(getattr(event, 'geoip_enricher_pid', 0)),
             'ml_detector_pid': int(getattr(event, 'ml_detector_pid', 0)),
             'dashboard_pid': self.get_safe_dashboard_pid(event),
             'firewall_pid': int(getattr(event, 'firewall_pid', 0)),
 
-            # 📊 TIMESTAMPS DE PROCESAMIENTO
+            # 📊 TIMESTAMPS DE PROCESAMIENTO (41-45)
             'promiscuous_timestamp': int(getattr(event, 'promiscuous_timestamp', 0)),
             'geoip_enricher_timestamp': int(getattr(event, 'geoip_enricher_timestamp', 0)),
             'ml_detector_timestamp': int(getattr(event, 'ml_detector_timestamp', current_time)),
             'dashboard_timestamp': current_time,
             'firewall_timestamp': int(getattr(event, 'firewall_timestamp', 0)),
 
-            # 🎯 MÉTRICAS DE PIPELINE
+            # 🎯 MÉTRICAS DE PIPELINE (46-48)
             'processing_latency_ms': float(getattr(event, 'processing_latency_ms', 0.0)),
             'pipeline_hops': int(getattr(event, 'pipeline_hops', 1)),
             'pipeline_path': getattr(event, 'pipeline_path', 'ml_detector_v3->dashboard'),
 
-            # 🔄 CONTROL DE FLUJO
+            # 🔄 CONTROL DE FLUJO (49-51)
             'retry_count': int(getattr(event, 'retry_count', 0)),
             'last_error': getattr(event, 'last_error', ''),
             'requires_reprocessing': bool(getattr(event, 'requires_reprocessing', False)),
 
-            # 🏷️ TAGS Y METADATOS
+            # 🏷️ TAGS Y METADATOS (52-53)
             'component_tags': list(getattr(event, 'component_tags', ['v3', 'ml_detector'])),
             'component_metadata': dict(getattr(event, 'component_metadata', {})),
 
-            # Campos de compatibilidad
+            # ==========================================
+            # 🆕 CAMPOS NUEVOS V3.0.0 - CRÍTICOS PARA FRONTEND
+            # ==========================================
+
+            # 🎯 COORDENADAS DUALES (54-57) - ESENCIALES PARA MAPA DUAL
+            'source_latitude': self._safe_float(getattr(event, 'source_latitude', None)),
+            'source_longitude': self._safe_float(getattr(event, 'source_longitude', None)),
+            'target_latitude': self._safe_float(getattr(event, 'target_latitude', None)),
+            'target_longitude': self._safe_float(getattr(event, 'target_longitude', None)),
+
+            # 🌍 INFORMACIÓN GEOGRÁFICA RICA (58-67) - ESENCIAL PARA MODAL TARGET_IP
+            'source_city': getattr(event, 'source_city', ''),
+            'source_country': getattr(event, 'source_country', ''),
+            'source_country_code': getattr(event, 'source_country_code', ''),
+            'source_region': getattr(event, 'source_region', ''),
+            'source_timezone': getattr(event, 'source_timezone', ''),
+
+            'target_city': getattr(event, 'target_city', ''),
+            'target_country': getattr(event, 'target_country', ''),
+            'target_country_code': getattr(event, 'target_country_code', ''),
+            'target_region': getattr(event, 'target_region', ''),
+            'target_timezone': getattr(event, 'target_timezone', ''),
+
+            # 🔍 ESTADO DE ENRIQUECIMIENTO V3.0.0 (68-71)
+            'source_ip_enriched': bool(getattr(event, 'source_ip_enriched', False)),
+            'target_ip_enriched': bool(getattr(event, 'target_ip_enriched', False)),
+            'geoip_primary_source': getattr(event, 'geoip_primary_source', 'none'),
+            'dual_enrichment_success': bool(getattr(event, 'dual_enrichment_success', False)),
+
+            # 🌐 DISCOVERY DE IP PÚBLICA V3.0.0 (72-76)
+            'public_ip_discovered': bool(getattr(event, 'public_ip_discovered', False)),
+            'original_source_ip': getattr(event, 'original_source_ip', ''),
+            'discovered_public_ip': getattr(event, 'discovered_public_ip', ''),
+            'ip_discovery_service': getattr(event, 'ip_discovery_service', ''),
+            'ip_discovery_timestamp': int(getattr(event, 'ip_discovery_timestamp', 0)),
+
+            # 📏 ANÁLISIS GEOGRÁFICO V3.0.0 (77-80) - ESENCIAL PARA ANÁLISIS
+            'geographic_distance_km': self._safe_float(getattr(event, 'geographic_distance_km', 0.0)),
+            'distance_category': getattr(event, 'distance_category', 'unknown'),
+            'same_country': bool(getattr(event, 'same_country', False)),
+            'same_continent': bool(getattr(event, 'same_continent', False)),
+
+            # 🔧 METADATOS DE ENRIQUECIMIENTO V3.0.0 (81-84)
+            'geoip_enricher_version': getattr(event, 'geoip_enricher_version', ''),
+            'geoip_method': getattr(event, 'geoip_method', 'unknown'),
+            'fallback_coordinates_used': bool(getattr(event, 'fallback_coordinates_used', False)),
+            'geoip_data_source': getattr(event, 'geoip_data_source', ''),
+
+            # 🎯 ISP Y INFORMACIÓN DE RED V3.0.0 (85-88)
+            'source_isp': getattr(event, 'source_isp', ''),
+            'target_isp': getattr(event, 'target_isp', ''),
+            'source_asn': getattr(event, 'source_asn', ''),
+            'target_asn': getattr(event, 'target_asn', ''),
+
+            # 🚨 INFORMACIÓN DE AMENAZAS V3.0.0 (89-92)
+            'target_is_tor_exit': bool(getattr(event, 'target_is_tor_exit', False)),
+            'target_is_known_malicious': bool(getattr(event, 'target_is_known_malicious', False)),
+            'threat_intelligence_source': getattr(event, 'threat_intelligence_source', ''),
+            'geographic_anomaly_score': self._safe_float(getattr(event, 'geographic_anomaly_score', 0.0)),
+
+            # 🔄 COMPATIBILIDAD Y VERSIONADO (93-95)
+            'protobuf_schema_version': getattr(event, 'protobuf_schema_version', 'v3.0.0'),
+            'legacy_compatibility_mode': bool(getattr(event, 'legacy_compatibility_mode', False)),
+            'deprecated_fields': list(getattr(event, 'deprecated_fields', [])),
+
+            # 📊 MÉTRICAS DE RENDIMIENTO ESPECÍFICAS V3.0.0 (96-99)
+            'geoip_lookup_latency_ms': self._safe_float(getattr(event, 'geoip_lookup_latency_ms', 0.0)),
+            'cache_hits_count': int(getattr(event, 'cache_hits_count', 0)),
+            'cache_misses_count': int(getattr(event, 'cache_misses_count', 0)),
+            'enrichment_success_rate': self._safe_float(getattr(event, 'enrichment_success_rate', 0.0)),
+
+            # ==========================================
+            # 🔄 CAMPOS DE COMPATIBILIDAD Y LEGACY
+            # ==========================================
+
+            # Campos de compatibilidad para frontend V2
             'packets': max(1, getattr(event, 'packet_size', 1)),
             'bytes': data_length,
-            'location': self._get_location_from_coordinates(
-                getattr(event, 'latitude', None),
-                getattr(event, 'longitude', None)
+            'location': self._get_location_from_coordinates_v3(
+                self._safe_float(getattr(event, 'source_latitude', None)),
+                self._safe_float(getattr(event, 'source_longitude', None)),
+                getattr(event, 'source_city', ''),
+                getattr(event, 'source_country', '')
             ),
 
             # Metadatos del parsing V3
-            'parsing_method': 'protobuf_v3_lightweight_ml',
+            'parsing_method': 'protobuf_v3_complete_schema',
             'raw_protobuf_length': data_length,
             'worker_id': worker_id,
             'dashboard_node_id': self.config.node_id,
             'dashboard_processing_timestamp': datetime.now().isoformat(),
 
-            # ML Models scores V3
-            'ml_models_scores': {
-                'v3_lightweight_ml': getattr(event, 'risk_score', 0.5),
-                'v3_anomaly_score': getattr(event, 'anomaly_score', 0.5)
+            # ML Models scores V3 MEJORADOS
+            'ml_models_scores': self._extract_v3_ml_scores(event, data_length),
+
+            # ✅ NUEVO: Información del ML Detector V3
+            'ml_detector_info': {
+                'version': 'V3',
+                'protobuf_version': '3.0.0',
+                'source_component': 'lightweight_ml_detector',
+                'dual_coordinates_available': bool(
+                    getattr(event, 'source_latitude', None) and
+                    getattr(event, 'target_latitude', None)
+                ),
+                'geographic_analysis_available': bool(getattr(event, 'geographic_distance_km', None)),
+                'threat_intelligence_available': bool(
+                    getattr(event, 'target_is_tor_exit', False) or
+                    getattr(event, 'target_is_known_malicious', False)
+                )
             }
         }
 
         # ✅ VALIDACIÓN ADICIONAL PARA CAMPOS CRÍTICOS V3
-        for field in ['source_ip', 'target_ip', 'node_id', 'agent_version']:
+        critical_v3_fields = [
+            'source_ip', 'target_ip', 'node_id', 'agent_version',
+            'protobuf_schema_version', 'geoip_primary_source'
+        ]
+
+        for field in critical_v3_fields:
             if field in parsed_event and not parsed_event[field]:
-                parsed_event[field] = self._get_default_value_for_field(field)
+                parsed_event[field] = self._get_default_value_for_field_v3(field)
+
+        # ✅ FALLBACK PARA COORDENADAS: Si no hay coordenadas duales, usar legacy
+        if not parsed_event['source_latitude'] and parsed_event['latitude']:
+            parsed_event['source_latitude'] = parsed_event['latitude']
+            parsed_event['source_longitude'] = parsed_event['longitude']
+            self.logger.debug(f"Worker {worker_id} - Usando coordenadas legacy como source")
 
         return parsed_event
+
+    def _safe_float(self, value) -> Optional[float]:
+        """Convertir valor a float de forma segura"""
+        try:
+            if value is None or value == '':
+                return None
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    def _get_location_from_coordinates_v3(self, lat: Optional[float], lon: Optional[float],
+                                          city: str = '', country: str = '') -> str:
+        """Obtener ubicación textual desde coordenadas V3 con información rica"""
+
+        # Prioridad 1: Usar ciudad y país si están disponibles
+        if city and country:
+            return f"{city}, {country}"
+        elif country:
+            return country
+        elif city:
+            return city
+
+        # Prioridad 2: Usar coordenadas legacy
+        if lat is None or lon is None:
+            return 'Unknown'
+
+        # Coordenadas aproximadas para España
+        if 35.0 <= lat <= 44.0 and -10.0 <= lon <= 4.0:
+            return 'España'
+        elif 40.0 <= lat <= 41.0 and -4.0 <= lon <= -3.0:
+            return 'Madrid, ES'
+        elif 41.0 <= lat <= 42.0 and 2.0 <= lon <= 3.0:
+            return 'Barcelona, ES'
+        else:
+            return f'Lat:{lat:.2f}, Lon:{lon:.2f}'
+
+    def _get_default_value_for_field_v3(self, field: str) -> str:
+        """Obtener valor por defecto para campos críticos V3"""
+        defaults = {
+            'source_ip': '127.0.0.1',
+            'target_ip': '127.0.0.1',
+            'node_id': self.config.node_id,
+            'agent_version': 'V3',
+            'protocol': 'TCP',
+            'event_type': 'network_event',
+            'protobuf_schema_version': 'v3.0.0',
+            'geoip_primary_source': 'none',
+            'geoip_method': 'unknown',
+            'distance_category': 'unknown'
+        }
+        return defaults.get(field, 'unknown')
+
+    def _extract_v3_ml_scores(self, event, data_length: int) -> dict:
+        """Extraer scores de ML específicos de V3"""
+
+        base_scores = {
+            'v3_risk_score': float(getattr(event, 'risk_score', 0.5)),
+            'v3_anomaly_score': float(getattr(event, 'anomaly_score', 0.5)),
+            'v3_geographic_anomaly': float(getattr(event, 'geographic_anomaly_score', 0.0)),
+            'v3_enrichment_success': float(getattr(event, 'enrichment_success_rate', 0.0))
+        }
+
+        # Extraer scores adicionales desde component_metadata
+        try:
+            metadata = dict(getattr(event, 'component_metadata', {}))
+            for key, value in metadata.items():
+                if any(term in key.lower() for term in ['ml_', 'score', 'anomaly', 'risk', 'detection']):
+                    try:
+                        base_scores[f'metadata_{key}'] = float(value)
+                    except (ValueError, TypeError):
+                        base_scores[f'metadata_{key}'] = str(value)
+        except Exception:
+            pass
+
+        # Añadir scores calculados basados en datos V3
+        base_scores.update({
+            'dual_coordinates_confidence': 1.0 if (
+                    getattr(event, 'source_latitude', None) and
+                    getattr(event, 'target_latitude', None)
+            ) else 0.0,
+            'threat_intelligence_confidence': 1.0 if (
+                    getattr(event, 'target_is_tor_exit', False) or
+                    getattr(event, 'target_is_known_malicious', False)
+            ) else 0.0,
+            'geographic_analysis_confidence': 1.0 if getattr(event, 'geographic_distance_km', None) else 0.0
+        })
+
+        return base_scores
 
     def _get_default_value_for_field(self, field: str) -> str:
         """Obtener valor por defecto para campos críticos"""
