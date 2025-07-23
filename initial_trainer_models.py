@@ -11,8 +11,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import KMeans
 from sklearn.svm import OneClassSVM
-from sklearn.neighbors import LocalOutlierFactor
 from sklearn.ensemble import RandomForestClassifier
+from imblearn.over_sampling import SMOTE
 import joblib
 
 # Configurar logging
@@ -63,7 +63,11 @@ def is_dataset_updated(dataset_slug, csv_path):
         if not last_updated:
             logging.warning("No se encontró 'lastUpdated' en el metadata. Usando archivo local.")
             return False
-        remote_last_modified = datetime.strptime(last_updated, '%Y-%m-%dT%H:%M:%S.%fZ')
+        try:
+            remote_last_modified = datetime.strptime(last_updated, '%Y-%m-%dT%H:%M:%S.%fZ')
+        except ValueError:
+            logging.warning("Formato de 'lastUpdated' inválido. Usando archivo local.")
+            return False
         local_last_modified = datetime.fromtimestamp(os.path.getmtime(csv_path))
         if remote_last_modified > local_last_modified:
             logging.info(f"Dataset remoto ({remote_last_modified}) más reciente que local ({local_last_modified}).")
@@ -154,7 +158,6 @@ def load_and_preprocess_data(csv_path, new_events_path=None, columns=None):
         raise ValueError("No se encontraron columnas numéricas válidas para entrenar.")
     X = df[columns].fillna(0)
     y = df['Attack_label'].fillna(0) if 'Attack_label' in df.columns else np.zeros(len(X))
-    # Separar datos normales para modelos no supervisados
     X_normal = X[df['Attack_label'] == 0] if 'Attack_label' in df.columns else X
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -175,13 +178,13 @@ def train_models(X_scaled, X_normal_scaled, y, config, columns, max_rows=0):
     logging.info(f"Usando {len(X_scaled_sub)} filas para entrenamiento")
     if config["ml"]["models"]["isolation_forest"]["enabled"]:
         model = IsolationForest(
-            contamination=0.2,  # Aumentado para mayor sensibilidad
+            contamination=0.2,
             n_estimators=config["ml"]["models"]["isolation_forest"]["n_estimators"],
             random_state=config["ml"]["models"]["isolation_forest"]["random_state"],
             n_jobs=config["ml"]["models"]["isolation_forest"]["n_jobs"],
             max_samples=512
         )
-        model.fit(X_normal_scaled_sub)  # Entrenar solo con datos normales
+        model.fit(X_normal_scaled_sub)
         joblib.dump(model, "models/isolation_forest_model.pkl")
         logging.info("Isolation Forest entrenado")
     if config["ml"]["models"]["kmeans"]["enabled"]:
@@ -190,40 +193,32 @@ def train_models(X_scaled, X_normal_scaled, y, config, columns, max_rows=0):
             n_init=config["ml"]["models"]["kmeans"]["n_init"],
             random_state=config["ml"]["models"]["kmeans"]["random_state"]
         )
-        model.fit(X_normal_scaled_sub)  # Entrenar solo con datos normales
+        model.fit(X_normal_scaled_sub)
         anomaly_threshold = np.percentile(np.min(model.transform(X_normal_scaled_sub), axis=1), 95)
         joblib.dump(model, "models/kmeans_model.pkl")
         joblib.dump(anomaly_threshold, "models/kmeans_anomaly_threshold.pkl")
         logging.info("KMeans entrenado")
     if config["ml"]["models"]["one_class_svm"]["enabled"]:
         model = OneClassSVM(
-            nu=0.01,  # Aumentado para mayor sensibilidad
+            nu=0.05,  # Aumentado para mayor sensibilidad
             kernel=config["ml"]["models"]["one_class_svm"]["kernel"],
             gamma=config["ml"]["models"]["one_class_svm"]["gamma"]
         )
         svm_rows = min(len(X_normal_scaled_sub), 100000)
-        model.fit(X_normal_scaled_sub[:svm_rows])  # Entrenar solo con datos normales
+        model.fit(X_normal_scaled_sub[:svm_rows])
         joblib.dump(model, "models/one_class_svm_model.pkl")
         logging.info("One-Class SVM entrenado")
-    if config["ml"]["models"]["local_outlier_factor"]["enabled"]:
-        model = LocalOutlierFactor(
-            n_neighbors=config["ml"]["models"]["local_outlier_factor"]["n_neighbors"],
-            contamination=0.2,  # Aumentado para mayor sensibilidad
-            novelty=True
-        )
-        lof_rows = min(len(X_normal_scaled_sub), 100000)
-        model.fit(X_normal_scaled_sub[:lof_rows])  # Entrenar solo con datos normales
-        joblib.dump(model, "models/local_outlier_factor_model.pkl")
-        logging.info("LOF entrenado")
     if config["ml"]["models"]["random_forest"]["enabled"]:
+        smote = SMOTE(random_state=config["ml"]["models"]["random_forest"]["random_state"])
+        X_scaled_resampled, y_resampled = smote.fit_resample(X_scaled_sub, y_sub)
         model = RandomForestClassifier(
-            n_estimators=config["ml"]["models"]["random_forest"]["n_estimators"],
-            max_depth=config["ml"]["models"]["random_forest"]["max_depth"],
+            n_estimators=500,  # Aumentado
+            max_depth=30,  # Aumentado
             random_state=config["ml"]["models"]["random_forest"]["random_state"],
             n_jobs=config["ml"]["models"]["random_forest"]["n_jobs"],
             class_weight="balanced_subsample"
         )
-        model.fit(X_scaled_sub, y_sub)  # Usar todos los datos para Random Forest
+        model.fit(X_scaled_resampled, y_resampled)
         joblib.dump(model, "models/random_forest_model.pkl")
         logging.info("Random Forest entrenado")
 
@@ -235,18 +230,16 @@ def get_risk_score(X_new, models, scaler, columns, weights=None, config=None):
     scores = {}
     if models.get("isolation_forest"):
         if_score = models["isolation_forest"].decision_function(X_scaled)
-        scores["isolation_forest"] = np.clip((if_score + 1) / 2, 0, 1)  # Convertir [-1, 1] a [0, 1]
+        scores["isolation_forest"] = np.clip((if_score + 1) / 2, 0, 1)
     if models.get("kmeans"):
         km_distances = models["kmeans"].transform(X_scaled)
         km_score = np.min(km_distances, axis=1)
         anomaly_threshold = joblib.load("models/kmeans_anomaly_threshold.pkl")
-        scores["kmeans"] = np.clip(km_score / (anomaly_threshold + 1e-10), 0, 1)
+        scores["kmeans"] = np.clip(1 - (km_score / (anomaly_threshold + 1e-10)), 0,
+                                   1)  # Invertir para alta distancia = alta anomalía
     if models.get("one_class_svm"):
         svm_score = models["one_class_svm"].decision_function(X_scaled)
-        scores["one_class_svm"] = np.clip((svm_score + 1) / 2, 0, 1)  # Convertir [-1, 1] a [0, 1]
-    if models.get("local_outlier_factor"):
-        lof_score = models["local_outlier_factor"].decision_function(X_scaled)
-        scores["local_outlier_factor"] = np.clip((lof_score + 1) / 2, 0, 1)  # Convertir [-1, 1] a [0, 1]
+        scores["one_class_svm"] = np.clip((svm_score + 1) / 2, 0, 1)
     if models.get("random_forest"):
         rf_score = models["random_forest"].predict_proba(X_scaled)[:, 1]
         scores["random_forest"] = rf_score
@@ -294,11 +287,11 @@ def main(force_download=False, force_train=False, max_rows=0):
 
     # Evento de prueba simulando un ataque DDoS
     new_event = pd.DataFrame(
-        [[0, 0, 0, 0, 0, 0, 2000, 0, 0, 2000000, 2000000, 12345, 0, 0, 1, 0, 80, 0x02, 0, 2000, 2000,
+        [[0, 0, 0, 0, 0, 0, 3000, 0, 0, 3000000, 3000000, 12345, 0, 0, 1, 0, 80, 0x02, 0, 3000, 3000,
           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
         columns=columns
-    )  # Simula DDoS: tcp.len=2000, tcp.connection.syn=1, tcp.dstport=80
-    weights = [0.1, 0.1, 0.1, 0.1, 0.6]  # Priorizar Random Forest
+    )  # Simula DDoS: tcp.len=3000, tcp.connection.syn=1, tcp.dstport=80
+    weights = [0.1, 0.1, 0.1, 0.7]  # Priorizar Random Forest
     risk_score, is_anomaly, is_high_risk, scores = get_risk_score(new_event, models, scaler, columns, weights, config)
     logging.info(f"Risk Score: {risk_score[0]:.2f}, Anomaly: {is_anomaly[0]}, High Risk: {is_high_risk[0]}")
     logging.info(f"Scores por modelo: { {k: v[0] for k, v in scores.items()} }")

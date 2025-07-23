@@ -1,8 +1,8 @@
 {
   "ml": {
     "enabled": true,
-    "anomaly_threshold": 0.3,
-    "high_risk_threshold": 0.5,
+    "anomaly_threshold": 0.5,
+    "high_risk_threshold": 0.7,
     "confidence_threshold": 0.7,
     "models": {
       "isolation_forest": {
@@ -20,12 +20,12 @@
       },
       "one_class_svm": {
         "enabled": true,
-        "nu": 0.01,
+        "nu": 0.05,
         "kernel": "rbf",
         "gamma": "scale"
       },
       "local_outlier_factor": {
-        "enabled": true,
+        "enabled": false,
         "n_neighbors": 3,
         "contamination": 0.2,
         "novelty": true
@@ -38,9 +38,9 @@
       },
       "random_forest": {
         "enabled": true,
-        "n_estimators": 300,
+        "n_estimators": 500,
         "random_state": 42,
-        "max_depth": 25,
+        "max_depth": 30,
         "n_jobs": -1
       }
     }
