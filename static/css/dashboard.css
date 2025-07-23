@@ -1,6 +1,6 @@
 /*
-dashboard.css - VERSIÓN CON MODALES DRAGGEABLES Y UX MEJORADA
-+ BOTONES GOOGLE MAPS + MODALES REPOSITIONABLES + SCROLLBARS
+dashboard.css - VERSIÓN V3 COMPLETA CON NUEVAS FUNCIONALIDADES
++ SISTEMA AVANZADO VENTANAS + ANIMACIONES MISIL + MODAL TARGET_IP + COORDENADAS DUALES
 */
 
 * {
@@ -241,6 +241,290 @@ body {
     display: block !important;
     opacity: 1 !important;
     z-index: 1001 !important;
+}
+
+/* ============================================================================
+   🚀 NUEVAS FUNCIONALIDADES V3: MARCADORES CLICKEABLES Y DUALES
+   ============================================================================ */
+
+/* 🎯 Marcadores específicos por tipo */
+.source-marker {
+    border: 3px solid #0066CC !important;
+    background-color: rgba(0, 102, 204, 0.8) !important;
+    box-shadow: 0 0 15px rgba(0, 102, 204, 0.6) !important;
+    animation: sourceMarkerPulse 3s infinite alternate;
+}
+
+.target-marker {
+    border: 3px solid #CC0000 !important;
+    background-color: rgba(204, 0, 0, 0.8) !important;
+    box-shadow: 0 0 15px rgba(204, 0, 0, 0.6) !important;
+    animation: targetMarkerPulse 3s infinite alternate;
+}
+
+.clickable-marker {
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.clickable-marker:hover {
+    transform: scale(1.2) !important;
+    z-index: 1002 !important;
+}
+
+@keyframes sourceMarkerPulse {
+    from {
+        box-shadow: 0 0 15px rgba(0, 102, 204, 0.6);
+        transform: scale(1);
+    }
+    to {
+        box-shadow: 0 0 25px rgba(0, 102, 204, 0.9), 0 0 35px rgba(0, 102, 204, 0.4);
+        transform: scale(1.05);
+    }
+}
+
+@keyframes targetMarkerPulse {
+    from {
+        box-shadow: 0 0 15px rgba(204, 0, 0, 0.6);
+        transform: scale(1);
+    }
+    to {
+        box-shadow: 0 0 25px rgba(204, 0, 0, 0.9), 0 0 35px rgba(204, 0, 0, 0.4);
+        transform: scale(1.05);
+    }
+}
+
+/* 🚀 ANIMACIONES TIPO MISIL - LÍNEAS CURVAS ANIMADAS */
+.missile-trajectory {
+    stroke-dasharray: 10, 5 !important;
+    animation: missileTrajectoryFlow 2s linear infinite !important;
+    filter: drop-shadow(0 0 8px currentColor) !important;
+    opacity: 0.9 !important;
+}
+
+.missile-flow-animation {
+    animation: missileTrajectoryFlow 2s linear infinite !important;
+}
+
+@keyframes missileTrajectoryFlow {
+    from {
+        stroke-dashoffset: 0;
+        opacity: 0.9;
+    }
+    to {
+        stroke-dashoffset: 30;
+        opacity: 0.6;
+    }
+}
+
+.connection-line-curved {
+    stroke-width: 3px !important;
+    stroke-linecap: round !important;
+    filter: drop-shadow(0 0 5px currentColor) !important;
+    animation: connectionPulse 4s ease-in-out infinite !important;
+}
+
+@keyframes connectionPulse {
+    0%, 100% {
+        stroke-width: 3px;
+        opacity: 0.8;
+    }
+    50% {
+        stroke-width: 5px;
+        opacity: 1;
+    }
+}
+
+.trajectory-arc {
+    stroke-dasharray: 15, 5 !important;
+    animation: trajectoryArc 3s ease-in-out infinite !important;
+}
+
+@keyframes trajectoryArc {
+    0% {
+        stroke-dashoffset: 0;
+        filter: drop-shadow(0 0 5px currentColor);
+    }
+    50% {
+        stroke-dashoffset: 20;
+        filter: drop-shadow(0 0 15px currentColor);
+    }
+    100% {
+        stroke-dashoffset: 40;
+        filter: drop-shadow(0 0 5px currentColor);
+    }
+}
+
+/* ============================================================================
+   🪟 SISTEMA AVANZADO DE VENTANAS - NUEVAS FUNCIONALIDADES V3
+   ============================================================================ */
+
+/* Controles avanzados para ventanas */
+.advanced-window-controls {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-left: auto;
+    padding-left: 10px;
+}
+
+.advanced-btn {
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #333;
+    color: #00ff88;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 9px;
+    font-family: 'Consolas', monospace;
+    transition: all 0.3s ease;
+    min-width: 20px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.advanced-btn:hover {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: #00ff88;
+    transform: scale(1.1);
+    text-shadow: 0 0 5px #00ff88;
+}
+
+/* Botones específicos por función */
+.minimize-adv {
+    color: #ffaa00 !important;
+    border-color: rgba(255, 170, 0, 0.3) !important;
+}
+
+.minimize-adv:hover {
+    background: rgba(255, 170, 0, 0.1) !important;
+    border-color: #ffaa00 !important;
+    text-shadow: 0 0 5px #ffaa00 !important;
+}
+
+.maximize-adv {
+    color: #0088ff !important;
+    border-color: rgba(0, 136, 255, 0.3) !important;
+}
+
+.maximize-adv:hover {
+    background: rgba(0, 136, 255, 0.1) !important;
+    border-color: #0088ff !important;
+    text-shadow: 0 0 5px #0088ff !important;
+}
+
+.fullscreen-adv {
+    color: #ff4444 !important;
+    border-color: rgba(255, 68, 68, 0.3) !important;
+}
+
+.fullscreen-adv:hover {
+    background: rgba(255, 68, 68, 0.1) !important;
+    border-color: #ff4444 !important;
+    text-shadow: 0 0 5px #ff4444 !important;
+}
+
+/* Estados de ventana avanzados */
+.window-minimized {
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    overflow: hidden !important;
+    transition: all 0.4s ease !important;
+}
+
+.window-minimized .section-content {
+    display: none !important;
+}
+
+.window-maximized {
+    position: fixed !important;
+    top: 55px !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: 10px !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    z-index: 1050 !important;
+    background: rgba(0, 0, 0, 0.98) !important;
+    border: 2px solid #00ff88 !important;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.5) !important;
+    border-radius: 8px !important;
+    animation: windowMaximize 0.3s ease !important;
+}
+
+@keyframes windowMaximize {
+    from {
+        transform: scale(0.9);
+        opacity: 0.8;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.window-maximized .section-content {
+    max-height: calc(100vh - 150px) !important;
+    overflow-y: auto !important;
+}
+
+.window-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    z-index: 1060 !important;
+    background: rgba(0, 0, 0, 0.99) !important;
+    border: 3px solid #ff4444 !important;
+    box-shadow: 0 0 50px rgba(255, 68, 68, 0.7) !important;
+    border-radius: 0 !important;
+    animation: windowFullscreen 0.4s ease !important;
+}
+
+@keyframes windowFullscreen {
+    from {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.window-fullscreen .section-content {
+    max-height: calc(100vh - 100px) !important;
+    overflow-y: auto !important;
+    padding: 20px !important;
+}
+
+/* Posicionamiento avanzado */
+.positioned-advanced {
+    position: fixed !important;
+    top: var(--window-y, 50%) !important;
+    left: var(--window-x, 50%) !important;
+    transform: none !important;
+    z-index: 1040 !important;
+    transition: all 0.3s ease !important;
+}
+
+.dragging-advanced {
+    transition: none !important;
+    z-index: 1055 !important;
+    box-shadow: 0 0 30px rgba(0, 255, 136, 0.7) !important;
+}
+
+.dragging-advanced .section-header {
+    cursor: grabbing !important;
+    background: rgba(0, 120, 0, 0.8) !important;
 }
 
 /* ============================================================================
@@ -1372,7 +1656,11 @@ body {
     max-height: calc(100vh - 140px);
 }
 
-/* ✅ BOTÓN GOOGLE MAPS STREET VIEW */
+/* ============================================================================
+   🎯 BOTONES GOOGLE MAPS DIFERENCIADOS - NUEVAS FUNCIONALIDADES V3
+   ============================================================================ */
+
+/* Botón base Google Maps */
 .google-maps-btn {
     background: rgba(234, 67, 53, 0.2);
     border: 1px solid #ea4335;
@@ -1386,6 +1674,7 @@ body {
     text-decoration: none;
     display: inline-block;
     margin: 5px;
+    font-family: 'Consolas', monospace;
 }
 
 .google-maps-btn:hover {
@@ -1397,6 +1686,194 @@ body {
 
 .google-maps-btn i {
     margin-right: 5px;
+}
+
+/* 🏠 Botón específico para source_ip (víctima) */
+.source-btn {
+    background: rgba(0, 102, 204, 0.2) !important;
+    border-color: #0066CC !important;
+    color: #0066CC !important;
+}
+
+.source-btn:hover {
+    background: rgba(0, 102, 204, 0.3) !important;
+    border-color: #0066CC !important;
+    box-shadow: 0 3px 10px rgba(0, 102, 204, 0.4) !important;
+}
+
+/* 🎯 Botón específico para target_ip (atacante) */
+.target-btn {
+    background: rgba(204, 0, 0, 0.2) !important;
+    border-color: #CC0000 !important;
+    color: #CC0000 !important;
+}
+
+.target-btn:hover {
+    background: rgba(204, 0, 0, 0.3) !important;
+    border-color: #CC0000 !important;
+    box-shadow: 0 3px 10px rgba(204, 0, 0, 0.4) !important;
+}
+
+/* 🗺️ Botón para ver ambas ubicaciones */
+.both-btn {
+    background: rgba(255, 170, 0, 0.2) !important;
+    border-color: #ffaa00 !important;
+    color: #ffaa00 !important;
+}
+
+.both-btn:hover {
+    background: rgba(255, 170, 0, 0.3) !important;
+    border-color: #ffaa00 !important;
+    box-shadow: 0 3px 10px rgba(255, 170, 0, 0.4) !important;
+}
+
+/* 📍 Botón legacy (fallback) */
+.legacy-btn {
+    background: rgba(102, 102, 102, 0.2) !important;
+    border-color: #666 !important;
+    color: #666 !important;
+}
+
+.legacy-btn:hover {
+    background: rgba(102, 102, 102, 0.3) !important;
+    border-color: #666 !important;
+    box-shadow: 0 3px 10px rgba(102, 102, 102, 0.4) !important;
+}
+
+/* Botones específicos para Street View */
+.source-streetview-btn {
+    background: rgba(0, 102, 204, 0.15) !important;
+    border: 2px solid #0066CC !important;
+    color: #0066CC !important;
+    font-weight: bold !important;
+    text-shadow: 0 0 3px #0066CC !important;
+}
+
+.target-streetview-btn {
+    background: rgba(204, 0, 0, 0.15) !important;
+    border: 2px solid #CC0000 !important;
+    color: #CC0000 !important;
+    font-weight: bold !important;
+    text-shadow: 0 0 3px #CC0000 !important;
+}
+
+/* ============================================================================
+   🎯 MODAL ESPECÍFICO PARA TARGET_IP - NUEVAS FUNCIONALIDADES V3
+   ============================================================================ */
+
+.target-ip-modal {
+    border-color: #CC0000 !important;
+    box-shadow: 0 10px 30px rgba(204, 0, 0, 0.4) !important;
+}
+
+.target-ip-modal .modal-header {
+    background: rgba(204, 0, 0, 0.2) !important;
+    border-bottom-color: #CC0000 !important;
+}
+
+.target-ip-modal .modal-header h3 {
+    color: #CC0000 !important;
+    text-shadow: 0 0 5px #CC0000 !important;
+}
+
+/* Botones de acción específicos para target_ip */
+.target-action-btn {
+    font-family: 'Consolas', monospace !important;
+    font-weight: bold !important;
+    text-shadow: 0 0 3px currentColor !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.target-action-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.4s ease;
+}
+
+.target-action-btn:hover::before {
+    left: 100%;
+}
+
+/* Botones de acción del firewall */
+.firewall-action-btn {
+    font-family: 'Consolas', monospace;
+    font-weight: bold;
+    text-shadow: 0 0 3px currentColor;
+    position: relative;
+    overflow: hidden;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.firewall-action-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.4s ease;
+}
+
+.firewall-action-btn:hover::before {
+    left: 100%;
+}
+
+.firewall-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Botones específicos por tipo de acción */
+.block-btn {
+    background: rgba(255, 68, 68, 0.15) !important;
+    border-color: #ff4444 !important;
+    color: #ff4444 !important;
+}
+
+.block-btn:hover {
+    background: rgba(255, 68, 68, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3) !important;
+}
+
+.ratelimit-btn {
+    background: rgba(255, 170, 0, 0.15) !important;
+    border-color: #ffaa00 !important;
+    color: #ffaa00 !important;
+}
+
+.ratelimit-btn:hover {
+    background: rgba(255, 170, 0, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(255, 170, 0, 0.3) !important;
+}
+
+.monitor-btn {
+    background: rgba(0, 170, 255, 0.15) !important;
+    border-color: #00aaff !important;
+    color: #00aaff !important;
+}
+
+.monitor-btn:hover {
+    background: rgba(0, 170, 255, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(0, 170, 255, 0.3) !important;
+}
+
+.list-rules-btn {
+    background: rgba(0, 255, 136, 0.15) !important;
+    border-color: #00ff88 !important;
+    color: #00ff88 !important;
+}
+
+.list-rules-btn:hover {
+    background: rgba(0, 255, 136, 0.25) !important;
+    box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3) !important;
 }
 
 /* ============================================================================
@@ -1549,6 +2026,19 @@ body {
     .status-indicator span {
         font-size: 8px;
     }
+
+    /* Controles avanzados más pequeños */
+    .advanced-btn {
+        font-size: 8px;
+        padding: 2px 4px;
+        min-width: 18px;
+    }
+
+    /* Botones Google Maps más pequeños */
+    .google-maps-btn {
+        font-size: 9px;
+        padding: 6px 10px;
+    }
 }
 
 @media (max-width: 900px) {
@@ -1618,6 +2108,31 @@ body {
     .logo span {
         font-size: 12px;
     }
+
+    /* Sistema avanzado de ventanas en móvil */
+    .window-maximized {
+        top: 50px !important;
+        left: 5px !important;
+        right: 5px !important;
+        bottom: 5px !important;
+    }
+
+    .advanced-window-controls {
+        gap: 3px;
+    }
+
+    .advanced-btn {
+        font-size: 7px;
+        padding: 1px 3px;
+        min-width: 16px;
+    }
+
+    /* Botones Google Maps en móvil */
+    .google-maps-btn {
+        font-size: 8px;
+        padding: 4px 6px;
+        margin: 2px;
+    }
 }
 
 @media (max-width: 768px) {
@@ -1676,6 +2191,17 @@ body {
     .modal-content {
         padding: 15px;
         max-height: 400px;
+    }
+
+    /* Ventanas fullscreen en móvil */
+    .window-fullscreen .section-content {
+        padding: 15px !important;
+    }
+
+    /* Botones de acción del firewall más pequeños */
+    .firewall-action-btn, .target-action-btn {
+        font-size: 8px;
+        padding: 4px 6px;
     }
 }
 
@@ -1767,7 +2293,7 @@ body {
 }
 
 /* ============================================================================
-   ANIMACIONES ADICIONALES
+   ANIMACIONES ADICIONALES V3
    ============================================================================ */
 
 @keyframes newEventGlow {
@@ -1804,8 +2330,35 @@ body {
     60%, 100% { content: '...'; }
 }
 
+/* 🚀 Animación específica para trayectorias misil más realista */
+@keyframes advancedMissileFlow {
+    0% {
+        stroke-dashoffset: 0;
+        opacity: 0.3;
+        filter: drop-shadow(0 0 3px currentColor);
+    }
+    25% {
+        opacity: 0.8;
+        filter: drop-shadow(0 0 8px currentColor);
+    }
+    50% {
+        stroke-dashoffset: 15;
+        opacity: 1;
+        filter: drop-shadow(0 0 12px currentColor);
+    }
+    75% {
+        opacity: 0.8;
+        filter: drop-shadow(0 0 8px currentColor);
+    }
+    100% {
+        stroke-dashoffset: 30;
+        opacity: 0.3;
+        filter: drop-shadow(0 0 3px currentColor);
+    }
+}
+
 /* ============================================================================
-   🔥 EVENTOS DEL FIREWALL - ESTILOS ESPECÍFICOS (SIN CAMBIOS)
+   🔥 EVENTOS DEL FIREWALL - ESTILOS ESPECÍFICOS V3
    ============================================================================ */
 
 /* Sección específica para eventos del firewall */
@@ -2065,31 +2618,6 @@ body {
     background: rgba(255, 170, 0, 0.1);
 }
 
-/* Indicadores de estado del firewall */
-.firewall-status {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 5px;
-    animation: pulse 2s infinite;
-}
-
-.firewall-status.connected {
-    background: #00ff88;
-    box-shadow: 0 0 8px #00ff88;
-}
-
-.firewall-status.disconnected {
-    background: #ff4444;
-    box-shadow: 0 0 8px #ff4444;
-}
-
-.firewall-status.pending {
-    background: #ffaa00;
-    box-shadow: 0 0 8px #ffaa00;
-}
-
 /* Badge específico para eventos del firewall */
 #firewall-events-count {
     background: #00ff88 !important;
@@ -2149,8 +2677,85 @@ body {
     }
 }
 
-/* Responsive design para eventos del firewall */
+/* ============================================================================
+   🌐 INFORMACIÓN DUAL GEOIP - NUEVAS FUNCIONALIDADES V3
+   ============================================================================ */
+
+/* Información geográfica dual */
+.dual-geoip-info {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin: 15px 0;
+}
+
+.source-info, .target-info {
+    flex: 1;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.source-info {
+    background: rgba(0, 102, 204, 0.1);
+    border-left: 4px solid #0066CC;
+}
+
+.target-info {
+    background: rgba(204, 0, 0, 0.1);
+    border-left: 4px solid #CC0000;
+}
+
+.source-info h4 {
+    color: #0066CC;
+    text-shadow: 0 0 3px #0066CC;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.target-info h4 {
+    color: #CC0000;
+    text-shadow: 0 0 3px #CC0000;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+/* Badge para indicar el tipo de IP discovery */
+.ip-discovery-badge {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 5px;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+}
+
+.ip-discovery-badge.dual {
+    background: linear-gradient(45deg, #007bff, #6610f2);
+}
+
+.ip-discovery-badge.single {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN PARA NUEVAS FUNCIONALIDADES V3
+   ============================================================================ */
+
 @media (max-width: 900px) {
+    .dual-geoip-info {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .source-info, .target-info {
+        padding: 8px;
+    }
+
     .firewall-stats {
         grid-template-columns: repeat(2, 1fr);
         gap: 6px;
@@ -2196,10 +2801,18 @@ body {
     .firewall-event-details {
         font-size: 8px;
     }
+
+    .dual-geoip-info {
+        gap: 8px;
+    }
+
+    .source-info h4, .target-info h4 {
+        font-size: 10px;
+    }
 }
 
 /* ============================================================================
-   UTILIDADES ESPECÍFICAS PARA FIREWALL
+   UTILIDADES ESPECÍFICAS PARA V3
    ============================================================================ */
 
 .firewall-loading {
@@ -2236,76 +2849,753 @@ body {
     text-shadow: 0 0 3px #ffaa00;
 }
 
-/* 🎯 Marcadores duales */
-.marker-source {
-    background-color: #0066CC;
-    border: 2px solid #004499;
-    color: white;
+/* Efectos especiales para elementos V3 */
+.v3-enhanced {
+    position: relative;
+    overflow: hidden;
 }
 
-.marker-target {
-    background-color: #CC0000;
-    border: 2px solid #990000;
-    color: white;
+.v3-enhanced::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.1), transparent);
+    transition: left 0.6s ease;
 }
 
-/* 📏 Líneas de conexión */
-.connection-line-local {
-    stroke: #FFA500;
-    stroke-width: 2px;
-    stroke-dasharray: 5,5;
+.v3-enhanced:hover::before {
+    left: 100%;
 }
 
-.connection-line-international {
-    stroke: #FF0000;
-    stroke-width: 3px;
-    animation: dash 2s linear infinite;
-}
-
-/* 📊 Panel de información dual */
-.dual-geoip-info {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-}
-
-.source-info, .target-info {
-    flex: 1;
-    padding: 10px;
-    border-radius: 5px;
-}
-
-.source-info {
-    background: rgba(0, 102, 204, 0.1);
-    border-left: 3px solid #0066CC;
-}
-
-.target-info {
-    background: rgba(204, 0, 0, 0.1);
-    border-left: 3px solid #CC0000;
-}
-
-/* 🌐 Indicador de IP discovery */
-.ip-discovery-badge {
-    background: #28a745;
-    color: white;
+/* Marcadores de versión V3 */
+.v3-badge {
+    background: linear-gradient(45deg, #00ff88, #00aaff);
+    color: #000;
     padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 0.8em;
+    border-radius: 8px;
+    font-size: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 5px;
+    box-shadow: 0 2px 4px rgba(0, 255, 136, 0.3);
 }
 
-/* Sistema ventanas avanzado */
-.advanced-window-controls, .advanced-btn, .window-minimized, .window-maximized, .window-fullscreen
-.positioned-advanced, .dragging-advanced
+/* ============================================================================
+   🚀 ESTILOS ESPECÍFICOS PARA EVENTOS SIN LÍMITE - V3
+   ============================================================================ */
 
-/* Animaciones misil */
-.missile-trajectory, .missile-flow-animation, .connection-line-curved, .trajectory-arc
+/* Contenedores de eventos ilimitados */
+.events-unlimited, .firewall-commands-unlimited {
+    max-height: none !important;
+    overflow-y: auto;
+}
 
-/* Modales específicos */
-.target-ip-modal, .source-streetview-btn, .target-streetview-btn, .target-action-btn
+/* Scrollbar infinito para eventos */
+.scrollable-infinite {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 255, 136, 0.6) rgba(0, 0, 0, 0.3);
+}
 
-/* Marcadores clickeables */
-.source-marker, .target-marker, .clickable-marker
+.scrollable-infinite::-webkit-scrollbar {
+    width: 8px;
+}
 
-/* Botones Google Maps */
-.google-maps-btn, .source-btn, .target-btn, .both-btn, .legacy-btn
+.scrollable-infinite::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.scrollable-infinite::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00ff88, #00aaff);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 255, 136, 0.4);
+}
+
+.scrollable-infinite::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #00ffaa, #0088ff);
+    box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+}
+
+/* Indicador de eventos infinitos */
+.infinite-events-indicator {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.9));
+    padding: 8px;
+    text-align: center;
+    font-size: 9px;
+    color: #666;
+    border-top: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.infinite-events-indicator::after {
+    content: ' • Scroll para ver más eventos';
+    animation: infiniteIndicatorPulse 2s infinite;
+}
+
+@keyframes infiniteIndicatorPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* ============================================================================
+   📱 SISTEMA DE VENTANAS MULTI-MONITOR - ESTILOS AVANZADOS V3
+   ============================================================================ */
+
+/* Handle de redimensionamiento para ventanas */
+.resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 15px;
+    height: 15px;
+    background: linear-gradient(135deg, transparent 40%, #00ff88 41%, #00ff88 59%, transparent 60%);
+    cursor: nw-resize;
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+}
+
+.resize-handle:hover {
+    opacity: 0.8;
+}
+
+/* Indicador de ventana multi-monitor */
+.multi-monitor-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 12px;
+    height: 8px;
+    background: rgba(0, 255, 136, 0.3);
+    border: 1px solid #00ff88;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.positioned-advanced .multi-monitor-indicator {
+    opacity: 1;
+}
+
+/* Estados de ventana con transiciones suaves */
+.window-transitioning {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Overlay para ventanas fullscreen */
+.window-fullscreen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 1059;
+    animation: overlayFadeIn 0.3s ease;
+}
+
+@keyframes overlayFadeIn {
+    from { background: rgba(0, 0, 0, 0); }
+    to { background: rgba(0, 0, 0, 0.95); }
+}
+
+/* Bordes inteligentes para ventanas draggeable */
+.dragging-advanced::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #00ff88, #00aaff, #ff4444, #ffaa00);
+    background-size: 400% 400%;
+    border-radius: 10px;
+    z-index: -1;
+    animation: borderGradientFlow 3s ease infinite;
+}
+
+@keyframes borderGradientFlow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* ============================================================================
+   🎯 MEJORAS ESPECÍFICAS PARA MODALES TARGET_IP - V3
+   ============================================================================ */
+
+/* Modal específico para información de atacante */
+.target-ip-modal .modal-content {
+    background: linear-gradient(135deg, rgba(204, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.98) 100%);
+}
+
+/* Información geográfica del atacante */
+.target-geo-info {
+    background: rgba(204, 0, 0, 0.1);
+    border: 1px solid rgba(204, 0, 0, 0.3);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 15px;
+}
+
+.target-geo-info h4 {
+    color: #CC0000;
+    text-shadow: 0 0 5px #CC0000;
+    margin-bottom: 8px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.target-geo-info h4::before {
+    content: '🎯';
+    font-size: 14px;
+    animation: targetIconPulse 2s infinite;
+}
+
+@keyframes targetIconPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+/* Acciones específicas para target_ip */
+.target-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.target-action-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.target-action-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.4s ease, height 0.4s ease;
+}
+
+.target-action-btn:active::after {
+    width: 200px;
+    height: 200px;
+}
+
+/* ============================================================================
+   🌐 MEJORAS PARA LÍNEAS DE CONEXIÓN Y ANIMACIONES MISIL - V3
+   ============================================================================ */
+
+/* Líneas de conexión con efectos avanzados */
+.connection-line-advanced {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 6px currentColor);
+    animation: connectionAdvancedFlow 4s ease-in-out infinite;
+}
+
+@keyframes connectionAdvancedFlow {
+    0%, 100% {
+        stroke-width: 2px;
+        opacity: 0.7;
+        filter: drop-shadow(0 0 6px currentColor);
+    }
+    25% {
+        stroke-width: 3px;
+        opacity: 0.9;
+        filter: drop-shadow(0 0 10px currentColor);
+    }
+    50% {
+        stroke-width: 4px;
+        opacity: 1;
+        filter: drop-shadow(0 0 15px currentColor);
+    }
+    75% {
+        stroke-width: 3px;
+        opacity: 0.9;
+        filter: drop-shadow(0 0 10px currentColor);
+    }
+}
+
+/* Partículas de misil para mayor realismo */
+.missile-particles {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1003;
+}
+
+.missile-particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #ff4444;
+    border-radius: 50%;
+    animation: missileParticleTrail 1s linear forwards;
+}
+
+@keyframes missileParticleTrail {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+}
+
+/* Trail del misil más realista */
+.missile-trail-advanced {
+    stroke: url(#missileGradient);
+    stroke-width: 3px;
+    stroke-linecap: round;
+    animation: missileTrailAdvanced 2s linear infinite;
+    filter: drop-shadow(0 0 8px #ff4444);
+}
+
+@keyframes missileTrailAdvanced {
+    0% {
+        stroke-dasharray: 0, 20;
+        stroke-dashoffset: 0;
+    }
+    50% {
+        stroke-dasharray: 10, 10;
+        stroke-dashoffset: -10;
+    }
+    100% {
+        stroke-dasharray: 20, 0;
+        stroke-dashoffset: -20;
+    }
+}
+
+/* ============================================================================
+   📊 INFORMACIÓN EXTENDIDA DEL EVENTO V3
+   ============================================================================ */
+
+/* Panel de información extendida */
+.event-extended-info {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.03) 0%, rgba(0, 0, 0, 0.6) 100%);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 8px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.event-extended-info h4 {
+    color: #00ff88;
+    text-shadow: 0 0 5px #00ff88;
+    margin-bottom: 10px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.event-extended-info h4::before {
+    content: '📊';
+    font-size: 16px;
+}
+
+/* Grid de información técnica */
+.technical-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.tech-info-item {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 255, 136, 0.1);
+    border-radius: 4px;
+    padding: 8px;
+    transition: all 0.3s ease;
+}
+
+.tech-info-item:hover {
+    border-color: rgba(0, 255, 136, 0.3);
+    background: rgba(0, 255, 136, 0.05);
+    transform: translateY(-1px);
+}
+
+.tech-info-label {
+    font-size: 9px;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.tech-info-value {
+    font-size: 11px;
+    color: #00ff88;
+    font-weight: bold;
+    text-shadow: 0 0 3px #00ff88;
+}
+
+/* ============================================================================
+   🎨 EFECTOS VISUALES ADICIONALES V3
+   ============================================================================ */
+
+/* Efecto de glassmorphism para elementos importantes */
+.glass-effect {
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Efecto de neón para elementos críticos */
+.neon-glow {
+    position: relative;
+    overflow: hidden;
+}
+
+.neon-glow::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.4), transparent);
+    animation: neonSweep 3s infinite;
+}
+
+@keyframes neonSweep {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Pulsación de elementos activos */
+.active-pulse {
+    animation: activePulse 2s infinite;
+}
+
+@keyframes activePulse {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(0, 255, 136, 0.3);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(0, 255, 136, 0.6), 0 0 30px rgba(0, 255, 136, 0.3);
+        transform: scale(1.02);
+    }
+}
+
+/* ============================================================================
+   🔧 UTILIDADES FINALES V3
+   ============================================================================ */
+
+/* Cursor personalizado para elementos draggeable */
+.draggeable-cursor {
+    cursor: grab;
+}
+
+.draggeable-cursor:active {
+    cursor: grabbing;
+}
+
+/* Indicadores de estado avanzados */
+.status-indicator-v3 {
+    position: relative;
+    display: inline-block;
+}
+
+.status-indicator-v3::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+    animation: statusBlink 1.5s infinite;
+}
+
+@keyframes statusBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+/* Transiciones suaves globales */
+.smooth-transition {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Sombras avanzadas */
+.advanced-shadow {
+    box-shadow:
+        0 4px 8px rgba(0, 0, 0, 0.3),
+        0 6px 20px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Gradientes de texto */
+.gradient-text {
+    background: linear-gradient(45deg, #00ff88, #00aaff);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 200% 200%;
+    animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+/* Bordes animados */
+.animated-border {
+    position: relative;
+    overflow: hidden;
+}
+
+.animated-border::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00ff88, transparent);
+    animation: borderSlide 2s infinite;
+}
+
+@keyframes borderSlide {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* ============================================================================
+   🎯 MEDIA QUERIES ESPECÍFICAS PARA NUEVAS FUNCIONALIDADES V3
+   ============================================================================ */
+
+@media (max-width: 1400px) {
+    .technical-info-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .target-actions-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 1200px) {
+    .dual-geoip-info {
+        gap: 12px;
+    }
+
+    .event-extended-info {
+        padding: 12px;
+    }
+
+    .tech-info-item {
+        padding: 6px;
+    }
+}
+
+@media (max-width: 900px) {
+    .technical-info-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .target-actions-grid {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .event-extended-info h4 {
+        font-size: 12px;
+    }
+
+    .tech-info-value {
+        font-size: 10px;
+    }
+
+    /* Ventanas fullscreen ocupan toda la pantalla en móvil */
+    .window-fullscreen {
+        border-radius: 0 !important;
+        border-width: 0 !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .event-extended-info {
+        padding: 10px;
+        margin: 10px 0;
+    }
+
+    .target-geo-info {
+        padding: 8px;
+    }
+
+    .tech-info-item {
+        padding: 4px;
+    }
+
+    .tech-info-label {
+        font-size: 8px;
+    }
+
+    .tech-info-value {
+        font-size: 9px;
+    }
+
+    /* Botones más grandes en móvil para mejor usabilidad */
+    .target-action-btn, .firewall-action-btn {
+        padding: 8px 12px !important;
+        font-size: 10px !important;
+        min-height: 36px;
+    }
+
+    /* Información geográfica más compacta */
+    .dual-geoip-info {
+        gap: 8px;
+    }
+
+    .source-info, .target-info {
+        padding: 8px;
+        font-size: 9px;
+    }
+}
+
+/* ============================================================================
+   🚀 OPTIMIZACIONES DE RENDIMIENTO V3
+   ============================================================================ */
+
+/* Optimización para animaciones en dispositivos de baja potencia */
+@media (prefers-reduced-motion: reduce) {
+    .missile-trajectory,
+    .missile-flow-animation,
+    .connection-line-curved,
+    .trajectory-arc,
+    .neon-glow::before,
+    .active-pulse {
+        animation: none !important;
+    }
+
+    .smooth-transition {
+        transition: none !important;
+    }
+}
+
+/* Optimización para pantallas de alta densidad */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .source-marker, .target-marker {
+        border-width: 2px !important;
+    }
+
+    .missile-trajectory {
+        stroke-width: 2px !important;
+    }
+
+    .tech-info-value {
+        text-shadow: 0 0 2px currentColor !important;
+    }
+}
+
+/* ============================================================================
+   🎨 TEMA OSCURO AVANZADO - AJUSTES FINALES V3
+   ============================================================================ */
+
+/* Mejoras para el contraste en tema oscuro */
+@media (prefers-color-scheme: dark) {
+    .modal-content {
+        background: rgba(5, 5, 5, 0.99);
+    }
+
+    .event-extended-info {
+        background: linear-gradient(135deg, rgba(0, 255, 136, 0.02) 0%, rgba(0, 0, 0, 0.8) 100%);
+    }
+
+    .tech-info-item {
+        background: rgba(0, 0, 0, 0.6);
+    }
+}
+
+/* ============================================================================
+   ✨ EFECTOS ESPECIALES FINALES V3
+   ============================================================================ */
+
+/* Efecto de hologram para elementos importantes */
+.hologram-effect {
+    position: relative;
+    background: linear-gradient(45deg, transparent 30%, rgba(0, 255, 136, 0.1) 50%, transparent 70%);
+    background-size: 20px 20px;
+    animation: hologramShift 4s linear infinite;
+}
+
+@keyframes hologramShift {
+    0% { background-position: 0 0; }
+    100% { background-position: 20px 20px; }
+}
+
+/* Efecto de matriz para el fondo */
+.matrix-bg::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        radial-gradient(1px 1px at 20px 30px, #00ff88, transparent),
+        radial-gradient(1px 1px at 40px 70px, rgba(0, 255, 136, 0.3), transparent),
+        radial-gradient(1px 1px at 90px 40px, rgba(0, 255, 136, 0.1), transparent);
+    background-repeat: repeat;
+    background-size: 100px 100px;
+    opacity: 0.02;
+    z-index: -1;
+    animation: matrixFloat 20s linear infinite;
+}
+
+@keyframes matrixFloat {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-100px); }
+}
+
+/* Indicador de carga V3 */
+.loading-v3 {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid rgba(0, 255, 136, 0.2);
+    border-top: 2px solid #00ff88;
+    border-radius: 50%;
+    animation: loadingV3Spin 1s linear infinite;
+}
+
+@keyframes loadingV3Spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Finalización del archivo CSS V3 */
+.v3-complete {
+    position: relative;
+}
+
+.v3-complete::after {
+    content: '✨ V3';
+    position: absolute;
+    bottom: -15px;
+    right: 0;
+    font-size: 8px;
+    color: rgba(0, 255, 136, 0.3);
+    font-weight: bold;
+}

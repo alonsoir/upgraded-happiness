@@ -146,3 +146,45 @@ scada*.json
 *.out
 
 *.joblib
+
+models/*.pkl
+
+ml_models_v3/best/*.*
+
+ml_models_v3/versions/*.*
+
+ml_models/best/*.*
+ml_models/evaluations/*.*
+ml_models/versions/*.*
+
+logs/*.*
+
+docs/*.*
+
+data/*.*
+
+data/dataset/*.*
+
+data/dataset/Edge-IIoTset dataset
+
+data/dataset/Edge-IIoTset dataset/*.*
+
+bitdefender_integration/*.*
+
+backups/*.*
+
+backup_before_cleanup_20250701_094239/*.*
+
+research_results/*.*
+
+saved_models/*.*
+
+tests/*.*
+
+tests_consolidated/*.*
+
+upgraded-happiness-bitdefender/*.*
+
+.env
+
+actual_tests_state.txt
