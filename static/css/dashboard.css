@@ -2293,3 +2293,19 @@ body {
     border-radius: 3px;
     font-size: 0.8em;
 }
+
+/* Sistema ventanas avanzado */
+.advanced-window-controls, .advanced-btn, .window-minimized, .window-maximized, .window-fullscreen
+.positioned-advanced, .dragging-advanced
+
+/* Animaciones misil */
+.missile-trajectory, .missile-flow-animation, .connection-line-curved, .trajectory-arc
+
+/* Modales específicos */
+.target-ip-modal, .source-streetview-btn, .target-streetview-btn, .target-action-btn
+
+/* Marcadores clickeables */
+.source-marker, .target-marker, .clickable-marker
+
+/* Botones Google Maps */
+.google-maps-btn, .source-btn, .target-btn, .both-btn, .legacy-btn
