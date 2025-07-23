@@ -1,0 +1,48 @@
+{
+  "ml": {
+    "enabled": true,
+    "anomaly_threshold": 0.85,
+    "high_risk_threshold": 0.95,
+    "confidence_threshold": 0.7,
+    "models": {
+      "isolation_forest": {
+        "enabled": true,
+        "contamination": 0.1,
+        "n_estimators": {{ n_estimators }},
+        "random_state": 42,
+        "n_jobs": {{ n_jobs }}
+      },
+      "kmeans": {
+        "enabled": true,
+        "n_clusters": {{ n_clusters }},
+        "random_state": 42,
+        "n_init": {{ n_init }}
+      },
+      "one_class_svm": {
+        "enabled": {{ enable_expensive_models }},
+        "nu": 0.05,
+        "kernel": "rbf",
+        "gamma": "scale"
+      },
+      "local_outlier_factor": {
+        "enabled": {{ enable_expensive_models }},
+        "n_neighbors": {{ n_neighbors }},
+        "contamination": 0.1,
+        "novelty": true
+      },
+      "dbscan": {
+        "enabled": {{ enable_expensive_models }},
+        "eps": 0.5,
+        "min_samples": 5,
+        "n_jobs": {{ n_jobs }}
+      },
+      "random_forest": {
+        "enabled": {{ enable_expensive_models }},
+        "n_estimators": {{ n_estimators_rf }},
+        "random_state": 42,
+        "max_depth": {{ max_depth }},
+        "n_jobs": {{ n_jobs }}
+      }
+    }
+  }
+}
