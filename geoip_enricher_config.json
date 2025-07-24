@@ -3,7 +3,7 @@
     "name": "geoip_enricher",
     "version": "3.0.0",
     "mode": "distributed_vertical",
-    "description": "GeoIP Enricher v3.0.0 - Geolocates target_ip (attackers) AND source_ip with public IP discovery + protobuf v3 support"
+    "description": "GeoIP Enricher v3.0.0 - REAL LOOKUP for target_ip (attackers) AND source_ip with public IP discovery + protobuf v3 support - NO HARDCODED COORDINATES"
   },
   "node_id": "geoip_enricher_v3_001",
   "version": "3.0.0",
@@ -89,49 +89,80 @@
       "batch_size": 25,
       "max_wait_ms": 50,
       "adaptive_batching": false
+    },
+    "queue_overflow_handling": {
+      "max_queue_wait_ms": 100,
+      "log_drops": true
     }
   },
 
-  "_comment_geoip": "🌍 Configuración GeoIP v3.0.0 con mock optimizado",
+  "_comment_geoip": "🌍 MODIFICADO v3.0.0: Lookup REAL con MaxMind + API fallback - SIN HARDCODEOS",
   "geoip": {
-    "lookup_method": "mock",
-    "performance_mode": "conservative",
+    "lookup_method": "maxmind",
+    "fallback_method": "api",
+    "performance_mode": "speed",
     "cache_enabled": true,
     "cache_size": 10000,
     "cache_ttl_seconds": 1800,
     "timeout_seconds": 5,
 
-    "_comment_coordinates": "📍 Coordenadas por defecto Madrid (mock)",
-    "mock_coordinates": [40.4168, -3.7038],
-    "use_default_coordinates_on_failure": true,
-    "default_coordinates": [40.4168, -3.7038],
+    "_comment_performance_modes": "⚡ speed=cache agresivo, precision=cache mínimo",
+    "performance_profiles": {
+      "speed": {
+        "cache_ttl_seconds": 3600,
+        "max_lookup_timeout": 2.0,
+        "aggressive_caching": true,
+        "skip_secondary_lookups": true
+      },
+      "precision": {
+        "cache_ttl_seconds": 300,
+        "max_lookup_timeout": 10.0,
+        "aggressive_caching": false,
+        "always_try_fallback": true
+      }
+    },
+
+    "_comment_no_hardcodes": "🚨 ELIMINADOS: coordenadas hardcoded, defaults automáticos",
+    "handle_lookup_failures": {
+      "strategy": "empty_coordinates",
+      "log_failures": true,
+      "log_level": "WARNING",
+      "retry_failed_ips": false
+    },
 
     "vertical_optimizations": {
       "preload_common_ips": false,
       "memory_mapped_database": false,
       "batch_lookup_enabled": false,
       "lookup_timeout_ms": 20,
-      "optimized_for_32gb_ram": false
+      "optimized_for_32gb_ram": true
     },
+
+    "_comment_maxmind": "🌍 MaxMind HABILITADO como método primario",
     "maxmind": {
+      "enabled": true,
       "database_path": "data/GeoLite2-City.mmdb",
-      "enabled": false,
       "auto_update": false,
       "fallback_to_country": true,
       "connection_pool_size": 8,
-      "fallback_database": "data/GeoLite2-Country.mmdb"
+      "fallback_database": "data/GeoLite2-Country.mmdb",
+      "timeout_seconds": 2.0
     },
+
+    "_comment_api": "🌐 API como fallback (SIN API key por ahora - desarrollo)",
     "api": {
-      "url": "https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}",
-      "timeout_seconds": 2.0,
-      "api_key": null,
       "enabled": false,
-      "rate_limit_per_minute": 2000,
+      "url": "https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}",
+      "timeout_seconds": 5.0,
+      "api_key": null,
+      "rate_limit_per_minute": 1000,
       "retry_failed_requests": false,
-      "connection_pool_size": 10
+      "connection_pool_size": 10,
+      "_comment": "Deshabilitado hasta tener API keys - solo MaxMind por ahora"
     },
+
     "precision": {
-      "coordinate_precision": 4,
+      "coordinate_precision": 6,
       "validate_coordinates": true,
       "min_latitude": -90.0,
       "max_latitude": 90.0,
@@ -159,12 +190,12 @@
       "timeout": 10,
       "_comment": "🔄 Cache de 1 hora para IP pública"
     },
-    "fallback_coordinates": {
-      "latitude": 37.3886,
-      "longitude": -5.9823,
-      "city": "Sevilla",
-      "country": "Spain"
-    }
+    "public_ip_resolution": {
+      "for_private_source_ips": "discover_and_lookup",
+      "cache_public_ip": true,
+      "cache_duration": 3600
+    },
+    "_comment_no_fallback": "🚨 ELIMINADO: fallback_coordinates hardcoded - solo para referencia en logs"
   },
 
   "_comment_enrichment": "🔍 v3.0.0: Configuración de enriquecimiento avanzado",
@@ -173,13 +204,14 @@
     "add_country_info": true,
     "add_region_info": true,
     "add_timezone": true,
-    "add_isp_info": false,
+    "add_isp_info": true,
     "add_threat_intel": false,
     "calculate_distance": true,
     "base_location": {
       "latitude": 37.3886,
       "longitude": -5.9823,
-      "name": "Sevilla, Spain"
+      "name": "Sevilla, Spain",
+      "_comment": "Solo para cálculos de distancia - NO como fallback"
     }
   },
 
@@ -197,20 +229,21 @@
   "output": {
     "include_original_event": true,
     "add_processing_metadata": true,
-    "coordinate_precision": 4,
+    "coordinate_precision": 6,
     "timestamp_format": "unix",
     "compress_output": false
   },
 
-  "_comment_logging": "📝 CRÍTICO: Logging dual habilitado (consola + archivo)",
+  "_comment_logging": "📝 MODIFICADO: Logging dual configurado para una línea legible",
   "logging": {
     "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [i9-VERTICAL] - %(message)s",
+    "format": "%(asctime)s | %(name)s | %(levelname)-8s | %(message)s",
+    "_comment_format": "Formato de una línea compacto y legible",
     "handlers": {
       "console": {
         "enabled": true,
         "level": "INFO",
-        "_comment": "Consola para monitoreo en tiempo real"
+        "_comment": "Consola para monitoreo en tiempo real - formato de una línea"
       },
       "file": {
         "enabled": true,
@@ -230,7 +263,7 @@
     }
   },
 
-  "_comment_monitoring": "📊 v3.0.0: Monitoreo con nuevas métricas duales",
+  "_comment_monitoring": "📊 v3.0.0: Monitoreo con nuevas métricas duales + lookup real",
   "monitoring": {
     "stats_interval_seconds": 15,
     "detailed_metrics": true,
@@ -256,12 +289,13 @@
     },
     "alerts": {
       "max_queue_usage_percent": 80.0,
-      "max_geoip_failure_rate_percent": 15.0,
-      "max_processing_latency_ms": 50.0,
+      "max_geoip_failure_rate_percent": 25.0,
+      "max_processing_latency_ms": 100.0,
       "max_backpressure_activations": 150,
       "min_cache_hit_rate_percent": 60.0,
       "max_memory_usage_mb": 1024,
-      "max_cpu_sustained_percent": 70.0
+      "max_cpu_sustained_percent": 70.0,
+      "_comment": "Tolerancia mayor a fallos de lookup real vs mock"
     },
     "metrics_export": {
       "enabled": false,
@@ -270,13 +304,14 @@
     }
   },
 
-  "_comment_performance": "⚡ v3.0.0: Configuración de rendimiento optimizada",
+  "_comment_performance": "⚡ v3.0.0: Configuración de rendimiento optimizada para lookup real",
   "performance": {
     "enable_async_processing": true,
     "connection_pool_size": 10,
     "request_timeout": 5,
-    "retry_attempts": 3,
-    "backoff_factor": 2
+    "retry_attempts": 2,
+    "backoff_factor": 1.5,
+    "_comment": "Reducidos timeouts para lookup real vs mock"
   },
 
   "_comment_distributed": "🌐 v3.0.0: Configuración distribuida upgraded-happiness",
@@ -331,13 +366,15 @@
     "input_sanitization": true
   },
 
-  "_comment_debugging": "🐛 v3.0.0: Configuración de debugging mejorada",
+  "_comment_debugging": "🐛 v3.0.0: Configuración de debugging mejorada para lookup real",
   "debugging": {
     "enabled": true,
     "log_coordinates": true,
     "log_processing_time": true,
     "log_cache_hits": true,
-    "detailed_error_logging": true
+    "detailed_error_logging": true,
+    "log_lookup_methods": true,
+    "log_ip_discovery": true
   },
 
   "_comment_integration": "🔗 v3.0.0: Integración con dashboard",
@@ -348,7 +385,7 @@
     "heartbeat_interval": 30
   },
 
-  "_comment_v3_features": "🆕 Nuevas características v3.0.0",
+  "_comment_v3_features": "🆕 Nuevas características v3.0.0 MODIFICADAS para lookup real",
   "v3_features": {
     "dual_geoip_enrichment": true,
     "protobuf_v3_support": true,
@@ -356,7 +393,29 @@
     "public_ip_discovery": true,
     "geographic_analysis": true,
     "dual_coordinate_fields": true,
-    "_comment": "Características específicas de la versión 3.0.0"
+    "real_geoip_lookup": true,
+    "maxmind_integration": true,
+    "no_hardcoded_coordinates": true,
+    "performance_configurable": true,
+    "_comment": "Características específicas de la versión 3.0.0 CON lookup real"
+  },
+
+  "_comment_requirements": "📦 Dependencias requeridas para lookup real",
+  "requirements": {
+    "python_packages": [
+      "geoip2>=4.0",
+      "maxminddb>=2.0"
+    ],
+    "external_data": [
+      "GeoLite2-City.mmdb",
+      "GeoLite2-Country.mmdb"
+    ],
+    "setup_instructions": {
+      "1": "pip install geoip2",
+      "2": "Descargar GeoLite2-City.mmdb de MaxMind",
+      "3": "Colocar en data/GeoLite2-City.mmdb",
+      "4": "Configurar API keys si se requiere fallback"
+    }
   },
 
   "debug": {
@@ -365,6 +424,7 @@
     "sample_rate_percent": 1.0,
     "log_protobuf_details": false,
     "profile_performance": false,
-    "log_vertical_metrics": false
+    "log_vertical_metrics": false,
+    "log_lookup_details": true
   }
 }
