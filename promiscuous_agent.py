@@ -296,32 +296,52 @@ class DistributedPromiscuousAgent:
             raise RuntimeError(f"❌ Error configurando socket ZMQ: {e}")
 
     def setup_logging(self):
-        """Setup logging desde configuración con node_id"""
+        """Setup logging desde configuración con node_id - CORREGIDO: disco + pantalla"""
         log_config = self.config["logging"]
 
         # 📝 Configurar nivel
         level = getattr(logging, log_config["level"].upper())
 
-        # 🏷️ Formato con node_id y PID
-        log_format = log_config["format"].format(
+        # 🏷️ Formato de UNA LÍNEA con node_id y PID
+        log_format = (
+            "%(asctime)s - %(name)-20s - %(levelname)-8s - "
+            "[node_id:{node_id}] [pid:{pid}] [v3.0.0] - %(message)s"
+        ).format(
             node_id=self.node_id,
             pid=self.process_id
         )
         formatter = logging.Formatter(log_format)
 
-        # 🔧 Configurar handler
-        if log_config.get("file"):
-            handler = logging.FileHandler(log_config["file"])
-        else:
-            handler = logging.StreamHandler()
-
-        handler.setFormatter(formatter)
-
         # 📋 Setup logger
         self.logger = logging.getLogger(f"promiscuous_agent_{self.node_id}")
         self.logger.setLevel(level)
-        self.logger.addHandler(handler)
+        self.logger.handlers.clear()  # Limpiar handlers existentes
         self.logger.propagate = False
+
+        # 🔧 HANDLER 1: SIEMPRE añadir StreamHandler (pantalla)
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        self.logger.addHandler(console_handler)
+
+        # 🔧 HANDLER 2: Si especifica file, también añadir FileHandler (disco)
+        if log_config.get("file"):
+            try:
+                # Crear directorio si no existe
+                log_file = log_config["file"]
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+                file_handler = logging.FileHandler(log_file)
+                file_handler.setFormatter(formatter)
+                self.logger.addHandler(file_handler)
+
+                # Log inicial para confirmar file logging
+                self.logger.info(f"📝 File logging habilitado: {log_file}")
+            except Exception as e:
+                # Si falla file logging, solo usar console
+                self.logger.error(f"❌ Error configurando file logging: {e}")
+
+        self.logger.info(f"📋 Logging configurado: nivel={log_config['level']}, "
+                         f"handlers={len(self.logger.handlers)}")
 
     def create_network_event(self, packet_data: Dict[str, Any], is_handshake: bool = False) -> bytes:
         """
