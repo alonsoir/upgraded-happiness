@@ -1,311 +1,317 @@
-import json
-import argparse
-import logging
 import os
-import subprocess
-from datetime import datetime
-import pandas as pd
-import numpy as np
-from kaggle.api.kaggle_api_extended import KaggleApi
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import IsolationForest
-from sklearn.cluster import KMeans
-from sklearn.svm import OneClassSVM
-from sklearn.ensemble import RandomForestClassifier
-from imblearn.over_sampling import SMOTE
+import json
+import zipfile
+import argparse
+from pathlib import Path
+from collections import Counter
 import joblib
+from datetime import datetime
 
-# initial_trainer_models.py --force_train --max_rows 0
-# Configurar logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Columnas numéricas del dataset Edge-IIoTset
-used_columns = [
-    'arp.opcode', 'arp.hw.size', 'icmp.checksum', 'icmp.seq_le', 'icmp.transmit_timestamp',
-    'icmp.unused', 'http.content_length', 'http.response', 'http.tls_port', 'tcp.ack',
-    'tcp.ack_raw', 'tcp.checksum', 'tcp.connection.fin', 'tcp.connection.rst',
-    'tcp.connection.syn', 'tcp.connection.synack', 'tcp.dstport', 'tcp.flags',
-    'tcp.flags.ack', 'tcp.len', 'tcp.seq', 'udp.port', 'udp.stream', 'udp.time_delta',
-    'dns.qry.name', 'dns.qry.qu', 'dns.qry.type', 'dns.retransmission',
-    'dns.retransmit_request', 'dns.retransmit_request_in', 'mqtt.conflag.cleansess',
-    'mqtt.conflags', 'mqtt.hdrflags', 'mqtt.len', 'mqtt.msg_decoded_as', 'mqtt.msgtype',
-    'mqtt.proto_len', 'mqtt.topic_len', 'mqtt.ver', 'mbtcp.len', 'mbtcp.trans_id', 'mbtcp.unit_id'
-]
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from imblearn.over_sampling import SMOTE
+from kaggle.api.kaggle_api_extended import KaggleApi
 
 
-# Función para verificar la configuración de Kaggle
-def check_kaggle_config():
-    kaggle_json = os.path.expanduser("~/.kaggle/kaggle.json")
-    if not os.path.exists(kaggle_json):
-        logging.error("Archivo kaggle.json no encontrado en ~/.kaggle/")
-        raise FileNotFoundError(
-            "Coloca kaggle.json en ~/.kaggle/ y ajusta permisos con 'chmod 600 ~/.kaggle/kaggle.json'")
-    try:
-        subprocess.run(['kaggle', 'datasets', 'list'], check=True, capture_output=True)
-        logging.info("Autenticación de Kaggle API exitosa")
-    except subprocess.CalledProcessError:
-        logging.error("Fallo en la autenticación de Kaggle. Verifica kaggle.json y conexión a internet.")
-        raise
+# -----------------------------------------------------------------------------
+# 📁 CONFIGURACIÓN CENTRALIZADA
+# -----------------------------------------------------------------------------
+def load_config():
+    config_path = Path("config-ml-trainer.json")
+    if not config_path.exists():
+        raise FileNotFoundError("No se encontró el archivo de configuración config.json.")
+    with open(config_path, "r") as f:
+        return json.load(f)
 
 
-# Función para verificar si el dataset está actualizado
-def is_dataset_updated(dataset_slug, csv_path):
-    if not os.path.exists(csv_path):
-        logging.info(f"Archivo {csv_path} no existe localmente. Se descargará.")
-        return True
-    try:
-        api = KaggleApi()
-        api.authenticate()
-        metadata_path = os.path.join(os.path.dirname(csv_path), "dataset-metadata.json")
-        api.dataset_metadata(dataset_slug, path=os.path.dirname(metadata_path))
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
-        last_updated = metadata.get('lastUpdated')
-        if not last_updated:
-            logging.warning("No se encontró 'lastUpdated' en el metadata. Usando archivo local.")
-            return False
-        try:
-            remote_last_modified = datetime.strptime(last_updated, '%Y-%m-%dT%H:%M:%S.%fZ')
-        except ValueError:
-            logging.warning("Formato de 'lastUpdated' inválido. Usando archivo local.")
-            return False
-        local_last_modified = datetime.fromtimestamp(os.path.getmtime(csv_path))
-        if remote_last_modified > local_last_modified:
-            logging.info(f"Dataset remoto ({remote_last_modified}) más reciente que local ({local_last_modified}).")
-            return True
-        logging.info("Dataset local está actualizado.")
-        return False
-    except Exception as e:
-        logging.warning(f"No se pudo verificar la actualización del dataset: {e}. Usando archivo local si existe.")
-        return False
+# -----------------------------------------------------------------------------
+# ⬇️ CARGA O DESCARGA DEL DATASET
+# -----------------------------------------------------------------------------
+def load_dataset(config, dataset_path: str = None, max_rows: int = 0) -> pd.DataFrame:
+    base_data_dir = Path("./data")
+    base_data_dir.mkdir(exist_ok=True)
 
+    # Configuración específica para UNSW-NB15
+    default_csv = base_data_dir / "UNSW_NB15_training-set.csv"
+    kaggle_dataset = "mrwellsdavid/unsw-nb15"
+    zip_output = base_data_dir / "unsw-nb15.zip"
 
-# Función para descargar dataset desde Kaggle
-def download_kaggle_dataset(dataset_slug, output_path, force_download=False):
-    target_csv = os.path.join(output_path, "dataset", "Edge-IIoTset dataset", "Selected dataset for ML and DL",
-                              "DNN-EdgeIIoT-dataset.csv")
-    if not force_download and os.path.exists(target_csv) and not is_dataset_updated(dataset_slug, target_csv):
-        logging.info(f"Dataset ya existe en {target_csv} y está actualizado. No se descargará.")
-        return os.path.dirname(target_csv)
-    os.makedirs(output_path, exist_ok=True)
-    try:
-        logging.info(f"Descargando dataset {dataset_slug}...")
-        subprocess.run(['kaggle', 'datasets', 'download', '-d', dataset_slug, '-p', output_path], check=True)
-        for file in os.listdir(output_path):
-            if file.endswith('.zip'):
-                logging.info(f"Descomprimiendo {file}...")
-                subprocess.run(['unzip', '-o', f'{output_path}/{file}', '-d', f'{output_path}/dataset'], check=True)
-                os.remove(f'{output_path}/{file}')
-        return f"{output_path}/dataset"
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Error al descargar/descomprimir el dataset: {e}")
-        raise
-
-
-# Función para encontrar el archivo CSV
-def find_csv_file(base_path, target_file="DNN-EdgeIIoT-dataset.csv"):
-    for root, _, files in os.walk(base_path):
-        if target_file in files:
-            csv_path = os.path.join(root, target_file)
-            logging.info(f"Archivo CSV encontrado: {csv_path}")
-            return csv_path
-    logging.error(f"No se encontró {target_file} en {base_path}")
-    raise FileNotFoundError(f"No se encontró {target_file} en {base_path}")
-
-
-# Función para verificar si es necesario reentrenar
-def needs_retraining(model_dir, csv_path, new_events_path=None, config=None):
-    enabled_models = [f"{k}_model.pkl" for k, v in config["ml"]["models"].items() if v["enabled"]]
-    if config["ml"]["models"].get("kmeans", {}).get("enabled", False):
-        enabled_models.append("kmeans_anomaly_threshold.pkl")
-    if not all(os.path.exists(os.path.join(model_dir, f)) for f in enabled_models):
-        logging.info("Faltan algunos modelos. Se requiere reentrenamiento.")
-        return True
-    model_mtime = min(os.path.getmtime(os.path.join(model_dir, f)) for f in enabled_models)
-    data_mtime = os.path.getmtime(csv_path)
-    if new_events_path and os.path.exists(new_events_path):
-        data_mtime = max(data_mtime, os.path.getmtime(new_events_path))
-    if data_mtime > model_mtime:
-        logging.info("Datos más recientes que los modelos. Se requiere reentrenamiento.")
-        return True
-    logging.info("Modelos están actualizados con los datos.")
-    return False
-
-
-# Función para cargar y preprocesar datos
-def load_and_preprocess_data(csv_path, new_events_path=None, columns=None):
-    logging.info(f"Cargando datos desde {csv_path}...")
-    try:
-        df = pd.read_csv(csv_path, low_memory=False)
-    except FileNotFoundError:
-        logging.error(f"Archivo {csv_path} no encontrado.")
-        raise
-    logging.info(f"Columnas disponibles en el dataset: {list(df.columns)}")
-    if new_events_path and os.path.exists(new_events_path):
-        df_new = pd.read_csv(new_events_path, low_memory=False)
-        df = pd.concat([df, df_new], ignore_index=True)
-        logging.info(f"Datos nuevos añadidos desde {new_events_path}")
-    if columns is None:
-        columns = used_columns
-    if not set(columns).issubset(df.columns):
-        logging.warning("Algunas columnas esperadas no están disponibles. Seleccionando columnas numéricas...")
-        columns = [col for col in used_columns if col in df.columns]
-        if not columns:
-            columns = df.select_dtypes(include=[np.number]).columns.tolist()
-            columns = [col for col in columns if col not in ['Attack_label', 'Attack_type']]
-            logging.info(f"Columnas numéricas seleccionadas: {columns}")
-    if not columns:
-        logging.error("No se encontraron columnas numéricas válidas en el dataset.")
-        raise ValueError("No se encontraron columnas numéricas válidas para entrenar.")
-    X = df[columns].fillna(0)
-    y = df['Attack_label'].fillna(0) if 'Attack_label' in df.columns else np.zeros(len(X))
-    X_normal = X[df['Attack_label'] == 0] if 'Attack_label' in df.columns else X
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    X_normal_scaled = scaler.transform(X_normal)
-    joblib.dump(scaler, "models/scaler.pkl")
-    logging.info(f"Datos preprocesados con columnas: {columns}")
-    return X_scaled, X_normal_scaled, y, scaler, columns
-
-
-# Función para entrenar modelos
-def train_models(X_scaled, X_normal_scaled, y, config, columns, max_rows=0):
-    os.makedirs("models", exist_ok=True)
-    logging.info("Entrenando modelos...")
-    X_scaled_sub = X_scaled if max_rows == 0 else X_scaled[:max_rows] if len(X_scaled) > max_rows else X_scaled
-    X_normal_scaled_sub = X_normal_scaled if max_rows == 0 else X_normal_scaled[:max_rows] if len(
-        X_normal_scaled) > max_rows else X_normal_scaled
-    y_sub = y if max_rows == 0 else y[:max_rows] if len(y) > max_rows else y
-    logging.info(f"Usando {len(X_scaled_sub)} filas para entrenamiento")
-    if config["ml"]["models"]["isolation_forest"]["enabled"]:
-        model = IsolationForest(
-            contamination=0.2,
-            n_estimators=config["ml"]["models"]["isolation_forest"]["n_estimators"],
-            random_state=config["ml"]["models"]["isolation_forest"]["random_state"],
-            n_jobs=config["ml"]["models"]["isolation_forest"]["n_jobs"],
-            max_samples=512
-        )
-        model.fit(X_normal_scaled_sub)
-        joblib.dump(model, "models/isolation_forest_model.pkl")
-        logging.info("Isolation Forest entrenado")
-    if config["ml"]["models"]["kmeans"]["enabled"]:
-        model = KMeans(
-            n_clusters=config["ml"]["models"]["kmeans"]["n_clusters"],
-            n_init=config["ml"]["models"]["kmeans"]["n_init"],
-            random_state=config["ml"]["models"]["kmeans"]["random_state"]
-        )
-        model.fit(X_normal_scaled_sub)
-        anomaly_threshold = np.percentile(np.min(model.transform(X_normal_scaled_sub), axis=1), 95)
-        joblib.dump(model, "models/kmeans_model.pkl")
-        joblib.dump(anomaly_threshold, "models/kmeans_anomaly_threshold.pkl")
-        logging.info("KMeans entrenado")
-    if config["ml"]["models"]["one_class_svm"]["enabled"]:
-        model = OneClassSVM(
-            nu=0.05,  # Aumentado para mayor sensibilidad
-            kernel=config["ml"]["models"]["one_class_svm"]["kernel"],
-            gamma=config["ml"]["models"]["one_class_svm"]["gamma"]
-        )
-        svm_rows = min(len(X_normal_scaled_sub), 100000)
-        model.fit(X_normal_scaled_sub[:svm_rows])
-        joblib.dump(model, "models/one_class_svm_model.pkl")
-        logging.info("One-Class SVM entrenado")
-    if config["ml"]["models"]["random_forest"]["enabled"]:
-        smote = SMOTE(random_state=config["ml"]["models"]["random_forest"]["random_state"])
-        X_scaled_resampled, y_resampled = smote.fit_resample(X_scaled_sub, y_sub)
-        model = RandomForestClassifier(
-            n_estimators=500,  # Aumentado
-            max_depth=30,  # Aumentado
-            random_state=config["ml"]["models"]["random_forest"]["random_state"],
-            n_jobs=config["ml"]["models"]["random_forest"]["n_jobs"],
-            class_weight="balanced_subsample"
-        )
-        model.fit(X_scaled_resampled, y_resampled)
-        joblib.dump(model, "models/random_forest_model.pkl")
-        logging.info("Random Forest entrenado")
-
-
-# Función para calcular el score de riesgo
-def get_risk_score(X_new, models, scaler, columns, weights=None, config=None):
-    X_new = X_new[columns].fillna(0)
-    X_scaled = scaler.transform(X_new)
-    scores = {}
-    if models.get("isolation_forest"):
-        if_score = models["isolation_forest"].decision_function(X_scaled)
-        scores["isolation_forest"] = np.clip((if_score + 1) / 2, 0, 1)
-    if models.get("kmeans"):
-        km_distances = models["kmeans"].transform(X_scaled)
-        km_score = np.min(km_distances, axis=1)
-        anomaly_threshold = joblib.load("models/kmeans_anomaly_threshold.pkl")
-        scores["kmeans"] = np.clip(1 - (km_score / (anomaly_threshold + 1e-10)), 0,
-                                   1)  # Invertir para alta distancia = alta anomalía
-    if models.get("one_class_svm"):
-        svm_score = models["one_class_svm"].decision_function(X_scaled)
-        scores["one_class_svm"] = np.clip((svm_score + 1) / 2, 0, 1)
-    if models.get("random_forest"):
-        rf_score = models["random_forest"].predict_proba(X_scaled)[:, 1]
-        scores["random_forest"] = rf_score
-    if not scores:
-        logging.error("No se encontraron modelos válidos para calcular el score de riesgo.")
-        raise ValueError("No hay modelos habilitados.")
-    if not weights:
-        weights = [1 / len(scores)] * len(scores)
-    weights_dict = dict(zip(scores.keys(), weights))
-    risk_score = np.average(list(scores.values()), axis=0, weights=weights)
-    is_anomaly = risk_score > config["ml"]["anomaly_threshold"]
-    is_high_risk = risk_score > config["ml"]["high_risk_threshold"]
-    return risk_score, is_anomaly, is_high_risk, scores
-
-
-# Función principal
-def main(force_download=False, force_train=False, max_rows=0):
-    check_kaggle_config()
-    try:
-        with open("config-ml-trainer.json") as f:
-            config = json.load(f)
-        if "ml" not in config or "models" not in config["ml"]:
-            logging.error("El archivo config-ml-trainer.json no tiene la estructura esperada: falta 'ml' o 'models'.")
-            raise ValueError("Estructura inválida en config-ml-trainer.json")
-    except FileNotFoundError:
-        logging.error("Archivo config-ml-trainer.json no encontrado.")
-        raise
-    dataset_slug = "mohamedamineferrag/edgeiiotset-cyber-security-dataset-of-iot-iiot"
-    dataset_path = download_kaggle_dataset(dataset_slug, "data", force_download=force_download)
-    csv_path = find_csv_file(dataset_path, "DNN-EdgeIIoT-dataset.csv")
-    new_events_path = "data/new_events.csv"
-    columns = used_columns
-    scaler = None
-    models = {}
-    if not force_train and not needs_retraining("models", csv_path, new_events_path, config):
-        logging.info("No es necesario reentrenar. Cargando modelos existentes...")
-        models = {k: joblib.load(f"models/{k}_model.pkl") for k, v in config["ml"]["models"].items() if v["enabled"]}
-        scaler = joblib.load("models/scaler.pkl")
+    # Opción 1: carga directa de path
+    if dataset_path and Path(dataset_path).exists():
+        print(f"[📁] Cargando dataset desde: {dataset_path}")
+        df = pd.read_csv(dataset_path)
+    # Opción 2: carga desde archivo local conocido
+    elif default_csv.exists():
+        print(f"[📁] Cargando dataset local desde: {default_csv}")
+        df = pd.read_csv(default_csv)
+    # Opción 3: descarga desde Kaggle
     else:
-        X_scaled, X_normal_scaled, y, scaler, columns = load_and_preprocess_data(csv_path, new_events_path,
-                                                                                 used_columns)
-        train_models(X_scaled, X_normal_scaled, y, config, columns, max_rows=max_rows)
-        models = {k: joblib.load(f"models/{k}_model.pkl") for k, v in config["ml"]["models"].items() if v["enabled"]}
-        scaler = joblib.load("models/scaler.pkl")
+        try:
+            print(f"[⬇️] Descargando dataset {kaggle_dataset} desde Kaggle...")
+            api = KaggleApi()
+            api.authenticate()
+            api.dataset_download_files(kaggle_dataset, path=base_data_dir, quiet=False)
 
-    # Evento de prueba simulando un ataque DDoS
-    new_event = pd.DataFrame(
-        [[0, 0, 0, 0, 0, 0, 3000, 0, 0, 3000000, 3000000, 12345, 0, 0, 1, 0, 80, 0x02, 0, 3000, 3000,
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-        columns=columns
-    )  # Simula DDoS: tcp.len=3000, tcp.connection.syn=1, tcp.dstport=80
-    weights = [0.1, 0.1, 0.1, 0.7]  # Priorizar Random Forest
-    risk_score, is_anomaly, is_high_risk, scores = get_risk_score(new_event, models, scaler, columns, weights, config)
-    logging.info(f"Risk Score: {risk_score[0]:.2f}, Anomaly: {is_anomaly[0]}, High Risk: {is_high_risk[0]}")
-    logging.info(f"Scores por modelo: { {k: v[0] for k, v in scores.items()} }")
-    new_event['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    new_event['src_ip'] = '192.168.1.10'
-    new_event['dst_ip'] = '10.0.0.1'
-    new_event.to_csv(new_events_path, mode='a', header=not os.path.exists(new_events_path), index=False)
+            # Verificar si se descargó el archivo zip
+            if not zip_output.exists():
+                raise FileNotFoundError(f"No se encontró el archivo descargado: {zip_output}")
+
+            print(f"[📦] Extrayendo archivos de {zip_output}...")
+            with zipfile.ZipFile(zip_output, 'r') as zip_ref:
+                zip_ref.extractall(base_data_dir)
+
+            # Buscar el archivo CSV en la estructura extraída
+            csv_path = None
+            for file in base_data_dir.glob("**/*.csv"):
+                if "training-set" in file.name or "UNSW_NB15" in file.name:
+                    csv_path = file
+                    print(f"[🔍] Archivo CSV encontrado: {csv_path}")
+                    break
+
+            if not csv_path:
+                raise FileNotFoundError("No se encontró el archivo CSV esperado en el ZIP")
+
+            print(f"[✅] Dataset cargado desde: {csv_path}")
+            df = pd.read_csv(csv_path)
+
+            # Guardar copia local para futuras ejecuciones
+            df.to_csv(default_csv, index=False)
+            print(f"[💾] Guardado copia local en: {default_csv}")
+
+        except Exception as e:
+            print(f"[❌] Error al descargar dataset desde Kaggle: {e}")
+            if default_csv.exists():
+                print(f"[⚠️] Usando copia local de emergencia: {default_csv}")
+                df = pd.read_csv(default_csv)
+            else:
+                raise FileNotFoundError("No se pudo obtener el dataset ni localmente ni desde Kaggle.")
+
+    # Aplicar límite de filas si se especificó
+    if max_rows > 0:
+        df = df.head(max_rows)
+
+    # Verificar columna 'label'
+    if 'label' not in df.columns:
+        # Intentar alternativas
+        if 'Label' in df.columns:
+            df.rename(columns={'Label': 'label'}, inplace=True)
+            print("[ℹ️] Se renombró 'Label' → 'label'")
+        elif 'labels' in df.columns:
+            df.rename(columns={'labels': 'label'}, inplace=True)
+            print("[ℹ️] Se renombró 'labels' → 'label'")
+        elif 'attack_cat' in df.columns:
+            print("[ℹ️] Creando etiqueta binaria a partir de 'attack_cat'")
+            df['label'] = df['attack_cat'].apply(lambda x: 0 if x == 'Normal' else 1)
+        else:
+            raise ValueError("No se encontró columna 'label' ni alternativas")
+
+    return df
 
 
+# -----------------------------------------------------------------------------
+# 🧹 LIMPIEZA Y PREPARACIÓN DE LOS DATOS
+# -----------------------------------------------------------------------------
+def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    # En clean_dataset(), añadir características derivadas
+    df['packet_imbalance'] = df['spkts'] / (df['dpkts'] + 1e-5)
+    df['byte_imbalance'] = df['sbytes'] / (df['dbytes'] + 1e-5)
+    df['loss_ratio'] = df['sloss'] / (df['spkts'] + 1e-5)
+
+    # Paso 1: Eliminar columnas no relevantes
+    columns_to_drop = ['id', 'attack_cat']
+    df = df.drop(columns=[col for col in columns_to_drop if col in df.columns], errors='ignore')
+
+    # Paso 2: Convertir columnas categóricas a numéricas
+    categorical_cols = ['proto', 'service', 'state']
+    le = LabelEncoder()
+    for col in categorical_cols:
+        if col in df.columns:
+            df[col] = le.fit_transform(df[col].astype(str))
+
+    # Asegurar que la columna 'label' esté presente
+    if 'label' not in df.columns:
+        raise ValueError("Columna 'label' no encontrada en el dataset después de la limpieza inicial")
+
+    # Paso 3: Filtrar características relevantes con manejo de errores
+    scapy_features = [
+        'dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 'dbytes',
+        'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss', 'sinpkt', 'dinpkt'
+    ]
+
+    # Verificar que todas las características existan
+    missing_features = [feat for feat in scapy_features if feat not in df.columns]
+    if missing_features:
+        print(f"[⚠️] Características faltantes: {missing_features}. Usando todas las columnas disponibles.")
+    else:
+        print("[🔍] Filtrado: Usando características relevantes para análisis de paquetes")
+        # Mantener solo características relevantes, pero asegurar que 'label' permanezca
+        df = df[scapy_features + ['label']]
+
+    # Paso 4: Limpieza estándar
+    original_size = len(df)
+    df = df.dropna()
+    df = df.drop_duplicates()
+    cleaned_size = len(df)
+
+    print(
+        f"[🧹] Limpieza: {original_size} → {cleaned_size} muestras ({100 * (1 - cleaned_size / original_size):.1f}% eliminadas)")
+
+    # Paso 5: Eliminar columnas con un solo valor (excepto 'label')
+    for col in df.columns:
+        if col != 'label' and df[col].nunique() == 1:
+            print(f"[⚠️] Eliminando columna constante: {col}")
+            df = df.drop(columns=[col])
+
+    # Verificar clases
+    class_counts = df['label'].value_counts()
+    print(f"[⚖️] Distribución de clases: {class_counts.to_dict()}")
+
+    return df
+
+
+# -----------------------------------------------------------------------------
+# ⚖️ BALANCEO CON SMOTE
+# -----------------------------------------------------------------------------
+def balance_dataset(X, y):
+    counts = Counter(y)
+    print(f"[⚖️] Distribución inicial: {dict(counts)}")
+
+    if any(count < 6 for count in counts.values()) or len(counts) < 2:
+        print("[⚠️] Muy pocas muestras o clases, omitiendo SMOTE.")
+        return X, y
+
+    print("[🔄] Aplicando SMOTE para balancear clases...")
+    smote = SMOTE(random_state=42)
+    X_res, y_res = smote.fit_resample(X, y)
+    print(f"[⚖️] Distribución después de SMOTE: {Counter(y_res)}")
+    return X_res, y_res
+
+
+# -----------------------------------------------------------------------------
+# 🧠 ENTRENAMIENTO DEL MODELO
+# -----------------------------------------------------------------------------
+def train_model(X_train, y_train, config):
+
+    rf_params = config['ml'].get('random_forest', {})
+    print(f"[🌲] Configuración RandomForest: {rf_params}")
+
+    # Añadir parámetros avanzados
+    advanced_params = {
+        'bootstrap': True,
+        'oob_score': True,
+        'verbose': 1
+    }
+    rf_params.update(advanced_params)
+    rf_params.update({
+        'n_estimators': 1000,
+        'max_depth': 100,
+        'min_samples_split': 10,
+        'min_samples_leaf': 4,
+        'max_features': 'log2',
+        'ccp_alpha': 0.001  # Parámetro de poda
+    })
+
+    model = RandomForestClassifier(**rf_params)
+    from sklearn.model_selection import cross_val_score
+    scores = cross_val_score(model, X_train, y_train, cv=5, scoring='roc_auc')
+    print(f"[📊] Validación Cruzada AUC: {np.mean(scores):.4f} ± {np.std(scores):.4f}")
+    print("[🔄] Entrenando modelo...")
+    model.fit(X_train, y_train)
+
+    # Reportar precisión OOB (Out-of-Bag)
+    if hasattr(model, 'oob_score_'):
+        print(f"[🔍] Precisión OOB: {model.oob_score_:.4f}")
+
+    return model
+
+
+# -----------------------------------------------------------------------------
+# 📊 EVALUACIÓN DEL MODELO
+# -----------------------------------------------------------------------------
+def evaluate_model(model, X_test, y_test):
+    print("[🧪] Evaluando modelo...")
+    y_pred = model.predict(X_test)
+
+    print("\n[📊] Matriz de Confusión:")
+    print(confusion_matrix(y_test, y_pred))
+
+    print("\n[📋] Reporte de Clasificación:")
+    print(classification_report(y_test, y_pred))
+
+
+# -----------------------------------------------------------------------------
+# 💾 GUARDAR MODELO Y RECURSOS
+# -----------------------------------------------------------------------------
+def save_model_artifacts(model, config, features):
+    os.makedirs("models", exist_ok=True)
+
+    # Guardar modelo RandomForest
+    model_path = "models/random_forest_model.pkl"
+    joblib.dump(model, model_path)
+    print(f"[💾] Modelo guardado: {model_path}")
+
+    # Guardar escalador dummy para compatibilidad
+    scaler_path = "models/scaler.pkl"
+    scaler = StandardScaler()
+    joblib.dump(scaler, scaler_path)
+    print(f"[💾] Escalador dummy guardado: {scaler_path}")
+
+    # Guardar metadatos del modelo
+    metadata = {
+        "training_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "features": features,
+        "model_params": config['ml'].get('random_forest', {}),
+        "dataset": "UNSW-NB15"
+    }
+    metadata_path = "models/model_metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=4)
+    print(f"[💾] Metadatos guardados: {metadata_path}")
+
+
+# -----------------------------------------------------------------------------
+# 🚀 FUNCIÓN PRINCIPAL
+# -----------------------------------------------------------------------------
+def main(force_train=False, max_rows=0):
+    config = load_config()
+    dataset_path = config['ml'].get('dataset_path')
+    df = load_dataset(config, dataset_path, max_rows)
+    df = clean_dataset(df)
+
+    if 'label' not in df.columns:
+        raise ValueError("El dataset no contiene la columna 'label' necesaria para clasificación.")
+
+    X = df.drop(columns=["label"])
+    y = df["label"]
+
+    # Guardar nombres de características para referencia futura
+    feature_names = list(X.columns)
+
+    X_resampled, y_resampled = balance_dataset(X, y)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_resampled, y_resampled, test_size=0.3, random_state=42
+    )
+
+    model = train_model(X_train, y_train, config)
+    evaluate_model(model, X_test, y_test)
+
+    # Guardar artefactos del modelo
+    save_model_artifacts(model, config, feature_names)
+
+    print("\n✅ Entrenamiento finalizado con éxito.")
+
+
+# -----------------------------------------------------------------------------
+# 🏁 EJECUCIÓN
+# -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--force_download", action="store_true", help="Forzar la descarga del dataset")
-    parser.add_argument("--force_train", action="store_true", help="Forzar el reentrenamiento de modelos")
-    parser.add_argument("--max_rows", type=int, default=0, help="Número máximo de filas para entrenar (0 = todas)")
+    parser = argparse.ArgumentParser(description="Entrenador de modelos para detección de amenazas")
+    parser.add_argument("--force_train", action="store_true", help="Forzar reentrenamiento del modelo")
+    parser.add_argument("--max_rows", type=int, default=0, help="Limitar la carga a N filas del dataset")
+
     args = parser.parse_args()
-    main(force_download=args.force_download, force_train=args.force_train, max_rows=args.max_rows)
+    main(force_train=args.force_train, max_rows=args.max_rows)

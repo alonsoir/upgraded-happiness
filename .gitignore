@@ -181,6 +181,14 @@ saved_models/*.*
 
 tests/*.*
 
+geodata
+
+models
+
+geodata/*.*
+
+models/*.*
+
 tests_consolidated/*.*
 
 upgraded-happiness-bitdefender/*.*
