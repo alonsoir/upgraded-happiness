@@ -6,7 +6,7 @@ import joblib
 import json
 import logging
 from datetime import datetime
-
+# test_synthetic_events.py
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 used_columns = [
