@@ -74,12 +74,12 @@
   "_comment_logging": "📝 ACTIVADO: Logging a disco habilitado",
   "logging": {
     "level": "INFO",
-    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [v3.0.0] - %(message)s",
+    "format": "%(asctime)s - %(name)-20s - %(levelname)-8s - [node_id:{node_id}] [pid:{pid}] [v3.0.0] - %(message)s",
     "file": "logs/promiscuous_agent.log",
     "max_file_size_mb": 100,
     "backup_count": 5,
     "include_performance_logs": true,
-    "_comment": "ACTIVADO: file ya no es null, logs van a disco + consola"
+    "_comment": "CORREGIDO: Formato de UNA línea + disco Y pantalla"
   },
 
   "_comment_monitoring": "📊 Monitoreo - Alertas ajustadas para v3",
