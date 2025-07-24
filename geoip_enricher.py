@@ -801,13 +801,13 @@ class DistributedGeoIPEnricherVertical:
         setattr(event, f"{prefix}timezone", geoip_info.get('timezone', ''))
 
         # 🔍 Metadatos del lookup
-        setattr(event, f"{prefix}lookup_method", geoip_info.get('lookup_method', 'unknown'))
+        # setattr(event, f"{prefix}lookup_method", geoip_info.get('lookup_method', 'unknown'))
 
         # 📊 Información adicional si está disponible
-        if geoip_info.get('accuracy_radius'):
-            setattr(event, f"{prefix}accuracy_radius", geoip_info.get('accuracy_radius'))
-        if geoip_info.get('postal_code'):
-            setattr(event, f"{prefix}postal_code", geoip_info.get('postal_code'))
+        #if geoip_info.get('accuracy_radius'):
+        #    setattr(event, f"{prefix}accuracy_radius", geoip_info.get('accuracy_radius'))
+        #if geoip_info.get('postal_code'):
+        #    setattr(event, f"{prefix}postal_code", geoip_info.get('postal_code'))
         if geoip_info.get('isp'):
             setattr(event, f"{prefix}isp", geoip_info.get('isp'))
 
@@ -1345,8 +1345,8 @@ class DistributedGeoIPEnricherVertical:
 # 🚀 Main
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("❌ Uso: python geoip_enricher_v3.py <config.json>")
-        print("💡 Ejemplo: python geoip_enricher_v3.py geoip_enricher_config_v3.json")
+        print("❌ Uso: python geoip_enricher.py <config.json>")
+        print("💡 Ejemplo: python geoip_enricher.py geoip_enricher_config.json")
         sys.exit(1)
 
     config_file = sys.argv[1]
@@ -1359,4 +1359,6 @@ if __name__ == "__main__":
         import traceback
 
         traceback.print_exc()
+        print(f"Stack trace completo: {traceback.format_exc()}")  # ← Añade esto
+
         sys.exit(1)
