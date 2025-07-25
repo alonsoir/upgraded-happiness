@@ -2740,6 +2740,541 @@ function showDebugLogDetail() { console.log('Debug log detail V3'); }
 function showLogEntryDetail(entry, event) { console.log('Log entry V3:', entry); event?.stopPropagation(); }
 
 // Cleanup
+/*
+🔧 SOLUCIONES COMPLETAS PARA DASHBOARD V3
+Problemas: Campos duales faltantes, animaciones misil, botones específicos
+Solución: Mapping de datos + fallbacks + mejoras de interactividad
+*/
+
+// ============================================================================
+// 🔧 SOLUCIÓN 1: FUNCIÓN DE MAPPING PARA CAMPOS DUALES
+// ============================================================================
+
+function enrichEventWithDualCoordinates(event) {
+    /*
+    Función que mapea campos legacy a V3 duales y viceversa
+    Soluciona el problema de backend que no envía campos V3
+    */
+
+    // Si ya tiene campos V3, devolverlo tal como está
+    if (event.source_latitude && event.target_latitude) {
+        console.log('✅ Evento ya tiene campos V3 duales:', event.source_ip, '→', event.target_ip);
+        return event;
+    }
+
+    // Si tiene campos legacy, intentar inferir campos duales
+    if (event.latitude && event.longitude && event.latitude !== 0 && event.longitude !== 0) {
+        console.log('🔄 Convirtiendo campos legacy a V3 duales para:', event.source_ip, '→', event.target_ip);
+
+        // ESTRATEGIA 1: Si hay información de ubicación en texto
+        const location = event.location || '';
+        const isSpanish = location.includes('España') || location.includes('Spain');
+
+        // ESTRATEGIA 2: Inferir basado en IPs
+        const sourceIsPrivate = isPrivateIP(event.source_ip);
+        const targetIsPrivate = isPrivateIP(event.target_ip);
+
+        if (sourceIsPrivate && !targetIsPrivate) {
+            // Source es privada (nosotros), target es pública (atacante)
+            // Asignar coordenadas actuales a source (Madrid/Sevilla)
+            event.source_latitude = 37.3886;  // Sevilla como fallback
+            event.source_longitude = -5.9823;
+            event.source_city = 'Sevilla';
+            event.source_country = 'España';
+            event.source_ip_enriched = true;
+
+            // Coordenadas legacy van a target (atacante)
+            event.target_latitude = event.latitude;
+            event.target_longitude = event.longitude;
+            event.target_city = extractCityFromLocation(location);
+            event.target_country = extractCountryFromLocation(location);
+            event.target_ip_enriched = true;
+
+        } else if (!sourceIsPrivate && targetIsPrivate) {
+            // Source es pública (atacante), target es privada (nosotros)
+            event.source_latitude = event.latitude;
+            event.source_longitude = event.longitude;
+            event.source_city = extractCityFromLocation(location);
+            event.source_country = extractCountryFromLocation(location);
+            event.source_ip_enriched = true;
+
+            event.target_latitude = 37.3886;  // Sevilla como fallback
+            event.target_longitude = -5.9823;
+            event.target_city = 'Sevilla';
+            event.target_country = 'España';
+            event.target_ip_enriched = true;
+
+        } else {
+            // Ambas son públicas o ambas privadas - usar heurística
+            if (isSpanish) {
+                // Si la ubicación es española, probablemente sea el atacante
+                event.target_latitude = event.latitude;
+                event.target_longitude = event.longitude;
+                event.target_city = extractCityFromLocation(location);
+                event.target_country = 'España';
+                event.target_ip_enriched = true;
+
+                // Source como nuestro nodo
+                event.source_latitude = 37.3886;
+                event.source_longitude = -5.9823;
+                event.source_city = 'Sevilla';
+                event.source_country = 'España';
+                event.source_ip_enriched = true;
+            } else {
+                // Ubicación extranjera - probablemente atacante
+                event.target_latitude = event.latitude;
+                event.target_longitude = event.longitude;
+                event.target_city = extractCityFromLocation(location);
+                event.target_country = extractCountryFromLocation(location);
+                event.target_ip_enriched = true;
+
+                event.source_latitude = 37.3886;
+                event.source_longitude = -5.9823;
+                event.source_city = 'Sevilla';
+                event.source_country = 'España';
+                event.source_ip_enriched = true;
+            }
+        }
+
+        // Calcular distancia geográfica
+        if (event.source_latitude && event.target_latitude) {
+            event.geographic_distance_km = calculateDistance(
+                event.source_latitude, event.source_longitude,
+                event.target_latitude, event.target_longitude
+            );
+            event.same_country = (event.source_country === event.target_country);
+        }
+
+        console.log('✅ Evento mapeado a V3:', {
+            source: `${event.source_city}, ${event.source_country}`,
+            target: `${event.target_city}, ${event.target_country}`,
+            distance: `${event.geographic_distance_km}km`
+        });
+    }
+
+    return event;
+}
+
+// ============================================================================
+// 🔧 SOLUCIÓN 2: ANIMACIONES MISIL CORREGIDAS Y MEJORADAS
+// ============================================================================
+
+function addEventToMapWithMissileAnimationFixed(event) {
+    if (!map) return;
+
+    try {
+        // 🔧 APLICAR MAPPING DUAL ANTES DE PROCESAR
+        event = enrichEventWithDualCoordinates(event);
+
+        const riskLevel = event.risk_score > 0.8 ? 'high' :
+                         event.risk_score > 0.5 ? 'medium' : 'low';
+
+        const colors = {
+            high: '#ff4444',
+            medium: '#ffaa00',
+            low: '#00ff00'
+        };
+
+        let markersAdded = [];
+
+        console.log('🗺️ Procesando evento V3 con campos duales corregidos:', {
+            source_coords: `${event.source_latitude}, ${event.source_longitude}`,
+            target_coords: `${event.target_latitude}, ${event.target_longitude}`,
+            distance: `${event.geographic_distance_km || 'N/A'}km`,
+            same_country: event.same_country
+        });
+
+        // ✅ MARCADOR SOURCE (víctima/origen) - SIEMPRE CLICKEABLE
+        if (event.source_latitude && event.source_longitude &&
+            event.source_latitude !== 0 && event.source_longitude !== 0) {
+
+            const sourceMarker = L.circleMarker([event.source_latitude, event.source_longitude], {
+                radius: 12,
+                fillColor: '#0066CC',
+                color: '#0066CC',
+                weight: 3,
+                opacity: 0.9,
+                fillOpacity: 0.7,
+                className: 'source-marker clickable-marker'
+            }).bindPopup(`
+                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                    <b>🏠 Víctima/Origen</b><br>
+                    <strong>IP:</strong> ${event.source_ip}<br>
+                    <strong>Ubicación:</strong> ${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}<br>
+                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
+                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
+                    <strong>Enriquecido:</strong> ${event.source_ip_enriched ? '✅' : '❌'}<br>
+                    <button onclick="showSourceIPDetail('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})"
+                            style="margin-top: 5px; background: #0066CC; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">
+                        🏠 Ver Detalles Víctima
+                    </button>
+                </div>
+            `).addTo(map);
+
+            // 🎯 HACER MARCADOR CLICKEABLE DIRECTAMENTE
+            sourceMarker.on('click', function() {
+                showSourceIPDetail(event.source_ip, event);
+            });
+
+            sourceMarker._isEventMarker = true;
+            sourceMarker._eventData = event;
+            sourceMarker._markerType = 'source';
+            markersAdded.push(sourceMarker);
+        }
+
+        // ✅ MARCADOR TARGET (atacante/destino) - SIEMPRE CLICKEABLE
+        if (event.target_latitude && event.target_longitude &&
+            event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+            const targetMarker = L.circleMarker([event.target_latitude, event.target_longitude], {
+                radius: 12,
+                fillColor: '#CC0000',
+                color: '#CC0000',
+                weight: 3,
+                opacity: 0.9,
+                fillOpacity: 0.7,
+                className: 'target-marker clickable-marker'
+            }).bindPopup(`
+                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                    <b>🎯 Atacante/Destino</b><br>
+                    <strong>IP:</strong> ${event.target_ip}<br>
+                    <strong>Ubicación:</strong> ${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}<br>
+                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
+                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
+                    <strong>Enriquecido:</strong> ${event.target_ip_enriched ? '✅' : '❌'}<br>
+                    <button onclick="showTargetIPDetail('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})"
+                            style="margin-top: 5px; background: #CC0000; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">
+                        🎯 Acciones Firewall
+                    </button>
+                </div>
+            `).addTo(map);
+
+            // 🎯 HACER MARCADOR CLICKEABLE DIRECTAMENTE
+            targetMarker.on('click', function() {
+                showTargetIPDetail(event.target_ip, event);
+            });
+
+            targetMarker._isEventMarker = true;
+            targetMarker._eventData = event;
+            targetMarker._markerType = 'target';
+            markersAdded.push(targetMarker);
+        }
+
+        // ✅ ANIMACIÓN MISIL MEJORADA - AHORA SÍ FUNCIONARÁ
+        if (markersAdded.length === 2 &&
+            event.source_latitude && event.source_longitude &&
+            event.target_latitude && event.target_longitude) {
+
+            createAdvancedMissileTrajectory(
+                [event.source_latitude, event.source_longitude],
+                [event.target_latitude, event.target_longitude],
+                event
+            );
+
+            console.log('🚀 Animación misil V3 creada entre:',
+                `${event.source_city} → ${event.target_city}`,
+                `(${event.geographic_distance_km}km)`);
+        }
+
+        // Añadir a la lista global con auto-eliminación
+        markersAdded.forEach(marker => {
+            markers.push(marker);
+            setTimeout(() => {
+                if (map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                    markers = markers.filter(m => m !== marker);
+                }
+            }, 5 * 60 * 1000); // 5 minutos
+        });
+
+        if (markersAdded.length > 0) {
+            console.log(`📍 ${markersAdded.length} marcadores V3 clickeables añadidos:`,
+                event.source_ip, '→', event.target_ip);
+        }
+
+    } catch (error) {
+        console.error('❌ Error añadiendo marcadores V3 corregidos:', error);
+    }
+}
+
+// ============================================================================
+// 🔧 SOLUCIÓN 3: ANIMACIÓN MISIL AVANZADA Y REALISTA
+// ============================================================================
+
+function createAdvancedMissileTrajectory(sourceCoords, targetCoords, event) {
+    try {
+        // Calcular curva parabólica más realista
+        const midLat = (sourceCoords[0] + targetCoords[0]) / 2;
+        const midLng = (sourceCoords[1] + targetCoords[1]) / 2;
+
+        // Altura de la curva basada en distancia y riesgo
+        const distance = Math.sqrt(
+            Math.pow(targetCoords[0] - sourceCoords[0], 2) +
+            Math.pow(targetCoords[1] - sourceCoords[1], 2)
+        );
+
+        // Curva más alta para ataques de alto riesgo
+        const riskMultiplier = event.risk_score > 0.8 ? 1.5 :
+                              event.risk_score > 0.5 ? 1.2 : 1.0;
+        const curveHeight = distance * 0.4 * riskMultiplier;
+
+        // Punto de control para curva Bézier
+        const controlPoint = [midLat + curveHeight, midLng];
+
+        // Generar puntos de la trayectoria
+        const trajectoryPoints = [];
+        for (let t = 0; t <= 1; t += 0.02) { // Más puntos para suavidad
+            const lat = Math.pow(1-t, 2) * sourceCoords[0] +
+                       2*(1-t)*t * controlPoint[0] +
+                       Math.pow(t, 2) * targetCoords[0];
+            const lng = Math.pow(1-t, 2) * sourceCoords[1] +
+                       2*(1-t)*t * controlPoint[1] +
+                       Math.pow(t, 2) * targetCoords[1];
+            trajectoryPoints.push([lat, lng]);
+        }
+
+        // Color basado en riesgo y ubicación
+        let trajectoryColor = '#FF4444'; // Alto riesgo por defecto
+        if (event.risk_score <= 0.5) trajectoryColor = '#FFAA00'; // Medio riesgo
+        if (event.same_country) trajectoryColor = '#FF6600'; // Mismo país
+        if (!event.same_country && event.geographic_distance_km > 1000) {
+            trajectoryColor = '#FF0000'; // Internacional de larga distancia
+        }
+
+        // Crear línea con animación avanzada
+        const trajectory = L.polyline(trajectoryPoints, {
+            color: trajectoryColor,
+            weight: 4,
+            opacity: 0.8,
+            dashArray: '12, 8',
+            className: 'missile-trajectory advanced-missile-animation'
+        }).bindPopup(`
+            <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                <b>🚀 Trayectoria de Ataque V3</b><br>
+                <strong>Origen:</strong> ${event.source_ip} (${event.source_city})<br>
+                <strong>Destino:</strong> ${event.target_ip} (${event.target_city})<br>
+                <strong>Distancia:</strong> ${event.geographic_distance_km?.toFixed(1) || 'N/A'}km<br>
+                <strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>
+                <strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(0)}%<br>
+                <strong>Tipo:</strong> ${event.type || 'network_traffic'}
+            </div>
+        `).addTo(map);
+
+        // 🚀 Animación de partículas misil
+        setTimeout(() => {
+            createMissileParticleEffect(trajectory, trajectoryColor);
+        }, 200);
+
+        // 🎆 Efecto de impacto en el destino
+        setTimeout(() => {
+            createImpactEffect(targetCoords, trajectoryColor);
+        }, 2000);
+
+        trajectory._isEventMarker = true;
+        trajectory._trajectoryType = 'advanced_missile';
+        connectionLines.push(trajectory);
+
+        // Auto-eliminar después de 5 minutos
+        setTimeout(() => {
+            if (map.hasLayer(trajectory)) {
+                map.removeLayer(trajectory);
+                connectionLines = connectionLines.filter(l => l !== trajectory);
+            }
+        }, 5 * 60 * 1000);
+
+        console.log('🚀 Trayectoria misil avanzada creada:',
+            `${event.source_city} → ${event.target_city}`,
+            `${event.geographic_distance_km}km, riesgo: ${(event.risk_score * 100).toFixed(0)}%`);
+
+    } catch (error) {
+        console.error('❌ Error creando trayectoria misil avanzada:', error);
+    }
+}
+
+// ============================================================================
+// 🔧 SOLUCIÓN 4: EFECTOS VISUALES ADICIONALES
+// ============================================================================
+
+function createMissileParticleEffect(trajectory, color) {
+    // Crear efecto de partículas siguiendo la trayectoria
+    const latLngs = trajectory.getLatLngs();
+    const particleInterval = setInterval(() => {
+        if (!map.hasLayer(trajectory)) {
+            clearInterval(particleInterval);
+            return;
+        }
+
+        // Crear partícula en posición aleatoria de la trayectoria
+        const randomIndex = Math.floor(Math.random() * latLngs.length);
+        const position = latLngs[randomIndex];
+
+        const particle = L.circleMarker(position, {
+            radius: 2,
+            fillColor: color,
+            color: color,
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 1
+        }).addTo(map);
+
+        // Animar y eliminar partícula
+        setTimeout(() => {
+            if (map.hasLayer(particle)) {
+                map.removeLayer(particle);
+            }
+        }, 500);
+
+    }, 200);
+
+    // Parar partículas después de 3 segundos
+    setTimeout(() => {
+        clearInterval(particleInterval);
+    }, 3000);
+}
+
+function createImpactEffect(coords, color) {
+    // Efecto de ondas concéntricas en el punto de impacto
+    for (let i = 1; i <= 3; i++) {
+        setTimeout(() => {
+            const impactRing = L.circle(coords, {
+                radius: 5000 * i, // Radio en metros
+                fillColor: 'transparent',
+                color: color,
+                weight: 3,
+                opacity: 0.8
+            }).addTo(map);
+
+            // Animar expansión y desvanecimiento
+            setTimeout(() => {
+                if (map.hasLayer(impactRing)) {
+                    map.removeLayer(impactRing);
+                }
+            }, 1000);
+
+        }, i * 200);
+    }
+}
+
+// ============================================================================
+// 🔧 SOLUCIÓN 5: FUNCIONES AUXILIARES MEJORADAS
+// ============================================================================
+
+function isPrivateIP(ip) {
+    // Verificar si es IP privada
+    const privateRanges = [
+        /^10\./,                    // 10.0.0.0/8
+        /^172\.(1[6-9]|2[0-9]|3[01])\./, // 172.16.0.0/12
+        /^192\.168\./,              // 192.168.0.0/16
+        /^127\./,                   // 127.0.0.0/8 (localhost)
+        /^169\.254\./               // 169.254.0.0/16 (link-local)
+    ];
+
+    return privateRanges.some(range => range.test(ip));
+}
+
+function extractCityFromLocation(location) {
+    if (!location) return 'N/A';
+    // Extraer ciudad de strings como "Madrid, España" o "New York, US"
+    const parts = location.split(',');
+    return parts[0]?.trim() || 'N/A';
+}
+
+function extractCountryFromLocation(location) {
+    if (!location) return 'N/A';
+    // Extraer país de strings como "Madrid, España"
+    const parts = location.split(',');
+    return parts[parts.length - 1]?.trim() || 'N/A';
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    // Fórmula de Haversine para calcular distancia entre coordenadas
+    const R = 6371; // Radio de la Tierra en km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// ============================================================================
+// 🔧 SOLUCIÓN 6: REEMPLAZAR FUNCIÓN ORIGINAL CON VERSIÓN CORREGIDA
+// ============================================================================
+
+// Reemplazar la función original con la versión corregida
+window.addEventToMapWithMissileAnimation = addEventToMapWithMissileAnimationFixed;
+
+// ============================================================================
+// 🔧 SOLUCIÓN 7: INTEGRACIÓN EN PROCESSEVENTS
+// ============================================================================
+
+function processEventsFromZeroMQFixed(events) {
+    if (eventsPaused) return;
+
+    try {
+        const newEvents = events.filter(event => {
+            return !currentEvents.some(existing =>
+                existing.id === event.id ||
+                (existing.timestamp === event.timestamp &&
+                 existing.source_ip === event.source_ip)
+            );
+        });
+
+        newEvents.forEach(event => {
+            // 🔧 APLICAR MAPPING ANTES DE PROCESAR
+            event = enrichEventWithDualCoordinates(event);
+            addEventFromZeroMQFixed(event);
+        });
+
+        if (newEvents.length > 0) {
+            console.log(`📨 ${newEvents.length} eventos V3 corregidos con campos duales procesados`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error procesando eventos V3 corregidos:', error);
+        addDebugLog('error', `Error eventos V3: ${error.message}`);
+    }
+}
+
+function addEventFromZeroMQFixed(event) {
+    try {
+        if (!event.source_ip || !event.target_ip) {
+            console.warn('⚠️ Evento incompleto:', event);
+            return;
+        }
+
+        // Normalizar campos si faltan
+        if (typeof event.risk_score !== 'number') {
+            event.risk_score = 0.5;
+        }
+        if (!event.timestamp) {
+            event.timestamp = Date.now() / 1000;
+        }
+
+        // 🔧 USAR FUNCIÓN CORREGIDA CON MAPPING DUAL
+        addEventToMapWithMissileAnimationFixed(event);
+        addEventToEventsList(event);
+
+        if (event.risk_score > 0.8) {
+            showThreatIndicator(event);
+        }
+
+        console.log('🚨 Evento V3 corregido procesado:',
+            event.source_ip, '→', event.target_ip,
+            `(${event.source_city || 'N/A'} → ${event.target_city || 'N/A'})`);
+
+    } catch (error) {
+        console.error('❌ Error añadiendo evento V3 corregido:', error);
+        addDebugLog('error', `Error evento V3: ${error.message}`);
+    }
+}
+
+// Reemplazar funciones originales
+window.processEventsFromZeroMQ = processEventsFromZeroMQFixed;
+window.addEventFromZeroMQ = addEventFromZeroMQFixed;
+
+console.log('✅ Soluciones V3 aplicadas: campos duales + animaciones misil + marcadores clickeables');
 window.addEventListener('beforeunload', function() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
