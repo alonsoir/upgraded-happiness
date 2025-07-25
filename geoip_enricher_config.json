@@ -141,11 +141,11 @@
     "_comment_maxmind": "🌍 MaxMind HABILITADO como método primario",
     "maxmind": {
       "enabled": true,
-      "database_path": "data/GeoLite2-City.mmdb",
+      "database_path": "geodata/GeoLite2-City.mmdb",
       "auto_update": false,
       "fallback_to_country": true,
       "connection_pool_size": 8,
-      "fallback_database": "data/GeoLite2-Country.mmdb",
+      "fallback_database": "geodata/GeoLite2-Country.mmdb",
       "timeout_seconds": 2.0
     },
 

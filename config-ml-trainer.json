@@ -3,8 +3,8 @@
     "enabled": true,
     "kaggle_dataset": "mrwellsdavid/unsw-nb15",
     "dataset_path": "",
-    "anomaly_threshold": 0.65,
-    "high_risk_threshold": 0.85,
+    "anomaly_threshold": 0.75,
+    "high_risk_threshold": 0.92,
     "confidence_threshold": 0.8,
     "models": {
       "random_forest": {
