@@ -1487,8 +1487,20 @@ class SecurityDashboard:
                         'encoding_method': encoding_used,
                         # Clasificación mejorada para el frontend
                         'risk_level': 'high' if event.risk_score > 0.7 else 'medium' if event.risk_score > 0.3 else 'low',
-                        'is_dns': event.target_ip in ['8.8.8.8', '1.1.1.1', '208.67.222.222'] if hasattr(event,
-                                                                                                         'target_ip') else False
+                        'is_dns': getattr(event, 'target_ip', '') in ['8.8.8.8', '1.1.1.1', '208.67.222.222'],
+                        # 🆕 AÑADIR: Campos V3 duales desde protobuf_data
+                        'source_latitude': event.protobuf_data.get('source_latitude'),
+                        'source_longitude': event.protobuf_data.get('source_longitude'),
+                        'target_latitude': event.protobuf_data.get('target_latitude'),
+                        'target_longitude': event.protobuf_data.get('target_longitude'),
+                        'source_city': event.protobuf_data.get('source_city', ''),
+                        'source_country': event.protobuf_data.get('source_country', ''),
+                        'target_city': event.protobuf_data.get('target_city', ''),
+                        'target_country': event.protobuf_data.get('target_country', ''),
+                        'source_ip_enriched': event.protobuf_data.get('source_ip_enriched', False),
+                        'target_ip_enriched': event.protobuf_data.get('target_ip_enriched', False),
+                        'geographic_distance_km': event.protobuf_data.get('geographic_distance_km', 0.0),
+                        'same_country': event.protobuf_data.get('same_country', False)
                     }
 
                     # ✅ CORREGIDO: Añadir TODOS los eventos SIN LÍMITE

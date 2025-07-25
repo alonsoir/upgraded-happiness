@@ -1,0 +1,14 @@
+{
+  "version": "20250725_081231",
+  "timestamp": "2025-07-25T08:17:54.792174",
+  "training_metrics": {
+    "training_time": 0.11525297164916992,
+    "samples_count": 200,
+    "mode": "conservative_local_v3",
+    "protobuf_version": "v3.0.0",
+    "feature_count": 20
+  },
+  "model_count": 2,
+  "config_mode": "conservative_local_v3",
+  "protobuf_version": "v3.0.0"
+}
