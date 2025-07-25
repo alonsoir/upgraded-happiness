@@ -5,7 +5,7 @@ Dashboard de Seguridad con ZeroMQ - Backend Principal v2.5.0 MEJORADO
 ✅ MEJORADO: Separación completa de archivos de configuración
 ✅ MEJORADO: Logging robusto a disco y terminal activado por defecto
 ✅ MEJORADO: Manejo mejorado de protobuf V3 desde ML Detector
-✅ MEJORADO: Integración completa con firewall_rules.json
+✅ MEJORADO: Integración completa con firewall_rules_dashboard.json
 ✅ MEJORADO: Compatibilidad con modales draggeables
 ✅ CORREGIDO: Errores sintácticos y métodos duplicados
 """
@@ -3440,17 +3440,17 @@ def main():
 
     print("🚀 Dashboard de Seguridad V2.5.0 - Inicio")
     print("✅ Compatible con lightweight_ml_detector V3")
-    print("🔥 Integración completa con firewall_rules.json")
+    print("🔥 Integración completa con firewall_rules_dashboard.json")
     print("📝 Logging robusto a disco y terminal")
     print("🎨 Soporte para modales draggeables")
 
     # 🔥 VERIFICAR ARGUMENTOS
     if len(sys.argv) != 3:
         print("\n❌ Uso incorrecto:")
-        print("python real_zmq_dashboard_with_firewall.py <dashboard_config.json> <firewall_rules.json>")
+        print("python real_zmq_dashboard_with_firewall.py <dashboard_config.json> <firewall_rules_dashboard.json>")
         print("\n📋 Descripción de archivos:")
         print("   • dashboard_config.json: Configuración del sistema (ZMQ, threads, monitoring)")
-        print("   • firewall_rules.json: Reglas dinámicas del firewall")
+        print("   • firewall_rules_dashboard.json: Reglas dinámicas del firewall")
         print("\n✅ Ambos archivos son obligatorios para el funcionamiento")
         sys.exit(1)
 

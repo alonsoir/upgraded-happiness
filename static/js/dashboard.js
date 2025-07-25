@@ -704,26 +704,25 @@ function pauseFirewallEventsUpdate() {
 
 async function sendTestFirewallCommand() {
     try {
-        console.log('🧪 Enviando comando de test firewall usando firewall_commands.proto...');
+        console.log('🧪 Enviando comando de test firewall (API corregida)...');
 
         const commandId = `test_${Date.now()}`;
         const targetAgent = getAvailableFirewallAgents()[0] || 'simple_firewall_agent_001';
 
-        // 🔥 Crear FirewallCommand usando estructura proto correcta
-        const firewallCommand = {
+        // ✅ CORREGIDO: Estructura plana para test
+        const requestData = {
+            action: 'LIST_RULES',             // ✅ Directo
+            target_ip: '127.0.0.1',          // ✅ Directo
+            firewall_node_id: targetAgent,   // ✅ Nombre correcto
+
             command_id: commandId,
-            action: CommandAction.LIST_RULES, // Usar enum correcto
-            target_ip: '127.0.0.1',
-            target_port: 0,
-            duration_seconds: 0,
-            reason: 'Dashboard test V3 - listing current rules',
-            priority: CommandPriority.LOW,
-            dry_run: true,
-            rate_limit_rule: '',
-            extra_params: {
-                test_mode: 'true',
-                source: 'dashboard_test'
-            }
+            generated_by: 'dashboard_test',
+            test_mode: true,
+
+            // ✅ ULTRA-SEGURO para test
+            force_dry_run: true,
+            max_duration: 0,
+            requires_confirmation: false  // LIST_RULES es seguro
         };
 
         addFirewallEventToList({
@@ -732,25 +731,19 @@ async function sendTestFirewallCommand() {
             action: 'LIST_RULES',
             target_ip: '127.0.0.1',
             action_code: CommandAction.LIST_RULES,
-            source: 'Dashboard Test V3 (Proto)',
+            source: 'Dashboard Test (Fixed API)',
             timestamp: Date.now() / 1000
         });
 
-        showToast('Enviando test V3 al firewall (proto)...', 'info');
+        showToast('Enviando test al firewall (API corregida)...', 'info');
 
-        // 🔥 ENVÍO CON ESTRUCTURA FIREWALL_COMMANDS.PROTO
-        const response = await fetch('/api/test-firewall', {
+        // ✅ ENVÍO CON API CORREGIDA
+        const response = await fetch('/api/execute-firewall-action', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                firewall_command: firewallCommand,
-                target_node_id: targetAgent,
-                batch_id: `test_batch_${Date.now()}`,
-                generated_by: 'dashboard',
-                dry_run_all: true
-            })
+            body: JSON.stringify(requestData)  // ✅ Estructura plana
         });
 
         if (!response.ok) {
@@ -766,16 +759,16 @@ async function sendTestFirewallCommand() {
                     type: 'response',
                     success: true,
                     agent: result.node_id || targetAgent,
-                    result: result.message || 'LIST_RULES executed successfully (dry_run=true)',
+                    result: result.message || 'LIST_RULES executed successfully',
                     node_id: result.node_id || targetAgent,
                     execution_time: result.execution_time || 0.05,
                     timestamp: Date.now() / 1000
                 });
             }, 300);
 
-            showToast('✅ Test V3 proto enviado correctamente al firewall', 'success');
-            console.log('✅ Test firewall V3 proto exitoso:', result);
-            addDebugLog('info', 'Test firewall V3 proto enviado correctamente');
+            showToast('✅ Test enviado correctamente al firewall', 'success');
+            console.log('✅ Test firewall exitoso:', result);
+            addDebugLog('info', 'Test firewall enviado correctamente con API corregida');
 
             firewallStats.commandsSent++;
             firewallStats.responsesOk++;
@@ -790,7 +783,7 @@ async function sendTestFirewallCommand() {
                     id: commandId,
                     type: 'error',
                     success: false,
-                    error: result.message || 'Error en test proto',
+                    error: result.message || 'Error en test',
                     timestamp: Date.now() / 1000
                 });
             }, 300);
@@ -798,26 +791,26 @@ async function sendTestFirewallCommand() {
             firewallStats.errors++;
             updateElement('firewall-errors', firewallStats.errors);
 
-            showToast('❌ Error en test V3 proto: ' + result.message, 'error');
-            addDebugLog('error', `Error test firewall V3 proto: ${result.message}`);
+            showToast('❌ Error en test: ' + result.message, 'error');
+            addDebugLog('error', `Error test firewall: ${result.message}`);
         }
 
     } catch (error) {
-        console.error('❌ Error en sendTestFirewallCommand proto:', error);
+        console.error('❌ Error en sendTestFirewallCommand:', error);
 
         addFirewallEventToList({
             id: `error_${Date.now()}`,
             type: 'error',
             success: false,
-            error: `Error de comunicación proto: ${error.message}`,
+            error: `Error de comunicación: ${error.message}`,
             timestamp: Date.now() / 1000
         });
 
         firewallStats.errors++;
         updateElement('firewall-errors', firewallStats.errors);
 
-        showToast('❌ Error comunicando con firewall proto: ' + error.message, 'error');
-        addDebugLog('error', `Error comunicación firewall proto: ${error.message}`);
+        showToast('❌ Error comunicando con firewall: ' + error.message, 'error');
+        addDebugLog('error', `Error comunicación firewall: ${error.message}`);
     }
 }
 
@@ -1383,22 +1376,22 @@ async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId
 
         const commandId = `target_${Date.now()}`;
 
-        // 🔥 Crear FirewallCommand específico para target_ip
-        const firewallCommand = {
+        // ✅ CORREGIDO: Estructura plana como espera el backend
+        const requestData = {
+            action: action,                    // ✅ Directo
+            target_ip: targetIP,              // ✅ Directo
+            firewall_node_id: firewallNodeId, // ✅ Nombre correcto
+
+            event_id: eventId,
             command_id: commandId,
-            action: CommandAction[action] || CommandAction.BLOCK_IP,
-            target_ip: targetIP,
-            target_port: 0,
-            duration_seconds: getDurationForAction(action),
-            reason: `Target IP action: ${action} applied to attacking IP ${targetIP}`,
-            priority: getPriorityForAction(action),
-            dry_run: false,
-            rate_limit_rule: action === 'RATE_LIMIT_IP' ? '10/min' : '',
-            extra_params: {
-                source: 'dashboard_target_action',
-                event_id: eventId,
-                target_type: 'attacking_ip'
-            }
+            generated_by: 'dashboard_target_action',
+            target_type: 'attacking_ip',
+            risk_score: 0.9,  // Alto riesgo para target_ip
+
+            // ✅ SEGURIDAD: Parámetros conservadores
+            force_dry_run: true,
+            max_duration: 600,
+            requires_confirmation: true
         };
 
         // Añadir evento a la lista
@@ -1408,7 +1401,7 @@ async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId
             action: action,
             target_ip: targetIP,
             action_code: CommandAction[action],
-            source: 'Dashboard Target Action',
+            source: 'Dashboard Target Action (Fixed)',
             timestamp: Date.now() / 1000
         });
 
@@ -1418,13 +1411,7 @@ async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                firewall_command: firewallCommand,
-                target_node_id: firewallNodeId,
-                batch_id: `event_action_${Date.now()}`,
-                generated_by: 'dashboard_event_response',
-                dry_run_all: false
-            })
+            body: JSON.stringify(requestData)  // ✅ Estructura plana
         });
 
         if (!response.ok) {
@@ -2046,22 +2033,25 @@ async function executeEventFirewallActionV3(action, targetIp, firewallNodeId, ev
 
         const commandId = `event_${Date.now()}`;
 
-        // 🔥 Crear FirewallCommand usando estructura proto correcta
-        const firewallCommand = {
+        // ✅ CORREGIDO: Enviar campos DIRECTOS como espera el backend
+        const requestData = {
+            // Backend busca estos campos directamente en request_data
+            action: action,                    // ✅ Directo (no anidado)
+            target_ip: targetIp,              // ✅ Directo (no anidado)
+            firewall_node_id: firewallNodeId, // ✅ Nombre correcto
+
+            // Campos adicionales para contexto
+            event_id: eventId,
             command_id: commandId,
-            action: CommandAction[action] || CommandAction.LIST_RULES,
-            target_ip: targetIp,
-            target_port: 0,
-            duration_seconds: getDurationForAction(action),
-            reason: `Event-triggered action: ${action} for event ${eventId}`,
-            priority: getPriorityForAction(action),
-            dry_run: false,
-            rate_limit_rule: action === 'RATE_LIMIT_IP' ? '5/min' : '',
-            extra_params: {
-                source: 'dashboard_event_action',
-                event_id: eventId,
-                action_type: 'event_response'
-            }
+            generated_by: 'dashboard_event_response',
+            risk_score: 0.8,
+            dry_run_all: false,
+            timestamp: Date.now(),
+
+            // ✅ NUEVO: Auto-detección de modo seguro
+            force_dry_run: true,  // Forzar dry_run por seguridad
+            max_duration: 300,    // Máximo 5 minutos
+            requires_confirmation: true
         };
 
         // Añadir evento a la lista
@@ -2071,23 +2061,17 @@ async function executeEventFirewallActionV3(action, targetIp, firewallNodeId, ev
             action: action,
             target_ip: targetIp,
             action_code: CommandAction[action],
-            source: 'Dashboard Event Action',
+            source: 'Dashboard Event Action (Fixed)',
             timestamp: Date.now() / 1000
         });
 
-        // Enviar al backend
+        // ✅ CORREGIDO: Enviar estructura plana
         const response = await fetch('/api/execute-firewall-action', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                firewall_command: firewallCommand,
-                target_node_id: firewallNodeId,
-                batch_id: `event_action_${Date.now()}`,
-                generated_by: 'dashboard_event_response',
-                dry_run_all: false
-            })
+            body: JSON.stringify(requestData)  // ✅ Estructura plana directa
         });
 
         if (!response.ok) {
@@ -3282,3 +3266,6 @@ window.addEventListener('beforeunload', function() {
 });
 
 // La inicialización se maneja desde HTML con DOMContentLoaded
+console.log('✅ FIX 1 APLICADO: Comunicación API dashboard.js corregida');
+console.log('📡 Ahora envía estructura plana como espera el backend');
+console.log('🔒 Con parámetros de seguridad añadidos');
