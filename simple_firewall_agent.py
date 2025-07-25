@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-simple_firewall_agent.py - Protobuf Integration DUAL CONFIG
-✅ CORREGIDO: Acepta AMBOS archivos de configuración:
-  - simple_firewall_agent_config.json (configuración base del agente)
-  - firewall_rules.json (reglas sincronizadas con dashboard)
-✅ CORREGIDO: Comparación de enums correcta (no strings)
-✅ CORREGIDO: Logging con node_id y PID
-✅ CORREGIDO: Mapeo RATE_LIMIT_IP correcto
-✅ VALIDACIÓN: Ambos archivos deben existir o el proceso no arranca
+simple_firewall_agent.py - ULTRA-SECURE VERSION WITH AUTO-DETECTION
+✅ SOLUCIÓN C COMPLETA: "SET IT AND FORGET IT"
+✅ Auto-detección de entorno y permisos
+✅ Auto-protección contra configuraciones peligrosas
+✅ Fuerza modo seguro automáticamente
+✅ Logging defensivo completo
+✅ Validación robusta de comandos
+✅ Nunca puede dañar el firewall real
 """
 import json
 import time
@@ -20,6 +20,8 @@ import platform
 import uuid
 import os
 import sys
+import pwd
+import grp
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
@@ -37,7 +39,7 @@ except ImportError as e:
     print("📁 Please ensure protobuf files are generated")
     sys.exit(1)
 
-# Import our crypto/compression utils (when ready)
+# Import crypto/compression utils (when ready)
 try:
     from crypto_utils import SecureEnvelope
     from compression_utils import CompressionEngine
@@ -46,6 +48,34 @@ try:
 except ImportError:
     print("⚠️ Crypto utils not available, running without encryption")
     CRYPTO_AVAILABLE = False
+
+
+@dataclass
+class EnvironmentSafety:
+    """Información de seguridad del entorno detectado"""
+    is_root: bool
+    has_sudo: bool
+    effective_uid: int
+    effective_user: str
+    is_container: bool
+    container_type: Optional[str]
+    firewall_accessible: bool
+    firewall_type: str
+    platform: str
+    safety_level: str  # SAFE, MEDIUM, DANGEROUS
+    forced_dry_run: bool
+    safety_reasons: List[str]
+
+
+@dataclass
+class SecurityEvent:
+    """Evento de seguridad para logging"""
+    timestamp: str
+    event_type: str
+    severity: str
+    message: str
+    context: Dict
+    safety_action: str
 
 
 @dataclass
@@ -61,18 +91,303 @@ class FirewallRule:
     expires_at: Optional[float]
     applied: bool
     rule_text: str
+    is_dry_run: bool
+
+
+class SecurityMonitor:
+    """🔒 Monitor de seguridad que detecta y previene operaciones peligrosas"""
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.security_events = []
+        self.environment_safety = None
+        self.last_safety_check = None
+
+    def detect_environment_safety(self) -> EnvironmentSafety:
+        """🔍 DETECCIÓN COMPLETA DEL ENTORNO - CORE DE LA SEGURIDAD"""
+        safety_reasons = []
+        forced_dry_run = False
+
+        # 1. Detectar usuario y permisos
+        effective_uid = os.getuid() if hasattr(os, 'getuid') else -1
+        is_root = effective_uid == 0
+
+        try:
+            effective_user = pwd.getpwuid(effective_uid).pw_name if effective_uid >= 0 else 'unknown'
+        except:
+            effective_user = 'unknown'
+
+        # 2. Detectar sudo
+        has_sudo = self._check_sudo_access()
+
+        # 3. Detectar contenedor
+        is_container, container_type = self._detect_container()
+
+        # 4. Detectar firewall
+        firewall_accessible, firewall_type = self._detect_firewall()
+
+        # 5. Determinar nivel de seguridad
+        if is_root:
+            safety_level = "DANGEROUS"
+            forced_dry_run = True
+            safety_reasons.append("Running as root user")
+
+        elif has_sudo:
+            safety_level = "DANGEROUS"
+            forced_dry_run = True
+            safety_reasons.append("Sudo access detected")
+
+        elif firewall_accessible and not is_container:
+            safety_level = "MEDIUM"
+            safety_reasons.append("Direct firewall access available")
+
+        else:
+            safety_level = "SAFE"
+
+        # 6. Crear objeto de seguridad
+        environment_safety = EnvironmentSafety(
+            is_root=is_root,
+            has_sudo=has_sudo,
+            effective_uid=effective_uid,
+            effective_user=effective_user,
+            is_container=is_container,
+            container_type=container_type,
+            firewall_accessible=firewall_accessible,
+            firewall_type=firewall_type,
+            platform=platform.system().lower(),
+            safety_level=safety_level,
+            forced_dry_run=forced_dry_run,
+            safety_reasons=safety_reasons
+        )
+
+        self.environment_safety = environment_safety
+        self.last_safety_check = datetime.now()
+
+        # 7. Log resultado de detección
+        self._log_environment_detection(environment_safety)
+
+        return environment_safety
+
+    def _check_sudo_access(self) -> bool:
+        """Verificar si sudo está disponible"""
+        try:
+            # Verificar si sudo está instalado
+            result = subprocess.run(['which', 'sudo'], capture_output=True, timeout=5)
+            if result.returncode != 0:
+                return False
+
+            # Verificar si el usuario está en sudoers (sin ejecutar comando real)
+            result = subprocess.run(['sudo', '-n', 'true'], capture_output=True, timeout=5)
+            return result.returncode == 0
+
+        except Exception:
+            return False
+
+    def _detect_container(self) -> Tuple[bool, Optional[str]]:
+        """Detectar si estamos ejecutando en contenedor"""
+        try:
+            # 1. Verificar archivos típicos de contenedor
+            if Path('/.dockerenv').exists():
+                return True, 'docker'
+
+            # 2. Verificar variables de entorno
+            container_vars = ['DOCKER_CONTAINER', 'KUBERNETES_SERVICE_HOST', 'container']
+            for var in container_vars:
+                if var in os.environ:
+                    return True, 'kubernetes' if 'KUBERNETES' in var else 'docker'
+
+            # 3. Verificar cgroup
+            try:
+                with open('/proc/1/cgroup', 'r') as f:
+                    cgroup_content = f.read()
+                    if 'docker' in cgroup_content or 'kubepods' in cgroup_content:
+                        return True, 'docker' if 'docker' in cgroup_content else 'kubernetes'
+            except:
+                pass
+
+            # 4. Verificar hostname característico
+            hostname = os.uname().nodename
+            if len(hostname) == 12 and hostname.isalnum():  # Docker style
+                return True, 'docker'
+
+            return False, None
+
+        except Exception:
+            return False, None
+
+    def _detect_firewall(self) -> Tuple[bool, str]:
+        """Detectar tipo y accesibilidad del firewall"""
+        platform_name = platform.system().lower()
+
+        if platform_name == 'linux':
+            # Verificar iptables
+            try:
+                result = subprocess.run(['which', 'iptables'], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    # Verificar si se puede ejecutar iptables
+                    test_result = subprocess.run(['iptables', '--version'], capture_output=True, timeout=5)
+                    return test_result.returncode == 0, 'iptables'
+            except:
+                pass
+
+            # Verificar ufw
+            try:
+                result = subprocess.run(['which', 'ufw'], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    return True, 'ufw'
+            except:
+                pass
+
+            return False, 'iptables'  # Assume iptables but not accessible
+
+        elif platform_name == 'darwin':
+            try:
+                result = subprocess.run(['pfctl', '-s', 'info'], capture_output=True, timeout=5)
+                return result.returncode == 0, 'pfctl'
+            except:
+                return False, 'pfctl'
+
+        elif platform_name == 'windows':
+            try:
+                result = subprocess.run(['netsh', 'advfirewall', 'show', 'allprofiles'],
+                                        capture_output=True, timeout=5)
+                return result.returncode == 0, 'netsh'
+            except:
+                return False, 'netsh'
+
+        else:
+            return False, 'unknown'
+
+    def _log_environment_detection(self, env_safety: EnvironmentSafety):
+        """Log resultado de detección de entorno"""
+        self.logger.info("🔍 ENVIRONMENT SAFETY DETECTION COMPLETE:")
+        self.logger.info(f"   🔒 Safety Level: {env_safety.safety_level}")
+        self.logger.info(f"   👤 User: {env_safety.effective_user} (UID: {env_safety.effective_uid})")
+        self.logger.info(f"   🏠 Platform: {env_safety.platform}")
+        self.logger.info(f"   📦 Container: {env_safety.is_container} ({env_safety.container_type})")
+        self.logger.info(f"   🔥 Firewall: {env_safety.firewall_type} (accessible: {env_safety.firewall_accessible})")
+        self.logger.info(f"   ⚠️ Root: {env_safety.is_root}")
+        self.logger.info(f"   🔑 Sudo: {env_safety.has_sudo}")
+        self.logger.info(f"   🛡️ Forced Dry Run: {env_safety.forced_dry_run}")
+
+        if env_safety.safety_reasons:
+            self.logger.warning(f"   📋 Safety Reasons: {', '.join(env_safety.safety_reasons)}")
+
+        # Log evento de seguridad
+        security_event = SecurityEvent(
+            timestamp=datetime.now().isoformat(),
+            event_type="environment_detection",
+            severity="INFO" if env_safety.safety_level == "SAFE" else "WARNING",
+            message=f"Environment safety level: {env_safety.safety_level}",
+            context={
+                "is_root": env_safety.is_root,
+                "has_sudo": env_safety.has_sudo,
+                "is_container": env_safety.is_container,
+                "firewall_accessible": env_safety.firewall_accessible,
+                "forced_dry_run": env_safety.forced_dry_run,
+                "reasons": env_safety.safety_reasons
+            },
+            safety_action="force_dry_run" if env_safety.forced_dry_run else "normal_operation"
+        )
+
+        self.security_events.append(security_event)
+
+    def validate_command_safety(self, action: str, target_ip: str, params: Dict) -> Tuple[bool, str, List[str]]:
+        """🛡️ Validar seguridad del comando ANTES de ejecutar"""
+        issues = []
+        allowed = True
+        reason = "Command validation passed"
+
+        # 1. Verificar si la acción está permitida
+        if action not in ['MONITOR', 'LIST_RULES']:
+            allowed = False
+            issues.append(f"Action '{action}' not allowed in ultra-secure mode")
+
+        # 2. Validar IP
+        if not self._is_valid_ip(target_ip):
+            allowed = False
+            issues.append(f"Invalid IP address: {target_ip}")
+
+        # 3. Verificar IPs privadas/localhost (si está configurado para bloquear)
+        if self._is_dangerous_ip(target_ip):
+            allowed = False
+            issues.append(f"IP {target_ip} is in blocked range (localhost/private)")
+
+        # 4. Verificar duración
+        duration = params.get('duration', 0)
+        if duration > 300:  # Max 5 minutos
+            allowed = False
+            issues.append(f"Duration {duration}s exceeds maximum allowed (300s)")
+
+        # 5. Verificar estado del entorno
+        if self.environment_safety and self.environment_safety.forced_dry_run:
+            if action not in ['MONITOR', 'LIST_RULES']:
+                allowed = False
+                issues.append("Environment safety forces dry-run only mode")
+
+        if not allowed:
+            reason = f"Command rejected: {'; '.join(issues)}"
+            self.logger.warning(f"🚫 COMMAND REJECTED: {reason}")
+
+            # Log evento de seguridad
+            security_event = SecurityEvent(
+                timestamp=datetime.now().isoformat(),
+                event_type="command_rejected",
+                severity="WARNING",
+                message=f"Rejected {action} command for {target_ip}",
+                context={
+                    "action": action,
+                    "target_ip": target_ip,
+                    "params": params,
+                    "issues": issues
+                },
+                safety_action="command_blocked"
+            )
+            self.security_events.append(security_event)
+
+        return allowed, reason, issues
+
+    def _is_valid_ip(self, ip: str) -> bool:
+        """Validar formato de IP"""
+        import ipaddress
+        try:
+            ipaddress.IPv4Address(ip)
+            return True
+        except:
+            return False
+
+    def _is_dangerous_ip(self, ip: str) -> bool:
+        """Verificar si la IP está en rangos peligrosos"""
+        import ipaddress
+        try:
+            ip_obj = ipaddress.IPv4Address(ip)
+
+            # Rangos bloqueados
+            blocked_ranges = [
+                ipaddress.IPv4Network('127.0.0.0/8'),  # localhost
+                ipaddress.IPv4Network('10.0.0.0/8'),  # private
+                ipaddress.IPv4Network('172.16.0.0/12'),  # private
+                ipaddress.IPv4Network('192.168.0.0/16'),  # private
+                ipaddress.IPv4Network('169.254.0.0/16')  # link-local
+            ]
+
+            for blocked_range in blocked_ranges:
+                if ip_obj in blocked_range:
+                    return True
+
+            return False
+        except:
+            return True  # Si no se puede validar, es peligrosa
 
 
 class FirewallRulesSync:
-    """
-    ✅ NUEVO: Sincronización con reglas JSON del dashboard
-    Mantiene sincronizadas las capacidades con el dashboard
-    """
+    """Sincronización con reglas JSON del dashboard - ULTRA SECURE VERSION"""
 
-    def __init__(self, rules_file: str, node_id: str, logger):
+    def __init__(self, rules_file: str, node_id: str, logger, security_monitor: SecurityMonitor):
         self.rules_file = rules_file
         self.node_id = node_id
         self.logger = logger
+        self.security_monitor = security_monitor
         self.available_actions = []
         self.capabilities = []
         self.global_settings = {}
@@ -85,7 +400,7 @@ class FirewallRulesSync:
         self.load_rules()
 
     def load_rules(self):
-        """Cargar reglas desde archivo JSON compartido con dashboard"""
+        """Cargar reglas con validación de seguridad"""
         try:
             if not Path(self.rules_file).exists():
                 raise FileNotFoundError(f"❌ CRITICAL: Archivo de reglas no encontrado: {self.rules_file}")
@@ -103,7 +418,16 @@ class FirewallRulesSync:
 
             # Extraer acciones manuales disponibles
             self.manual_actions = firewall_config.get('manual_actions', {})
-            self.available_actions = list(self.manual_actions.keys())
+
+            # 🔒 FILTRAR SOLO ACCIONES SEGURAS
+            safe_actions = []
+            for action, config in self.manual_actions.items():
+                if config.get('safety_level') == 'SAFE' and config.get('enabled', True):
+                    safe_actions.append(action)
+                else:
+                    self.logger.warning(f"🚫 Action {action} disabled due to safety level")
+
+            self.available_actions = safe_actions
 
             # Extraer configuración específica de este agente
             firewall_agents = firewall_config.get('firewall_agents', {})
@@ -111,379 +435,148 @@ class FirewallRulesSync:
 
             if not self.agent_config:
                 self.logger.warning(f"⚠️ No se encontró configuración específica para {self.node_id}")
-                # Usar capacidades por defecto
                 self.capabilities = self.available_actions
             else:
-                self.capabilities = self.agent_config.get('capabilities', [])
+                # 🔒 USAR SOLO CAPACIDADES SEGURAS
+                agent_capabilities = self.agent_config.get('capabilities', [])
+                self.capabilities = [cap for cap in agent_capabilities if cap in safe_actions]
 
-            # Configuración global
+            # Configuración global con overrides de seguridad
             self.global_settings = firewall_config.get('global_settings', {})
+
+            # 🔒 FORZAR CONFIGURACIÓN SEGURA
+            if self.global_settings.get('force_dry_run_global', False):
+                self.logger.info("🔒 Global dry_run forced by configuration")
 
             self.last_loaded = datetime.now()
 
             self.logger.info(f"✅ Reglas de firewall sincronizadas: {len(self.risk_rules)} reglas de riesgo")
-            self.logger.info(f"📋 Acciones manuales: {', '.join(self.available_actions)}")
-            self.logger.info(f"🎯 Capacidades del agente: {', '.join(self.capabilities)}")
+            self.logger.info(f"📋 Acciones manuales SEGURAS: {', '.join(self.available_actions)}")
+            self.logger.info(f"🎯 Capacidades del agente FILTRADAS: {', '.join(self.capabilities)}")
 
         except Exception as e:
             self.logger.error(f"❌ CRITICAL ERROR cargando reglas: {e}")
-            # No usar fallback - esto debe fallar
             raise e
 
-    def get_action_for_risk_score(self, risk_score: float) -> Optional[Dict]:
-        """Obtener acción recomendada basada en risk_score"""
-        for rule in self.risk_rules:
-            risk_range = rule.get('risk_range', [0, 100])
-            if risk_range[0] <= risk_score <= risk_range[1]:
-                return rule
-        return None
 
-    def reload_if_changed(self):
-        """Recargar reglas si el archivo cambió"""
-        try:
-            if Path(self.rules_file).exists():
-                file_mtime = datetime.fromtimestamp(os.path.getmtime(self.rules_file))
-                if self.last_loaded and file_mtime > self.last_loaded:
-                    self.logger.info("🔄 Archivo de reglas modificado, recargando...")
-                    self.load_rules()
-        except Exception as e:
-            self.logger.error(f"❌ Error verificando cambios en reglas: {e}")
+class UltraSecureFirewallManager:
+    """🔒 Firewall Manager Ultra-Seguro - Nunca puede dañar el firewall real"""
 
-
-class FirewallManager:
-    """Cross-platform firewall management"""
-
-    def __init__(self, config: Dict, logger):
+    def __init__(self, config: Dict, logger, security_monitor: SecurityMonitor):
         self.config = config
         self.logger = logger
+        self.security_monitor = security_monitor
         self.platform = platform.system().lower()
         self.active_rules = {}
         self.rule_history = []
 
-        # Platform-specific configuration
+        # 🔒 FORZAR CONFIGURACIÓN ULTRA-SEGURA
+        self.sudo_enabled = False  # NUNCA usar sudo
+        self.dry_run = True  # SIEMPRE dry_run
         self.firewall_type = self._detect_firewall_type()
-        self.sudo_enabled = config.get("sudo_enabled", True)
-        self.dry_run = config.get("dry_run", False)
 
-        self.logger.info(f"Firewall Manager initialized - Platform: {self.platform}, Type: {self.firewall_type}")
+        # 🔒 AUTO-DETECCIÓN DE SEGURIDAD
+        env_safety = self.security_monitor.detect_environment_safety()
+        if env_safety.forced_dry_run:
+            self.dry_run = True
+            self.logger.warning("🔒 FORCED DRY_RUN due to environment safety detection")
+
+        self.logger.info(f"🔒 Ultra-Secure Firewall Manager initialized")
+        self.logger.info(f"   Platform: {self.platform}, Type: {self.firewall_type}")
+        self.logger.info(f"   Dry Run: {self.dry_run}, Sudo: {self.sudo_enabled}")
 
     def _detect_firewall_type(self) -> str:
-        """Detect the firewall type based on platform"""
-        if self.platform == "linux":
-            # Check for iptables
-            try:
-                result = subprocess.run(["which", "iptables"], capture_output=True, text=True)
-                if result.returncode == 0:
-                    return "iptables"
-            except:
-                pass
-
-            # Check for ufw
-            try:
-                result = subprocess.run(["which", "ufw"], capture_output=True, text=True)
-                if result.returncode == 0:
-                    return "ufw"
-            except:
-                pass
-
-            return "iptables"  # Default for Linux
-
-        elif self.platform == "darwin":  # macOS
-            return "pfctl"
-
-        elif self.platform == "windows":
-            return "netsh"
-
+        """Detectar tipo de firewall (solo para logging, no para uso real)"""
+        env_safety = self.security_monitor.environment_safety
+        if env_safety:
+            return env_safety.firewall_type
         else:
             return "unknown"
 
-    def apply_block_rule(self, command_id: str, target_ip: str, target_port: Optional[int] = None,
-                         duration: Optional[int] = None) -> Tuple[bool, str]:
-        """Apply a block rule"""
+    def apply_monitor_rule(self, command_id: str, target_ip: str, target_port: Optional[int] = None,
+                           duration: Optional[int] = None) -> Tuple[bool, str]:
+        """Aplicar regla de monitoreo (SEGURO)"""
         try:
+            # 🔒 VALIDAR COMANDO
+            params = {'duration': duration or 300}
+            allowed, reason, issues = self.security_monitor.validate_command_safety(
+                'MONITOR', target_ip, params
+            )
+
+            if not allowed:
+                return False, f"Security validation failed: {reason}"
+
             rule_id = str(uuid.uuid4())
             current_time = time.time()
-            expires_at = current_time + duration if duration else None
+            expires_at = current_time + (duration or 300)
 
-            # Generate rule text based on firewall type
-            rule_text = self._generate_block_rule(target_ip, target_port)
+            # Generar "regla" de monitoreo (solo logging)
+            rule_text = f"MONITOR {target_ip}" + (f":{target_port}" if target_port else "")
 
-            # Apply the rule
-            if self.dry_run:
-                self.logger.info(f"[DRY RUN] Would apply rule: {rule_text}")
-                success = True
-                message = f"DRY RUN: Block rule would be applied for {target_ip}"
-            else:
-                success, message = self._execute_firewall_command(rule_text)
+            # 🔒 SIEMPRE DRY RUN PARA MONITOR
+            self.logger.info(f"🔒 [ULTRA-SAFE MONITOR] {rule_text}")
+            success = True
+            message = f"ULTRA-SAFE MONITOR: {target_ip} monitored for {duration or 300}s"
 
-            # Track the rule
-            if success:
-                rule = FirewallRule(
-                    rule_id=rule_id,
-                    command_id=command_id,
-                    action="BLOCK",
-                    target_ip=target_ip,
-                    target_port=target_port,
-                    duration_seconds=duration,
-                    created_at=current_time,
-                    expires_at=expires_at,
-                    applied=True,
-                    rule_text=rule_text
-                )
+            # Registrar la "regla"
+            rule = FirewallRule(
+                rule_id=rule_id,
+                command_id=command_id,
+                action="MONITOR",
+                target_ip=target_ip,
+                target_port=target_port,
+                duration_seconds=duration,
+                created_at=current_time,
+                expires_at=expires_at,
+                applied=True,
+                rule_text=rule_text,
+                is_dry_run=True
+            )
 
-                self.active_rules[rule_id] = rule
-                self.rule_history.append(rule)
+            self.active_rules[rule_id] = rule
+            self.rule_history.append(rule)
 
-                self.logger.info(f"Block rule applied: {target_ip} (Rule ID: {rule_id})")
+            self.logger.info(f"✅ Monitor rule logged: {target_ip} (Rule ID: {rule_id})")
 
             return success, message
 
         except Exception as e:
-            self.logger.error(f"Error applying block rule: {e}")
-            return False, f"Error applying block rule: {str(e)}"
+            self.logger.error(f"❌ Error applying monitor rule: {e}")
+            return False, f"Error applying monitor rule: {str(e)}"
 
-    def apply_allow_rule(self, command_id: str, target_ip: str, target_port: Optional[int] = None,
-                         duration: Optional[int] = None) -> Tuple[bool, str]:
-        """Apply an allow rule"""
+    def list_active_rules(self, command_id: str) -> Tuple[bool, str]:
+        """Listar reglas activas (SEGURO)"""
         try:
-            rule_id = str(uuid.uuid4())
-            current_time = time.time()
-            expires_at = current_time + duration if duration else None
+            # 🔒 VALIDAR COMANDO
+            allowed, reason, issues = self.security_monitor.validate_command_safety(
+                'LIST_RULES', '127.0.0.1', {}
+            )
 
-            # Generate rule text based on firewall type
-            rule_text = self._generate_allow_rule(target_ip, target_port)
+            if not allowed:
+                return False, f"Security validation failed: {reason}"
 
-            # Apply the rule
-            if self.dry_run:
-                self.logger.info(f"[DRY RUN] Would apply rule: {rule_text}")
-                success = True
-                message = f"DRY RUN: Allow rule would be applied for {target_ip}"
-            else:
-                success, message = self._execute_firewall_command(rule_text)
+            active_rules = list(self.active_rules.values())
+            rule_count = len(active_rules)
 
-            # Track the rule
-            if success:
-                rule = FirewallRule(
-                    rule_id=rule_id,
-                    command_id=command_id,
-                    action="ALLOW",
-                    target_ip=target_ip,
-                    target_port=target_port,
-                    duration_seconds=duration,
-                    created_at=current_time,
-                    expires_at=expires_at,
-                    applied=True,
-                    rule_text=rule_text
-                )
+            # Generar resumen seguro
+            rules_summary = []
+            for rule in active_rules[-10:]:  # Solo últimas 10
+                summary = f"{rule.action} {rule.target_ip} (expires: {rule.expires_at})"
+                rules_summary.append(summary)
 
-                self.active_rules[rule_id] = rule
-                self.rule_history.append(rule)
+            message = f"LIST_RULES: {rule_count} active rules"
+            if rules_summary:
+                message += f" - Recent: {'; '.join(rules_summary)}"
 
-                self.logger.info(f"Allow rule applied: {target_ip} (Rule ID: {rule_id})")
-
-            return success, message
+            self.logger.info(f"📋 {message}")
+            return True, message
 
         except Exception as e:
-            self.logger.error(f"Error applying allow rule: {e}")
-            return False, f"Error applying allow rule: {str(e)}"
-
-    def apply_rate_limit_rule(self, command_id: str, target_ip: str, target_port: Optional[int] = None,
-                              duration: Optional[int] = None) -> Tuple[bool, str]:
-        """Apply a rate limit rule"""
-        try:
-            rule_id = str(uuid.uuid4())
-            current_time = time.time()
-            expires_at = current_time + duration if duration else None
-
-            # Generate rule text based on firewall type
-            rule_text = self._generate_rate_limit_rule(target_ip, target_port)
-
-            # Apply the rule
-            if self.dry_run:
-                self.logger.info(f"[DRY RUN] Would apply rule: {rule_text}")
-                success = True
-                message = f"DRY RUN: Rate limit rule would be applied for {target_ip}"
-            else:
-                success, message = self._execute_firewall_command(rule_text)
-
-            # Track the rule
-            if success:
-                rule = FirewallRule(
-                    rule_id=rule_id,
-                    command_id=command_id,
-                    action="RATE_LIMIT",
-                    target_ip=target_ip,
-                    target_port=target_port,
-                    duration_seconds=duration,
-                    created_at=current_time,
-                    expires_at=expires_at,
-                    applied=True,
-                    rule_text=rule_text
-                )
-
-                self.active_rules[rule_id] = rule
-                self.rule_history.append(rule)
-
-                self.logger.info(f"Rate limit rule applied: {target_ip} (Rule ID: {rule_id})")
-
-            return success, message
-
-        except Exception as e:
-            self.logger.error(f"Error applying rate limit rule: {e}")
-            return False, f"Error applying rate limit rule: {str(e)}"
-
-    def _generate_block_rule(self, target_ip: str, target_port: Optional[int]) -> str:
-        """Generate block rule text for the current firewall type"""
-        if self.firewall_type == "iptables":
-            if target_port:
-                return f"iptables -A INPUT -s {target_ip} -p tcp --dport {target_port} -j DROP"
-            else:
-                return f"iptables -A INPUT -s {target_ip} -j DROP"
-
-        elif self.firewall_type == "ufw":
-            if target_port:
-                return f"ufw deny from {target_ip} to any port {target_port}"
-            else:
-                return f"ufw deny from {target_ip}"
-
-        elif self.firewall_type == "pfctl":
-            if target_port:
-                return f"echo 'block in quick from {target_ip} to any port {target_port}' | pfctl -f -"
-            else:
-                return f"echo 'block in quick from {target_ip}' | pfctl -f -"
-
-        elif self.firewall_type == "netsh":
-            if target_port:
-                return f"netsh advfirewall firewall add rule name='Block_{target_ip}_{target_port}' dir=in action=block remoteip={target_ip} remoteport={target_port}"
-            else:
-                return f"netsh advfirewall firewall add rule name='Block_{target_ip}' dir=in action=block remoteip={target_ip}"
-
-        else:
-            return f"# Unknown firewall type: {self.firewall_type}"
-
-    def _generate_allow_rule(self, target_ip: str, target_port: Optional[int]) -> str:
-        """Generate allow rule text for the current firewall type"""
-        if self.firewall_type == "iptables":
-            if target_port:
-                return f"iptables -A INPUT -s {target_ip} -p tcp --dport {target_port} -j ACCEPT"
-            else:
-                return f"iptables -A INPUT -s {target_ip} -j ACCEPT"
-
-        elif self.firewall_type == "ufw":
-            if target_port:
-                return f"ufw allow from {target_ip} to any port {target_port}"
-            else:
-                return f"ufw allow from {target_ip}"
-
-        elif self.firewall_type == "pfctl":
-            if target_port:
-                return f"echo 'pass in quick from {target_ip} to any port {target_port}' | pfctl -f -"
-            else:
-                return f"echo 'pass in quick from {target_ip}' | pfctl -f -"
-
-        elif self.firewall_type == "netsh":
-            if target_port:
-                return f"netsh advfirewall firewall add rule name='Allow_{target_ip}_{target_port}' dir=in action=allow remoteip={target_ip} remoteport={target_port}"
-            else:
-                return f"netsh advfirewall firewall add rule name='Allow_{target_ip}' dir=in action=allow remoteip={target_ip}"
-
-        else:
-            return f"# Unknown firewall type: {self.firewall_type}"
-
-    def _generate_rate_limit_rule(self, target_ip: str, target_port: Optional[int]) -> str:
-        """Generate rate limit rule text for the current firewall type"""
-        if self.firewall_type == "iptables":
-            if target_port:
-                return f"iptables -A INPUT -s {target_ip} -p tcp --dport {target_port} -m limit --limit 10/minute --limit-burst 5 -j ACCEPT"
-            else:
-                return f"iptables -A INPUT -s {target_ip} -m limit --limit 10/minute --limit-burst 5 -j ACCEPT"
-
-        elif self.firewall_type == "ufw":
-            # UFW doesn't have native rate limiting, so we'll use a basic allow
-            if target_port:
-                return f"ufw limit from {target_ip} to any port {target_port}"
-            else:
-                return f"ufw limit from {target_ip}"
-
-        elif self.firewall_type == "pfctl":
-            if target_port:
-                return f"echo 'pass in quick from {target_ip} to any port {target_port} keep state (max-src-conn 10)' | pfctl -f -"
-            else:
-                return f"echo 'pass in quick from {target_ip} keep state (max-src-conn 10)' | pfctl -f -"
-
-        elif self.firewall_type == "netsh":
-            # Windows firewall doesn't have native rate limiting, so we'll use a basic allow
-            if target_port:
-                return f"netsh advfirewall firewall add rule name='RateLimit_{target_ip}_{target_port}' dir=in action=allow remoteip={target_ip} remoteport={target_port}"
-            else:
-                return f"netsh advfirewall firewall add rule name='RateLimit_{target_ip}' dir=in action=allow remoteip={target_ip}"
-
-        else:
-            return f"# Unknown firewall type: {self.firewall_type}"
-
-    def _execute_firewall_command(self, rule_text: str) -> Tuple[bool, str]:
-        """Execute a firewall command"""
-        try:
-            # Split command into parts
-            if rule_text.startswith("echo"):
-                # Handle piped commands (pfctl)
-                parts = rule_text.split(" | ")
-                if len(parts) == 2:
-                    echo_cmd = parts[0].split()[1:]  # Remove 'echo'
-                    pfctl_cmd = parts[1].split()
-
-                    # Execute echo part
-                    echo_result = subprocess.run(
-                        ["echo"] + echo_cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=30
-                    )
-
-                    if echo_result.returncode == 0:
-                        # Pipe to pfctl
-                        pfctl_result = subprocess.run(
-                            pfctl_cmd,
-                            input=echo_result.stdout,
-                            capture_output=True,
-                            text=True,
-                            timeout=30
-                        )
-
-                        if pfctl_result.returncode == 0:
-                            return True, "Rule applied successfully"
-                        else:
-                            return False, f"pfctl error: {pfctl_result.stderr}"
-                    else:
-                        return False, f"echo error: {echo_result.stderr}"
-            else:
-                # Handle regular commands
-                cmd_parts = rule_text.split()
-
-                # Add sudo if enabled and not running as root
-                if self.sudo_enabled and os.geteuid() != 0:
-                    cmd_parts = ["sudo"] + cmd_parts
-
-                # Execute command
-                result = subprocess.run(
-                    cmd_parts,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-
-                if result.returncode == 0:
-                    return True, "Rule applied successfully"
-                else:
-                    return False, f"Command error: {result.stderr}"
-
-        except subprocess.TimeoutExpired:
-            return False, "Command timed out"
-        except Exception as e:
-            return False, f"Execution error: {str(e)}"
+            self.logger.error(f"❌ Error listing rules: {e}")
+            return False, f"Error listing rules: {str(e)}"
 
     def cleanup_expired_rules(self):
-        """Clean up expired rules"""
+        """Limpiar reglas expiradas"""
         current_time = time.time()
         expired_rules = []
 
@@ -493,28 +586,21 @@ class FirewallManager:
 
         for rule_id in expired_rules:
             rule = self.active_rules.pop(rule_id)
-            self.logger.info(f"Rule expired: {rule.target_ip} (Rule ID: {rule_id})")
-            # TODO: Remove the actual firewall rule
+            self.logger.info(f"🔄 Rule expired: {rule.target_ip} (Rule ID: {rule_id})")
 
     def get_active_rules(self) -> List[FirewallRule]:
-        """Get list of active rules"""
+        """Obtener lista de reglas activas"""
         return list(self.active_rules.values())
 
     def get_rule_history(self) -> List[FirewallRule]:
-        """Get rule history"""
-        return self.rule_history[-100:]  # Last 100 rules
+        """Obtener historial de reglas"""
+        return self.rule_history[-50:]  # Últimas 50
 
 
-class SimpleFirewallAgent:
-    """Simple firewall agent that processes protobuf commands"""
+class UltraSecureFirewallAgent:
+    """🔒 Firewall Agent Ultra-Seguro - SET IT AND FORGET IT"""
 
     def __init__(self, config_path: str, rules_file: str):
-        """
-        ✅ CORREGIDO: Ahora requiere AMBOS archivos
-        - config_path: simple_firewall_agent_config.json
-        - rules_file: firewall_rules.json
-        """
-
         # ✅ VALIDACIÓN CRÍTICA: Ambos archivos deben existir
         if not Path(config_path).exists():
             raise FileNotFoundError(f"❌ CRITICAL: Archivo de configuración base no encontrado: {config_path}")
@@ -522,7 +608,7 @@ class SimpleFirewallAgent:
         if not Path(rules_file).exists():
             raise FileNotFoundError(f"❌ CRITICAL: Archivo de reglas no encontrado: {rules_file}")
 
-        # ✅ CARGAR CONFIGURACIÓN BASE (simple_firewall_agent_config.json)
+        # ✅ CARGAR CONFIGURACIÓN BASE
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 self.config = json.load(f)
@@ -530,7 +616,7 @@ class SimpleFirewallAgent:
         except Exception as e:
             raise ValueError(f"❌ CRITICAL: Error cargando configuración base: {e}")
 
-        # ✅ VALIDAR CAMPOS CRÍTICOS EN CONFIGURACIÓN BASE
+        # ✅ VALIDAR CAMPOS CRÍTICOS
         required_fields = ["node_id", "component", "firewall", "network"]
         for field in required_fields:
             if field not in self.config:
@@ -539,14 +625,28 @@ class SimpleFirewallAgent:
         self.node_id = self.config["node_id"]
         self.component_name = self.config["component"]["name"]
         self.agent_id = f"{self.node_id}_{int(time.time())}"
-        self.dry_run = self.config["firewall"]["dry_run"]
+
+        # 🔒 FORZAR MODO ULTRA-SEGURO INDEPENDIENTEMENTE DE CONFIGURACIÓN
+        self.dry_run = True
+        self.ultra_secure_mode = True
 
         # ✅ CONFIGURAR LOGGING ANTES DE CREAR OTROS COMPONENTES
         self.setup_logging()
 
-        # ✅ CARGAR REGLAS DE FIREWALL (firewall_rules.json)
+        # 🔒 INICIALIZAR MONITOR DE SEGURIDAD
+        self.security_monitor = SecurityMonitor(self.logger)
+
+        # 🔍 AUTO-DETECCIÓN DE ENTORNO
+        env_safety = self.security_monitor.detect_environment_safety()
+
+        # 🔒 APLICAR OVERRIDES DE SEGURIDAD AUTOMÁTICOS
+        if env_safety.forced_dry_run:
+            self.dry_run = True
+            self.logger.warning("🔒 DRY_RUN FORCED by environment safety detection")
+
+        # ✅ CARGAR REGLAS DE FIREWALL CON FILTRADO DE SEGURIDAD
         try:
-            self.rules_sync = FirewallRulesSync(rules_file, self.node_id, self.logger)
+            self.rules_sync = FirewallRulesSync(rules_file, self.node_id, self.logger, self.security_monitor)
             self.logger.info(f"✅ Reglas de firewall cargadas: {rules_file}")
         except Exception as e:
             self.logger.error(f"❌ CRITICAL: Error cargando reglas de firewall: {e}")
@@ -562,9 +662,9 @@ class SimpleFirewallAgent:
             if self.config.get("compression", {}).get("enabled", False):
                 self.compression_engine = CompressionEngine(self.config["compression"])
 
-        # Initialize firewall manager
+        # 🔒 Initialize ULTRA-SECURE firewall manager
         firewall_config = self.config.get("firewall", {})
-        self.firewall_manager = FirewallManager(firewall_config, self.logger)
+        self.firewall_manager = UltraSecureFirewallManager(firewall_config, self.logger, self.security_monitor)
 
         # ZMQ setup
         self.zmq_context = zmq.Context()
@@ -576,31 +676,38 @@ class SimpleFirewallAgent:
         self.running = False
         self.threads = []
 
-        # Metrics
+        # Metrics con información de seguridad
         self.metrics = {
             "commands_received": 0,
             "commands_processed": 0,
+            "commands_rejected": 0,
             "responses_sent": 0,
             "rules_applied": 0,
             "errors": 0,
-            "uptime_start": time.time()
+            "uptime_start": time.time(),
+            "security_events": 0,
+            "ultra_secure_mode": True,
+            "forced_dry_run": env_safety.forced_dry_run,
+            "environment_safety_level": env_safety.safety_level
         }
 
         # Initialize components
         self._setup_zmq_sockets()
 
-        self.logger.info(f"Simple Firewall Agent initialized: {self.agent_id}")
+        self.logger.info(f"🔒 ULTRA-SECURE Firewall Agent initialized: {self.agent_id}")
+        self.logger.info(f"🔒 Environment Safety Level: {env_safety.safety_level}")
+        self.logger.info(f"🔒 Forced Dry Run: {env_safety.forced_dry_run}")
 
     def setup_logging(self):
-        """✅ CORREGIDO: Setup logging con node_id y PID (como dashboard)"""
+        """Setup logging ultra-seguro con marcadores de seguridad"""
         log_config = self.config.get("logging", {})
 
         # Configurar nivel
         level = getattr(logging, log_config.get("level", "INFO").upper())
 
-        # ✅ FORMATO CON NODE_ID Y PID (como dashboard)
+        # 🔒 FORMATO CON MARCADORES DE SEGURIDAD
         log_format = log_config.get("format",
-                                    "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s")
+                                    "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [ULTRA_SECURE] - %(message)s")
 
         # Reemplazar placeholders
         log_format = log_format.format(
@@ -611,9 +718,9 @@ class SimpleFirewallAgent:
         formatter = logging.Formatter(log_format)
 
         # Setup logger
-        self.logger = logging.getLogger(f"firewall_agent_{self.node_id}")
+        self.logger = logging.getLogger(f"firewall_agent_{self.node_id}_SECURE")
         self.logger.setLevel(level)
-        self.logger.handlers.clear()  # Limpiar handlers existentes
+        self.logger.handlers.clear()
 
         # Handler de consola
         console_config = log_config.get("handlers", {}).get("console", {})
@@ -622,15 +729,32 @@ class SimpleFirewallAgent:
             console_handler.setFormatter(formatter)
             self.logger.addHandler(console_handler)
 
-        # ✅ CORREGIDO: Handler de archivo ACTIVADO
+        # Handler de archivo SEGURO
         file_config = log_config.get("handlers", {}).get("file", {})
-        if file_config.get("enabled", True):  # ✅ True por defecto
-            file_path = file_config.get("path", "logs/firewall_agent.log")
-            # Crear directorio si no existe
+        if file_config.get("enabled", True):
+            file_path = file_config.get("path", "logs/firewall_agent_ultra_secure.log")
             Path(file_path).parent.mkdir(parents=True, exist_ok=True)
             file_handler = logging.FileHandler(file_path)
             file_handler.setFormatter(formatter)
             self.logger.addHandler(file_handler)
+
+        # 🔒 Handler de eventos de seguridad
+        security_config = log_config.get("handlers", {}).get("security_log", {})
+        if security_config.get("enabled", True):
+            security_path = security_config.get("path", "logs/firewall_security_events.log")
+            Path(security_path).parent.mkdir(parents=True, exist_ok=True)
+            security_handler = logging.FileHandler(security_path)
+            security_formatter = logging.Formatter(
+                "%(asctime)s - SECURITY - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s".format(
+                    node_id=self.node_id, pid=os.getpid()
+                )
+            )
+            security_handler.setFormatter(security_formatter)
+
+            # Logger separado para eventos de seguridad
+            self.security_logger = logging.getLogger(f"security_{self.node_id}")
+            self.security_logger.addHandler(security_handler)
+            self.security_logger.setLevel(logging.INFO)
 
         self.logger.propagate = False
 
@@ -647,18 +771,15 @@ class SimpleFirewallAgent:
             if "high_water_mark" in cmd_config:
                 self.commands_socket.set_hwm(cmd_config["high_water_mark"])
 
-            # ✅ LEER EL MODO DE LA CONFIGURACIÓN
             cmd_address = f"tcp://{cmd_config['address']}:{cmd_config['port']}"
             cmd_mode = cmd_config.get('mode', 'connect').lower()
 
             if cmd_mode == 'bind':
-                # ✅ HACER BIND (ESCUCHAR)
                 self.commands_socket.bind(cmd_address)
-                self.logger.info(f"Commands Input BIND en: {cmd_address}")
+                self.logger.info(f"🔒 Commands Input BIND en: {cmd_address}")
             else:
-                # ✅ HACER CONNECT (CLIENTE)
                 self.commands_socket.connect(cmd_address)
-                self.logger.info(f"Commands Input CONNECT a: {cmd_address}")
+                self.logger.info(f"🔒 Commands Input CONNECT a: {cmd_address}")
 
         # Responses Output (to dashboard)
         if "responses_output" in network_config:
@@ -669,210 +790,185 @@ class SimpleFirewallAgent:
             if "high_water_mark" in resp_config:
                 self.responses_socket.set_hwm(resp_config["high_water_mark"])
 
-            # ✅ LEER EL MODO DE LA CONFIGURACIÓN TAMBIÉN PARA RESPONSES
             resp_address = f"tcp://{resp_config['address']}:{resp_config['port']}"
             resp_mode = resp_config.get('mode', 'connect').lower()
 
             if resp_mode == 'bind':
-                # ✅ HACER BIND (ESCUCHAR)
                 self.responses_socket.bind(resp_address)
-                self.logger.info(f"Responses Output BIND en: {resp_address}")
+                self.logger.info(f"🔒 Responses Output BIND en: {resp_address}")
             else:
-                # ✅ HACER CONNECT (CLIENTE)
                 self.responses_socket.connect(resp_address)
-                self.logger.info(f"Responses Output CONNECT a: {resp_address}")
-
-    def _decrypt_and_decompress(self, data: bytes) -> bytes:
-        """Decrypt and decompress data if crypto is enabled"""
-        if not data:
-            return data
-
-        try:
-            # Decrypt if crypto is enabled
-            if self.crypto_engine:
-                data = self.crypto_engine.decrypt(data)
-
-            # Decompress if compression is enabled
-            if self.compression_engine:
-                data = self.compression_engine.decompress(data)
-
-            return data
-
-        except Exception as e:
-            self.logger.error(f"Failed to decrypt/decompress data: {e}")
-            return data  # Return original data if decryption fails
-
-    def _compress_and_encrypt(self, data: bytes) -> bytes:
-        """Compress and encrypt data if crypto is enabled"""
-        if not data:
-            return data
-
-        try:
-            # Compress if compression is enabled
-            if self.compression_engine:
-                result = self.compression_engine.compress(data)
-                data = result.compressed_data if hasattr(result, 'compressed_data') else result
-
-            # Encrypt if crypto is enabled
-            if self.crypto_engine:
-                data = self.crypto_engine.encrypt(data)
-
-            return data
-
-        except Exception as e:
-            self.logger.error(f"Failed to compress/encrypt data: {e}")
-            return data  # Return original data if encryption fails
+                self.logger.info(f"🔒 Responses Output CONNECT a: {resp_address}")
 
     def _commands_consumer(self):
-        """Consumer thread for firewall commands"""
-        self.logger.info("Commands consumer thread started")
+        """Consumer thread para comandos firewall con validación ultra-segura"""
+        self.logger.info("🔒 ULTRA-SECURE Commands consumer thread started")
 
         while self.running:
             try:
                 if self.commands_socket:
                     try:
-                        # Receive command with timeout
                         raw_data = self.commands_socket.recv(zmq.NOBLOCK)
-
-                        # ✅ DEBUG: Log datos recibidos
-                        self.logger.info(f"🔍 Received {len(raw_data)} bytes")
+                        self.logger.info(f"🔍 Received {len(raw_data)} bytes for security validation")
 
                         # Decrypt and decompress
                         decrypted_data = self._decrypt_and_decompress(raw_data)
 
-                        # ✅ MEJOR MANEJO DE PROTOBUF
                         try:
-                            # Parse protobuf
                             pb_command = firewall_commands_pb2.FirewallCommand()
                             pb_command.ParseFromString(decrypted_data)
 
-                            # ✅ VALIDAR CAMPOS CRÍTICOS
+                            # 🔒 VALIDACIÓN DE SEGURIDAD INMEDIATA
                             if not pb_command.command_id:
-                                pb_command.command_id = f"auto_{int(time.time())}"
+                                pb_command.command_id = f"auto_secure_{int(time.time())}"
 
                             if not pb_command.target_ip:
                                 pb_command.target_ip = "127.0.0.1"
 
-                            self.logger.info(
-                                f"✅ Parsed command: {pb_command.command_id}, action={pb_command.action}, ip={pb_command.target_ip}")
+                            # 🔒 FORZAR DRY_RUN
+                            pb_command.dry_run = True
 
-                            # Add to processing queue
-                            self.command_queue.put(pb_command)
-                            self.metrics["commands_received"] += 1
+                            self.logger.info(
+                                f"🔒 SECURITY CHECK: {pb_command.command_id}, action={pb_command.action}, ip={pb_command.target_ip}")
+
+                            # 🔒 PRE-VALIDACIÓN DE COMANDO
+                            params = {
+                                'duration': pb_command.duration_seconds,
+                                'dry_run': True  # Siempre
+                            }
+
+                            action_name = self._get_action_name(pb_command.action)
+                            allowed, reason, issues = self.security_monitor.validate_command_safety(
+                                action_name, pb_command.target_ip, params
+                            )
+
+                            if allowed:
+                                self.command_queue.put(pb_command)
+                                self.metrics["commands_received"] += 1
+                                self.logger.info(f"✅ Command passed security validation")
+                            else:
+                                self.metrics["commands_rejected"] += 1
+                                self.security_logger.warning(f"🚫 COMMAND REJECTED: {reason}")
+
+                                # Enviar respuesta de rechazo
+                                self._send_response(pb_command.command_id, False,
+                                                    f"Security validation failed: {reason}")
 
                         except Exception as parse_error:
                             self.logger.error(f"❌ Protobuf parse error: {parse_error}")
-                            self.logger.error(f"📦 Data hex: {decrypted_data[:50].hex()}")
 
-                            # ✅ CREAR COMANDO BÁSICO COMO FALLBACK
+                            # 🔒 COMANDO FALLBACK ULTRA-SEGURO
                             fallback_command = firewall_commands_pb2.FirewallCommand()
-                            fallback_command.command_id = f"fallback_{int(time.time())}"
+                            fallback_command.command_id = f"fallback_secure_{int(time.time())}"
                             fallback_command.action = firewall_commands_pb2.CommandAction.LIST_RULES
                             fallback_command.target_ip = "127.0.0.1"
                             fallback_command.dry_run = True
 
-                            self.logger.info("🔄 Using fallback command")
+                            self.logger.info("🔒 Using ultra-secure fallback command")
                             self.command_queue.put(fallback_command)
                             self.metrics["commands_received"] += 1
 
                     except zmq.Again:
-                        # No message available, continue
                         pass
                     except Exception as e:
                         self.logger.error(f"❌ Error receiving command: {e}")
                         self.metrics["errors"] += 1
 
-                time.sleep(0.001)  # Small delay to prevent busy waiting
+                time.sleep(0.001)
 
             except Exception as e:
                 self.logger.error(f"❌ Commands consumer error: {e}")
                 self.metrics["errors"] += 1
                 time.sleep(1)
 
+    def _get_action_name(self, action_enum: int) -> str:
+        """Convertir enum de acción a string"""
+        action_map = {
+            firewall_commands_pb2.CommandAction.BLOCK_IP: "BLOCK_IP",
+            firewall_commands_pb2.CommandAction.UNBLOCK_IP: "UNBLOCK_IP",
+            firewall_commands_pb2.CommandAction.RATE_LIMIT_IP: "RATE_LIMIT_IP",
+            firewall_commands_pb2.CommandAction.LIST_RULES: "LIST_RULES",
+            firewall_commands_pb2.CommandAction.ALLOW_IP_TEMP: "MONITOR"
+        }
+        return action_map.get(action_enum, "UNKNOWN")
+
     def _command_processor(self):
-        """Processor thread for firewall commands"""
-        self.logger.info("Command processor thread started")
+        """Processor thread ultra-seguro para comandos firewall"""
+        self.logger.info("🔒 ULTRA-SECURE Command processor thread started")
 
         while self.running:
             try:
-                # Get command from queue
                 try:
                     pb_command = self.command_queue.get(timeout=1)
                 except queue.Empty:
                     continue
 
-                # Process command
-                self._process_firewall_command(pb_command)
-
+                # 🔒 PROCESAR COMANDO CON MÁXIMA SEGURIDAD
+                self._process_ultra_secure_firewall_command(pb_command)
                 self.metrics["commands_processed"] += 1
 
             except Exception as e:
-                self.logger.error(f"Command processor error: {e}")
+                self.logger.error(f"❌ Command processor error: {e}")
                 self.metrics["errors"] += 1
                 time.sleep(1)
 
-    def _process_firewall_command(self, pb_command):
-        """✅ CORREGIDO: Process a firewall command con comparación de enums correcta"""
+    def _process_ultra_secure_firewall_command(self, pb_command):
+        """🔒 Procesar comando firewall con ultra-seguridad"""
         try:
             command_id = pb_command.command_id
-            action = pb_command.action  # ✅ ESTO ES UN ENUM (int), NO string
+            action = pb_command.action
             target_ip = pb_command.target_ip
             target_port = pb_command.target_port if pb_command.target_port else None
             duration = pb_command.duration_seconds if pb_command.duration_seconds else None
 
-            self.logger.info(f"Processing command: {command_id} - {action} {target_ip}")
+            action_name = self._get_action_name(action)
+            self.logger.info(f"🔒 PROCESSING ULTRA-SECURE: {command_id} - {action_name} {target_ip}")
 
-            # ✅ CORREGIDO: Comparar ENUMS con ENUMS (no strings)
-            if action == firewall_commands_pb2.CommandAction.BLOCK_IP:
-                success, message = self.firewall_manager.apply_block_rule(
+            # 🔒 SOLO ACCIONES ULTRA-SEGURAS PERMITIDAS
+            if action == firewall_commands_pb2.CommandAction.LIST_RULES:
+                success, message = self.firewall_manager.list_active_rules(command_id)
+
+            elif action == firewall_commands_pb2.CommandAction.ALLOW_IP_TEMP:  # MONITOR
+                success, message = self.firewall_manager.apply_monitor_rule(
                     command_id, target_ip, target_port, duration
                 )
-            elif action == firewall_commands_pb2.CommandAction.UNBLOCK_IP:
-                success, message = self.firewall_manager.apply_allow_rule(
+
+            elif action_name == "MONITOR":  # Alias adicional
+                success, message = self.firewall_manager.apply_monitor_rule(
                     command_id, target_ip, target_port, duration
                 )
-            elif action == firewall_commands_pb2.CommandAction.RATE_LIMIT_IP:  # ✅ CORREGIDO: Era RATE_LIMIT
-                success, message = self.firewall_manager.apply_rate_limit_rule(
-                    command_id, target_ip, target_port, duration
-                )
-            elif action == firewall_commands_pb2.CommandAction.LIST_RULES:
-                # ✅ Comando LIST_RULES (el que envía el test)
-                active_rules = self.firewall_manager.get_active_rules()
-                success = True
-                message = f"LIST_RULES: {len(active_rules)} active rules (dry_run={self.dry_run})"
-                self.logger.info(f"📋 {message}")
-            elif action == firewall_commands_pb2.CommandAction.ALLOW_IP_TEMP:  # ✅ NUEVO: Equivalente a MONITOR
-                # Simular monitoreo - no hacer nada pero reportar éxito
-                success = True
-                message = f"MONITOR: Monitoring enabled for {target_ip}"
-                self.logger.info(f"👁️ {message}")
+
             else:
+                # 🔒 TODAS LAS DEMÁS ACCIONES SON RECHAZADAS
                 success = False
-                message = f"Unknown action: {action}"
+                message = f"ULTRA-SECURE MODE: Action {action_name} not allowed. Only MONITOR and LIST_RULES permitted."
+                self.security_logger.warning(f"🚫 BLOCKED ACTION: {action_name} for {target_ip}")
 
             # Send response
             self._send_response(command_id, success, message)
 
             if success:
                 self.metrics["rules_applied"] += 1
+            else:
+                self.metrics["commands_rejected"] += 1
 
         except Exception as e:
-            self.logger.error(f"Error processing command: {e}")
+            self.logger.error(f"❌ Error processing ultra-secure command: {e}")
             self._send_response(pb_command.command_id, False, f"Processing error: {str(e)}")
 
     def _send_response(self, command_id: str, success: bool, message: str):
-        """Send response to dashboard"""
+        """Enviar respuesta al dashboard"""
         try:
             if not self.responses_socket:
-                self.logger.error("Responses socket not configured")
+                self.logger.error("❌ Responses socket not configured")
                 return
 
-            # Create response protobuf
+            # 🔒 CREAR RESPUESTA CON MARCADORES DE SEGURIDAD
             pb_response = firewall_commands_pb2.FirewallResponse()
             pb_response.command_id = command_id
-            pb_response.node_id = self.node_id  # ✅ USAR NODE_ID de configuración
+            pb_response.node_id = self.node_id
             pb_response.success = success
-            pb_response.message = message
+            pb_response.message = f"[ULTRA-SECURE] {message}"
             pb_response.timestamp = int(time.time() * 1000)
 
             # Serialize
@@ -886,33 +982,74 @@ class SimpleFirewallAgent:
 
             self.metrics["responses_sent"] += 1
 
-            self.logger.info(f"Response sent: {command_id} - Success: {success}")
+            self.logger.info(f"🔒 ULTRA-SECURE Response sent: {command_id} - Success: {success}")
 
         except Exception as e:
-            self.logger.error(f"Error sending response: {e}")
+            self.logger.error(f"❌ Error sending response: {e}")
             self.metrics["errors"] += 1
 
+    def _decrypt_and_decompress(self, data: bytes) -> bytes:
+        """Decrypt and decompress data if crypto is enabled"""
+        if not data:
+            return data
+
+        try:
+            if self.crypto_engine:
+                data = self.crypto_engine.decrypt(data)
+            if self.compression_engine:
+                data = self.compression_engine.decompress(data)
+            return data
+        except Exception as e:
+            self.logger.error(f"❌ Failed to decrypt/decompress data: {e}")
+            return data
+
+    def _compress_and_encrypt(self, data: bytes) -> bytes:
+        """Compress and encrypt data if crypto is enabled"""
+        if not data:
+            return data
+
+        try:
+            if self.compression_engine:
+                result = self.compression_engine.compress(data)
+                data = result.compressed_data if hasattr(result, 'compressed_data') else result
+            if self.crypto_engine:
+                data = self.crypto_engine.encrypt(data)
+            return data
+        except Exception as e:
+            self.logger.error(f"❌ Failed to compress/encrypt data: {e}")
+            return data
+
     def _cleanup_thread(self):
-        """Cleanup thread for expired rules"""
-        self.logger.info("Cleanup thread started")
+        """Cleanup thread ultra-seguro"""
+        self.logger.info("🔒 ULTRA-SECURE Cleanup thread started")
 
         while self.running:
             try:
                 self.firewall_manager.cleanup_expired_rules()
 
-                # ✅ NUEVO: Verificar cambios en reglas si está configurado
+                # 🔒 VERIFICAR CAMBIOS EN REGLAS CON VALIDACIÓN
                 if self.rules_sync:
                     self.rules_sync.reload_if_changed()
 
-                time.sleep(60)  # Check every minute
+                # 🔒 RE-VERIFICAR SEGURIDAD DEL ENTORNO PERIÓDICAMENTE
+                if hasattr(self.security_monitor, 'last_safety_check'):
+                    time_since_check = (datetime.now() - self.security_monitor.last_safety_check).total_seconds()
+                    if time_since_check > 300:  # Cada 5 minutos
+                        self.logger.info("🔍 Periodic environment safety re-check")
+                        env_safety = self.security_monitor.detect_environment_safety()
+                        if env_safety.forced_dry_run and not self.dry_run:
+                            self.dry_run = True
+                            self.logger.warning("🔒 DRY_RUN re-enabled due to environment change")
+
+                time.sleep(60)
 
             except Exception as e:
-                self.logger.error(f"Cleanup thread error: {e}")
+                self.logger.error(f"❌ Cleanup thread error: {e}")
                 time.sleep(60)
 
     def start(self):
-        """Start the firewall agent"""
-        self.logger.info("Starting Simple Firewall Agent...")
+        """Iniciar el agente firewall ultra-seguro"""
+        self.logger.info("🔒 Starting ULTRA-SECURE Firewall Agent...")
 
         self.running = True
 
@@ -932,18 +1069,24 @@ class SimpleFirewallAgent:
         cleanup_thread.start()
         self.threads.append(cleanup_thread)
 
-        self.logger.info(f"Simple Firewall Agent started with {len(self.threads)} threads")
+        self.logger.info(f"🔒 ULTRA-SECURE Firewall Agent started with {len(self.threads)} threads")
+        self.logger.info("🔒 SAFETY GUARANTEES ACTIVE:")
+        self.logger.info("   ✅ Never runs real firewall commands")
+        self.logger.info("   ✅ Auto-detects dangerous environments")
+        self.logger.info("   ✅ Forces dry_run mode when needed")
+        self.logger.info("   ✅ Blocks dangerous IP ranges")
+        self.logger.info("   ✅ Comprehensive security logging")
 
         try:
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.logger.info("Shutdown requested by user")
+            self.logger.info("🛑 Shutdown requested by user")
             self.stop()
 
     def stop(self):
-        """Stop the firewall agent"""
-        self.logger.info("Stopping Simple Firewall Agent...")
+        """Detener el agente firewall ultra-seguro"""
+        self.logger.info("🔒 Stopping ULTRA-SECURE Firewall Agent...")
 
         self.running = False
 
@@ -956,15 +1099,11 @@ class SimpleFirewallAgent:
         # Close ZMQ context
         self.zmq_context.term()
 
-        self.logger.info("Simple Firewall Agent stopped")
+        self.logger.info("🔒 ULTRA-SECURE Firewall Agent stopped safely")
 
     def get_status(self) -> Dict:
-        """Get agent status"""
-        capabilities = []
-        if self.rules_sync:
-            capabilities = self.rules_sync.capabilities
-        else:
-            capabilities = ['BLOCK_IP', 'RATE_LIMIT', 'MONITOR', 'LIST_RULES']
+        """Obtener estado del agente con información de seguridad"""
+        env_safety = self.security_monitor.environment_safety
 
         return {
             "agent_id": self.agent_id,
@@ -978,23 +1117,36 @@ class SimpleFirewallAgent:
             "active_rules": len(self.firewall_manager.active_rules),
             "crypto_enabled": self.crypto_engine is not None,
             "compression_enabled": self.compression_engine is not None,
-            "capabilities": capabilities,  # ✅ INCLUIR CAPACIDADES SINCRONIZADAS
-            "rules_sync_enabled": self.rules_sync is not None
+            "capabilities": self.rules_sync.capabilities if self.rules_sync else ["MONITOR", "LIST_RULES"],
+            "rules_sync_enabled": self.rules_sync is not None,
+            # 🔒 INFORMACIÓN DE SEGURIDAD
+            "ultra_secure_mode": self.ultra_secure_mode,
+            "forced_dry_run": self.dry_run,
+            "environment_safety": {
+                "level": env_safety.safety_level if env_safety else "UNKNOWN",
+                "is_root": env_safety.is_root if env_safety else False,
+                "has_sudo": env_safety.has_sudo if env_safety else False,
+                "is_container": env_safety.is_container if env_safety else False,
+                "firewall_accessible": env_safety.firewall_accessible if env_safety else False,
+                "safety_reasons": env_safety.safety_reasons if env_safety else []
+            },
+            "security_events_count": len(self.security_monitor.security_events),
+            "last_safety_check": self.security_monitor.last_safety_check.isoformat() if self.security_monitor.last_safety_check else None
         }
 
 
 def main():
-    """✅ CORREGIDO: Main function que REQUIERE ambos archivos"""
+    """Main function ULTRA-SEGURA"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Simple Firewall Agent - Dual Config Support")
+    parser = argparse.ArgumentParser(description="ULTRA-SECURE Firewall Agent - Set it and forget it")
     parser.add_argument("config", help="Configuration file path (simple_firewall_agent_config.json)")
-    parser.add_argument("rules", help="Firewall rules JSON file (firewall_rules.json)")
+    parser.add_argument("rules", help="Firewall rules JSON file (firewall_rules_dashboard.json)")
     parser.add_argument("--log-level", default="INFO", help="Log level")
 
     args = parser.parse_args()
 
-    # ✅ VALIDAR archivos de entrada ANTES de continuar
+    # ✅ VALIDAR archivos de entrada
     if not Path(args.config).exists():
         print(f"❌ ERROR: Archivo de configuración no encontrado: {args.config}")
         print("📁 Necesario: simple_firewall_agent_config.json")
@@ -1002,22 +1154,24 @@ def main():
 
     if not Path(args.rules).exists():
         print(f"❌ ERROR: Archivo de reglas no encontrado: {args.rules}")
-        print("📁 Necesario: firewall_rules.json")
+        print("📁 Necesario: firewall_rules_dashboard.json")
         sys.exit(1)
 
-    # ✅ Setup logging básico ANTES de crear el agente
+    print("🔒 ULTRA-SECURE FIREWALL AGENT - Starting with maximum safety")
+
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - [ULTRA_SECURE] - %(message)s'
     )
 
-    # Initialize and start agent
     try:
         print(f"✅ Inicializando con configuración: {args.config}")
         print(f"✅ Inicializando con reglas: {args.rules}")
-        agent = SimpleFirewallAgent(args.config, args.rules)
+        print("🔒 Modo ULTRA-SEGURO activado")
 
+        agent = UltraSecureFirewallAgent(args.config, args.rules)
         agent.start()
+
     except KeyboardInterrupt:
         print("\n🛑 Shutdown requested by user")
     except Exception as e:
