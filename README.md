@@ -16,10 +16,13 @@ El Sistema Autoinmune Digital es una plataforma de seguridad distribuida que emu
 - **🔄 Auto-optimización**: Sistema que se mejora continuamente
 
 ## 🏗️ **Arquitectura del Sistema**
+![Captura de pantalla 2025-07-25 a las 8.44.58.png](../../Desktop/Captura%20de%20pantalla%202025-07-25%20a%20las%208.44.58.png)
 
+![Captura de pantalla 2025-07-25 a las 8.46.43.png](../../Desktop/Captura%20de%20pantalla%202025-07-25%20a%20las%208.46.43.png)
 
-<img width="1575" height="763" alt="pantallazo" src="https://github.com/user-attachments/assets/7dcb9a2f-426b-44b9-97eb-03cb5d98dc7b" />
+![Captura de pantalla 2025-07-25 a las 8.47.31.png](../../Desktop/Captura%20de%20pantalla%202025-07-25%20a%20las%208.47.31.png)
 
+![deepseek_mermaid_20250726_1aa37e.png](../../Downloads/deepseek_mermaid_20250726_1aa37e.png)
 ```
 📡 CAPTURA DE TRÁFICO
 ├── promiscuous_agent.py → Captura promiscua de paquetes (Puerto 5559)
@@ -129,7 +132,7 @@ python lightweight_ml_detector.py lightweight_ml_detector_config.json
 
 ### **📊 Dashboard Central**
 ```bash
-python real_zmq_dashboard_with_firewall.py dashboard_config.json
+python real_zmq_dashboard_with_firewall.py dashboard_config.json config/firewall_rules_dashboard.json
 ```
 **Estado**: 🔄 En desarrollo
 - Recibe de puerto 5561, controla 5562
@@ -139,7 +142,7 @@ python real_zmq_dashboard_with_firewall.py dashboard_config.json
 
 ### **🛡️ Firewall Agents**
 ```bash
-python simple_firewall_agent.py firewall_agent_config.json
+python simple_firewall_agent.py firewall_agent_config.json config/firewall_rules_agent.json
 ```
 **Estado**: ✅ Básico (mejorando integración)
 - Escucha en puerto 5562
@@ -148,16 +151,110 @@ python simple_firewall_agent.py firewall_agent_config.json
 
 ### **🧠 Neural Trainer** (Próximo)
 ```bash
-python neural_trainer_collector.py neural_trainer_config.json
+python advanced_trainer.py --max_rows 1000000
 ```
 **Estado**: 🎯 Planificado
 - Entrenamiento incremental
 - Distribución vía etcd
 - A/B testing de modelos
 
-### **🗣️ RAG Engine** (Próximo)
+### **🗣️ RAG Engine** (Próximo, Aún no está.)
 ```bash
 python autoinmune_rag_engine.py rag_engine_config.json
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness 
+└➤ python advanced_trainer.py --max_rows 1000000
+[🔍] Cargando y combinando datasets...
+[📁] Cargando UNSW-NB15 desde: data/UNSW-NB15.csv
+  - Distribución inicial de etiquetas: {1: 45332, 0: 37000}
+[✅] UNSW-NB15 cargado con 82332 registros
+  - Distribución de etiquetas: {1: 45332, 0: 37000}
+[📊] Total de registros combinados: 82332
+[🧹] Realizando preprocesamiento avanzado...
+[🌍] Enriqueciendo datos con geolocalización...
+[⚠️] No se encontró columna de dirección IP. Usando IPs dummy.
+[⏩] Saltando enriquecimiento geográfico - sin IPs reales
+[🏷️] Asignando etiquetas unificadas...
+[🔖] Mapeando etiquetas para UNSW-NB15 usando columna 'label'
+  - Distribución después de mapeo: {1.0: 45332, 0.0: 37000}
+
+[📊] Distribución global de etiquetas:
+unified_label
+1.0    45332
+0.0    37000
+Name: count, dtype: int64
+[⚙️] Preparando datos para entrenamiento...
+[🔢] Dimensiones iniciales: X=(82332, 47), y=(82332,)
+[🔍] Filtrando características numéricas...
+[🔢] Características finales (21): ['dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 'dbytes', 'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss', 'sinpkt', 'dinpkt', 'src_country', 'src_asn', 'country_risk', 'distance_km']
+[⚠️] Columnas no numéricas detectadas: ['src_country']
+[🔄] Codificando características categóricas...
+[⚖️] Distribución antes de balanceo: Counter({1.0: 45332, 0.0: 37000})
+[🔍] Valores únicos en y: [0. 1.]
+[⚖️] Aplicando balanceo híbrido...
+[⚖️] Aplicando balanceo híbrido...
+[📊] Distribución inicial: Counter({1.0: 45332, 0.0: 37000})
+[⚖️] Estrategia de balanceo: {1.0: 31732, 0.0: 90664}
+[⚖️] Distribución después de balanceo: Counter({0.0: 90664, 1.0: 31732})
+[✂️] Dividiendo datos...
+[📏] Escalando características...
+[🧠] Entrenando modelo de alta precisión...
+[🎯] Entrenando RandomForest para máxima precisión:
+  - n_estimators: 2000
+  - max_depth: 120
+  - min_samples_split: 2
+  - min_samples_leaf: 1
+  - max_features: log2
+  - bootstrap: True
+  - oob_score: True
+  - n_jobs: -1
+  - random_state: 42
+  - class_weight: balanced_subsample
+  - ccp_alpha: 0.0001
+  - max_samples: 0.8
+[🔍] Fold 1 - Precisión: 0.9606
+[🔍] Fold 2 - Precisión: 0.9645
+[🔍] Fold 3 - Precisión: 0.9584
+[🔍] Fold 4 - Precisión: 0.9597
+[🔍] Fold 5 - Precisión: 0.9619
+[🏆] Mejor fold: 2 con precisión 0.9645
+[🚀] Entrenando modelo final con todos los datos...
+[🔎] Generando explicaciones SHAP...
+[📊] Evaluando modelo...
+[🧪] Evaluando modelo...
+
+[📊] Matriz de Confusión:
+[[22200   466]
+ [  702  7231]]
+
+[📋] Reporte de Clasificación:
+              precision    recall  f1-score   support
+
+         0.0       0.97      0.98      0.97     22666
+         1.0       0.94      0.91      0.93      7933
+
+    accuracy                           0.96     30599
+   macro avg       0.95      0.95      0.95     30599
+weighted avg       0.96      0.96      0.96     30599
+
+[📈] AUC-ROC: 0.9888
+[📈] AUC-PR: 0.9776
+
+[🔒] Métricas de Seguridad:
+  - Tasa de Falsos Positivos (FPR): 0.0206
+  - Tasa de Falsos Negativos (FNR): 0.0885
+  - Tasa de Detección: 0.9115
+  - Precisión en Amenazas: 0.9395
+[💾] Guardando artefactos...
+[💾] Artefactos guardados en: models/model_20250726_103214
+  - Modelo: models/model_20250726_103214/model.pkl
+  - Metadatos: models/model_20250726_103214/metadata.json
+  - Escalador: models/model_20250726_103214/scaler.pkl
+  - SHAP Explainer: models/model_20250726_103214/shap_explainer.pkl
+  - Reputación ASN: models/model_20250726_103214/asn_reputation.pkl
+
+✅ Entrenamiento avanzado completado con éxito!
+
 ```
 **Estado**: 🎯 Arquitectura definida
 - **TimescaleDB + pgvector**: Series temporales + embeddings vectoriales

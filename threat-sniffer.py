@@ -4,10 +4,11 @@ import numpy as np
 import pandas as pd
 import logging
 import time
+import statistics
 from datetime import datetime
 from pathlib import Path
 from collections import defaultdict, deque
-from scapy.all import sniff, IP, TCP, UDP
+from scapy.all import sniff, IP, TCP, UDP, ICMP
 import geoip2.database
 
 # Configurar logging
@@ -28,6 +29,11 @@ class ThreatDetector:
         self.flow_tracker = FlowTracker()
         self.packet_queue = deque(maxlen=100)
         self.last_processing_time = time.time()
+        self.required_features = [
+            'dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 'dbytes',
+            'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss', 'sinpkt', 'dinpkt',
+            'src_country', 'src_asn', 'country_risk', 'distance_km'
+        ]
 
     @staticmethod
     def load_latest_model(model_path=None):
@@ -89,6 +95,9 @@ class ThreatDetector:
                 if not flow_features:
                     continue
 
+                # Añadir características calculadas
+                flow_features.update(self.calculate_derived_features(flow_features))
+
                 threat_level, probability = self.detect_threat(flow_features)
                 if threat_level != "Normal":
                     log_msg = (
@@ -104,6 +113,23 @@ class ThreatDetector:
 
         except Exception as e:
             logging.error(f"Error procesando cola: {str(e)}")
+
+    def calculate_derived_features(self, features):
+        """Calcula características derivadas para el flujo"""
+        duration = features.get('dur', 1)  # Evitar división por cero
+
+        derived = {
+            'rate': features.get('packet_count', 0) / duration if duration > 0 else 0,
+            'sload': features.get('sbytes', 0) / duration if duration > 0 else 0,
+            'dload': features.get('dbytes', 0) / duration if duration > 0 else 0,
+            'packet_imbalance': features.get('spkts', 1) / max(features.get('dpkts', 1), 1),
+            'byte_imbalance': features.get('sbytes', 1) / max(features.get('dbytes', 1), 1),
+            'sloss': 0,  # No disponible actualmente
+            'dloss': 0,  # No disponible actualmente
+            'service': 0,  # Placeholder
+            'state': 0  # Placeholder
+        }
+        return derived
 
     def detect_threat(self, features):
         """Detecta amenazas en un conjunto de características"""
@@ -138,12 +164,12 @@ class ThreatDetector:
         df = pd.DataFrame([features])
 
         # Asegurar todas las columnas esperadas
-        for feature in self.feature_names:
+        for feature in self.required_features:
             if feature not in df.columns:
                 df[feature] = 0
 
         # Mantener solo las características necesarias
-        df = df[self.feature_names]
+        df = df[self.required_features]
 
         # Aplicar escalado
         return self.scaler.transform(df)
@@ -166,6 +192,7 @@ class PacketFeatureExtractor:
             'proto': ip_layer.proto,
             'sbytes': len(packet),
             'sttl': ip_layer.ttl,
+            'dttl': ip_layer.ttl,  # Mismo que sttl inicialmente
         }
 
         # Manejar capas de transporte
@@ -181,6 +208,12 @@ class PacketFeatureExtractor:
             features.update({
                 'sport': udp_layer.sport,
                 'dport': udp_layer.dport
+            })
+        elif ICMP in packet:
+            icmp_layer = packet[ICMP]
+            features.update({
+                'type': icmp_layer.type,
+                'code': icmp_layer.code
             })
 
         # Añadir geolocalización
@@ -248,11 +281,13 @@ class FlowTracker:
             'max_ttl': 0,
             'flags': set(),
             'sport': 0,
-            'dport': 0
+            'dport': 0,
+            'src_timestamps': [],
+            'dst_timestamps': []
         }
 
     def get_flow_id(self, packet):
-        """Obtiene un ID único para el flujo"""
+        """Obtiene un ID único para el flujo (bidireccional)"""
         ip = packet[IP]
         src = ip.src
         dst = ip.dst
@@ -267,8 +302,16 @@ class FlowTracker:
             udp = packet[UDP]
             sport = udp.sport
             dport = udp.dport
+        elif ICMP in packet:
+            # ICMP no tiene puertos, usamos type y code como identificadores
+            icmp = packet[ICMP]
+            sport = icmp.type
+            dport = icmp.code
 
-        return f"{src}-{sport}-{dst}-{dport}-{proto}"
+        # Crear ID canónico independiente de la dirección
+        ips = sorted([src, dst])
+        ports = sorted([sport, dport])
+        return f"{ips[0]}-{ports[0]}-{ips[1]}-{ports[1]}-{proto}"
 
     def update_flow(self, flow_id, packet, features):
         """Actualiza la información del flujo con un nuevo paquete"""
@@ -286,8 +329,10 @@ class FlowTracker:
         # Determinar dirección
         if features['src_ip'] == flow_id.split('-')[0]:
             direction = 'src'
+            flow['src_timestamps'].append(current_time)
         else:
             direction = 'dst'
+            flow['dst_timestamps'].append(current_time)
 
         # Actualizar estadísticas de dirección
         flow[f'{direction}_bytes'] += len(packet)
@@ -315,6 +360,10 @@ class FlowTracker:
         flow = self.flows[flow_id]
         duration = flow['last_update'] - flow['start_time']
 
+        # Calcular inter-arrival times
+        sinpkt = self.calculate_interarrival(flow['src_timestamps'])
+        dinpkt = self.calculate_interarrival(flow['dst_timestamps'])
+
         # Calcular características basadas en el flujo
         features = {
             'dur': duration,
@@ -327,13 +376,8 @@ class FlowTracker:
             'dbytes': flow['dst_bytes'],
             'sttl': flow['min_ttl'],
             'dttl': flow['min_ttl'],  # Usar mismo valor para simplificar
-            'rate': flow['packet_count'] / duration if duration > 0 else 0,
-            'sload': flow['src_bytes'] / duration if duration > 0 else 0,
-            'dload': flow['dst_bytes'] / duration if duration > 0 else 0,
-            'packet_imbalance': flow['src_packets'] / max(flow['dst_packets'], 1),
-            'byte_imbalance': flow['src_bytes'] / max(flow['dst_bytes'], 1),
-            'conn_state_abnormal': 1 if 'S' in ''.join(flow['flags']) and 'A' not in ''.join(flow['flags']) else 0,
-            'high_port_activity': 1 if flow['sport'] > 1024 or flow['dport'] > 1024 else 0
+            'sinpkt': sinpkt,
+            'dinpkt': dinpkt
         }
 
         # Añadir características temporales
@@ -342,10 +386,19 @@ class FlowTracker:
         features['day_of_week'] = now.weekday()
         features['is_weekend'] = 1 if features['day_of_week'] >= 5 else 0
 
-        # Añadir geolocalización desde el primer paquete
+        # Añadir geolocalización
         features.update(self.get_geo_features(features['src_ip']))
 
         return features
+
+    def calculate_interarrival(self, timestamps):
+        """Calcula el tiempo promedio entre llegadas de paquetes"""
+        if len(timestamps) < 2:
+            return 0
+
+        sorted_times = sorted(timestamps)
+        intervals = [sorted_times[i] - sorted_times[i - 1] for i in range(1, len(sorted_times))]
+        return statistics.mean(intervals) if intervals else 0
 
     def get_geo_features(self, ip):
         """Simula obtención de características geográficas (implementación real en PacketFeatureExtractor)"""
@@ -373,6 +426,10 @@ class FlowTracker:
 
 def main():
     """Función principal para iniciar el sniffer"""
+    """Tienes que capturar esto, como mínimo, para poder alimentar al modelo entrenado RF y te de un SI o un NO"""
+    """[🔢] Características finales (21): ['dur', 'proto', 'service', 'state', 'spkts', 'dpkts', 'sbytes', 'dbytes', 
+    'rate', 'sttl', 'dttl', 'sload', 'dload', 'sloss', 'dloss', 'sinpkt', 'dinpkt', 'src_country', 'src_asn', 
+    'country_risk', 'distance_km']"""
     logging.info("Iniciando sniffer de amenazas...")
     detector = ThreatDetector()
 

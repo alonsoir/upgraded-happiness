@@ -2409,10 +2409,14 @@ class SecurityDashboard:
             action_mapping = {
                 'BLOCK_IP': fw_pb2.CommandAction.BLOCK_IP,
                 'UNBLOCK_IP': fw_pb2.CommandAction.UNBLOCK_IP,
-                'RATE_LIMIT': fw_pb2.CommandAction.RATE_LIMIT_IP,
-                'MONITOR': fw_pb2.CommandAction.MONITOR,
+                'RATE_LIMIT_IP': fw_pb2.CommandAction.RATE_LIMIT_IP,  # ✅ CORREGIDO: Nombre completo
+                'RATE_LIMIT': fw_pb2.CommandAction.RATE_LIMIT_IP,  # ✅ ALIAS para compatibilidad
+                'MONITOR': fw_pb2.CommandAction.ALLOW_IP_TEMP,  # ✅ CORREGIDO: MONITOR es ALLOW_IP_TEMP
+                'ALLOW_IP_TEMP': fw_pb2.CommandAction.ALLOW_IP_TEMP,  # ✅ AÑADIDO: Nombre directo
                 'LIST_RULES': fw_pb2.CommandAction.LIST_RULES,
-                'FLUSH_RULES': fw_pb2.CommandAction.FLUSH_RULES
+                'FLUSH_RULES': fw_pb2.CommandAction.FLUSH_RULES,
+                'BACKUP_RULES': fw_pb2.CommandAction.BACKUP_RULES,  # ✅ AÑADIDO: Faltaba
+                'RESTORE_RULES': fw_pb2.CommandAction.RESTORE_RULES  # ✅ AÑADIDO: Faltaba
             }
 
             action_str = getattr(command, 'action', 'LIST_RULES')

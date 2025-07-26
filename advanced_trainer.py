@@ -561,6 +561,7 @@ def save_advanced_artifacts(model, explainer, config, features, geo_enricher, ev
             "descriptions": {feat: FEATURE_DESCRIPTIONS.get(feat, "Descripción no disponible")
                              for feat in features}
         },
+
         "datasets": config['ml'].get('datasets', []),
         "model_params": model.get_params(),
         "geo_config": {
