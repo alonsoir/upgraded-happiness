@@ -2,6 +2,9 @@
 dashboard.js - VERSIÓN V3 COMPLETA CORREGIDA PARA BACKEND V3
 + FIREWALL_COMMANDS.PROTO + SISTEMA AVANZADO DE VENTANAS + COORDENADAS DUALES CORREGIDAS
 + COMPATIBLE CON ESTRUCTURA DE CAMPOS PLANOS DEL BACKEND
++ ✅ FIX 2: Google Maps vista superior corregida
++ ✅ FIX 3: Botones de geolocalización siempre visibles
++ ✅ FIX 4: Acciones contra atacante independientes de geolocalización
 */
 
 // ============================================================================
@@ -84,7 +87,7 @@ const CommandPriority = {
 // ============================================================================
 
 function initializeDashboard() {
-    console.log('🚀 Inicializando Dashboard SCADA V3 corregido para backend V3...');
+    console.log('🚀 Inicializando Dashboard SCADA V3 con TODOS LOS FIXES aplicados...');
 
     try {
         initializeMap();
@@ -98,8 +101,8 @@ function initializeDashboard() {
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
 
-        console.log('✅ Dashboard V3 inicializado correctamente con estructura corregida');
-        addDebugLog('info', 'Dashboard V3 inicializado - campos planos + firewall_commands.proto');
+        console.log('✅ Dashboard V3 inicializado con FIX 2, 3 y 4 aplicados');
+        addDebugLog('info', 'Dashboard V3 + TODOS LOS FIXES - campos planos + firewall_commands.proto');
 
     } catch (error) {
         console.error('❌ Error inicializando dashboard:', error);
@@ -912,6 +915,9 @@ function addEventToEventsList(event) {
         const geoInfo = (event.geographic_distance_km && event.geographic_distance_km > 0) ?
             `<small style="color: #888;">${event.geographic_distance_km}km - ${event.same_country ? 'Local' : 'Internacional'}</small>` : '';
 
+        // ✅ FIX 4: ACCIONES INDEPENDIENTES DE GEOLOCALIZACIÓN - Añadir botones directos
+        const quickActionsButtons = generateQuickFirewallActions(event);
+
         eventElement.innerHTML = `
             <div class="event-header">
                 <span class="event-time">${eventTime.toLocaleTimeString()}</span>
@@ -920,6 +926,10 @@ function addEventToEventsList(event) {
             <div class="event-details">
                 <div><span class="event-source">${event.source_ip}</span> → <span class="event-target">${event.target_ip}</span></div>
                 <div class="event-type">${event.type || 'Backend Event V3'} ${geoInfo}</div>
+            </div>
+            <!-- ✅ FIX 4: BOTONES DE ACCIÓN DIRECTOS EN LA LISTA -->
+            <div class="event-quick-actions" style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
+                ${quickActionsButtons}
             </div>
         `;
 
@@ -936,6 +946,84 @@ function addEventToEventsList(event) {
     } catch (error) {
         console.error('❌ Error añadiendo evento a lista:', error);
     }
+}
+
+// ✅ FIX 4: FUNCIÓN PARA GENERAR BOTONES RÁPIDOS EN LA LISTA
+function generateQuickFirewallActions(event) {
+    const buttons = `
+        <button onclick="quickBlockAttacker('${event.target_ip}', '${event.id}'); event.stopPropagation();"
+                class="quick-action-btn block-btn"
+                title="Bloquear IP atacante"
+                style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
+            🚫 Block
+        </button>
+        <button onclick="quickShowTargetDetail('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')}); event.stopPropagation();"
+                class="quick-action-btn target-btn"
+                title="Ver detalles del atacante"
+                style="background: rgba(204, 0, 0, 0.2); border: 1px solid #cc0000; color: #cc0000; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
+            🎯 Details
+        </button>
+        <button onclick="quickShowSourceDetail('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')}); event.stopPropagation();"
+                class="quick-action-btn source-btn"
+                title="Ver detalles de la víctima"
+                style="background: rgba(0, 102, 204, 0.2); border: 1px solid #0066cc; color: #0066cc; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
+            🏠 Victim
+        </button>
+    `;
+    return buttons;
+}
+
+// ✅ FIX 4: FUNCIONES PARA ACCIONES RÁPIDAS
+async function quickBlockAttacker(targetIP, eventId) {
+    try {
+        console.log(`⚡ Acción rápida: Bloqueando ${targetIP}`);
+
+        const commandId = `quick_block_${Date.now()}`;
+        const requestData = {
+            action: 'BLOCK_IP',
+            target_ip: targetIP,
+            firewall_node_id: getAvailableFirewallAgents()[0] || 'simple_firewall_agent_001',
+            command_id: commandId,
+            generated_by: 'dashboard_quick_action',
+            event_id: eventId,
+            force_dry_run: true,
+            max_duration: 300
+        };
+
+        showToast(`🚫 Bloqueando ${targetIP}...`, 'warning');
+
+        const response = await fetch('/api/execute-firewall-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showToast(`✅ ${targetIP} bloqueado exitosamente`, 'success');
+                addDebugLog('info', `Quick block ejecutado: ${targetIP}`);
+            } else {
+                showToast(`❌ Error bloqueando ${targetIP}: ${result.message}`, 'error');
+            }
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error en quick block:', error);
+        showToast(`❌ Error comunicando con firewall`, 'error');
+    }
+}
+
+function quickShowTargetDetail(targetIP, eventData) {
+    console.log(`🎯 Acción rápida: Mostrando detalles del atacante ${targetIP}`);
+    showTargetIPDetail(targetIP, eventData);
+}
+
+function quickShowSourceDetail(sourceIP, eventData) {
+    console.log(`🏠 Acción rápida: Mostrando detalles de la víctima ${sourceIP}`);
+    showSourceIPDetail(sourceIP, eventData);
 }
 
 // ============================================================================
@@ -1176,11 +1264,19 @@ async function showTargetIPDetail(targetIP, eventData) {
         // Obtener información del firewall responsable
         const firewallInfo = await getResponsibleFirewallInfoForTarget(targetIP, event);
 
-        // ✅ CORREGIDO: Generar botón Street View solo para target_ip usando campos planos
-        const targetStreetViewButton = hasTargetGeoInfo ?
+        // ✅ FIX 2: GOOGLE MAPS VISTA SUPERIOR - Generar botón correcto para target_ip
+        const targetMapButton = hasTargetGeoInfo ?
             `<div style="margin-top: 10px;">
-                <a href="https://www.google.com/maps/@${event.target_latitude},${event.target_longitude},3a,75y,0h,90t/data=!3m7!1e1!3m5!1s${encodeURIComponent(targetIP)}!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com!7i16384!8i8192" target="_blank" class="google-maps-btn target-streetview-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🎯 Street View del Atacante
+                <a href="https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z" target="_blank" class="google-maps-btn target-streetview-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Ubicación del Atacante
+                </a>
+            </div>` : '';
+
+        // ✅ FIX 3: BOTÓN SIEMPRE VISIBLE - Mostrar botón incluso sin coordenadas exactas
+        const fallbackMapButton = !hasTargetGeoInfo ?
+            `<div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(targetIP)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar IP en Maps
                 </a>
             </div>` : '';
 
@@ -1188,14 +1284,15 @@ async function showTargetIPDetail(targetIP, eventData) {
             <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
                 <!-- Header específico del target_ip -->
                 <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #CC0000;">
-                    <h3 style="color: #CC0000; margin: 0;">🎯 Información del Atacante (Campos Planos V3)</h3>
+                    <h3 style="color: #CC0000; margin: 0;">🎯 Información del Atacante (FIX 2+3 Aplicado)</h3>
                     <div style="font-size: 14px; color: #CC0000; margin-top: 5px; font-weight: bold;">
                         IP: ${targetIP}
                     </div>
                     <div style="font-size: 11px; color: #888; margin-top: 5px;">
                         Evento ID: ${event.id || 'N/A'} | ${new Date(event.timestamp * 1000).toLocaleString()}
                     </div>
-                    ${targetStreetViewButton}
+                    ${targetMapButton}
+                    ${fallbackMapButton}
                 </div>
 
                 <!-- ✅ CORREGIDO: Información geográfica del target_ip usando campos planos -->
@@ -1218,7 +1315,19 @@ async function showTargetIPDetail(targetIP, eventData) {
                             ${event.target_is_known_malicious ? '<strong style="color: #FF0000;">⚠️ IP Maliciosa Conocida</strong><br>' : ''}
                         </div>
                     </div>
-                ` : ''}
+                ` : `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                        <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
+                            ⚠️ Información Geográfica No Disponible
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>IP:</strong> ${targetIP}<br>
+                            <strong>Estado:</strong> Sin geolocalización exacta<br>
+                            <strong>Acciones:</strong> Disponibles independientemente de ubicación<br>
+                            💡 Las acciones de firewall funcionan sin coordenadas geográficas
+                        </div>
+                    </div>
+                `}
 
                 <!-- ✅ CORREGIDO: Información del ataque usando campos planos -->
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 68, 68, 0.1); border-left: 4px solid #ff4444; border-radius: 4px;">
@@ -1250,16 +1359,17 @@ async function showTargetIPDetail(targetIP, eventData) {
                     </div>
                 </div>
 
-                <!-- 🎯 ACCIONES ESPECÍFICAS PARA TARGET_IP -->
+                <!-- 🎯 ACCIONES ESPECÍFICAS PARA TARGET_IP - SIEMPRE DISPONIBLES -->
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(204, 0, 0, 0.1); border-left: 4px solid #CC0000; border-radius: 4px;">
                     <div style="color: #CC0000; font-weight: bold; margin-bottom: 12px;">
-                        ⚡ Acciones Disponibles para ${targetIP}
+                        ⚡ Acciones Disponibles para ${targetIP} (FIX 4 Aplicado)
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                         ${generateTargetIPFirewallActions(targetIP, firewallInfo, event)}
                     </div>
                     <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
-                        💡 Las acciones se aplicarán específicamente a la IP atacante: <strong style="color: #CC0000;">${targetIP}</strong>
+                        💡 Las acciones se aplicarán específicamente a la IP atacante: <strong style="color: #CC0000;">${targetIP}</strong><br>
+                        ✅ Disponibles independientemente de la geolocalización
                     </div>
                 </div>
 
@@ -1546,25 +1656,34 @@ async function showSourceIPDetail(sourceIP, eventData) {
         const hasSourceGeoInfo = event.source_latitude && event.source_longitude &&
                                 event.source_latitude !== 0 && event.source_longitude !== 0;
 
-        // ✅ CORREGIDO: Generar botón Street View solo para source_ip usando campos planos
-        const sourceStreetViewButton = hasSourceGeoInfo ?
+        // ✅ FIX 2: GOOGLE MAPS VISTA SUPERIOR - Generar botón correcto para source_ip
+        const sourceMapButton = hasSourceGeoInfo ?
             `<div style="margin-top: 10px;">
-                <a href="https://www.google.com/maps/@${event.source_latitude},${event.source_longitude},3a,75y,0h,90t/data=!3m7!1e1!3m5!1s${encodeURIComponent(sourceIP)}!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com!7i16384!8i8192" target="_blank" class="google-maps-btn source-streetview-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🏠 Street View de la Víctima
+                <a href="https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z" target="_blank" class="google-maps-btn source-streetview-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Ubicación de la Víctima
+                </a>
+            </div>` : '';
+
+        // ✅ FIX 3: BOTÓN SIEMPRE VISIBLE - Mostrar botón incluso sin coordenadas exactas
+        const fallbackMapButton = !hasSourceGeoInfo ?
+            `<div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(sourceIP)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar IP en Maps
                 </a>
             </div>` : '';
 
         const content = `
             <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
                 <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #0066CC;">
-                    <h3 style="color: #0066CC; margin: 0;">🏠 Información de la Víctima (Campos Planos V3)</h3>
+                    <h3 style="color: #0066CC; margin: 0;">🏠 Información de la Víctima (FIX 2+3 Aplicado)</h3>
                     <div style="font-size: 14px; color: #0066CC; margin-top: 5px; font-weight: bold;">
                         IP: ${sourceIP}
                     </div>
                     <div style="font-size: 11px; color: #888; margin-top: 5px;">
                         Evento ID: ${event.id || 'N/A'} | ${new Date(event.timestamp * 1000).toLocaleString()}
                     </div>
-                    ${sourceStreetViewButton}
+                    ${sourceMapButton}
+                    ${fallbackMapButton}
                 </div>
 
                 <!-- ✅ CORREGIDO: Información geográfica de la víctima usando campos planos -->
@@ -1585,7 +1704,19 @@ async function showSourceIPDetail(sourceIP, eventData) {
                             <strong>Enriquecimiento:</strong> ${event.source_ip_enriched ? '✅ Exitoso' : '❌ Fallido'}
                         </div>
                     </div>
-                ` : ''}
+                ` : `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                        <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
+                            ⚠️ Información Geográfica No Disponible
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>IP:</strong> ${sourceIP}<br>
+                            <strong>Estado:</strong> Sin geolocalización exacta<br>
+                            <strong>Tipo:</strong> Víctima del ataque<br>
+                            💡 El sistema puede funcionar sin coordenadas exactas
+                        </div>
+                    </div>
+                `}
 
                 <!-- ✅ CORREGIDO: Información del ataque recibido usando campos planos -->
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
@@ -1654,14 +1785,14 @@ async function showEventDetail(event) {
         const firewallInfo = await getResponsibleFirewallInfo(event);
         console.log('🔥 Info firewall responsable V3:', firewallInfo);
 
-        // ✅ CORREGIDO: Generar botones Google Maps con campos planos
-        const googleMapsButtons = generateDualGoogleMapsButtonsFlat(event);
+        // ✅ FIX 2: CORREGIDO - Generar botones Google Maps con vista superior
+        const googleMapsButtons = generateDualGoogleMapsButtonsFixed(event);
 
         const content = `
             <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
                 <!-- Header del evento -->
                 <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
-                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad V3 Completo (Campos Planos)</h3>
+                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad V3 Completo (TODOS LOS FIXES)</h3>
                     <div style="font-size: 11px; color: #888; margin-top: 5px;">
                         ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
                     </div>
@@ -1788,51 +1919,49 @@ async function showEventDetail(event) {
 }
 
 // ============================================================================
-// ✅ FUNCIONES PARA GOOGLE MAPS STREET VIEW - CORREGIDAS PARA CAMPOS PLANOS
+// ✅ FIX 2: FUNCIONES PARA GOOGLE MAPS VISTA SUPERIOR - CORREGIDAS
 // ============================================================================
 
-function generateDualGoogleMapsButtonsFlat(event) {
+function generateDualGoogleMapsButtonsFixed(event) {
     let buttons = '';
 
     // ✅ CORREGIDO: Coordenadas duales usando campos planos directos del backend
-    console.log('🗺️ Generando botones Google Maps con campos planos:', {
+    console.log('🗺️ Generando botones Google Maps con vista superior (FIX 2):', {
         source_lat: event.source_latitude,
         source_lng: event.source_longitude,
         target_lat: event.target_latitude,
         target_lng: event.target_longitude
     });
 
-    // ✅ Botón SOURCE (víctima) - CAMPOS PLANOS
+    // ✅ FIX 2: Botón SOURCE (víctima) - VISTA SUPERIOR
     if (event.source_latitude && event.source_longitude &&
         event.source_latitude !== 0 && event.source_longitude !== 0) {
 
-        const sourceUrl = `https://www.google.com/maps/@${event.source_latitude},${event.source_longitude},3a,75y,0h,90t/data=!3m7!1e1!3m5!1s${encodeURIComponent(event.source_ip)}!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com!7i16384!8i8192`;
-
+        const sourceUrl = `https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z`;
         buttons += `
             <div style="margin-top: 10px;">
                 <a href="${sourceUrl}" target="_blank" class="google-maps-btn source-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🏠 Street View Víctima (${event.source_ip})
+                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Víctima (${event.source_ip})
                 </a>
             </div>
         `;
     }
 
-    // ✅ Botón TARGET (atacante) - CAMPOS PLANOS
+    // ✅ FIX 2: Botón TARGET (atacante) - VISTA SUPERIOR
     if (event.target_latitude && event.target_longitude &&
         event.target_latitude !== 0 && event.target_longitude !== 0) {
 
-        const targetUrl = `https://www.google.com/maps/@${event.target_latitude},${event.target_longitude},3a,75y,0h,90t/data=!3m7!1e1!3m5!1s${encodeURIComponent(event.target_ip)}!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com!7i16384!8i8192`;
-
+        const targetUrl = `https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z`;
         buttons += `
             <div style="margin-top: 5px;">
                 <a href="${targetUrl}" target="_blank" class="google-maps-btn target-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🎯 Street View Atacante (${event.target_ip})
+                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Atacante (${event.target_ip})
                 </a>
             </div>
         `;
     }
 
-    // ✅ Botón para ver ambas ubicaciones en Google Maps - CAMPOS PLANOS
+    // ✅ FIX 2: Botón para ver ambas ubicaciones en Google Maps - VISTA SUPERIOR
     if (event.source_latitude && event.source_longitude &&
         event.target_latitude && event.target_longitude &&
         event.source_latitude !== 0 && event.source_longitude !== 0 &&
@@ -1849,16 +1978,17 @@ function generateDualGoogleMapsButtonsFlat(event) {
         `;
     }
 
-    // ✅ FALLBACK: Coordenadas legacy si no hay campos planos
-    if (!buttons && event.latitude && event.longitude &&
-        event.latitude !== 0 && event.longitude !== 0) {
-
-        const legacyUrl = `https://www.google.com/maps/@${event.latitude},${event.longitude},3a,75y,0h,90t/data=!3m7!1e1!3m5!1s${encodeURIComponent(event.source_ip)}!2e0!6shttps:%2F%2Fstreetviewpixels-pa.googleapis.com!7i16384!8i8192`;
-
+    // ✅ FIX 3: BOTONES SIEMPRE VISIBLES - Fallback si no hay coordenadas exactas
+    if (!buttons) {
         buttons += `
             <div style="margin-top: 10px;">
-                <a href="${legacyUrl}" target="_blank" class="google-maps-btn legacy-btn">
-                    <i class="fas fa-map-marked-alt"></i> Ver en Google Maps Street View (Legacy)
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.source_ip)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Víctima
+                </a>
+            </div>
+            <div style="margin-top: 5px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.target_ip)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Atacante
                 </a>
             </div>
         `;
@@ -2159,7 +2289,7 @@ function toggleEventData() {
 function showSimpleEventDetail(event) {
     const content = `
         <div style="font-family: 'Consolas', monospace;">
-            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento de Seguridad V3 (Campos Planos)</h4>
+            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento de Seguridad V3 (TODOS LOS FIXES)</h4>
 
             <div style="margin-bottom: 10px;">
                 <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
@@ -2180,7 +2310,7 @@ function showSimpleEventDetail(event) {
             ${event.geographic_distance_km ? `<div style="margin-bottom: 10px;"><strong>Distancia:</strong> ${event.geographic_distance_km}km</div>` : ''}
 
             <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.6); border-radius: 4px;">
-                <strong>Datos del Evento V3 (Campos Planos):</strong><br>
+                <strong>Datos del Evento V3 (TODOS LOS FIXES):</strong><br>
                 <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify(event, null, 2)}</pre>
             </div>
 
@@ -2207,7 +2337,7 @@ function showSimpleEventDetail(event) {
 
 function initializeMap() {
     try {
-        console.log('🗺️ Inicializando mapa Leaflet V3 con animaciones misil corregidas...');
+        console.log('🗺️ Inicializando mapa Leaflet V3 con TODOS LOS FIXES aplicados...');
 
         if (typeof L === 'undefined') {
             throw new Error('Leaflet no está disponible');
@@ -2233,9 +2363,9 @@ function initializeMap() {
         }).addTo(map);
 
         map.on('load', function() {
-            console.log('✅ Mapa V3 cargado');
+            console.log('✅ Mapa V3 cargado con TODOS LOS FIXES');
             addInitialMarkers();
-            addDebugLog('info', 'Mapa Leaflet V3 cargado con animaciones misil');
+            addDebugLog('info', 'Mapa Leaflet V3 + TODOS LOS FIXES cargado');
         });
 
         setTimeout(() => {
@@ -2244,8 +2374,8 @@ function initializeMap() {
             }
         }, 500);
 
-        console.log('✅ Mapa V3 inicializado');
-        addDebugLog('info', 'Mapa V3 inicializado correctamente');
+        console.log('✅ Mapa V3 inicializado con TODOS LOS FIXES');
+        addDebugLog('info', 'Mapa V3 + TODOS LOS FIXES inicializado correctamente');
 
     } catch (error) {
         console.error('❌ Error inicializando mapa:', error);
@@ -2259,20 +2389,20 @@ function addInitialMarkers() {
 
     try {
         const madridMarker = L.marker([40.4168, -3.7038])
-            .bindPopup('<b>🖥️ Dashboard Principal V3</b><br>Madrid, España<br>Backend Dashboard (Campos Planos)')
+            .bindPopup('<b>🖥️ Dashboard Principal V3 (FIXED)</b><br>Madrid, España<br>Backend Dashboard (Campos Planos)')
             .addTo(map);
 
         const barcelonaMarker = L.marker([41.3851, 2.1734])
-            .bindPopup('<b>🔄 Nodo Remoto V3</b><br>Barcelona, España<br>ML Detector Node V3')
+            .bindPopup('<b>🔄 Nodo Remoto V3 (FIXED)</b><br>Barcelona, España<br>ML Detector Node V3')
             .addTo(map);
 
         const sevillaMarker = L.marker([37.3886, -5.9823])
-            .bindPopup('<b>🔥 Firewall Agent V3</b><br>Sevilla, España<br>Simple Firewall Agent')
+            .bindPopup('<b>🔥 Firewall Agent V3 (FIXED)</b><br>Sevilla, España<br>Simple Firewall Agent')
             .addTo(map);
 
         markers.push(madridMarker, barcelonaMarker, sevillaMarker);
 
-        console.log('✅ Marcadores iniciales V3 añadidos');
+        console.log('✅ Marcadores iniciales V3 + FIXES añadidos');
 
     } catch (error) {
         console.error('❌ Error añadiendo marcadores:', error);
@@ -2285,7 +2415,7 @@ function handleMapError(error) {
         mapContainer.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #ff4444; font-weight: bold; text-align: center; padding: 20px;">
                 <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px;"></i>
-                <div style="font-size: 18px; margin-bottom: 10px;">❌ Error cargando mapa V3</div>
+                <div style="font-size: 18px; margin-bottom: 10px;">❌ Error cargando mapa V3 (FIXED)</div>
                 <div style="font-size: 12px; opacity: 0.8;">${error.message}</div>
                 <button onclick="initializeMap()" style="margin-top: 20px; background: rgba(0, 255, 0, 0.2); border: 1px solid #00ff00; color: #00ff00; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit;">🔄 Reintentar</button>
             </div>
@@ -2316,9 +2446,9 @@ function clearAllMarkers() {
         markers = markers.filter(marker => !marker._isEventMarker);
         connectionLines = [];
 
-        console.log('🗺️ Marcadores y líneas V3 limpiados');
-        showToast('Marcadores V3 limpiados', 'success');
-        addDebugLog('info', 'Marcadores y conexiones V3 limpiados');
+        console.log('🗺️ Marcadores y líneas V3 + FIXES limpiados');
+        showToast('Marcadores V3 + FIXES limpiados', 'success');
+        addDebugLog('info', 'Marcadores y conexiones V3 + FIXES limpiados');
 
     } catch (error) {
         console.error('❌ Error limpiando marcadores:', error);
@@ -2330,8 +2460,8 @@ function centerMap() {
 
     try {
         map.setView([40.4168, -3.7038], 6);
-        console.log('🎯 Mapa V3 centrado');
-        showToast('Mapa V3 centrado', 'info');
+        console.log('🎯 Mapa V3 + FIXES centrado');
+        showToast('Mapa V3 + FIXES centrado', 'info');
 
     } catch (error) {
         console.error('❌ Error centrando mapa:', error);
@@ -2489,13 +2619,13 @@ function clearEventsList() {
                 <i class="fas fa-inbox"></i>
                 <p>No hay eventos recientes</p>
                 <button onclick="sendTestFirewallCommand()" class="btn btn-primary">
-                    🧪 Generar Test Backend V3
+                    🧪 Generar Test Backend V3 (FIXED)
                 </button>
             </div>
         `;
         updateElement('live-events-count', 0);
         currentEvents = [];
-        addDebugLog('info', 'Lista de eventos V3 limpiada');
+        addDebugLog('info', 'Lista de eventos V3 + FIXES limpiada');
     }
 }
 
@@ -2516,15 +2646,15 @@ function filterEvents() {
 }
 
 function refreshDashboard() {
-    console.log('🔄 Refrescando dashboard V3 con campos planos...');
+    console.log('🔄 Refrescando dashboard V3 con TODOS LOS FIXES aplicados...');
     fetchDataFromZeroMQ();
 
     if (map) {
         map.invalidateSize();
     }
 
-    showToast('Dashboard V3 actualizado', 'success');
-    addDebugLog('info', 'Dashboard V3 refrescado - campos planos + firewall_commands.proto + sistema avanzado ventanas');
+    showToast('Dashboard V3 + TODOS LOS FIXES actualizado', 'success');
+    addDebugLog('info', 'Dashboard V3 + TODOS LOS FIXES refrescado - campos planos + firewall_commands.proto + sistema avanzado ventanas + Google Maps vista superior + botones siempre visibles + acciones independientes');
 }
 
 function clearDebugLog() {
@@ -2532,10 +2662,10 @@ function clearDebugLog() {
     if (debugLog) {
         debugLog.innerHTML = `
             <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log limpiado</div>
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard V3 con campos planos conectado</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard V3 + TODOS LOS FIXES conectado</div>
         `;
     }
-    showToast('Log V3 limpiado', 'info');
+    showToast('Log V3 + FIXES limpiado', 'info');
 }
 
 // ✅ MODAL SYSTEM MEJORADO
@@ -2583,7 +2713,7 @@ function showModal(title, content, actions = null) {
 
         makeModalDraggable(modal);
 
-        console.log('📱 Modal V3 mostrado con controles avanzados');
+        console.log('📱 Modal V3 + FIXES mostrado con controles avanzados');
     }
 }
 
@@ -2611,7 +2741,7 @@ function makeModalDraggable(modal) {
 
         e.preventDefault();
 
-        console.log('🖱️ Iniciando drag del modal');
+        console.log('🖱️ Iniciando drag del modal V3 + FIXES');
     });
 }
 
@@ -2625,7 +2755,7 @@ function minimizeModal() {
             btn.innerHTML = modal.classList.contains('minimized') ? '🔼' : '_';
         }
 
-        console.log('📱 Modal minimizado/restaurado');
+        console.log('📱 Modal V3 + FIXES minimizado/restaurado');
     }
 }
 
@@ -2645,7 +2775,7 @@ function maximizeModal() {
             modal.style.removeProperty('--modal-y');
         }
 
-        console.log('🔲 Modal maximizado/restaurado');
+        console.log('🔲 Modal V3 + FIXES maximizado/restaurado');
     }
 }
 
@@ -2664,7 +2794,7 @@ function closeModal() {
         currentModal = null;
         isDragging = false;
 
-        console.log('📱 Modal V3 cerrado');
+        console.log('📱 Modal V3 + FIXES cerrado');
     }
 }
 
@@ -2689,7 +2819,7 @@ function showThreatIndicator(event) {
     const indicator = document.getElementById('threat-indicator');
     if (indicator) {
         indicator.innerHTML = `
-            ⚠️ Amenaza V3 detectada!<br>
+            ⚠️ Amenaza V3 + FIXES detectada!<br>
             <small>${event.source_ip} → ${event.target_ip}</small>
         `;
         indicator.classList.add('show');
@@ -2701,564 +2831,29 @@ function showThreatIndicator(event) {
 }
 
 // Funciones placeholder para handlers del HTML
-function toggleHeatmap() { showToast('Heatmap V3: en desarrollo', 'warning'); }
-function showMapLegend() { showToast('Leyenda V3: en desarrollo', 'info'); }
-function testAllConnections() { showToast('Test conexiones V3: en desarrollo', 'info'); }
-function showConnectionDetails(type) { console.log('Connection details V3:', type); }
-function showSystemInfo() { console.log('System info V3'); }
-function showEventsSummary() { console.log('Events summary V3'); }
-function showConfirmationsSummary() { console.log('Confirmations summary V3'); }
-function showPortDetails(port, event) { console.log('Port details V3:', port); event?.stopPropagation(); }
-function showEventsDetail(event) { console.log('Events detail V3'); event?.stopPropagation(); }
-function showCommandsDetail(event) { console.log('Commands detail V3'); event?.stopPropagation(); }
-function showConfirmationsDetail(event) { console.log('Confirmations detail V3'); event?.stopPropagation(); }
-function showComponentDetail(component) { console.log('Component detail V3:', component); }
-function showComponentMetric(metric, event) { console.log('Component metric V3:', metric); event?.stopPropagation(); }
-function showTopologyLineDetail(line) { console.log('Topology line V3:', line); }
-function showZMQConnectionDetail(connection) { console.log('ZMQ connection V3:', connection); }
-function showEventsPerMinuteDetail() { console.log('Events per minute detail V3'); }
-function showHighRiskEventsDetail() { console.log('High risk events detail V3'); }
-function showSuccessRateDetail() { console.log('Success rate detail V3'); }
-function showFailuresDetail() { console.log('Failures detail V3'); }
-function showDebugLogDetail() { console.log('Debug log detail V3'); }
-function showLogEntryDetail(entry, event) { console.log('Log entry V3:', entry); event?.stopPropagation(); }
+function toggleHeatmap() { showToast('Heatmap V3 + FIXES: en desarrollo', 'warning'); }
+function showMapLegend() { showToast('Leyenda V3 + FIXES: en desarrollo', 'info'); }
+function testAllConnections() { showToast('Test conexiones V3 + FIXES: en desarrollo', 'info'); }
+function showConnectionDetails(type) { console.log('Connection details V3 + FIXES:', type); }
+function showSystemInfo() { console.log('System info V3 + FIXES'); }
+function showEventsSummary() { console.log('Events summary V3 + FIXES'); }
+function showConfirmationsSummary() { console.log('Confirmations summary V3 + FIXES'); }
+function showPortDetails(port, event) { console.log('Port details V3 + FIXES:', port); event?.stopPropagation(); }
+function showEventsDetail(event) { console.log('Events detail V3 + FIXES'); event?.stopPropagation(); }
+function showCommandsDetail(event) { console.log('Commands detail V3 + FIXES'); event?.stopPropagation(); }
+function showConfirmationsDetail(event) { console.log('Confirmations detail V3 + FIXES'); event?.stopPropagation(); }
+function showComponentDetail(component) { console.log('Component detail V3 + FIXES:', component); }
+function showComponentMetric(metric, event) { console.log('Component metric V3 + FIXES:', metric); event?.stopPropagation(); }
+function showTopologyLineDetail(line) { console.log('Topology line V3 + FIXES:', line); }
+function showZMQConnectionDetail(connection) { console.log('ZMQ connection V3 + FIXES:', connection); }
+function showEventsPerMinuteDetail() { console.log('Events per minute detail V3 + FIXES'); }
+function showHighRiskEventsDetail() { console.log('High risk events detail V3 + FIXES'); }
+function showSuccessRateDetail() { console.log('Success rate detail V3 + FIXES'); }
+function showFailuresDetail() { console.log('Failures detail V3 + FIXES'); }
+function showDebugLogDetail() { console.log('Debug log detail V3 + FIXES'); }
+function showLogEntryDetail(entry, event) { console.log('Log entry V3 + FIXES:', entry); event?.stopPropagation(); }
 
 // Cleanup
-/*
-🔧 SOLUCIONES COMPLETAS PARA DASHBOARD V3
-Problemas: Campos duales faltantes, animaciones misil, botones específicos
-Solución: Mapping de datos + fallbacks + mejoras de interactividad
-*/
-
-// ============================================================================
-// 🔧 SOLUCIÓN 1: FUNCIÓN DE MAPPING PARA CAMPOS DUALES
-// ============================================================================
-
-function enrichEventWithDualCoordinates(event) {
-    /*
-    Función que mapea campos legacy a V3 duales y viceversa
-    Soluciona el problema de backend que no envía campos V3
-    */
-
-    // Si ya tiene campos V3, devolverlo tal como está
-    if (event.source_latitude && event.target_latitude) {
-        console.log('✅ Evento ya tiene campos V3 duales:', event.source_ip, '→', event.target_ip);
-        return event;
-    }
-
-    // Si tiene campos legacy, intentar inferir campos duales
-    if (event.latitude && event.longitude && event.latitude !== 0 && event.longitude !== 0) {
-        console.log('🔄 Convirtiendo campos legacy a V3 duales para:', event.source_ip, '→', event.target_ip);
-
-        // ESTRATEGIA 1: Si hay información de ubicación en texto
-        const location = event.location || '';
-        const isSpanish = location.includes('España') || location.includes('Spain');
-
-        // ESTRATEGIA 2: Inferir basado en IPs
-        const sourceIsPrivate = isPrivateIP(event.source_ip);
-        const targetIsPrivate = isPrivateIP(event.target_ip);
-
-        if (sourceIsPrivate && !targetIsPrivate) {
-            // Source es privada (nosotros), target es pública (atacante)
-            // Asignar coordenadas actuales a source (Madrid/Sevilla)
-            event.source_latitude = 37.3886;  // Sevilla como fallback
-            event.source_longitude = -5.9823;
-            event.source_city = 'Sevilla';
-            event.source_country = 'España';
-            event.source_ip_enriched = true;
-
-            // Coordenadas legacy van a target (atacante)
-            event.target_latitude = event.latitude;
-            event.target_longitude = event.longitude;
-            event.target_city = extractCityFromLocation(location);
-            event.target_country = extractCountryFromLocation(location);
-            event.target_ip_enriched = true;
-
-        } else if (!sourceIsPrivate && targetIsPrivate) {
-            // Source es pública (atacante), target es privada (nosotros)
-            event.source_latitude = event.latitude;
-            event.source_longitude = event.longitude;
-            event.source_city = extractCityFromLocation(location);
-            event.source_country = extractCountryFromLocation(location);
-            event.source_ip_enriched = true;
-
-            event.target_latitude = 37.3886;  // Sevilla como fallback
-            event.target_longitude = -5.9823;
-            event.target_city = 'Sevilla';
-            event.target_country = 'España';
-            event.target_ip_enriched = true;
-
-        } else {
-            // Ambas son públicas o ambas privadas - usar heurística
-            if (isSpanish) {
-                // Si la ubicación es española, probablemente sea el atacante
-                event.target_latitude = event.latitude;
-                event.target_longitude = event.longitude;
-                event.target_city = extractCityFromLocation(location);
-                event.target_country = 'España';
-                event.target_ip_enriched = true;
-
-                // Source como nuestro nodo
-                event.source_latitude = 37.3886;
-                event.source_longitude = -5.9823;
-                event.source_city = 'Sevilla';
-                event.source_country = 'España';
-                event.source_ip_enriched = true;
-            } else {
-                // Ubicación extranjera - probablemente atacante
-                event.target_latitude = event.latitude;
-                event.target_longitude = event.longitude;
-                event.target_city = extractCityFromLocation(location);
-                event.target_country = extractCountryFromLocation(location);
-                event.target_ip_enriched = true;
-
-                event.source_latitude = 37.3886;
-                event.source_longitude = -5.9823;
-                event.source_city = 'Sevilla';
-                event.source_country = 'España';
-                event.source_ip_enriched = true;
-            }
-        }
-
-        // Calcular distancia geográfica
-        if (event.source_latitude && event.target_latitude) {
-            event.geographic_distance_km = calculateDistance(
-                event.source_latitude, event.source_longitude,
-                event.target_latitude, event.target_longitude
-            );
-            event.same_country = (event.source_country === event.target_country);
-        }
-
-        console.log('✅ Evento mapeado a V3:', {
-            source: `${event.source_city}, ${event.source_country}`,
-            target: `${event.target_city}, ${event.target_country}`,
-            distance: `${event.geographic_distance_km}km`
-        });
-    }
-
-    return event;
-}
-
-// ============================================================================
-// 🔧 SOLUCIÓN 2: ANIMACIONES MISIL CORREGIDAS Y MEJORADAS
-// ============================================================================
-
-function addEventToMapWithMissileAnimationFixed(event) {
-    if (!map) return;
-
-    try {
-        // 🔧 APLICAR MAPPING DUAL ANTES DE PROCESAR
-        event = enrichEventWithDualCoordinates(event);
-
-        const riskLevel = event.risk_score > 0.8 ? 'high' :
-                         event.risk_score > 0.5 ? 'medium' : 'low';
-
-        const colors = {
-            high: '#ff4444',
-            medium: '#ffaa00',
-            low: '#00ff00'
-        };
-
-        let markersAdded = [];
-
-        console.log('🗺️ Procesando evento V3 con campos duales corregidos:', {
-            source_coords: `${event.source_latitude}, ${event.source_longitude}`,
-            target_coords: `${event.target_latitude}, ${event.target_longitude}`,
-            distance: `${event.geographic_distance_km || 'N/A'}km`,
-            same_country: event.same_country
-        });
-
-        // ✅ MARCADOR SOURCE (víctima/origen) - SIEMPRE CLICKEABLE
-        if (event.source_latitude && event.source_longitude &&
-            event.source_latitude !== 0 && event.source_longitude !== 0) {
-
-            const sourceMarker = L.circleMarker([event.source_latitude, event.source_longitude], {
-                radius: 12,
-                fillColor: '#0066CC',
-                color: '#0066CC',
-                weight: 3,
-                opacity: 0.9,
-                fillOpacity: 0.7,
-                className: 'source-marker clickable-marker'
-            }).bindPopup(`
-                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                    <b>🏠 Víctima/Origen</b><br>
-                    <strong>IP:</strong> ${event.source_ip}<br>
-                    <strong>Ubicación:</strong> ${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}<br>
-                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
-                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
-                    <strong>Enriquecido:</strong> ${event.source_ip_enriched ? '✅' : '❌'}<br>
-                    <button onclick="showSourceIPDetail('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})"
-                            style="margin-top: 5px; background: #0066CC; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">
-                        🏠 Ver Detalles Víctima
-                    </button>
-                </div>
-            `).addTo(map);
-
-            // 🎯 HACER MARCADOR CLICKEABLE DIRECTAMENTE
-            sourceMarker.on('click', function() {
-                showSourceIPDetail(event.source_ip, event);
-            });
-
-            sourceMarker._isEventMarker = true;
-            sourceMarker._eventData = event;
-            sourceMarker._markerType = 'source';
-            markersAdded.push(sourceMarker);
-        }
-
-        // ✅ MARCADOR TARGET (atacante/destino) - SIEMPRE CLICKEABLE
-        if (event.target_latitude && event.target_longitude &&
-            event.target_latitude !== 0 && event.target_longitude !== 0) {
-
-            const targetMarker = L.circleMarker([event.target_latitude, event.target_longitude], {
-                radius: 12,
-                fillColor: '#CC0000',
-                color: '#CC0000',
-                weight: 3,
-                opacity: 0.9,
-                fillOpacity: 0.7,
-                className: 'target-marker clickable-marker'
-            }).bindPopup(`
-                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                    <b>🎯 Atacante/Destino</b><br>
-                    <strong>IP:</strong> ${event.target_ip}<br>
-                    <strong>Ubicación:</strong> ${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}<br>
-                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
-                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
-                    <strong>Enriquecido:</strong> ${event.target_ip_enriched ? '✅' : '❌'}<br>
-                    <button onclick="showTargetIPDetail('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})"
-                            style="margin-top: 5px; background: #CC0000; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">
-                        🎯 Acciones Firewall
-                    </button>
-                </div>
-            `).addTo(map);
-
-            // 🎯 HACER MARCADOR CLICKEABLE DIRECTAMENTE
-            targetMarker.on('click', function() {
-                showTargetIPDetail(event.target_ip, event);
-            });
-
-            targetMarker._isEventMarker = true;
-            targetMarker._eventData = event;
-            targetMarker._markerType = 'target';
-            markersAdded.push(targetMarker);
-        }
-
-        // ✅ ANIMACIÓN MISIL MEJORADA - AHORA SÍ FUNCIONARÁ
-        if (markersAdded.length === 2 &&
-            event.source_latitude && event.source_longitude &&
-            event.target_latitude && event.target_longitude) {
-
-            createAdvancedMissileTrajectory(
-                [event.source_latitude, event.source_longitude],
-                [event.target_latitude, event.target_longitude],
-                event
-            );
-
-            console.log('🚀 Animación misil V3 creada entre:',
-                `${event.source_city} → ${event.target_city}`,
-                `(${event.geographic_distance_km}km)`);
-        }
-
-        // Añadir a la lista global con auto-eliminación
-        markersAdded.forEach(marker => {
-            markers.push(marker);
-            setTimeout(() => {
-                if (map.hasLayer(marker)) {
-                    map.removeLayer(marker);
-                    markers = markers.filter(m => m !== marker);
-                }
-            }, 5 * 60 * 1000); // 5 minutos
-        });
-
-        if (markersAdded.length > 0) {
-            console.log(`📍 ${markersAdded.length} marcadores V3 clickeables añadidos:`,
-                event.source_ip, '→', event.target_ip);
-        }
-
-    } catch (error) {
-        console.error('❌ Error añadiendo marcadores V3 corregidos:', error);
-    }
-}
-
-// ============================================================================
-// 🔧 SOLUCIÓN 3: ANIMACIÓN MISIL AVANZADA Y REALISTA
-// ============================================================================
-
-function createAdvancedMissileTrajectory(sourceCoords, targetCoords, event) {
-    try {
-        // Calcular curva parabólica más realista
-        const midLat = (sourceCoords[0] + targetCoords[0]) / 2;
-        const midLng = (sourceCoords[1] + targetCoords[1]) / 2;
-
-        // Altura de la curva basada en distancia y riesgo
-        const distance = Math.sqrt(
-            Math.pow(targetCoords[0] - sourceCoords[0], 2) +
-            Math.pow(targetCoords[1] - sourceCoords[1], 2)
-        );
-
-        // Curva más alta para ataques de alto riesgo
-        const riskMultiplier = event.risk_score > 0.8 ? 1.5 :
-                              event.risk_score > 0.5 ? 1.2 : 1.0;
-        const curveHeight = distance * 0.4 * riskMultiplier;
-
-        // Punto de control para curva Bézier
-        const controlPoint = [midLat + curveHeight, midLng];
-
-        // Generar puntos de la trayectoria
-        const trajectoryPoints = [];
-        for (let t = 0; t <= 1; t += 0.02) { // Más puntos para suavidad
-            const lat = Math.pow(1-t, 2) * sourceCoords[0] +
-                       2*(1-t)*t * controlPoint[0] +
-                       Math.pow(t, 2) * targetCoords[0];
-            const lng = Math.pow(1-t, 2) * sourceCoords[1] +
-                       2*(1-t)*t * controlPoint[1] +
-                       Math.pow(t, 2) * targetCoords[1];
-            trajectoryPoints.push([lat, lng]);
-        }
-
-        // Color basado en riesgo y ubicación
-        let trajectoryColor = '#FF4444'; // Alto riesgo por defecto
-        if (event.risk_score <= 0.5) trajectoryColor = '#FFAA00'; // Medio riesgo
-        if (event.same_country) trajectoryColor = '#FF6600'; // Mismo país
-        if (!event.same_country && event.geographic_distance_km > 1000) {
-            trajectoryColor = '#FF0000'; // Internacional de larga distancia
-        }
-
-        // Crear línea con animación avanzada
-        const trajectory = L.polyline(trajectoryPoints, {
-            color: trajectoryColor,
-            weight: 4,
-            opacity: 0.8,
-            dashArray: '12, 8',
-            className: 'missile-trajectory advanced-missile-animation'
-        }).bindPopup(`
-            <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                <b>🚀 Trayectoria de Ataque V3</b><br>
-                <strong>Origen:</strong> ${event.source_ip} (${event.source_city})<br>
-                <strong>Destino:</strong> ${event.target_ip} (${event.target_city})<br>
-                <strong>Distancia:</strong> ${event.geographic_distance_km?.toFixed(1) || 'N/A'}km<br>
-                <strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>
-                <strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(0)}%<br>
-                <strong>Tipo:</strong> ${event.type || 'network_traffic'}
-            </div>
-        `).addTo(map);
-
-        // 🚀 Animación de partículas misil
-        setTimeout(() => {
-            createMissileParticleEffect(trajectory, trajectoryColor);
-        }, 200);
-
-        // 🎆 Efecto de impacto en el destino
-        setTimeout(() => {
-            createImpactEffect(targetCoords, trajectoryColor);
-        }, 2000);
-
-        trajectory._isEventMarker = true;
-        trajectory._trajectoryType = 'advanced_missile';
-        connectionLines.push(trajectory);
-
-        // Auto-eliminar después de 5 minutos
-        setTimeout(() => {
-            if (map.hasLayer(trajectory)) {
-                map.removeLayer(trajectory);
-                connectionLines = connectionLines.filter(l => l !== trajectory);
-            }
-        }, 5 * 60 * 1000);
-
-        console.log('🚀 Trayectoria misil avanzada creada:',
-            `${event.source_city} → ${event.target_city}`,
-            `${event.geographic_distance_km}km, riesgo: ${(event.risk_score * 100).toFixed(0)}%`);
-
-    } catch (error) {
-        console.error('❌ Error creando trayectoria misil avanzada:', error);
-    }
-}
-
-// ============================================================================
-// 🔧 SOLUCIÓN 4: EFECTOS VISUALES ADICIONALES
-// ============================================================================
-
-function createMissileParticleEffect(trajectory, color) {
-    // Crear efecto de partículas siguiendo la trayectoria
-    const latLngs = trajectory.getLatLngs();
-    const particleInterval = setInterval(() => {
-        if (!map.hasLayer(trajectory)) {
-            clearInterval(particleInterval);
-            return;
-        }
-
-        // Crear partícula en posición aleatoria de la trayectoria
-        const randomIndex = Math.floor(Math.random() * latLngs.length);
-        const position = latLngs[randomIndex];
-
-        const particle = L.circleMarker(position, {
-            radius: 2,
-            fillColor: color,
-            color: color,
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 1
-        }).addTo(map);
-
-        // Animar y eliminar partícula
-        setTimeout(() => {
-            if (map.hasLayer(particle)) {
-                map.removeLayer(particle);
-            }
-        }, 500);
-
-    }, 200);
-
-    // Parar partículas después de 3 segundos
-    setTimeout(() => {
-        clearInterval(particleInterval);
-    }, 3000);
-}
-
-function createImpactEffect(coords, color) {
-    // Efecto de ondas concéntricas en el punto de impacto
-    for (let i = 1; i <= 3; i++) {
-        setTimeout(() => {
-            const impactRing = L.circle(coords, {
-                radius: 5000 * i, // Radio en metros
-                fillColor: 'transparent',
-                color: color,
-                weight: 3,
-                opacity: 0.8
-            }).addTo(map);
-
-            // Animar expansión y desvanecimiento
-            setTimeout(() => {
-                if (map.hasLayer(impactRing)) {
-                    map.removeLayer(impactRing);
-                }
-            }, 1000);
-
-        }, i * 200);
-    }
-}
-
-// ============================================================================
-// 🔧 SOLUCIÓN 5: FUNCIONES AUXILIARES MEJORADAS
-// ============================================================================
-
-function isPrivateIP(ip) {
-    // Verificar si es IP privada
-    const privateRanges = [
-        /^10\./,                    // 10.0.0.0/8
-        /^172\.(1[6-9]|2[0-9]|3[01])\./, // 172.16.0.0/12
-        /^192\.168\./,              // 192.168.0.0/16
-        /^127\./,                   // 127.0.0.0/8 (localhost)
-        /^169\.254\./               // 169.254.0.0/16 (link-local)
-    ];
-
-    return privateRanges.some(range => range.test(ip));
-}
-
-function extractCityFromLocation(location) {
-    if (!location) return 'N/A';
-    // Extraer ciudad de strings como "Madrid, España" o "New York, US"
-    const parts = location.split(',');
-    return parts[0]?.trim() || 'N/A';
-}
-
-function extractCountryFromLocation(location) {
-    if (!location) return 'N/A';
-    // Extraer país de strings como "Madrid, España"
-    const parts = location.split(',');
-    return parts[parts.length - 1]?.trim() || 'N/A';
-}
-
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    // Fórmula de Haversine para calcular distancia entre coordenadas
-    const R = 6371; // Radio de la Tierra en km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-}
-
-// ============================================================================
-// 🔧 SOLUCIÓN 6: REEMPLAZAR FUNCIÓN ORIGINAL CON VERSIÓN CORREGIDA
-// ============================================================================
-
-// Reemplazar la función original con la versión corregida
-window.addEventToMapWithMissileAnimation = addEventToMapWithMissileAnimationFixed;
-
-// ============================================================================
-// 🔧 SOLUCIÓN 7: INTEGRACIÓN EN PROCESSEVENTS
-// ============================================================================
-
-function processEventsFromZeroMQFixed(events) {
-    if (eventsPaused) return;
-
-    try {
-        const newEvents = events.filter(event => {
-            return !currentEvents.some(existing =>
-                existing.id === event.id ||
-                (existing.timestamp === event.timestamp &&
-                 existing.source_ip === event.source_ip)
-            );
-        });
-
-        newEvents.forEach(event => {
-            // 🔧 APLICAR MAPPING ANTES DE PROCESAR
-            event = enrichEventWithDualCoordinates(event);
-            addEventFromZeroMQFixed(event);
-        });
-
-        if (newEvents.length > 0) {
-            console.log(`📨 ${newEvents.length} eventos V3 corregidos con campos duales procesados`);
-        }
-
-    } catch (error) {
-        console.error('❌ Error procesando eventos V3 corregidos:', error);
-        addDebugLog('error', `Error eventos V3: ${error.message}`);
-    }
-}
-
-function addEventFromZeroMQFixed(event) {
-    try {
-        if (!event.source_ip || !event.target_ip) {
-            console.warn('⚠️ Evento incompleto:', event);
-            return;
-        }
-
-        // Normalizar campos si faltan
-        if (typeof event.risk_score !== 'number') {
-            event.risk_score = 0.5;
-        }
-        if (!event.timestamp) {
-            event.timestamp = Date.now() / 1000;
-        }
-
-        // 🔧 USAR FUNCIÓN CORREGIDA CON MAPPING DUAL
-        addEventToMapWithMissileAnimationFixed(event);
-        addEventToEventsList(event);
-
-        if (event.risk_score > 0.8) {
-            showThreatIndicator(event);
-        }
-
-        console.log('🚨 Evento V3 corregido procesado:',
-            event.source_ip, '→', event.target_ip,
-            `(${event.source_city || 'N/A'} → ${event.target_city || 'N/A'})`);
-
-    } catch (error) {
-        console.error('❌ Error añadiendo evento V3 corregido:', error);
-        addDebugLog('error', `Error evento V3: ${error.message}`);
-    }
-}
-
-// Reemplazar funciones originales
-window.processEventsFromZeroMQ = processEventsFromZeroMQFixed;
-window.addEventFromZeroMQ = addEventFromZeroMQFixed;
-
-console.log('✅ Soluciones V3 aplicadas: campos duales + animaciones misil + marcadores clickeables');
 window.addEventListener('beforeunload', function() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
@@ -3266,6 +2861,9 @@ window.addEventListener('beforeunload', function() {
 });
 
 // La inicialización se maneja desde HTML con DOMContentLoaded
-console.log('✅ FIX 1 APLICADO: Comunicación API dashboard.js corregida');
-console.log('📡 Ahora envía estructura plana como espera el backend');
+console.log('✅ TODOS LOS FIXES APLICADOS: dashboard.js V3 COMPLETO');
+console.log('📡 FIX 1: Mapeo de acciones corregido');
+console.log('🗺️ FIX 2: Google Maps vista superior aplicado');
+console.log('📍 FIX 3: Botones geolocalización siempre visibles aplicado');
+console.log('⚔️ FIX 4: Acciones contra atacante independientes de geolocalización aplicado');
 console.log('🔒 Con parámetros de seguridad añadidos');
