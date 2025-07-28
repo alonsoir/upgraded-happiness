@@ -2,9 +2,10 @@
   "node_id": "dashboard_main_001",
   "component": {
     "name": "security_dashboard",
-    "version": "2.2.2",
+    "version": "2.3.0",
     "mode": "distributed_orchestrator",
-    "role": "dashboard_coordinator"
+    "role": "dashboard_coordinator",
+    "description": "SCADA Dashboard with Draggable Modals + Firewall Rules Integration"
   },
 
   "network": {
@@ -82,12 +83,37 @@
       "overflow_strategy": "drop_oldest",
       "max_wait_ms": 100,
       "emergency_drop_threshold": 80.0
-    }
+    },
+
+    "_comment_data_processing": "📊 Configuración heredada de versión 2.1.0",
+    "event_buffer_size": 1000,
+    "max_events_per_update": 50,
+    "event_retention_hours": 24,
+    "enable_event_filtering": true,
+    "risk_score_threshold": 0.1
+  },
+
+  "_comment_new_features": "🚀 NUEVAS CARACTERÍSTICAS - Modales Draggeables + Firewall Integration",
+  "firewall_integration": {
+    "enabled": true,
+    "rules_file": "firewall_rules.json",
+    "default_agent": "simple_firewall_agent_001",
+    "command_timeout": 30,
+    "retry_attempts": 3,
+    "auto_reload_rules": true,
+    "test_commands_enabled": true,
+    "auto_block_high_risk": true,
+    "block_threshold": 0.95,
+    "default_block_duration": "300s"
   },
 
   "monitoring": {
     "stats_interval_seconds": 20,
     "detailed_metrics": true,
+    "health_check_interval": 30,
+    "component_timeout": 60,
+    "alert_on_component_failure": true,
+    "heartbeat_enabled": true,
 
     "alerts": {
       "max_queue_usage_percent": 70.0,
@@ -108,11 +134,16 @@
     "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] - %(message)s",
     "handlers": {
       "console": {
-        "enabled": true
+        "enabled": true,
+        "level": "INFO"
       },
       "file": {
-        "enabled": false,
-        "path": "logs/dashboard.log"
+        "enabled": true,
+        "path": "logs/dashboard.log",
+        "level": "INFO",
+        "max_size": "50MB",
+        "backup_count": 5,
+        "rotation": "time"
       }
     }
   },
@@ -125,20 +156,21 @@
       "sanitize_inputs": true
     },
 
-    "firewall_integration": {
-      "enabled": true,
-      "test_commands_enabled": true,
-      "auto_block_high_risk": true,
-      "block_threshold": 0.95,
-      "default_block_duration": "300s"
-    }
+    "_comment_auth": "🔐 Configuración de seguridad heredada + nuevas características",
+    "enable_authentication": false,
+    "session_timeout": 3600,
+    "cors_enabled": true,
+    "csrf_protection": false
   },
 
   "web_interface": {
     "enabled": true,
-    "static_files_path": "static",
+    "static_files_path": "templates",
     "templates_path": "templates",
     "cache_control": "no-cache",
+    "host": "0.0.0.0",
+    "port": 8080,
+    "debug": false,
 
     "_comment_map": "🗺️ Configuración específica para el mapa",
     "map_settings": {
@@ -155,9 +187,46 @@
     "api_endpoints": {
       "metrics": "/api/metrics",
       "test_firewall": "/api/test-firewall",
+      "firewall_agent_info": "/api/firewall-agent-info",
+      "execute_firewall_action": "/api/execute-firewall-action",
       "map_data": "/api/map-data",
       "live_events": "/api/live-events"
     }
+  },
+
+  "_comment_performance": "⚡ Optimizaciones de rendimiento",
+  "performance": {
+    "enable_caching": true,
+    "cache_ttl": 300,
+    "compress_responses": true,
+    "max_workers": 4
+  },
+
+  "_comment_metrics": "📊 Configuración de métricas",
+  "metrics": {
+    "enable_collection": true,
+    "update_interval": 2,
+    "retention_hours": 48,
+    "export_prometheus": false
+  },
+
+  "_comment_ui_features": "🎨 NUEVAS CARACTERÍSTICAS UI - Modales Draggeables",
+  "features": {
+    "draggable_modals": true,
+    "google_maps_integration": true,
+    "real_time_updates": true,
+    "event_geolocation": true,
+    "firewall_actions": true,
+    "debug_mode": true
+  },
+
+  "ui_settings": {
+    "theme": "dark_terminal",
+    "auto_refresh": true,
+    "refresh_interval": 2000,
+    "max_events_display": 100,
+    "show_debug_log": true,
+    "enable_notifications": true
   },
 
   "distributed": {
@@ -180,6 +249,7 @@
     "thread_safety": "Solo 1 thread ML consumer para evitar race conditions ZMQ",
     "message_size": "Límite 10KB compatible con configuración conservadora ML",
     "timeouts": "500ms timeout compatible con ML detector conservador",
-    "map_debugging": "Usar CSS debug si el mapa no aparece"
+    "map_debugging": "Usar CSS debug si el mapa no aparece",
+    "new_features": "Versión 2.3.0 añade modales draggeables + integración firewall rules JSON"
   }
 }
