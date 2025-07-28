@@ -47,17 +47,21 @@ DASHBOARD = real_zmq_dashboard_with_firewall.py      # 🔄 Dashboard principal 
 FIREWALL_AGENT = simple_firewall_agent.py            # ✅ Agente firewall (integrando)
 
 # Advanced Components (Próximas fases)
-NEURAL_TRAINER = neural_trainer_collector.py         # 🎯 Entrenamiento continuo
+NEURAL_TRAINER = advanced_trainer.py         # 🎯 Entrenamiento continuo
 RAG_ENGINE = autoinmune_rag_engine.py               # 🎯 Interfaz conversacional
 
 # Configuraciones JSON
 PROMISCUOUS_CONFIG = enhanced_agent_config.json
 GEOIP_CONFIG = geoip_enricher_config.json
 ML_CONFIG = lightweight_ml_detector_config.json
-DASHBOARD_CONFIG = dashboard_config.json
-FIREWALL_CONFIG = simple_firewall_agent_config.json
-NEURAL_CONFIG = neural_trainer_config.json
+DASHBOARD_CONFIG = dashboard_config.json                    # ✅ Primer parámetro (original)
+FIREWALL_CONFIG = simple_firewall_agent_config.json       # ✅ Primer parámetro (original)
+NEURAL_CONFIG = config-advanced-trainer.json
 RAG_CONFIG = rag_engine_config.json
+
+# Configuraciones JSON adicionales (segundos parámetros)
+DASHBOARD_FIREWALL_CONFIG = config/firewall_rules_dashboard.json  # ✅ Segundo parámetro dashboard
+FIREWALL_AGENT_RULES_CONFIG = config/firewall_rules_agent.json   # ✅ Segundo parámetro firewall agent
 
 # =============================================================================
 # ARQUITECTURA DE RED (ZeroMQ)
@@ -114,7 +118,7 @@ MONITOR_SCRIPT = monitor_autoinmune.sh
         show-dashboard show-architecture show-roadmap \
         quick debug test benchmark \
         dev-start dev-stop dev-restart \
-        start-improved verify-start status-detailed
+        start-improved verify-start status-detailed create-config-dirs
 
 # =============================================================================
 # HELP Y DOCUMENTACIÓN
@@ -227,7 +231,13 @@ show-roadmap:
 # =============================================================================
 # SETUP Y CONFIGURACIÓN
 # =============================================================================
-setup:
+create-config-dirs:
+	@echo "$(BLUE)📁 Creando directorios de configuración...$(NC)"
+	@mkdir -p config
+	@mkdir -p $(PIDS_DIR) $(LOGS_DIR) $(DATA_DIR) $(MODELS_DIR)
+	@echo "$(GREEN)✅ Directorios creados$(NC)"
+
+setup: create-config-dirs
 	@echo "$(BLUE)🔧 Configurando entorno virtual...$(NC)"
 	@if [ -d "$(VENV_NAME)" ]; then \
 		echo "$(YELLOW)⚠️  Entorno virtual ya existe$(NC)"; \
@@ -236,8 +246,6 @@ setup:
 		echo "$(GREEN)✅ Entorno virtual creado$(NC)"; \
 	fi
 	@$(ACTIVATE) && $(PYTHON_VENV) -m pip install --upgrade pip
-	@mkdir -p $(PIDS_DIR) $(LOGS_DIR) $(DATA_DIR) $(MODELS_DIR)
-	@echo "$(GREEN)✅ Directorios creados$(NC)"
 	@echo "$(GREEN)✅ Setup completado$(NC)"
 
 install: setup
@@ -295,11 +303,26 @@ verify:
 		fi \
 	done
 	@echo "$(YELLOW)Configuraciones:$(NC)"
-	@for config in $(PROMISCUOUS_CONFIG) $(GEOIP_CONFIG) $(ML_CONFIG) $(DASHBOARD_CONFIG) $(FIREWALL_CONFIG); do \
-		if [ -f "$$config" ]; then \
-			echo "  ✅ $$config"; \
+	@for config in $(PROMISCUOUS_CONFIG) $(GEOIP_CONFIG) $(ML_CONFIG) $(DASHBOARD_CONFIG) $(FIREWALL_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG); do \
+		if [ -f "$config" ]; then \
+			echo "  ✅ $config"; \
 		else \
-			echo "  ❌ $$config falta"; \
+			echo "  ❌ $config falta - creando configuración básica..."; \
+			if echo "$config" | grep -q "firewall_rules_agent"; then \
+				mkdir -p config; \
+				echo '{"rules": [], "enabled": true, "mode": "agent"}' > "$config"; \
+				echo "  ✅ $config creado"; \
+			elif echo "$config" | grep -q "firewall_rules_dashboard"; then \
+				mkdir -p config; \
+				echo '{"dashboard_rules": [], "monitoring": true, "mode": "dashboard"}' > "$config"; \
+				echo "  ✅ $config creado"; \
+			elif echo "$config" | grep -q "dashboard_config"; then \
+				echo '{"port": 8080, "host": "localhost", "debug": false}' > "$config"; \
+				echo "  ✅ $config creado"; \
+			elif echo "$config" | grep -q "simple_firewall_agent_config"; then \
+				echo '{"agent_id": "firewall_001", "enabled": true, "log_level": "INFO"}' > "$config"; \
+				echo "  ✅ $config creado"; \
+			fi \
 		fi \
 	done
 	@echo "$(YELLOW)Permisos:$(NC)"
@@ -329,10 +352,15 @@ start: install verify check-geoip stop
 	@echo "$(PURPLE)Branch: $(BRANCH)$(NC)"
 	@echo ""
 	@echo "$(BLUE)🔄 Iniciando componentes en orden secuencial...$(NC)"
+	@echo "$(BLUE)📁 Verificando archivos de configuración JSON...$(NC)"
+	@test -f $(DASHBOARD_CONFIG) || (echo "$(YELLOW)⚠️  Creando $(DASHBOARD_CONFIG)...$(NC)" && echo '{"port": 8080, "host": "localhost", "debug": false}' > $(DASHBOARD_CONFIG))
+	@test -f $(DASHBOARD_FIREWALL_CONFIG) || (echo "$(YELLOW)⚠️  Creando $(DASHBOARD_FIREWALL_CONFIG)...$(NC)" && mkdir -p config && echo '{"dashboard_rules": [], "monitoring": true, "mode": "dashboard"}' > $(DASHBOARD_FIREWALL_CONFIG))
+	@test -f $(FIREWALL_CONFIG) || (echo "$(YELLOW)⚠️  Creando $(FIREWALL_CONFIG)...$(NC)" && echo '{"agent_id": "firewall_001", "enabled": true, "log_level": "INFO"}' > $(FIREWALL_CONFIG))
+	@test -f $(FIREWALL_AGENT_RULES_CONFIG) || (echo "$(YELLOW)⚠️  Creando $(FIREWALL_AGENT_RULES_CONFIG)...$(NC)" && mkdir -p config && echo '{"rules": [], "enabled": true, "mode": "agent"}' > $(FIREWALL_AGENT_RULES_CONFIG))
 	@echo ""
 
-	@echo "$(BLUE)1. 🛡️  Firewall Agent (Puerto $(FIREWALL_PORT))...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
+	@echo "$(BLUE)1. 🛡️  Firewall Agent (Puerto $(FIREWALL_PORT)) con $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG)...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $! > $(FIREWALL_PID)
 	@sleep 3
 
 	@echo "$(BLUE)2. 🕵️  Promiscuous Agent → Puerto $(CAPTURE_PORT)...$(NC)"
@@ -363,8 +391,8 @@ start: install verify check-geoip stop
 	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
 	@sleep 3
 
-	@echo "$(BLUE)5. 📊 Dashboard ($(ML_PORT) → UI $(DASHBOARD_WEB_PORT) → $(FIREWALL_PORT)) [🔄 Mejorando]...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
+	@echo "$(BLUE)5. 📊 Dashboard ($(ML_PORT) → UI $(DASHBOARD_WEB_PORT) → $(FIREWALL_PORT)) con $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) [🔄 Mejorando]...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $! > $(DASHBOARD_PID)
 	@sleep 5
 
 	@echo ""
@@ -376,6 +404,9 @@ start: install verify check-geoip stop
 	@echo "$(YELLOW)📡 Captura: Modo promiscuo activo$(NC)"
 	@echo "$(YELLOW)🌍 GeoIP: Enriquecimiento geográfico$(NC)"
 	@echo "$(YELLOW)🤖 ML: Detección de anomalías$(NC)"
+	@echo "$(YELLOW)⚙️  Configuraciones JSON:$(NC)"
+	@echo "$(YELLOW)   • Firewall Agent: $(FIREWALL_CONFIG)$(NC)"
+	@echo "$(YELLOW)   • Dashboard: $(DASHBOARD_CONFIG)$(NC)"
 	@echo ""
 	@echo "$(PURPLE)💡 Issues conocidos en desarrollo:$(NC)"
 	@echo "$(PURPLE)   • Click-to-block en dashboard (próxima semana)$(NC)"
@@ -387,15 +418,19 @@ start: install verify check-geoip stop
 
 start-core: install verify stop
 	@echo "$(GREEN)🚀 Iniciando componentes CORE...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
+	@test -f $(FIREWALL_CONFIG) || echo '{"agent_id": "firewall_001", "enabled": true, "log_level": "INFO"}' > $(FIREWALL_CONFIG)
+	@test -f $(FIREWALL_AGENT_RULES_CONFIG) || (mkdir -p config && echo '{"rules": [], "enabled": true, "mode": "agent"}' > $(FIREWALL_AGENT_RULES_CONFIG))
+	@test -f $(DASHBOARD_CONFIG) || echo '{"port": 8080, "host": "localhost", "debug": false}' > $(DASHBOARD_CONFIG)
+	@test -f $(DASHBOARD_FIREWALL_CONFIG) || (mkdir -p config && echo '{"dashboard_rules": [], "monitoring": true, "mode": "dashboard"}' > $(DASHBOARD_FIREWALL_CONFIG))
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $! > $(FIREWALL_PID)
 	@sleep 2
-	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)'
+	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $! > $(PROMISCUOUS_PID)'
 	@sleep 2
-	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $$! > $(GEOIP_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER) $(GEOIP_CONFIG) > $(GEOIP_LOG) 2>&1 & echo $! > $(GEOIP_PID)
 	@sleep 2
-	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $$! > $(ML_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $! > $(ML_PID)
 	@sleep 2
-	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $! > $(DASHBOARD_PID)
 	@echo "$(GREEN)✅ Componentes core iniciados$(NC)"
 
 start-advanced:
@@ -418,6 +453,8 @@ start-advanced:
 
 start-bg: install verify check-geoip stop
 	@echo "$(GREEN)🚀 Iniciando sistema (background mode)...$(NC)"
+	@test -f $(FIREWALL_CONFIG) || (mkdir -p config && echo '{"rules": [], "enabled": true, "mode": "agent"}' > $(FIREWALL_CONFIG))
+	@test -f $(DASHBOARD_CONFIG) || (mkdir -p config && echo '{"dashboard_rules": [], "monitoring": true, "mode": "dashboard"}' > $(DASHBOARD_CONFIG))
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
 	@sudo bash -c 'nohup $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $$! > $(PROMISCUOUS_PID)'
@@ -518,6 +555,7 @@ start-improved: install verify check-geoip stop
 	@echo "$(CYAN)========================================================$(NC)"
 
 	@echo "$(BLUE)1. 🛡️  Firewall Agent...$(NC)"
+	@test -f $(FIREWALL_CONFIG) || (mkdir -p config && echo '{"rules": [], "enabled": true, "mode": "agent"}' > $(FIREWALL_CONFIG))
 	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 3
 
@@ -534,6 +572,7 @@ start-improved: install verify check-geoip stop
 	@sleep 3
 
 	@echo "$(BLUE)5. 📊 Dashboard...$(NC)"
+	@test -f $(DASHBOARD_CONFIG) || (mkdir -p config && echo '{"dashboard_rules": [], "monitoring": true, "mode": "dashboard"}' > $(DASHBOARD_CONFIG))
 	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
 	@sleep 5
 
@@ -583,6 +622,10 @@ status:
 	@echo "$(YELLOW)🧠 Componentes Avanzados:$(NC)"
 	@pgrep -f "$(NEURAL_TRAINER)" >/dev/null && echo "  🤖 Neural Trainer: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🤖 Neural Trainer: $(BLUE)🎯 No disponible$(NC)"
 	@pgrep -f "$(RAG_ENGINE)" >/dev/null && echo "  🗣️  RAG Engine: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🗣️  RAG Engine: $(BLUE)🎯 No disponible$(NC)"
+	@echo ""
+	@echo "$(YELLOW)⚙️  Configuraciones JSON:$(NC)"
+	@test -f $(FIREWALL_CONFIG) && echo "  ✅ Firewall Agent Config: $(FIREWALL_CONFIG)" || echo "  ❌ Firewall Agent Config: $(FIREWALL_CONFIG) falta"
+	@test -f $(DASHBOARD_CONFIG) && echo "  ✅ Dashboard Config: $(DASHBOARD_CONFIG)" || echo "  ❌ Dashboard Config: $(DASHBOARD_CONFIG) falta"
 	@echo ""
 	@echo "$(YELLOW)🌐 Puertos de Red:$(NC)"
 	@lsof -i :$(CAPTURE_PORT) >/dev/null 2>&1 && echo "  📡 Captura ($(CAPTURE_PORT)): $(GREEN)ACTIVO$(NC)" || echo "  📡 Captura ($(CAPTURE_PORT)): $(RED)INACTIVO$(NC)"
@@ -652,8 +695,8 @@ show-dashboard:
 	@echo "$(BLUE)🌐 Abriendo dashboard web...$(NC)"
 	@echo "$(YELLOW)URL: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
 	@which open >/dev/null && open http://localhost:$(DASHBOARD_WEB_PORT) || \
-	 which xdg-open >/dev/null && xdg-open http://localhost:$(DASHBOARD_WEB_PORT) || \
-	 echo "💡 Abrir manualmente: http://localhost:$(DASHBOARD_WEB_PORT)"
+		which xdg-open >/dev/null && xdg-open http://localhost:$(DASHBOARD_WEB_PORT) || \
+		echo "💡 Abrir manualmente: http://localhost:$(DASHBOARD_WEB_PORT)"
 
 debug:
 	@echo "$(BLUE)🔧 Modo Debug Interactivo$(NC)"
