@@ -2,17 +2,12 @@
 
 ## 📅 **Estado Actual (Q3 2025) - ✅ COMPLETADO AL 100%**
 
-![Captura de pantalla 2025-07-24 a las 11.01.54.png](../../Desktop/Captura%20de%20pantalla%202025-07-24%20a%20las%2011.01.54.png)
-
-![Captura de pantalla 2025-07-24 a las 11.10.17.png](../../Desktop/Captura%20de%20pantalla%202025-07-24%20a%20las%2011.10.17.png)
-
-![Captura de pantalla 2025-07-24 a las 11.10.35.png](../../Desktop/Captura%20de%20pantalla%202025-07-24%20a%20las%2011.10.35.png)
-
-![Captura de pantalla 2025-07-25 a las 8.44.58.png](../../Desktop/Captura%20de%20pantalla%202025-07-25%20a%20las%208.44.58.png)
-
-![Captura de pantalla 2025-07-25 a las 8.46.43.png](../../Desktop/Captura%20de%20pantalla%202025-07-25%20a%20las%208.46.43.png)
-
-![Captura de pantalla 2025-07-25 a las 11.20.57.png](../../Desktop/Captura%20de%20pantalla%202025-07-25%20a%20las%2011.20.57.png)
+![pantallazo1.png](pantallazos/pantallazo1.png)
+![pantallazo2.png](pantallazos/pantallazo2.png)
+![pantallazo3.png](pantallazos/pantallazo3.png)
+![pantallazo4.png](pantallazos/pantallazo4.png)
+![pantallazo5.png](pantallazos/pantallazo5.png)
+![pantallazo6.png](pantallazos/pantallazo6.png)
 
 ### 🎯 **Pipeline Completo Funcional - ÉXITO TOTAL**
 - ✅ **Captura en tiempo real**: Agente promiscuo con Scapy completamente operativo
