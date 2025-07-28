@@ -25,18 +25,31 @@
                 <span>SCADA Dashboard - Arquitectura 3 Puertos</span>
             </div>
             <div class="status-indicators">
-                <div class="status-indicator" onclick="showConnectionDetails('connecting')">
-                    <div class="status-dot connecting" id="status-connecting"></div>
-                    <span>Connecting...</span>
+                <!-- 🔥 ESTADO GENERAL -->
+                <div class="status-indicator" onclick="showConnectionDetails('overall')">
+                    <div class="status-dot connecting" id="overall-status"></div>
+                    <span id="overall-status-text">Connecting...</span>
+                </div>
+
+                <!-- 🔥 COMPONENTES ESPECÍFICOS -->
+                <div class="status-indicator" onclick="showConnectionDetails('promiscuous-agent')">
+                    <div class="status-dot disconnected" id="promiscuous-agent-status"></div>
+                    <span>Promiscuous Agent</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('geoip-enricher')">
+                    <div class="status-dot disconnected" id="geoip-enricher-status"></div>
+                    <span>GeoIP Enricher</span>
                 </div>
                 <div class="status-indicator" onclick="showConnectionDetails('ml-detector')">
-                    <div class="status-dot connected" id="status-ml-detector"></div>
+                    <div class="status-dot disconnected" id="ml-detector-status"></div>
                     <span>ML Detector</span>
                 </div>
-                <div class="status-indicator" onclick="showConnectionDetails('firewall')">
-                    <div class="status-dot connected" id="status-firewall"></div>
-                    <span>Firewall</span>
+                <div class="status-indicator" onclick="showConnectionDetails('firewall-agent')">
+                    <div class="status-dot disconnected" id="firewall-agent-status"></div>
+                    <span>Firewall Agent</span>
                 </div>
+
+                <!-- INFO DEL SISTEMA -->
                 <div class="status-indicator" onclick="showSystemInfo()">
                     <span id="current-time">--:--:--</span>
                 </div>
@@ -64,7 +77,7 @@
                 <button class="map-control-btn" onclick="showMapLegend()" title="Mostrar leyenda del mapa">
                     <i class="fas fa-info-circle"></i> Legend
                 </button>
-                <button class="map-control-btn" onclick="sendTestFirewallEvent()" title="Enviar evento de prueba al firewall">
+                <button class="map-control-btn" onclick="sendTestFirewallCommand()" title="Enviar evento de prueba al firewall">
                     <i class="fas fa-vial"></i> Test FW
                 </button>
             </div>
@@ -110,6 +123,51 @@
                     </div>
                 </div>
                 <div class="section-content" id="components-content">
+                    <!-- 🔥 PROMISCUOUS AGENT -->
+                    <div class="component-item promiscuous-agent" onclick="showComponentDetail('promiscuous-agent')">
+                        <div class="component-header">
+                            <span class="component-name">Promiscuous Agent</span>
+                            <span class="component-health healthy" id="promiscuous-agent-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('promiscuous-agent-packets', event)">
+                                Packets: <span id="promiscuous-agent-packets">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-interfaces', event)">
+                                Interfaces: <span id="promiscuous-agent-interfaces">eth0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-filtered', event)">
+                                Filtered: <span id="promiscuous-agent-filtered">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-rate', event)">
+                                Rate: <span id="promiscuous-agent-rate">0 pkt/s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔥 GEOIP ENRICHER -->
+                    <div class="component-item geoip-enricher" onclick="showComponentDetail('geoip-enricher')">
+                        <div class="component-header">
+                            <span class="component-name">GeoIP Enricher</span>
+                            <span class="component-health warning" id="geoip-enricher-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('geoip-enricher-lookups', event)">
+                                Lookups: <span id="geoip-enricher-lookups">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-cached', event)">
+                                Cached: <span id="geoip-enricher-cached">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-enriched', event)">
+                                Enriched: <span id="geoip-enricher-enriched">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-latency', event)">
+                                Latency: <span id="geoip-enricher-latency">0ms</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ML DETECTOR -->
                     <div class="component-item ml-detector" onclick="showComponentDetail('ml-detector')">
                         <div class="component-header">
                             <span class="component-name">ML Detector</span>
@@ -131,6 +189,7 @@
                         </div>
                     </div>
 
+                    <!-- FIREWALL AGENT -->
                     <div class="component-item firewall-agent" onclick="showComponentDetail('firewall-agent')">
                         <div class="component-header">
                             <span class="component-name">Firewall Agent</span>
@@ -152,6 +211,7 @@
                         </div>
                     </div>
 
+                    <!-- DASHBOARD -->
                     <div class="component-item dashboard" onclick="showComponentDetail('dashboard')">
                         <div class="component-header">
                             <span class="component-name">Dashboard</span>
@@ -192,7 +252,7 @@
                         <button class="mini-btn" onclick="pauseEventsUpdate()" title="Pausar/reanudar actualización" id="pause-events-btn">
                             <i class="fas fa-pause"></i>
                         </button>
-                        <button class="mini-btn" onclick="sendTestFirewallEvent()" title="Enviar evento de prueba">
+                        <button class="mini-btn" onclick="sendTestFirewallCommand()" title="Enviar evento de prueba">
                             <i class="fas fa-vial"></i>
                         </button>
                         <select id="events-filter" onchange="filterEvents()" class="mini-select">
@@ -206,10 +266,67 @@
                         <div class="no-events-placeholder">
                             <i class="fas fa-inbox"></i>
                             <p>No hay eventos recientes</p>
-                            <button onclick="sendTestFirewallEvent()" class="btn btn-primary">
+                            <button onclick="sendTestFirewallCommand()" class="btn btn-primary">
                                 🧪 Generar Evento de Prueba
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔥 NUEVA SECCIÓN: Eventos del Firewall -->
+            <div class="collapsible-section" id="firewall-events-section">
+                <div class="section-header" onclick="toggleSection('firewall-events')">
+                    <div class="section-title">
+                        🔥 Eventos del Firewall
+                        <span class="event-count-badge" id="firewall-events-count" style="background: #00ff88;">0</span>
+                        <i class="fas fa-chevron-down toggle-icon" id="firewall-events-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="firewall-events-content">
+                    <!-- Estadísticas del Firewall -->
+                    <div class="firewall-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; margin-bottom: 12px;">
+                        <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 4px; padding: 6px; text-align: center;">
+                            <div style="font-size: 9px; color: #888; text-transform: uppercase;">Comandos</div>
+                            <div style="font-size: 14px; font-weight: bold; color: #00ff88;" id="firewall-commands-sent">0</div>
+                        </div>
+                        <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 4px; padding: 6px; text-align: center;">
+                            <div style="font-size: 9px; color: #888; text-transform: uppercase;">Resp. OK</div>
+                            <div style="font-size: 14px; font-weight: bold; color: #00ff88;" id="firewall-responses-ok">0</div>
+                        </div>
+                        <div style="background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.3); border-radius: 4px; padding: 6px; text-align: center;">
+                            <div style="font-size: 9px; color: #888; text-transform: uppercase;">Errores</div>
+                            <div style="font-size: 14px; font-weight: bold; color: #ff4444;" id="firewall-errors">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Controles del Firewall -->
+                    <div class="events-controls">
+                        <button class="mini-btn" onclick="clearFirewallEventsList()" title="Limpiar eventos del firewall">
+                            <i class="fas fa-fire"></i>
+                        </button>
+                        <button class="mini-btn" onclick="pauseFirewallEventsUpdate()" title="Pausar/reanudar eventos firewall" id="pause-firewall-events-btn">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                        <button class="mini-btn" onclick="sendTestFirewallCommand()" title="Enviar comando test al firewall" style="border-color: #00aaff; color: #00aaff;">
+                            <i class="fas fa-vial"></i>
+                        </button>
+                    </div>
+
+                    <!-- Lista de Eventos del Firewall -->
+                    <div class="events-list" id="firewall-events-list" style="max-height: 250px;">
+                        <div class="no-firewall-events" style="text-align: center; color: #666; padding: 20px; font-style: italic;">
+                            <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                            <p>No hay eventos del firewall</p>
+                            <button onclick="sendTestFirewallCommand()" class="btn btn-primary" style="margin-top: 10px;">
+                                🧪 Enviar Test Firewall
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Info último agente -->
+                    <div style="margin-top: 10px; font-size: 9px; color: #666; text-align: center;">
+                        Último Agent: <span id="firewall-last-agent" style="color: #00ff88;">N/A</span>
                     </div>
                 </div>
             </div>
@@ -343,9 +460,9 @@
                 </div>
                 <div class="section-content" id="debug-content">
                     <div class="debug-log" id="debug-log" onclick="showDebugLogDetail()">
-                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado</div>
-                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] ZeroMQ context creado</div>
-                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del ML Detector...</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado con componentes distribuidos</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Backend ZeroMQ conectado</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del pipeline...</div>
                         <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Mapa Leaflet inicializado</div>
                     </div>
                 </div>
@@ -362,7 +479,7 @@
                 <button class="btn test" onclick="testAllConnections()" title="Probar conectividad de los 3 puertos">
                     <i class="fas fa-plug"></i> Test 3 Puertos
                 </button>
-                <button class="btn confirmations" onclick="sendTestFirewallEvent()" title="Enviar evento de prueba al firewall">
+                <button class="btn confirmations" onclick="sendTestFirewallCommand()" title="Enviar evento de prueba al firewall">
                     <i class="fas fa-vial"></i> Test Firewall
                 </button>
             </div>
