@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-simple_firewall_agent.py - ULTRA-SECURE VERSION WITH AUTO-DETECTION
+simple_firewall_agent.py - ULTRA-SECURE VERSION WITH AUTO-DETECTION - FIXED
 ✅ SOLUCIÓN C COMPLETA: "SET IT AND FORGET IT"
 ✅ Auto-detección de entorno y permisos
 ✅ Auto-protección contra configuraciones peligrosas
@@ -8,6 +8,7 @@ simple_firewall_agent.py - ULTRA-SECURE VERSION WITH AUTO-DETECTION
 ✅ Logging defensivo completo
 ✅ Validación robusta de comandos
 ✅ Nunca puede dañar el firewall real
+🔧 FIXED: Añadido método reload_if_changed() que faltaba
 """
 import json
 import time
@@ -22,7 +23,7 @@ import os
 import sys
 import pwd
 import grp
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -381,7 +382,7 @@ class SecurityMonitor:
 
 
 class FirewallRulesSync:
-    """Sincronización con reglas JSON del dashboard - ULTRA SECURE VERSION"""
+    """Sincronización con reglas JSON del dashboard - ULTRA SECURE VERSION - FIXED"""
 
     def __init__(self, rules_file: str, node_id: str, logger, security_monitor: SecurityMonitor):
         self.rules_file = rules_file
@@ -396,8 +397,87 @@ class FirewallRulesSync:
         self.agent_config = {}
         self.last_loaded = None
 
+        # 🔧 NUEVO: Para tracking de cambios (FIX RELOAD_IF_CHANGED)
+        self.last_modified_time = 0
+        self.file_size = 0
+        self.load_count = 0
+
         # Cargar reglas iniciales
         self.load_rules()
+
+    def reload_if_changed(self) -> bool:
+        """
+        🔧 MÉTODO AÑADIDO: Recargar reglas solo si el archivo ha cambiado
+        Returns: True si se recargó, False si no hubo cambios
+        """
+        try:
+            # Verificar si el archivo existe
+            if not Path(self.rules_file).exists():
+                self.logger.warning(f"⚠️ Archivo de reglas no existe: {self.rules_file}")
+                return False
+
+            # Obtener información del archivo
+            file_stat = os.stat(self.rules_file)
+            current_modified_time = file_stat.st_mtime
+            current_file_size = file_stat.st_size
+
+            # Verificar si hay cambios
+            if (current_modified_time != self.last_modified_time or
+                    current_file_size != self.file_size):
+
+                self.logger.info(f"🔄 Cambios detectados en {self.rules_file}, recargando...")
+                self.logger.debug(f"   Modificado: {self.last_modified_time} → {current_modified_time}")
+                self.logger.debug(f"   Tamaño: {self.file_size} → {current_file_size}")
+
+                # Recargar reglas
+                self.load_rules()
+
+                # Actualizar tracking
+                self.last_modified_time = current_modified_time
+                self.file_size = current_file_size
+                self.load_count += 1
+
+                self.logger.info(f"✅ Reglas recargadas exitosamente (recarga #{self.load_count})")
+                return True
+            else:
+                self.logger.debug(f"📋 Sin cambios en {self.rules_file}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando cambios en reglas: {e}")
+            return False
+
+    def force_reload(self) -> bool:
+        """🔄 Forzar recarga de reglas sin verificar cambios"""
+        try:
+            self.logger.info(f"🔄 Forzando recarga de reglas: {self.rules_file}")
+            self.load_rules()
+
+            # Actualizar tracking
+            if Path(self.rules_file).exists():
+                file_stat = os.stat(self.rules_file)
+                self.last_modified_time = file_stat.st_mtime
+                self.file_size = file_stat.st_size
+
+            self.load_count += 1
+            self.logger.info(f"✅ Reglas forzadamente recargadas (recarga #{self.load_count})")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Error forzando recarga de reglas: {e}")
+            return False
+
+    def get_reload_stats(self) -> Dict[str, Any]:
+        """📊 Obtener estadísticas de recarga"""
+        return {
+            "rules_file": self.rules_file,
+            "last_loaded": self.last_loaded.isoformat() if self.last_loaded else None,
+            "last_modified_time": self.last_modified_time,
+            "file_size": self.file_size,
+            "load_count": self.load_count,
+            "available_actions_count": len(self.available_actions),
+            "capabilities_count": len(self.capabilities),
+            "risk_rules_count": len(self.risk_rules)
+        }
 
     def load_rules(self):
         """Cargar reglas con validación de seguridad"""
@@ -449,6 +529,12 @@ class FirewallRulesSync:
                 self.logger.info("🔒 Global dry_run forced by configuration")
 
             self.last_loaded = datetime.now()
+
+            # 🔧 ACTUALIZAR TRACKING DE CAMBIOS
+            if Path(self.rules_file).exists():
+                file_stat = os.stat(self.rules_file)
+                self.last_modified_time = file_stat.st_mtime
+                self.file_size = file_stat.st_size
 
             self.logger.info(f"✅ Reglas de firewall sincronizadas: {len(self.risk_rules)} reglas de riesgo")
             self.logger.info(f"📋 Acciones manuales SEGURAS: {', '.join(self.available_actions)}")
@@ -598,7 +684,7 @@ class UltraSecureFirewallManager:
 
 
 class UltraSecureFirewallAgent:
-    """🔒 Firewall Agent Ultra-Seguro - SET IT AND FORGET IT"""
+    """🔒 Firewall Agent Ultra-Seguro - SET IT AND FORGET IT - FIXED"""
 
     def __init__(self, config_path: str, rules_file: str):
         # ✅ VALIDACIÓN CRÍTICA: Ambos archivos deben existir
@@ -1020,31 +1106,60 @@ class UltraSecureFirewallAgent:
             return data
 
     def _cleanup_thread(self):
-        """Cleanup thread ultra-seguro"""
+        """🔧 FIXED: Cleanup thread ultra-seguro con manejo robusto de errores"""
         self.logger.info("🔒 ULTRA-SECURE Cleanup thread started")
 
         while self.running:
             try:
-                self.firewall_manager.cleanup_expired_rules()
+                # 🧹 Limpiar reglas expiradas
+                try:
+                    self.firewall_manager.cleanup_expired_rules()
+                except Exception as e:
+                    self.logger.error(f"❌ Error cleaning expired rules: {e}")
 
-                # 🔒 VERIFICAR CAMBIOS EN REGLAS CON VALIDACIÓN
-                if self.rules_sync:
-                    self.rules_sync.reload_if_changed()
+                # 🔧 FIXED: VERIFICAR CAMBIOS EN REGLAS CON VALIDACIÓN ROBUSTA
+                try:
+                    if self.rules_sync:
+                        # ✅ USAR EL MÉTODO QUE AHORA SÍ EXISTE
+                        if hasattr(self.rules_sync, 'reload_if_changed'):
+                            changed = self.rules_sync.reload_if_changed()
+                            if changed:
+                                self.logger.info("🔄 Rules configuration reloaded due to file changes")
+                        else:
+                            # Fallback si por alguna razón no existe el método
+                            self.logger.warning("⚠️ reload_if_changed method not available, skipping rules reload")
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error reloading rules: {e}")
 
                 # 🔒 RE-VERIFICAR SEGURIDAD DEL ENTORNO PERIÓDICAMENTE
-                if hasattr(self.security_monitor, 'last_safety_check'):
-                    time_since_check = (datetime.now() - self.security_monitor.last_safety_check).total_seconds()
-                    if time_since_check > 300:  # Cada 5 minutos
-                        self.logger.info("🔍 Periodic environment safety re-check")
-                        env_safety = self.security_monitor.detect_environment_safety()
-                        if env_safety.forced_dry_run and not self.dry_run:
-                            self.dry_run = True
-                            self.logger.warning("🔒 DRY_RUN re-enabled due to environment change")
+                try:
+                    if hasattr(self.security_monitor, 'last_safety_check') and self.security_monitor.last_safety_check:
+                        time_since_check = (datetime.now() - self.security_monitor.last_safety_check).total_seconds()
+                        if time_since_check > 300:  # Cada 5 minutos
+                            self.logger.info("🔍 Periodic environment safety re-check")
+                            env_safety = self.security_monitor.detect_environment_safety()
+                            if env_safety.forced_dry_run and not self.dry_run:
+                                self.dry_run = True
+                                self.logger.warning("🔒 DRY_RUN re-enabled due to environment change")
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error in environment safety check: {e}")
+
+                # 📊 Log periódico de estadísticas
+                try:
+                    if hasattr(self.rules_sync, 'get_reload_stats'):
+                        stats = self.rules_sync.get_reload_stats()
+                        self.logger.debug(
+                            f"📊 Rules stats: {stats['load_count']} reloads, {stats['available_actions_count']} actions")
+                except Exception as e:
+                    self.logger.error(f"❌ Error logging stats: {e}")
 
                 time.sleep(60)
 
             except Exception as e:
                 self.logger.error(f"❌ Cleanup thread error: {e}")
+                # 🛡️ NO detener el thread por errores individuales
                 time.sleep(60)
 
     def start(self):
@@ -1139,7 +1254,7 @@ def main():
     """Main function ULTRA-SEGURA"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="ULTRA-SECURE Firewall Agent - Set it and forget it")
+    parser = argparse.ArgumentParser(description="ULTRA-SECURE Firewall Agent - Set it and forget it - FIXED")
     parser.add_argument("config", help="Configuration file path (simple_firewall_agent_config.json)")
     parser.add_argument("rules", help="Firewall rules JSON file (firewall_rules_dashboard.json)")
     parser.add_argument("--log-level", default="INFO", help="Log level")
@@ -1157,7 +1272,7 @@ def main():
         print("📁 Necesario: firewall_rules_dashboard.json")
         sys.exit(1)
 
-    print("🔒 ULTRA-SECURE FIREWALL AGENT - Starting with maximum safety")
+    print("🔒 ULTRA-SECURE FIREWALL AGENT - Starting with maximum safety - FIXED")
 
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
@@ -1168,6 +1283,7 @@ def main():
         print(f"✅ Inicializando con configuración: {args.config}")
         print(f"✅ Inicializando con reglas: {args.rules}")
         print("🔒 Modo ULTRA-SEGURO activado")
+        print("🔧 FIXED: Método reload_if_changed añadido")
 
         agent = UltraSecureFirewallAgent(args.config, args.rules)
         agent.start()

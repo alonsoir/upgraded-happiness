@@ -1,12 +1,12 @@
 {
   "component": {
     "name": "geoip_enricher",
-    "version": "3.0.0",
+    "version": "3.0.0_readonly_basic",
     "mode": "distributed_vertical",
-    "description": "GeoIP Enricher v3.0.0 - REAL LOOKUP for target_ip (attackers) AND source_ip with public IP discovery + protobuf v3 support - NO HARDCODED COORDINATES"
+    "description": "GeoIP Enricher v3.0.0 READONLY BASIC - REAL LOOKUP for target_ip (attackers) AND source_ip with public IP discovery + protobuf v3 support + READONLY basic fields validation - NO HARDCODED COORDINATES"
   },
-  "node_id": "geoip_enricher_v3_001",
-  "version": "3.0.0",
+  "node_id": "geoip_enricher_v3_readonly_001",
+  "version": "3.0.0_readonly_basic",
   "component_type": "geoip_enricher",
 
   "_comment_network": "🔌 Red optimizada - CRÍTICO: CONNECT a promiscuous, BIND para ML",
@@ -16,14 +16,14 @@
       "port": 5559,
       "mode": "connect",
       "socket_type": "PULL",
-      "description": "Recibe eventos protobuf v3.0.0 del promiscuous_agent"
+      "description": "Recibe eventos protobuf v3.0.0 CON CAMPOS BÁSICOS RELLENOS del promiscuous_agent"
     },
     "output_socket": {
       "address": "localhost",
       "port": 5560,
       "mode": "bind",
       "socket_type": "PUSH",
-      "description": "Envía eventos enriquecidos v3.0.0 al lightweight_ml_detector"
+      "description": "Envía eventos enriquecidos v3.0.0 CON GEOLOCALIZACIÓN al lightweight_ml_detector"
     }
   },
 
@@ -58,7 +58,7 @@
     }
   },
 
-  "_comment_processing": "⚙️ CRÍTICO: Configuración de qué IPs geoposicionar v3.0.0",
+  "_comment_processing": "⚙️ CRÍTICO: Configuración de qué IPs geoposicionar v3.0.0 + READONLY BASIC",
   "processing": {
     "threads": 3,
     "send_threads": 1,
@@ -76,6 +76,38 @@
     "max_events_per_batch": 100,
     "batch_timeout_ms": 50,
     "worker_threads": 4,
+
+    "_comment_readonly_basic": "📖 NUEVO: Configuración para campos básicos READONLY",
+    "basic_fields_validation": {
+      "enabled": true,
+      "strict_validation": true,
+      "reject_invalid_events": true,
+      "required_basic_fields": [
+        "event_id",
+        "timestamp",
+        "source_ip",
+        "target_ip",
+        "packet_size",
+        "dest_port",
+        "src_port",
+        "protocol",
+        "agent_id",
+        "anomaly_score"
+      ],
+      "validation_rules": {
+        "timestamp_min": 1000000000000,
+        "port_range": [0, 65535],
+        "packet_size_max": 65535,
+        "anomaly_score_range": [0.0, 1.0],
+        "ip_format_validation": true,
+        "protocol_whitelist": ["tcp", "udp", "icmp", "http", "https"]
+      },
+      "logging": {
+        "log_validation_failures": true,
+        "log_level": "WARNING",
+        "log_every_nth_failure": 10
+      }
+    },
 
     "vertical_scaling": {
       "optimized_for_i9_8cores": true,
@@ -96,10 +128,10 @@
     }
   },
 
-  "_comment_geoip": "🌍 MODIFICADO v3.0.0: Lookup REAL con MaxMind + API fallback - SIN HARDCODEOS",
+  "_comment_geoip": "🌍 MODIFICADO v3.0.0: Lookup REAL con MaxMind + IPAPI fallback - SIN HARDCODEOS",
   "geoip": {
     "lookup_method": "maxmind",
-    "fallback_method": "api",
+    "fallback_method": "ipapi",
     "performance_mode": "speed",
     "cache_enabled": true,
     "cache_size": 10000,
@@ -127,7 +159,8 @@
       "strategy": "empty_coordinates",
       "log_failures": true,
       "log_level": "WARNING",
-      "retry_failed_ips": false
+      "retry_failed_ips": false,
+      "never_use_fallback_coordinates": true
     },
 
     "vertical_optimizations": {
@@ -149,16 +182,21 @@
       "timeout_seconds": 2.0
     },
 
-    "_comment_api": "🌐 API como fallback (SIN API key por ahora - desarrollo)",
+    "_comment_ipapi": "🌐 IPAPI como fallback - CONFIGURA TU TOKEN AQUÍ",
     "api": {
-      "enabled": false,
-      "url": "https://api.ipgeolocation.io/ipgeo?apiKey={api_key}&ip={ip}",
+      "enabled": true,
+      "provider": "ipapi",
+      "base_url": "https://ipapi.co",
+      "endpoint_format": "{ip}/json",
+      "access_key_param": "key",
       "timeout_seconds": 5.0,
-      "api_key": null,
+      "api_key": "$IPAPI_TOKEN",
       "rate_limit_per_minute": 1000,
-      "retry_failed_requests": false,
+      "retry_failed_requests": true,
+      "max_retries": 2,
       "connection_pool_size": 10,
-      "_comment": "Deshabilitado hasta tener API keys - solo MaxMind por ahora"
+      "use_https": true,
+      "_comment": "⚠️ IMPORTANTE: Reemplazar 'TU_TOKEN_IPAPI_AQUI' con tu token real"
     },
 
     "precision": {
@@ -195,7 +233,7 @@
       "cache_public_ip": true,
       "cache_duration": 3600
     },
-    "_comment_no_fallback": "🚨 ELIMINADO: fallback_coordinates hardcoded - solo para referencia en logs"
+    "_comment_no_fallback": "🚨 ELIMINADO: fallback_coordinates hardcoded"
   },
 
   "_comment_enrichment": "🔍 v3.0.0: Configuración de enriquecimiento avanzado",
@@ -206,12 +244,12 @@
     "add_timezone": true,
     "add_isp_info": true,
     "add_threat_intel": false,
-    "calculate_distance": true,
-    "base_location": {
-      "latitude": 37.3886,
-      "longitude": -5.9823,
-      "name": "Sevilla, Spain",
-      "_comment": "Solo para cálculos de distancia - NO como fallback"
+    "calculate_distance": false,
+    "_comment_distance": "🚫 Distance calculation removido para evitar dependencias innecesarias",
+    "field_behavior": {
+      "basic_fields_1_10": "readonly_only",
+      "legacy_fields_11_12": "never_touch",
+      "geoip_fields_54_plus": "writeonly_only"
     }
   },
 
@@ -231,10 +269,12 @@
     "add_processing_metadata": true,
     "coordinate_precision": 6,
     "timestamp_format": "unix",
-    "compress_output": false
+    "compress_output": false,
+    "preserve_basic_fields": true,
+    "only_enrich_geoip_fields": true
   },
 
-  "_comment_logging": "📝 MODIFICADO: Logging dual configurado para una línea legible",
+  "_comment_logging": "📝 LOGGING optimizado para READONLY BASIC",
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s | %(name)s | %(levelname)-8s | %(message)s",
@@ -243,27 +283,28 @@
       "console": {
         "enabled": true,
         "level": "INFO",
-        "_comment": "Consola para monitoreo en tiempo real - formato de una línea"
+        "_comment": "Consola para monitoreo en tiempo real"
       },
       "file": {
         "enabled": true,
-        "path": "logs/geoip_enricher.log",
+        "path": "logs/geoip_enricher_readonly_basic.log",
         "level": "DEBUG",
         "max_size": "25MB",
         "backup_count": 3,
         "rotation": "time",
-        "_comment": "Archivo para análisis histórico y debugging"
+        "_comment": "Archivo específico para versión READONLY BASIC"
       }
     },
     "performance_logging": {
       "enabled": true,
       "log_slow_requests": true,
       "slow_request_threshold_ms": 50,
-      "log_throughput_stats": true
+      "log_throughput_stats": true,
+      "log_validation_stats": true
     }
   },
 
-  "_comment_monitoring": "📊 v3.0.0: Monitoreo con nuevas métricas duales + lookup real",
+  "_comment_monitoring": "📊 v3.0.0: Monitoreo con nuevas métricas READONLY BASIC",
   "monitoring": {
     "stats_interval_seconds": 15,
     "detailed_metrics": true,
@@ -280,13 +321,25 @@
       "track_batch_performance": true,
       "hardware_profile": "i9_8cores_32gb"
     },
+
+    "_comment_readonly_metrics": "📖 NUEVO: Métricas específicas para READONLY BASIC",
+    "readonly_basic_metrics": {
+      "track_basic_field_validation": true,
+      "track_invalid_events": true,
+      "track_field_read_write_separation": true,
+      "validation_failure_threshold": 5.0,
+      "basic_field_coverage_threshold": 95.0
+    },
+
     "component_health_check": {
       "enabled": true,
       "check_interval_seconds": 30,
       "memory_threshold_mb": 1024,
       "cpu_threshold_percent": 75.0,
-      "cache_hit_rate_threshold": 70.0
+      "cache_hit_rate_threshold": 70.0,
+      "basic_field_validation_rate_threshold": 95.0
     },
+
     "alerts": {
       "max_queue_usage_percent": 80.0,
       "max_geoip_failure_rate_percent": 25.0,
@@ -295,29 +348,39 @@
       "min_cache_hit_rate_percent": 60.0,
       "max_memory_usage_mb": 1024,
       "max_cpu_sustained_percent": 70.0,
-      "_comment": "Tolerancia mayor a fallos de lookup real vs mock"
+      "_comment_new_alerts": "🚨 NUEVAS alertas para READONLY BASIC",
+      "max_invalid_basic_events_per_minute": 10,
+      "min_basic_field_validation_rate_percent": 90.0,
+      "max_field_separation_violations": 0,
+      "alert_on_legacy_field_access": true
     },
+
     "metrics_export": {
       "enabled": false,
       "prometheus_port": 9090,
-      "export_interval_seconds": 60
+      "export_interval_seconds": 60,
+      "include_readonly_basic_metrics": true
     }
   },
 
-  "_comment_performance": "⚡ v3.0.0: Configuración de rendimiento optimizada para lookup real",
+  "_comment_performance": "⚡ v3.0.0: Configuración de rendimiento optimizada para READONLY BASIC",
   "performance": {
     "enable_async_processing": true,
     "connection_pool_size": 10,
     "request_timeout": 5,
     "retry_attempts": 2,
     "backoff_factor": 1.5,
-    "_comment": "Reducidos timeouts para lookup real vs mock"
+    "field_access_optimization": {
+      "cache_basic_field_reads": true,
+      "validate_field_boundaries": true,
+      "optimize_geoip_writes": true
+    }
   },
 
   "_comment_distributed": "🌐 v3.0.0: Configuración distribuida upgraded-happiness",
   "distributed": {
     "cluster_name": "upgraded-happiness-cluster",
-    "component_role": "enricher_vertical",
+    "component_role": "enricher_vertical_readonly_basic",
     "enable_container_detection": true,
     "enable_system_info_collection": true,
     "pipeline_tracking": {
@@ -325,7 +388,8 @@
       "track_latency": true,
       "track_component_path": true,
       "max_pipeline_hops": 10,
-      "track_vertical_metrics": true
+      "track_vertical_metrics": true,
+      "track_field_separation": true
     },
     "load_balancing": {
       "strategy": "vertical_single_node",
@@ -353,7 +417,9 @@
       "enabled": true,
       "max_event_size_bytes": 1048576,
       "validate_protobuf_schema": true,
-      "sanitize_ip_addresses": true
+      "sanitize_ip_addresses": true,
+      "enforce_basic_field_readonly": true,
+      "prevent_legacy_field_writes": true
     },
     "rate_limiting": {
       "enabled": true,
@@ -366,7 +432,7 @@
     "input_sanitization": true
   },
 
-  "_comment_debugging": "🐛 v3.0.0: Configuración de debugging mejorada para lookup real",
+  "_comment_debugging": "🐛 v3.0.0: Configuración de debugging para READONLY BASIC",
   "debugging": {
     "enabled": true,
     "log_coordinates": true,
@@ -374,7 +440,12 @@
     "log_cache_hits": true,
     "detailed_error_logging": true,
     "log_lookup_methods": true,
-    "log_ip_discovery": true
+    "log_ip_discovery": true,
+    "_comment_new_debug": "🔍 NUEVO: Debug específico para READONLY BASIC",
+    "log_basic_field_validation": true,
+    "log_field_read_write_operations": true,
+    "log_legacy_field_avoidance": true,
+    "trace_field_separation": false
   },
 
   "_comment_integration": "🔗 v3.0.0: Integración con dashboard",
@@ -382,25 +453,32 @@
     "dashboard_reporting": true,
     "metrics_export": true,
     "status_updates": true,
-    "heartbeat_interval": 30
+    "heartbeat_interval": 30,
+    "report_readonly_basic_stats": true
   },
 
-  "_comment_v3_features": "🆕 Nuevas características v3.0.0 MODIFICADAS para lookup real",
+  "_comment_v3_features": "🆕 Nuevas características v3.0.0 READONLY BASIC",
   "v3_features": {
     "dual_geoip_enrichment": true,
     "protobuf_v3_support": true,
     "enhanced_logging": true,
     "public_ip_discovery": true,
-    "geographic_analysis": true,
+    "geographic_analysis": false,
     "dual_coordinate_fields": true,
     "real_geoip_lookup": true,
     "maxmind_integration": true,
+    "ipapi_integration": true,
     "no_hardcoded_coordinates": true,
     "performance_configurable": true,
-    "_comment": "Características específicas de la versión 3.0.0 CON lookup real"
+    "_comment_new_features": "🔍 NUEVAS características READONLY BASIC",
+    "basic_fields_readonly_validation": true,
+    "geoip_fields_writeonly": true,
+    "legacy_fields_completely_avoided": true,
+    "field_separation_enforcement": true,
+    "pipeline_input_validation": true
   },
 
-  "_comment_requirements": "📦 Dependencias requeridas para lookup real",
+  "_comment_requirements": "📦 Dependencias requeridas para READONLY BASIC",
   "requirements": {
     "python_packages": [
       "geoip2>=4.0",
@@ -410,11 +488,19 @@
       "GeoLite2-City.mmdb",
       "GeoLite2-Country.mmdb"
     ],
+    "api_services": [
+      "ipapi.co token"
+    ],
+    "protobuf_schema": [
+      "network_event_extended_v3_pb2.py"
+    ],
     "setup_instructions": {
       "1": "pip install geoip2",
       "2": "Descargar GeoLite2-City.mmdb de MaxMind",
-      "3": "Colocar en data/GeoLite2-City.mmdb",
-      "4": "Configurar API keys si se requiere fallback"
+      "3": "Colocar en geodata/GeoLite2-City.mmdb",
+      "4": "Reemplazar 'TU_TOKEN_IPAPI_AQUI' con tu token real",
+      "5": "Verificar que promiscuous_agent envía campos básicos rellenos",
+      "6": "Configurar fallback_method como 'ipapi'"
     }
   },
 
@@ -425,6 +511,10 @@
     "log_protobuf_details": false,
     "profile_performance": false,
     "log_vertical_metrics": false,
-    "log_lookup_details": true
+    "log_lookup_details": true,
+    "_comment_readonly_debug": "🔍 Debug específico READONLY BASIC",
+    "trace_basic_field_access": false,
+    "validate_field_boundaries_strict": true,
+    "log_field_separation_violations": true
   }
 }

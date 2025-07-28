@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-geoip_enricher_v3.py - Enriquecedor GeoIP optimizado para escalado vertical v3.0.0
-🌍 Enhanced GeoIP Enricher para Upgraded-Happiness (VERTICAL SCALING v3.0.0)
+geoip_enricher_v3_ipapi_READONLY_BASIC.py - Enriquecedor GeoIP v3.0.0 + IPAPI - READONLY CAMPOS BÁSICOS
+🌍 Enhanced GeoIP Enricher para Upgraded-Happiness (VERTICAL SCALING v3.0.0 + IPAPI INTEGRATION)
 🚨 BUG FIX CRÍTICO: source_ip → target_ip para geoposicionar atacantes
 🌐 NUEVO: Discovery automático de IP pública
 🎯 NUEVO: Enriquecimiento dual (source_ip + target_ip)
-📦 ACTUALIZADO: Protobuf v3.0.0 con nuevos campos
+📦 ACTUALIZADO: Protobuf v3.0.0 con CAMPOS MODERNOS únicamente
 📝 MEJORADO: Logging dual (consola + archivo)
 🔧 MODIFICADO: Lookup real MaxMind SIN hardcodeos
-- Optimizado para i9 8-cores + 32GB RAM
-- Lee configuraciones de escalado vertical desde JSON
-- Backpressure adaptativo según CPU y memoria
-- Caches optimizadas para hardware específico
-- Métricas verticales detalladas
-- Batch processing inteligente
+🌐 AÑADIDO: Soporte completo para IPAPI como proveedor de geolocalización
+🚫 ELIMINADO: Uso de campos LEGACY deprecados
+✅ USADO: ÚNICAMENTE campos v3.0.0 modernos (source_latitude, target_latitude, etc.)
+📖 READONLY: Campos básicos del evento (1-10) - NO los modifica, solo los lee
+✍️ WRITEONLY: Campos de geolocalización (54+) - ÚNICAMENTE estos se modifican
 """
 
 import zmq
@@ -275,13 +274,17 @@ class VerticalScalingManager:
 
 class DistributedGeoIPEnricherVertical:
     """
-    GeoIP Enricher distribuido optimizado para escalado vertical v3.0.0
+    GeoIP Enricher distribuido optimizado para escalado vertical v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS
     🚨 BUG FIX: Geoposiciona target_ip (atacantes) correctamente
     🌐 NUEVO: Discovery automático de IP pública
     🎯 NUEVO: Enriquecimiento dual (source + target)
-    📦 ACTUALIZADO: Protobuf v3.0.0 con campos duales
+    📦 ACTUALIZADO: Protobuf v3.0.0 con campos MODERNOS únicamente
     📝 MEJORADO: Logging dual (consola + archivo)
     🔧 MODIFICADO: Lookup real MaxMind SIN hardcodeos
+    🌐 AÑADIDO: Soporte completo para IPAPI
+    🚫 ELIMINADO: Uso de campos LEGACY deprecados
+    📖 READONLY: Campos básicos del evento (1-10) - SOLO lectura
+    ✍️ WRITEONLY: Campos de geolocalización (54+) - SOLO escritura
     """
 
     def __init__(self, config_file: str):
@@ -353,7 +356,13 @@ class DistributedGeoIPEnricherVertical:
             'v3_events_processed': 0,
             'maxmind_lookups': 0,
             'api_lookups': 0,
+            'ipapi_lookups': 0,
             'lookup_failures': 0,
+            'modern_fields_used': 0,
+            'legacy_fields_avoided': 0,
+            'basic_fields_read': 0,
+            'basic_fields_validated': 0,
+            'invalid_basic_events': 0,
             'start_time': time.time(),
             'last_stats_time': time.time()
         }
@@ -372,20 +381,110 @@ class DistributedGeoIPEnricherVertical:
         # 📝 Log configuración v3.0.0
         self._log_v3_configuration()
 
-        self.logger.info(f"🌍 Distributed GeoIP Enricher VERTICAL v3.0.0 inicializado")
+        # 🌐 NUEVO: Log información del proveedor API
+        self._log_api_provider_info()
+
+        self.logger.info(f"🌍 Distributed GeoIP Enricher VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS inicializado")
         self.logger.info(f"   🏷️ Node ID: {self.node_id}")
         self.logger.info(f"   🔢 PID: {self.process_id}")
         self.logger.info(f"   📄 Config: {config_file}")
         self.logger.info(f"   🏗️ Escalado vertical: ✅")
         self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
         self.logger.info(f"   🌍 MaxMind: {'✅' if MAXMIND_AVAILABLE else '❌'}")
+        self.logger.info(f"   🌐 IPAPI: {'✅' if self.geoip_config.get('api', {}).get('enabled') else '❌'}")
         self.logger.info(f"   🖥️ Hardware profile: {self.vertical_manager.hardware_profile}")
         self.logger.info(f"   🚨 Bug fix aplicado: target_ip geoposicionado ✅")
+        self.logger.info(f"   🚫 Campos LEGACY: EVITADOS completamente ✅")
+        self.logger.info(f"   ✅ Campos MODERNOS: v3.0.0 únicamente ✅")
+        self.logger.info(f"   📖 Campos BÁSICOS (1-10): SOLO lectura ✅")
+        self.logger.info(f"   ✍️ Campos GEOLOCALIZACIÓN (54+): SOLO escritura ✅")
+
+    def _validate_basic_event_fields(self, event) -> bool:
+        """
+        📖 NUEVO: Valida que los campos básicos del evento estén presentes
+        Estos campos DEBEN venir rellenos del promiscuous_agent
+        """
+        try:
+            required_basic_fields = {
+                'event_id': (1, str),
+                'timestamp': (2, int),
+                'source_ip': (3, str),
+                'target_ip': (4, str),
+                'packet_size': (5, int),
+                'dest_port': (6, int),
+                'src_port': (7, int),
+                'protocol': (8, str),
+                'agent_id': (9, str),
+                'anomaly_score': (10, float)
+            }
+
+            missing_fields = []
+            invalid_fields = []
+
+            for field_name, (field_number, expected_type) in required_basic_fields.items():
+                if not hasattr(event, field_name):
+                    missing_fields.append(f"{field_name} (campo {field_number})")
+                    continue
+
+                field_value = getattr(event, field_name)
+
+                # Verificar que no esté vacío
+                if field_name in ['event_id', 'source_ip', 'target_ip', 'protocol', 'agent_id']:
+                    if not field_value or field_value == '':
+                        invalid_fields.append(f"{field_name} está vacío")
+                        continue
+
+                # Verificar timestamp válido
+                if field_name == 'timestamp' and field_value <= 0:
+                    invalid_fields.append(f"{field_name} inválido: {field_value}")
+                    continue
+
+                # Verificar puertos válidos
+                if field_name in ['dest_port', 'src_port'] and (field_value < 0 or field_value > 65535):
+                    invalid_fields.append(f"{field_name} fuera de rango: {field_value}")
+                    continue
+
+            if missing_fields or invalid_fields:
+                self.logger.error(f"❌ Evento con campos básicos inválidos:")
+                for field in missing_fields:
+                    self.logger.error(f"   🚫 Campo faltante: {field}")
+                for field in invalid_fields:
+                    self.logger.error(f"   ⚠️ Campo inválido: {field}")
+
+                self.stats['invalid_basic_events'] += 1
+                return False
+
+            self.stats['basic_fields_validated'] += 1
+            self.logger.debug(
+                f"✅ Campos básicos validados: event_id={event.event_id}, source_ip={event.source_ip}, target_ip={event.target_ip}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error validando campos básicos: {e}")
+            self.stats['invalid_basic_events'] += 1
+            return False
+
+    def _log_api_provider_info(self):
+        """📝 NUEVO: Log información del proveedor de API configurado"""
+        api_config = self.geoip_config.get("api", {})
+        if api_config.get("enabled", False):
+            provider = api_config.get("provider", "unknown")
+            has_key = bool(api_config.get("api_key"))
+
+            self.logger.info(f"🌐 Proveedor API configurado: {provider}")
+            self.logger.info(f"   🔑 API Key: {'✅ Configurada' if has_key else '❌ No configurada (plan gratuito)'}")
+            self.logger.info(f"   ⏱️ Timeout: {api_config.get('timeout_seconds', 5)}s")
+            self.logger.info(f"   🔄 Max retries: {api_config.get('max_retries', 1)}")
+
+            if provider == "ipapi" and not has_key:
+                self.logger.info("   ℹ️ IPAPI plan gratuito: 1000 requests/month")
+            elif provider == "ipapi" and has_key:
+                self.logger.info("   ℹ️ IPAPI plan pago: límites según suscripción")
 
     def _log_v3_configuration(self):
         """Log configuración específica v3.0.0"""
         processing_config = self.config.get("processing", {})
-        self.logger.info("🎯 Configuración de enriquecimiento v3.0.0:")
+        self.logger.info("🎯 Configuración de enriquecimiento v3.0.0 + READONLY CAMPOS BÁSICOS:")
         self.logger.info(f"   🏠 source_ip: {'✅' if processing_config.get('geolocate_source_ip') else '❌'}")
         self.logger.info(f"   🎯 target_ip: {'✅' if processing_config.get('geolocate_target_ip') else '❌'}")
         self.logger.info(
@@ -394,6 +493,10 @@ class DistributedGeoIPEnricherVertical:
         self.logger.info(f"   📦 Protobuf version: {PROTOBUF_VERSION}")
         self.logger.info(f"   🌍 GeoIP method: {self.geoip_config.get('lookup_method', 'unknown')}")
         self.logger.info(f"   ⚡ Performance mode: {self.geoip_config.get('performance_mode', 'speed')}")
+        self.logger.info(f"   🚫 Campos legacy: EVITADOS (latitude/longitude legacy)")
+        self.logger.info(f"   ✅ Campos modernos: source_latitude, target_latitude, etc.")
+        self.logger.info(f"   📖 Campos básicos (1-10): SOLO lectura desde promiscuous_agent")
+        self.logger.info(f"   ✍️ Campos geolocalización (54+): SOLO escritura por GeoIP enricher")
 
         if self.ip_handler.public_ip_discovery.enabled:
             services = self.ip_handler.public_ip_discovery.services
@@ -633,7 +736,7 @@ class DistributedGeoIPEnricherVertical:
             self.logger.info("🗄️ Cache GeoIP deshabilitado")
 
     # ============================================================
-    # 🆕 NUEVOS MÉTODOS PARA LOOKUP REAL COMPLETO v3.0.0
+    # 🆕 NUEVOS MÉTODOS PARA LOOKUP REAL COMPLETO v3.0.0 + IPAPI
     # ============================================================
 
     def get_complete_geoip_info(self, ip_address: str) -> Optional[Dict[str, Any]]:
@@ -665,18 +768,18 @@ class DistributedGeoIPEnricherVertical:
     def _direct_geoip_lookup(self, ip_address: str) -> Optional[Dict[str, Any]]:
         """
         🔧 MODIFICADO v3.0.0: Lookup directo con información completa
-        SIN hardcodeos - usa MaxMind primary, API fallback
+        SIN hardcodeos - usa MaxMind primary, IPAPI fallback
         """
         geoip_config = self.config["geoip"]
         lookup_method = geoip_config.get("lookup_method", "maxmind")
-        fallback_method = geoip_config.get("fallback_method", "api")
+        fallback_method = geoip_config.get("fallback_method", "ipapi")
 
         # 🎯 Intentar método primario
         if lookup_method == "maxmind":
             result = self._maxmind_lookup(ip_address)
             if result and result.get('latitude') is not None:
                 return result
-        elif lookup_method == "api":
+        elif lookup_method == "ipapi" or lookup_method == "api":
             result = self._api_lookup(ip_address)
             if result and result.get('latitude') is not None:
                 return result
@@ -688,7 +791,7 @@ class DistributedGeoIPEnricherVertical:
                 result = self._maxmind_lookup(ip_address)
                 if result and result.get('latitude') is not None:
                     return result
-            elif fallback_method == "api":
+            elif fallback_method == "ipapi" or fallback_method == "api":
                 result = self._api_lookup(ip_address)
                 if result and result.get('latitude') is not None:
                     return result
@@ -739,88 +842,123 @@ class DistributedGeoIPEnricherVertical:
             return None
 
     def _api_lookup(self, ip_address: str) -> Optional[Dict[str, Any]]:
-        """🌐 NUEVO: Lookup usando API externa (ipgeolocation.io, etc.)"""
+        """🌐 MODIFICADO: Lookup usando API externa con soporte multi-proveedor (IPAPI)"""
         try:
             api_config = self.geoip_config.get("api", {})
             if not api_config.get("enabled", False):
                 return None
 
-            api_key = api_config.get("api_key")
-            if not api_key:
-                self.logger.debug("🔑 API key no configurada para lookup API")
-                return None
-
-            url = api_config.get("url", "").format(api_key=api_key, ip=ip_address)
+            provider = api_config.get("provider", "ipgeolocation").lower()
             timeout = api_config.get("timeout_seconds", 5.0)
+            max_retries = api_config.get("max_retries", 1)
+            api_key = api_config.get("api_key")
 
-            request = urllib.request.Request(url)
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                data = json.loads(response.read().decode('utf-8'))
+            # 🌐 Construir URL específica del proveedor
+            if provider == "ipapi":
+                base_url = api_config.get("base_url", "https://ipapi.co")
+                if api_key:
+                    url = f"{base_url}/{ip_address}/json/?key={api_key}"
+                else:
+                    url = f"{base_url}/{ip_address}/json/"
+            else:
+                # Fallback para otros proveedores (IPGeolocation, etc.)
+                url = api_config.get("url", "").format(api_key=api_key, ip=ip_address)
 
-                self.stats['api_lookups'] += 1
+            # 🔄 Intentar lookup con reintentos
+            for attempt in range(max_retries + 1):
+                try:
+                    request = urllib.request.Request(url)
+                    request.add_header('User-Agent', 'GeoIP-Enricher-v3.0.0')
 
-                return {
-                    'latitude': float(data.get('latitude')) if data.get('latitude') else None,
-                    'longitude': float(data.get('longitude')) if data.get('longitude') else None,
-                    'city': data.get('city', ''),
-                    'country': data.get('country_name', ''),
-                    'country_code': data.get('country_code2', ''),
-                    'region': data.get('state_prov', ''),
-                    'timezone': data.get('time_zone', {}).get('name', '') if isinstance(data.get('time_zone'),
-                                                                                        dict) else data.get('time_zone',
-                                                                                                            ''),
-                    'lookup_method': 'api',
-                    'isp': data.get('isp', ''),
-                    'organization': data.get('organization', '')
-                }
+                    with urllib.request.urlopen(request, timeout=timeout) as response:
+                        raw_data = response.read().decode('utf-8')
+                        data = json.loads(raw_data)
 
-        except urllib.error.URLError as e:
-            self.logger.warning(f"❌ API lookup URL error para {ip_address}: {e}")
+                        # 🔍 Verificar errores específicos del proveedor
+                        if provider == "ipapi":
+                            if data.get('error'):
+                                raise Exception(f"IPAPI error: {data.get('reason', 'Unknown error')}")
+
+                            # Mapeo para IPAPI
+                            result = {
+                                'latitude': float(data.get('latitude')) if data.get('latitude') else None,
+                                'longitude': float(data.get('longitude')) if data.get('longitude') else None,
+                                'city': data.get('city', ''),
+                                'country': data.get('country_name', ''),
+                                'country_code': data.get('country_code', data.get('country', '')),
+                                'region': data.get('region', ''),
+                                'timezone': data.get('timezone', ''),
+                                'lookup_method': 'ipapi',
+                                'isp': data.get('org', ''),
+                                'organization': data.get('org', ''),
+                                'postal_code': data.get('postal', ''),
+                            }
+
+                            # Contabilizar lookup IPAPI específicamente
+                            self.stats['ipapi_lookups'] += 1
+                        else:
+                            # Mapeo para IPGeolocation (original)
+                            result = {
+                                'latitude': float(data.get('latitude')) if data.get('latitude') else None,
+                                'longitude': float(data.get('longitude')) if data.get('longitude') else None,
+                                'city': data.get('city', ''),
+                                'country': data.get('country_name', ''),
+                                'country_code': data.get('country_code2', ''),
+                                'region': data.get('state_prov', ''),
+                                'timezone': data.get('time_zone', {}).get('name', '') if isinstance(
+                                    data.get('time_zone'), dict) else data.get('time_zone', ''),
+                                'lookup_method': 'api',
+                                'isp': data.get('isp', ''),
+                                'organization': data.get('organization', '')
+                            }
+
+                        if result.get('latitude') is not None and result.get('longitude') is not None:
+                            self.stats['api_lookups'] += 1
+                            self.logger.debug(
+                                f"✅ {provider} lookup exitoso para {ip_address}: {result['city']}, {result['country']}")
+                            return result
+                        else:
+                            self.logger.warning(f"⚠️ {provider} lookup sin coordenadas para {ip_address}")
+                            return None
+
+                except urllib.error.HTTPError as e:
+                    if e.code == 429:  # Rate limit
+                        self.logger.warning(f"⚠️ Rate limit en {provider} para {ip_address}")
+                        if attempt < max_retries:
+                            time.sleep(2 ** attempt)
+                            continue
+                    elif e.code == 403:
+                        self.logger.error(f"❌ API key inválida en {provider}")
+                        break
+                    else:
+                        if attempt < max_retries:
+                            time.sleep(1)
+                            continue
+
+                except Exception as e:
+                    if attempt < max_retries:
+                        time.sleep(1)
+                        continue
+                    break
+
+            self.logger.warning(f"❌ {provider} lookup fallido para {ip_address} después de {max_retries + 1} intentos")
             return None
-        except json.JSONDecodeError as e:
-            self.logger.warning(f"❌ API lookup JSON error para {ip_address}: {e}")
-            return None
+
         except Exception as e:
-            self.logger.warning(f"❌ API lookup error para {ip_address}: {e}")
+            self.logger.error(f"❌ Error crítico en API lookup para {ip_address}: {e}")
             return None
 
-    def _apply_geoip_to_event(self, event, geoip_info: Dict[str, Any], ip_type: str):
-        """🔧 NUEVO: Aplica información geográfica completa al evento"""
-        prefix = f"{ip_type}_"
-
-        # 📍 Coordenadas (CRÍTICAS)
-        setattr(event, f"{prefix}latitude", geoip_info.get('latitude'))
-        setattr(event, f"{prefix}longitude", geoip_info.get('longitude'))
-        setattr(event, f"{prefix}ip_enriched", True)
-
-        # 🌍 Información geográfica adicional
-        setattr(event, f"{prefix}city", geoip_info.get('city', ''))
-        setattr(event, f"{prefix}country", geoip_info.get('country', ''))
-        setattr(event, f"{prefix}country_code", geoip_info.get('country_code', ''))
-        setattr(event, f"{prefix}region", geoip_info.get('region', ''))
-        setattr(event, f"{prefix}timezone", geoip_info.get('timezone', ''))
-
-        # 🔍 Metadatos del lookup
-        # setattr(event, f"{prefix}lookup_method", geoip_info.get('lookup_method', 'unknown'))
-
-        # 📊 Información adicional si está disponible
-        #if geoip_info.get('accuracy_radius'):
-        #    setattr(event, f"{prefix}accuracy_radius", geoip_info.get('accuracy_radius'))
-        #if geoip_info.get('postal_code'):
-        #    setattr(event, f"{prefix}postal_code", geoip_info.get('postal_code'))
-        if geoip_info.get('isp'):
-            setattr(event, f"{prefix}isp", geoip_info.get('isp'))
-
     # ============================================================
-    # 🔧 MODIFICACIÓN PRINCIPAL: ENRIQUECIMIENTO SIN HARDCODEOS
+    # 🔧 ENRIQUECIMIENTO CON VALIDACIÓN DE CAMPOS BÁSICOS
     # ============================================================
 
-    def enrich_protobuf_event_vertical_v3(self, protobuf_data: bytes) -> Optional[bytes]:
+    def enrich_protobuf_event_vertical_v3_readonly_basic(self, protobuf_data: bytes) -> Optional[bytes]:
         """
-        🚨 VERSIÓN v3.0.0 MODIFICADA - Enriquece tanto source_ip como target_ip
-        BUG FIX CRÍTICO: Geoposiciona target_ip (atacante) correctamente
-        🔧 MODIFICADO: Usa lookup real completo SIN hardcodeos
-        NUEVO: Usa campos duales v3.0.0 del protobuf
+        🚨 VERSIÓN v3.0.0 READONLY CAMPOS BÁSICOS - USA ÚNICAMENTE CAMPOS v3.0.0
+        📖 VALIDA: Que campos básicos (1-10) estén presentes del promiscuous_agent
+        📖 LEE: Únicamente campos básicos necesarios (source_ip, target_ip, timestamp)
+        ✍️ ESCRIBE: Únicamente campos de geolocalización (54+)
+        🚫 NO TOCA: Ningún campo básico del evento (1-10)
         """
         if not PROTOBUF_AVAILABLE:
             raise RuntimeError("❌ Protobuf v3 no disponible")
@@ -833,6 +971,21 @@ class DistributedGeoIPEnricherVertical:
             # 📊 Contabilizar evento v3 procesado
             self.stats['v3_events_processed'] += 1
 
+            # ✅ VALIDAR que campos básicos estén presentes del promiscuous_agent
+            if not self._validate_basic_event_fields(event):
+                self.logger.error(f"❌ Evento rechazado: campos básicos inválidos o faltantes")
+                return None
+
+            # 📖 LEER campos básicos necesarios (NO modificar)
+            source_ip = event.source_ip  # Campo 3 - SOLO LECTURA
+            target_ip = event.target_ip  # Campo 4 - SOLO LECTURA
+            event_timestamp = event.timestamp  # Campo 2 - SOLO LECTURA
+            event_id = event.event_id  # Campo 1 - SOLO LECTURA
+
+            self.stats['basic_fields_read'] += 1
+            self.logger.debug(
+                f"📖 Campos básicos leídos: event_id={event_id}, source_ip={source_ip}, target_ip={target_ip}")
+
             # 🔧 Configuración de procesamiento v3.0.0
             processing_config = self.config.get("processing", {})
             geolocate_source = processing_config.get("geolocate_source_ip", True)
@@ -842,146 +995,211 @@ class DistributedGeoIPEnricherVertical:
             # 🌍 Variables para información completa
             source_geoip_info = None
             target_geoip_info = None
-            primary_geoip_info = None
             enrichment_success = False
 
             # 🎯 CORRECCIÓN CRÍTICA: Geoposicionar target_ip (atacante) PRIMERO con lookup real
-            if geolocate_target and event.target_ip and event.target_ip != 'unknown':
-                target_ip_to_lookup = self.ip_handler.resolve_target_ip_for_lookup(event.target_ip)
+            if geolocate_target and target_ip and target_ip != 'unknown':
+                target_ip_to_lookup = self.ip_handler.resolve_target_ip_for_lookup(target_ip)
                 if target_ip_to_lookup:
                     target_geoip_info = self.get_complete_geoip_info(target_ip_to_lookup)
                     if target_geoip_info and target_geoip_info.get('latitude') is not None:
                         self.stats['target_ip_enriched'] += 1
                         self.logger.debug(
-                            f"✅ target_ip geoposicionada: {event.target_ip} → lat:{target_geoip_info['latitude']}, lon:{target_geoip_info['longitude']}, city:{target_geoip_info.get('city', 'N/A')}")
+                            f"✅ target_ip geoposicionada: {target_ip} → lat:{target_geoip_info['latitude']}, lon:{target_geoip_info['longitude']}, city:{target_geoip_info.get('city', 'N/A')}")
                         enrichment_success = True
                     else:
-                        self.logger.warning(f"❌ No se pudo geoposicionar target_ip: {event.target_ip}")
+                        self.logger.warning(f"❌ No se pudo geoposicionar target_ip: {target_ip}")
                 else:
-                    self.logger.warning(f"⚠️ target_ip no válida para lookup: {event.target_ip}")
+                    self.logger.warning(f"⚠️ target_ip no válida para lookup: {target_ip}")
 
             # 🏠 Geoposicionar source_ip (nuestra IP) con lookup real
-            if geolocate_source and event.source_ip and event.source_ip != 'unknown':
-                source_ip_to_lookup = self.ip_handler.resolve_source_ip_for_lookup(event.source_ip)
+            if geolocate_source and source_ip and source_ip != 'unknown':
+                source_ip_to_lookup = self.ip_handler.resolve_source_ip_for_lookup(source_ip)
                 if source_ip_to_lookup:
                     source_geoip_info = self.get_complete_geoip_info(source_ip_to_lookup)
                     if source_geoip_info and source_geoip_info.get('latitude') is not None:
                         self.stats['source_ip_enriched'] += 1
                         self.logger.debug(
-                            f"✅ source_ip geoposicionada: {event.source_ip} → lat:{source_geoip_info['latitude']}, lon:{source_geoip_info['longitude']}, city:{source_geoip_info.get('city', 'N/A')}")
+                            f"✅ source_ip geoposicionada: {source_ip} → lat:{source_geoip_info['latitude']}, lon:{source_geoip_info['longitude']}, city:{source_geoip_info.get('city', 'N/A')}")
                         enrichment_success = True
 
                         # Si obtuvimos IP pública, contabilizar
-                        if source_ip_to_lookup != event.source_ip:
+                        if source_ip_to_lookup != source_ip:
                             self.stats['public_ip_discoveries'] += 1
                     else:
-                        self.logger.warning(f"❌ No se pudo geoposicionar source_ip: {event.source_ip}")
+                        self.logger.warning(f"❌ No se pudo geoposicionar source_ip: {source_ip}")
                 else:
-                    self.logger.warning(f"⚠️ No se pudo resolver IP pública para source_ip privada: {event.source_ip}")
+                    self.logger.warning(f"⚠️ No se pudo resolver IP pública para source_ip privada: {source_ip}")
 
-            # 🎯 Determinar información primaria según prioridad
-            if prioritize_target and target_geoip_info:
-                primary_geoip_info = target_geoip_info
-                self.logger.debug("🎯 Usando target_ip como coordenadas primarias")
-            elif source_geoip_info:
-                primary_geoip_info = source_geoip_info
-                self.logger.debug("🏠 Usando source_ip como coordenadas primarias")
-            elif target_geoip_info:
-                primary_geoip_info = target_geoip_info
-                self.logger.debug("🎯 Fallback a target_ip como coordenadas primarias")
+            # ============================================================
+            # ✍️ ESCRIBIR ÚNICAMENTE CAMPOS v3.0.0 DE GEOLOCALIZACIÓN (54+)
+            # 🚫 NO TOCAR NINGÚN CAMPO BÁSICO (1-10)
+            # ============================================================
 
-            # ✅ Aplicar información SOLO si existe - SIN hardcodeos
-            if primary_geoip_info and primary_geoip_info.get('latitude') is not None:
-                event.latitude = primary_geoip_info['latitude']
-                event.longitude = primary_geoip_info['longitude']
-                event.geoip_enriched = True
-                event.enrichment_node = self.node_id
-                event.enrichment_timestamp = int(time.time() * 1000)
+            # 🏠 SOURCE IP - CAMPOS v3.0.0 MODERNOS (SOLO ESCRITURA)
+            if source_geoip_info and source_geoip_info.get('latitude') is not None:
+                # 📍 Coordenadas source (campos 54, 55)
+                event.source_latitude = source_geoip_info['latitude']
+                event.source_longitude = source_geoip_info['longitude']
 
-                # ============================================================
-                # 🆕 CAMPOS NUEVOS v3.0.0 - ENRIQUECIMIENTO DUAL COMPLETO
-                # ============================================================
+                # 🌍 Información geográfica source (campos 58-62)
+                event.source_city = source_geoip_info.get('city', '')
+                event.source_country = source_geoip_info.get('country', '')
+                event.source_country_code = source_geoip_info.get('country_code', '')
+                event.source_region = source_geoip_info.get('region', '')
+                event.source_timezone = source_geoip_info.get('timezone', '')
 
-                # 🏠 APLICAR INFORMACIÓN COMPLETA PARA SOURCE IP
-                if source_geoip_info:
-                    self._apply_geoip_to_event(event, source_geoip_info, "source")
+                # 🔍 Estado de enriquecimiento (campo 68)
+                event.source_ip_enriched = True
 
-                # 🎯 APLICAR INFORMACIÓN COMPLETA PARA TARGET IP
-                if target_geoip_info:
-                    self._apply_geoip_to_event(event, target_geoip_info, "target")
+                # 🏢 ISP información source (campo 85)
+                if source_geoip_info.get('isp'):
+                    event.source_isp = source_geoip_info['isp']
 
-                # 🔍 ESTADO DE ENRIQUECIMIENTO v3.0.0
-                event.geoip_primary_source = "target" if (prioritize_target and target_geoip_info) else "source"
-                event.dual_enrichment_success = bool(source_geoip_info and target_geoip_info)
-
-                # 🌐 DISCOVERY DE IP PÚBLICA v3.0.0
-                if (source_geoip_info and
-                        hasattr(event, 'source_ip') and
-                        self.ip_handler.is_private_ip(event.source_ip)):
-
-                    public_ip = self.ip_handler.public_ip_discovery.get_public_ip()
-                    if public_ip:
-                        event.public_ip_discovered = True
-                        event.original_source_ip = event.source_ip
-                        event.discovered_public_ip = public_ip
-                        event.ip_discovery_service = "discovery_service"  # TODO: detectar servicio usado
-                        event.ip_discovery_timestamp = int(time.time() * 1000)
-
-                # Contabilizar enriquecimiento dual exitoso
-                if source_geoip_info and target_geoip_info:
-                    self.stats['dual_enrichment_success'] += 1
+                self.stats['modern_fields_used'] += 1
+                self.logger.debug(f"✅ Campos MODERNOS escritos para source_ip: {source_ip}")
 
             else:
-                # ❌ Enrichment fallido completamente - SIN hardcodeos
-                self.stats['failed_lookups'] += 1
-                event.geoip_enriched = False
-                # NO asignar coordenadas por defecto - dejar sin coordenadas
-                # El dashboard debe manejar eventos sin coordenadas
+                # Source no enriquecida
+                event.source_ip_enriched = False
 
-            # 🔧 METADATOS DE ENRIQUECIMIENTO v3.0.0
-            event.geoip_enricher_version = "3.0.0"
+            # 🎯 TARGET IP - CAMPOS v3.0.0 MODERNOS (SOLO ESCRITURA)
+            if target_geoip_info and target_geoip_info.get('latitude') is not None:
+                # 📍 Coordenadas target (campos 56, 57)
+                event.target_latitude = target_geoip_info['latitude']
+                event.target_longitude = target_geoip_info['longitude']
+
+                # 🌍 Información geográfica target (campos 63-67)
+                event.target_city = target_geoip_info.get('city', '')
+                event.target_country = target_geoip_info.get('country', '')
+                event.target_country_code = target_geoip_info.get('country_code', '')
+                event.target_region = target_geoip_info.get('region', '')
+                event.target_timezone = target_geoip_info.get('timezone', '')
+
+                # 🔍 Estado de enriquecimiento (campo 69)
+                event.target_ip_enriched = True
+
+                # 🏢 ISP información target (campo 86)
+                if target_geoip_info.get('isp'):
+                    event.target_isp = target_geoip_info['isp']
+
+                self.stats['modern_fields_used'] += 1
+                self.logger.debug(f"✅ Campos MODERNOS escritos para target_ip: {target_ip}")
+
+            else:
+                # Target no enriquecida
+                event.target_ip_enriched = False
+
+            # 🔍 ESTADO DE ENRIQUECIMIENTO v3.0.0 (campos 70, 71)
+            if prioritize_target and target_geoip_info:
+                event.geoip_primary_source = "target"
+            elif source_geoip_info:
+                event.geoip_primary_source = "source"
+            elif target_geoip_info:
+                event.geoip_primary_source = "target"
+            else:
+                event.geoip_primary_source = "none"
+
+            # Dual enrichment success (campo 71)
+            event.dual_enrichment_success = bool(source_geoip_info and target_geoip_info)
+
+            # 🌐 DISCOVERY DE IP PÚBLICA v3.0.0 (campos 72-76)
+            if (source_geoip_info and
+                    source_ip and
+                    self.ip_handler.is_private_ip(source_ip)):
+
+                public_ip = self.ip_handler.public_ip_discovery.get_public_ip()
+                if public_ip:
+                    event.public_ip_discovered = True
+                    event.original_source_ip = source_ip
+                    event.discovered_public_ip = public_ip
+                    event.ip_discovery_service = "discovery_service"
+                    event.ip_discovery_timestamp = int(time.time() * 1000)
+            else:
+                event.public_ip_discovered = False
+
+            # Contabilizar enriquecimiento dual exitoso
+            if source_geoip_info and target_geoip_info:
+                self.stats['dual_enrichment_success'] += 1
+
+            # 🚫 ASEGURAR QUE NO SE TOCAN CAMPOS LEGACY DEPRECADOS
+            # NO tocar event.latitude (campo 11) - LEGACY
+            # NO tocar event.longitude (campo 12) - LEGACY
+            # NO tocar event.legacy_compatibility_mode (campo 94)
+            self.stats['legacy_fields_avoided'] += 1
+
+            # ============================================================
+            # 🔧 METADATOS DE ENRIQUECIMIENTO v3.0.0 (campos 81-84)
+            # ============================================================
+
+            event.geoip_enricher_version = "3.0.0_ipapi_readonly_basic"
             event.geoip_method = self.geoip_config.get("lookup_method", "maxmind")
-            event.protobuf_schema_version = "v3.0.0"
+            event.fallback_coordinates_used = False  # Nunca usamos fallback hardcoded
 
-            # 📊 MÉTRICAS DE RENDIMIENTO v3.0.0
-            processing_time = time.time() * 1000 - event.timestamp  # Rough estimate
-            event.geoip_lookup_latency_ms = max(0.0, processing_time)
+            # Determinar fuente de datos
+            if source_geoip_info or target_geoip_info:
+                primary_info = target_geoip_info if target_geoip_info else source_geoip_info
+                lookup_method = primary_info.get('lookup_method', 'unknown')
+                if lookup_method == 'maxmind':
+                    event.geoip_data_source = "GeoLite2"
+                elif lookup_method == 'ipapi':
+                    event.geoip_data_source = "ipapi"
+                else:
+                    event.geoip_data_source = "api"
+
+            # 📊 MÉTRICAS DE RENDIMIENTO v3.0.0 (usar timestamp leído, no modificar)
+            current_time_ms = int(time.time() * 1000)
+            if event_timestamp > 0:
+                processing_time = current_time_ms - event_timestamp
+                event.geoip_lookup_latency_ms = max(0.0, float(processing_time))
 
             # 🆔 Información específica del pipeline
             event.geoip_enricher_pid = self.process_id
-            event.geoip_enricher_timestamp = int(time.time() * 1000)
+            event.geoip_enricher_timestamp = current_time_ms
 
-            # 📊 Métricas del pipeline
-            if event.promiscuous_timestamp > 0:
-                pipeline_latency = event.geoip_enricher_timestamp - event.promiscuous_timestamp
+            # 📊 Métricas del pipeline (si están disponibles)
+            if hasattr(event, 'promiscuous_timestamp') and event.promiscuous_timestamp > 0:
+                pipeline_latency = current_time_ms - event.promiscuous_timestamp
                 event.processing_latency_ms = float(pipeline_latency)
 
             # 🎯 Path del pipeline
-            if event.pipeline_path:
-                event.pipeline_path += "->geoip_v3.0.0"
+            if hasattr(event, 'pipeline_path') and event.pipeline_path:
+                event.pipeline_path += "->geoip_v3.0.0_readonly"
             else:
-                event.pipeline_path = "promiscuous->geoip_v3.0.0"
+                event.pipeline_path = "promiscuous->geoip_v3.0.0_readonly"
 
-            event.pipeline_hops += 1
+            # Incrementar hops si el campo existe
+            if hasattr(event, 'pipeline_hops'):
+                event.pipeline_hops += 1
+            else:
+                event.pipeline_hops = 1
 
-            # 🏷️ Tags v3.0.0
-            event.component_tags.append(f"geoip_enricher_v3_{self.node_id}")
-            event.component_metadata["geoip_version"] = "3.0.0"
-            event.component_metadata["dual_ip_enrichment"] = "true"
-            event.component_metadata["bug_fix_applied"] = "target_ip_prioritized"
-            event.component_metadata["protobuf_version"] = PROTOBUF_VERSION
-            event.component_metadata["lookup_real"] = "true"
-            event.component_metadata["no_hardcoded_coords"] = "true"
+            # 🏷️ Tags v3.0.0 (si están disponibles)
+            if hasattr(event, 'component_tags'):
+                event.component_tags.append(f"geoip_enricher_v3_readonly_{self.node_id}")
+
+            if hasattr(event, 'component_metadata'):
+                event.component_metadata["geoip_version"] = "3.0.0_readonly_basic"
+                event.component_metadata["dual_ip_enrichment"] = "true"
+                event.component_metadata["bug_fix_applied"] = "target_ip_prioritized"
+                event.component_metadata["protobuf_version"] = PROTOBUF_VERSION
+                event.component_metadata["lookup_real"] = "true"
+                event.component_metadata["no_hardcoded_coords"] = "true"
+                event.component_metadata["ipapi_support"] = "true"
+                event.component_metadata["modern_fields_only"] = "true"
+                event.component_metadata["legacy_fields_avoided"] = "true"
+                event.component_metadata["basic_fields_readonly"] = "true"
 
             # 🔄 Estado del componente
-            event.component_status = "healthy_v3"
+            if hasattr(event, 'component_status'):
+                event.component_status = "healthy_v3_readonly"
 
             # 🔄 Serializar evento enriquecido
             return event.SerializeToString()
 
         except Exception as e:
             self.stats['protobuf_errors'] += 1
-            self.logger.error(f"❌ Error enriquecimiento v3.0.0: {e}")
+            self.logger.error(f"❌ Error enriquecimiento v3.0.0 READONLY BASIC: {e}")
             return None
 
     # ================================================================
@@ -997,7 +1215,8 @@ class DistributedGeoIPEnricherVertical:
 
     def receive_protobuf_events_vertical(self):
         """Thread de recepción con optimizaciones verticales"""
-        self.logger.info("📡 Iniciando thread de recepción protobuf VERTICAL v3.0.0...")
+        self.logger.info(
+            "📡 Iniciando thread de recepción protobuf VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS...")
 
         consecutive_errors = 0
         queue_full_count = 0
@@ -1055,7 +1274,7 @@ class DistributedGeoIPEnricherVertical:
 
     def process_protobuf_events_vertical(self):
         """Thread de procesamiento con optimizaciones verticales"""
-        self.logger.info("⚙️ Iniciando thread de procesamiento VERTICAL v3.0.0...")
+        self.logger.info("⚙️ Iniciando thread de procesamiento VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS...")
 
         queue_timeout = self.config["processing"]["queue_timeout_seconds"]
 
@@ -1067,8 +1286,8 @@ class DistributedGeoIPEnricherVertical:
                 # 🔄 Medir latencia de procesamiento
                 start_time = time.time()
 
-                # 🌍 Enriquecer con optimizaciones verticales v3.0.0
-                enriched_protobuf = self.enrich_protobuf_event_vertical_v3(protobuf_data)
+                # 🌍 Enriquecer con optimizaciones verticales v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS
+                enriched_protobuf = self.enrich_protobuf_event_vertical_v3_readonly_basic(protobuf_data)
 
                 if enriched_protobuf:
                     # 📊 Métricas de latencia
@@ -1088,7 +1307,7 @@ class DistributedGeoIPEnricherVertical:
             except Empty:
                 continue
             except Exception as e:
-                self.logger.error(f"❌ Error procesamiento vertical v3.0.0: {e}")
+                self.logger.error(f"❌ Error procesamiento vertical v3.0.0 READONLY BASIC: {e}")
                 self.stats['processing_errors'] += 1
 
     def send_event_with_backpressure_vertical(self, enriched_data: bytes) -> bool:
@@ -1149,7 +1368,7 @@ class DistributedGeoIPEnricherVertical:
 
     def send_enriched_events(self):
         """Thread de envío estándar v3.0.0"""
-        self.logger.info("📤 Iniciando thread de envío vertical v3.0.0...")
+        self.logger.info("📤 Iniciando thread de envío vertical v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS...")
         queue_timeout = self.config["processing"]["queue_timeout_seconds"]
 
         while self.running:
@@ -1176,11 +1395,11 @@ class DistributedGeoIPEnricherVertical:
 
             # 📊 Actualizar métricas verticales
             self.vertical_manager.update_vertical_metrics()
-            self._log_performance_stats_vertical_v3()
+            self._log_performance_stats_vertical_v3_readonly_basic()
             self._check_performance_alerts_vertical()
 
-    def _log_performance_stats_vertical_v3(self):
-        """Log de estadísticas con métricas verticales v3.0.0"""
+    def _log_performance_stats_vertical_v3_readonly_basic(self):
+        """Log de estadísticas con métricas verticales v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS"""
         now = time.time()
         interval = now - self.stats['last_stats_time']
 
@@ -1207,7 +1426,12 @@ class DistributedGeoIPEnricherVertical:
         if self.stats['enriched'] > 0:
             dual_success_rate = (self.stats['dual_enrichment_success'] / self.stats['enriched']) * 100
 
-        self.logger.info(f"📊 GeoIP Enricher VERTICAL v3.0.0 Stats:")
+        # 📖 Estadísticas de validación de campos básicos
+        basic_validation_rate = 0.0
+        if self.stats['basic_fields_read'] > 0:
+            basic_validation_rate = (self.stats['basic_fields_validated'] / self.stats['basic_fields_read']) * 100
+
+        self.logger.info(f"📊 GeoIP Enricher VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS Stats:")
         self.logger.info(f"   📨 Recibidos: {self.stats['received']} ({recv_rate:.1f}/s)")
         self.logger.info(f"   🌍 Enriquecidos: {self.stats['enriched']} ({enrich_rate:.1f}/s)")
         self.logger.info(f"   📤 Enviados: {self.stats['sent']} ({send_rate:.1f}/s)")
@@ -1218,8 +1442,15 @@ class DistributedGeoIPEnricherVertical:
         self.logger.info(f"   🌐 Discoveries IP pública: {self.stats['public_ip_discoveries']}")
         self.logger.info(f"   📦 Eventos v3 procesados: {self.stats['v3_events_processed']}")
         self.logger.info(f"   🌍 MaxMind lookups: {self.stats['maxmind_lookups']}")
-        self.logger.info(f"   🌐 API lookups: {self.stats['api_lookups']}")
+        self.logger.info(f"   🌐 API lookups (general): {self.stats['api_lookups']}")
+        self.logger.info(f"   🌐 IPAPI lookups: {self.stats['ipapi_lookups']}")
         self.logger.info(f"   ❌ Lookup failures: {self.stats['lookup_failures']}")
+        self.logger.info(f"   ✅ Campos MODERNOS usados: {self.stats['modern_fields_used']}")
+        self.logger.info(f"   🚫 Campos LEGACY evitados: {self.stats['legacy_fields_avoided']}")
+        self.logger.info(f"   📖 Campos BÁSICOS leídos: {self.stats['basic_fields_read']}")
+        self.logger.info(
+            f"   ✅ Campos BÁSICOS validados: {self.stats['basic_fields_validated']} ({basic_validation_rate:.1f}%)")
+        self.logger.info(f"   ❌ Eventos con campos básicos inválidos: {self.stats['invalid_basic_events']}")
         self.logger.info(f"   🗄️ Cache: {cache_hit_rate:.1f}% hit rate")
         self.logger.info(f"   ⏱️ Latencia promedio: {avg_latency:.1f}ms")
         self.logger.info(f"   🖥️ CPU promedio: {cpu_avg:.1f}%")
@@ -1229,12 +1460,19 @@ class DistributedGeoIPEnricherVertical:
         self.logger.info(f"   🔧 Optimizaciones verticales: {self.stats['vertical_optimizations_applied']}")
         self.logger.info(f"   🔄 Delays adaptativos: {self.stats['cpu_aware_delays']}")
 
+        # 🌐 Estadísticas específicas del proveedor API
+        api_config = self.geoip_config.get("api", {})
+        if api_config.get("enabled", False):
+            provider = api_config.get("provider", "unknown")
+            self.logger.info(f"   🌐 Proveedor API activo: {provider}")
+
         # Reset stats
         for key in ['received', 'enriched', 'sent', 'failed_lookups', 'cache_hits', 'cache_misses',
                     'buffer_errors', 'backpressure_activations', 'queue_overflows', 'protobuf_errors',
                     'vertical_optimizations_applied', 'cpu_aware_delays', 'source_ip_enriched',
                     'target_ip_enriched', 'dual_enrichment_success', 'public_ip_discoveries', 'v3_events_processed',
-                    'maxmind_lookups', 'api_lookups', 'lookup_failures']:
+                    'maxmind_lookups', 'api_lookups', 'ipapi_lookups', 'lookup_failures', 'modern_fields_used',
+                    'legacy_fields_avoided', 'basic_fields_read', 'basic_fields_validated', 'invalid_basic_events']:
             self.stats[key] = 0
 
         self.stats['pipeline_latency_total'] = 0.0
@@ -1261,9 +1499,14 @@ class DistributedGeoIPEnricherVertical:
         if hardware_util > 85.0:
             self.logger.warning(f"🚨 ALERTA VERTICAL: Utilización de hardware alta ({hardware_util:.1f}%)")
 
+        # 🚨 Alerta específica de campos básicos inválidos
+        if self.stats.get('invalid_basic_events', 0) > 0:
+            self.logger.warning(
+                f"🚨 ALERTA: {self.stats['invalid_basic_events']} eventos con campos básicos inválidos recibidos")
+
     def run(self):
-        """Ejecutar el enriquecedor vertical v3.0.0"""
-        self.logger.info("🚀 Iniciando Distributed GeoIP Enricher VERTICAL v3.0.0...")
+        """Ejecutar el enriquecedor vertical v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS"""
+        self.logger.info("🚀 Iniciando Distributed GeoIP Enricher VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS...")
 
         threads = []
 
@@ -1291,7 +1534,8 @@ class DistributedGeoIPEnricherVertical:
         for thread in threads:
             thread.start()
 
-        self.logger.info(f"✅ GeoIP Enricher VERTICAL v3.0.0 iniciado con {len(threads)} threads")
+        self.logger.info(
+            f"✅ GeoIP Enricher VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS iniciado con {len(threads)} threads")
         self.logger.info(f"   📡 Recepción: 1 thread")
         self.logger.info(
             f"   ⚙️ Procesamiento: {num_threads} threads (optimizado para {self.vertical_manager.cpu_count} cores)")
@@ -1299,15 +1543,20 @@ class DistributedGeoIPEnricherVertical:
         self.logger.info(f"   🖥️ Hardware: {self.vertical_manager.hardware_profile}")
         self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
         self.logger.info(f"   🌍 MaxMind: {'✅' if MAXMIND_AVAILABLE else '❌'}")
+        self.logger.info(f"   🌐 IPAPI: {'✅' if self.geoip_config.get('api', {}).get('enabled') else '❌'}")
         self.logger.info(f"   🚨 Bug fix: target_ip geoposicionamiento ✅")
         self.logger.info(f"   🌐 IP discovery: {'✅' if self.ip_handler.public_ip_discovery.enabled else '❌'}")
         self.logger.info(f"   🔧 Lookup real: ✅ SIN hardcodeos")
+        self.logger.info(f"   🚫 Campos legacy: EVITADOS completamente")
+        self.logger.info(f"   ✅ Campos modernos: v3.0.0 únicamente")
+        self.logger.info(f"   📖 Campos básicos (1-10): SOLO lectura")
+        self.logger.info(f"   ✍️ Campos geolocalización (54+): SOLO escritura")
 
         try:
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.logger.info("🛑 Deteniendo GeoIP Enricher VERTICAL v3.0.0...")
+            self.logger.info("🛑 Deteniendo GeoIP Enricher VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS...")
 
         self.shutdown(threads)
 
@@ -1321,14 +1570,26 @@ class DistributedGeoIPEnricherVertical:
         total_dual_success = self.stats.get('dual_enrichment_success', 0)
         total_maxmind = self.stats.get('maxmind_lookups', 0)
         total_api = self.stats.get('api_lookups', 0)
+        total_ipapi = self.stats.get('ipapi_lookups', 0)
         total_failures = self.stats.get('lookup_failures', 0)
+        total_modern_fields = self.stats.get('modern_fields_used', 0)
+        total_legacy_avoided = self.stats.get('legacy_fields_avoided', 0)
+        total_basic_read = self.stats.get('basic_fields_read', 0)
+        total_basic_validated = self.stats.get('basic_fields_validated', 0)
+        total_invalid_basic = self.stats.get('invalid_basic_events', 0)
 
-        self.logger.info(f"📊 Stats finales VERTICAL v3.0.0 - Runtime: {runtime:.1f}s")
+        self.logger.info(f"📊 Stats finales VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS - Runtime: {runtime:.1f}s")
         self.logger.info(f"   📦 Total eventos v3 procesados: {total_v3_events}")
         self.logger.info(f"   🎯➕🏠 Total enriquecimiento dual exitoso: {total_dual_success}")
         self.logger.info(f"   🌍 Total MaxMind lookups: {total_maxmind}")
         self.logger.info(f"   🌐 Total API lookups: {total_api}")
+        self.logger.info(f"   🌐 Total IPAPI lookups: {total_ipapi}")
         self.logger.info(f"   ❌ Total lookup failures: {total_failures}")
+        self.logger.info(f"   ✅ Total campos MODERNOS usados: {total_modern_fields}")
+        self.logger.info(f"   🚫 Total campos LEGACY evitados: {total_legacy_avoided}")
+        self.logger.info(f"   📖 Total campos BÁSICOS leídos: {total_basic_read}")
+        self.logger.info(f"   ✅ Total campos BÁSICOS validados: {total_basic_validated}")
+        self.logger.info(f"   ❌ Total eventos con campos básicos inválidos: {total_invalid_basic}")
 
         for thread in threads:
             thread.join(timeout=5)
@@ -1339,14 +1600,15 @@ class DistributedGeoIPEnricherVertical:
             self.output_socket.close()
         self.context.term()
 
-        self.logger.info("✅ Distributed GeoIP Enricher VERTICAL v3.0.0 cerrado correctamente")
+        self.logger.info(
+            "✅ Distributed GeoIP Enricher VERTICAL v3.0.0 + IPAPI + READONLY CAMPOS BÁSICOS cerrado correctamente")
 
 
 # 🚀 Main
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("❌ Uso: python geoip_enricher.py <config.json>")
-        print("💡 Ejemplo: python geoip_enricher.py geoip_enricher_config.json")
+        print("❌ Uso: python geoip_enricher_v3_ipapi_READONLY_BASIC.py <config.json>")
+        print("💡 Ejemplo: python geoip_enricher_v3_ipapi_READONLY_BASIC.py geoip_enricher_config.json")
         sys.exit(1)
 
     config_file = sys.argv[1]
@@ -1359,6 +1621,6 @@ if __name__ == "__main__":
         import traceback
 
         traceback.print_exc()
-        print(f"Stack trace completo: {traceback.format_exc()}")  # ← Añade esto
+        print(f"Stack trace completo: {traceback.format_exc()}")
 
         sys.exit(1)
