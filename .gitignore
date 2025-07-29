@@ -87,7 +87,7 @@ logs/
 *.sqlite3
 
 normal_traffic.csv
-
+internal_traffic_dataset.csv
 # Environment variables
 .env
 .env.local
