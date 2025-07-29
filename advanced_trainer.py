@@ -24,7 +24,7 @@ import shap
 # 📁 CONFIGURACIÓN CENTRALIZADA
 # -----------------------------------------------------------------------------
 def load_config():
-    config_path = Path("config-advanced-trainer.json")
+    config_path = Path("config-advanced-trainer-RF-Agression-NoAgression.json")
     if not config_path.exists():
         raise FileNotFoundError("No se encontró el archivo de configuración.")
     with open(config_path, "r") as f:
@@ -782,6 +782,9 @@ def main():
     # Guardar artefactos con gestión de características
     print("[💾] Guardando artefactos...")
     save_advanced_artifacts(model, explainer, config, feature_names, geo_enricher, eval_metrics, scaler)
+
+    with open("models/feature_order.txt", "w") as f:
+        f.write("\n".join(X_train.columns))
 
     print("\n✅ Entrenamiento avanzado completado con éxito!")
 
