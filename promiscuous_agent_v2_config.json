@@ -1,0 +1,41 @@
+{
+  "interface": "en0",
+  "filter": "not port 22 and not port 443",
+
+  "flow_tracker": {
+    "min_window": 1.0,
+    "base_window": 10.0,
+    "max_window": 60.0
+  },
+
+  "exporter": {
+    "output_file": "normal_traffic.csv",
+    "batch_size": 10
+  },
+
+  "geoip": {
+    "city_db": "geodata/GeoLite2-City.mmdb",
+    "country_db": "geodata/GeoLite2-Country.mmdb",
+    "asn_db": "geodata/GeoLite2-ASN-Test.mmdb",
+    "cache_size": 10000,
+    "hq_coords": [37.3891, -5.9845],
+    "use_ipapi_fallback": true,
+    "ipapi_token": null,
+
+    "country_risk_scores": {
+      "ES": 0.1,
+      "US": 0.1,
+      "GB": 0.1,
+      "DE": 0.1,
+      "FR": 0.1,
+      "RU": 0.7,
+      "CN": 0.6,
+      "IR": 0.8,
+      "KP": 0.9
+    }
+  },
+
+  "logging": {
+    "level": "INFO"
+  }
+}

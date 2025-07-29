@@ -86,6 +86,8 @@ logs/
 *.sqlite
 *.sqlite3
 
+normal_traffic.csv
+
 # Environment variables
 .env
 .env.local
