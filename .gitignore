@@ -88,6 +88,10 @@ logs/
 
 normal_traffic.csv
 internal_traffic_dataset.csv
+
+validation_results/
+
+validation_results/*.*
 # Environment variables
 .env
 .env.local
