@@ -1,8 +1,8 @@
 {
   "ml": {
     "enabled": true,
-    "_comment_phase_current": "FASE 2-CORREGIDA: UNSW-NB15 + CSE-CIC-IDS2018 con mapeo correcto",
-    "datasets": ["UNSW-NB15", "CSE-CIC-IDS2018"],
+    "_comment_phase_current": "FASE 3-CORREGIDA: UNSW-NB15 activado, CSE-CIC-IDS2018 y TON-IoT desactivados.",
+    "datasets": ["UNSW-NB15"],
     "_comment_ton_iot": "TON-IoT comentado temporalmente por problemas de descarga/mapeo",
     "_datasets_full_future": ["UNSW-NB15", "CSE-CIC-IDS2018", "TON-IoT"],
     "anomaly_threshold": 0.78,
