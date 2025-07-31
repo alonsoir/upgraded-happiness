@@ -86,6 +86,12 @@ logs/
 *.sqlite
 *.sqlite3
 
+data/
+data/*.*
+
+results/
+results/*.*
+
 normal_traffic.csv
 internal_traffic_dataset.csv
 
