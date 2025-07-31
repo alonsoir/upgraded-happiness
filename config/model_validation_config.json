@@ -15,7 +15,7 @@
       "expected_features": 21,
       "description": "Detector general de ataques conocidos - MULTI-DATASET SIN DNS BIAS",
       "training_info": {
-        "datasets": ["UNSW-NB15", "CSE-CIC-IDS2018"],
+        "datasets": ["UNSW-NB15"],
         "dns_filtered": true,
         "total_samples": 8009713,
         "final_accuracy": 0.9978,
