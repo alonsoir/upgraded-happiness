@@ -1,0 +1,30 @@
+# SNIFFER FEATURE MAPPING
+# Modelo entrenado: 20250801_102857
+# AUC Score: 1.0000
+
+FEATURES_ORDER = ['duration', 'spkts', 'dpkts', 'sbytes', 'dbytes', 'sload', 'smean', 'dmean', 'flow_iat_mean', 'flow_iat_std', 'fwd_psh_flags', 'bwd_psh_flags', 'fwd_urg_flags', 'bwd_urg_flags', 'packet_len_mean', 'packet_len_std', 'packet_len_var', 'fin_flag_count', 'syn_flag_count', 'rst_flag_count', 'psh_flag_count', 'ack_flag_count', 'urg_flag_count']
+
+# El sniffer debe calcular estas features en este EXACTO orden:
+#  1. duration
+#  2. spkts
+#  3. dpkts
+#  4. sbytes
+#  5. dbytes
+#  6. sload
+#  7. smean
+#  8. dmean
+#  9. flow_iat_mean
+# 10. flow_iat_std
+# 11. fwd_psh_flags
+# 12. bwd_psh_flags
+# 13. fwd_urg_flags
+# 14. bwd_urg_flags
+# 15. packet_len_mean
+# 16. packet_len_std
+# 17. packet_len_var
+# 18. fin_flag_count
+# 19. syn_flag_count
+# 20. rst_flag_count
+# 21. psh_flag_count
+# 22. ack_flag_count
+# 23. urg_flag_count

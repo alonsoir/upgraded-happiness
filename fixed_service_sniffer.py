@@ -140,9 +140,7 @@ class FixedServiceMLSniffer:
         # Mapeo explícito para evitar confusiones
         model_mappings = {
             "attack": [
-                "models/rf_production_final.joblib",
-                "models/rf_production.joblib",
-                "models/rf_unsw_baseline.joblib"
+                "models/rf_production_sniffer_compatible.joblib"
             ],
             "web_normal": [
                 "models/web_normal_detector.joblib"
@@ -343,8 +341,8 @@ class FixedServiceMLSniffer:
     def _initialize_flow(self, flow, packet, flow_key, current_time, is_source):
         """Inicializa un nuevo flujo"""
         flow.flow_id = flow_key
-        flow.start_time = current_time
-        flow.last_time = current_time
+        flow.start_time = float(packet.time)  # Timestamp REAL del packet
+        flow.last_time = float(packet.time)  # Timestamp REAL del packet
 
         if packet.haslayer(IP):
             ip_layer = packet[IP]
@@ -377,7 +375,7 @@ class FixedServiceMLSniffer:
 
     def _update_basic_stats(self, flow, packet, is_source, current_time):
         """Actualiza estadísticas básicas del flujo"""
-        flow.last_time = current_time
+        flow.last_time = float(packet.time)     # Timestamp REAL del packet
         packet_size = len(packet)
 
         if is_source:
@@ -493,7 +491,8 @@ class FixedServiceMLSniffer:
         """Extrae las 26 features completas para un flujo"""
         flow = self.flows[flow_key]
         current_time = time.time()
-        duration = max(flow.last_time - flow.start_time, 0.001)
+        duration = flow.last_time - flow.start_time if flow.last_time > flow.start_time else 0.00001
+
 
         features = {}
 
