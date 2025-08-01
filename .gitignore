@@ -92,6 +92,12 @@ data/*.*
 results/
 results/*.*
 
+cicids_2017_processed.csv
+cicids_data/
+models_cicids/
+cicids_data/*.*
+models_cicids/*.*
+
 normal_traffic.csv
 internal_traffic_dataset.csv
 
