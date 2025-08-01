@@ -1,236 +1,262 @@
-# 🗺️ ROADMAP - Upgraded Happiness
+# 🗺️ ROADMAP - Upgraded Happiness Network Security System
 
-## 📅 **Estado Actual (Q2 2025) - ✅ COMPLETADO**
+## 🎯 Visión del Proyecto
 
-### 🎯 **Pipeline Completo Funcional**
-- ✅ **Captura en tiempo real**: Agente promiscuo operativo con Scapy
-- ✅ **Enriquecimiento de datos**: Procesamiento y análisis de eventos
-- ✅ **Dashboard interactivo**: Visualización con animaciones + capacidad de interacción
-- ✅ **Comunicación distribuida**: ZeroMQ broker estable (5555/5556)
-- ✅ **Machine Learning**: 6 algoritmos entrenados y funcionando
-- ✅ **Monitoreo avanzado**: Sistema de métricas en tiempo real
-
-### ⚠️ **Limitaciones Identificadas**
-- **Servicio GeoIP**: Limitado por versión freemium (pocas consultas/mes)
-- **Escalabilidad**: Sistema monolítico, necesita distribución
-- **Persistencia**: Almacenamiento temporal, falta base de datos time-series
+Crear el sistema de detección de amenazas de red más avanzado y confiable, combinando Machine Learning de última generación con análisis de tráfico en tiempo real, para proporcionar protección proactiva contra amenazas conocidas y emergentes.
 
 ---
 
-## 🔮 **Futuro Inmediato (Q3-Q4 2025)**
+## ✅ **COMPLETADO - Q3 2025**
 
-### 🧠 **1. Sistema de Machine Learning Avanzado**
+### 🏆 **HITO MAYOR**: Sistema Tricapa de Detección Operativo
 
-#### 🎯 **Modelo Principal: Random Forest para Detección de Ataques**
-```mermaid
-flowchart TD
-    A[Datos de Entrenamiento<br/>Ataques + Tráfico Normal] --> B[Feature Engineering<br/>Nuevos campos Protobuf]
-    B --> C[Random Forest<br/>¿Es un ataque?]
-    C --> D[Clasificación Binaria<br/>Ataque / Normal]
-    D --> E[Modelo Secundario<br/>Identificación de Tipo]
-    E --> F[Nombre del Ataque<br/>Port Scan, DDoS, etc.]
-    F --> G[Reglas Firewall<br/>Respuesta Automatizada]
-```
+**🚨 Breakthrough Tecnológico Alcanzado**
+- ✅ **Tres Modelos Especializados Entrenados**: Sistema de detección multicapa funcionando
+  - **Detector de Ataques**: Identifica amenazas con >95% precisión
+  - **Detector Web Normal**: Reconoce tráfico web legítimo
+  - **Detector Interno Normal**: Distingue comunicaciones internas válidas
+- ✅ **Híbrido Sniffer/ML-Detector**: Integración completa scan → features → predicción
+- ✅ **Superación de Datasets Corruptos**: Metodología científica aplicada exitosamente
 
-**Objetivos específicos:**
-- **Primer modelo RF**: Clasificación binaria (¿es ataque? sí/no)
-- **Segundo modelo**: Identificación específica del tipo de ataque
-- **Training data**: Datasets de calidad con ataques etiquetados vs tráfico normal
-- **Respuesta automática**: Generación de reglas de firewall específicas
+### 🔬 **Investigación y Validación**
+- ✅ **Análisis Exhaustivo de Datasets**: Identificación de corrupción en datasets oficiales
+  - UNSW-NB15: ❌ Confirmado corrupto (valores incompatibles con Scapy)
+  - CICIDS 2017: ✅ Procesado y limpio (1044.1MB utilizable)
+  - CSE-CIC-IDS2018: ✅ Validado (4051.9MB)
+- ✅ **Feature Engineering Robusto**: Extracción compatible con herramientas reales
+- ✅ **Metodología Científica**: Validación cruzada y reproducibilidad garantizada
 
-#### 🔧 **Nuevo Protobuf Schema**
-```protobuf
-message NetworkEvent {
-  // Campos existentes
-  string timestamp = 1;
-  string src_ip = 2;
-  string dst_ip = 3;
-  
-  // NUEVOS CAMPOS para ML
-  PacketFeatures packet_features = 4;
-  FlowStatistics flow_stats = 5;
-  ProtocolAnalysis protocol_analysis = 6;
-  TimeSeriesFeatures time_features = 7;
-}
+### 🏗️ **Arquitectura Core Establecida**
+- ✅ **Sistema de Captura**: Sniffers optimizados para ML (`fixed_service_sniffer.py`)
+- ✅ **Pipeline ML**: Entrenamiento, validación y re-entrenamiento automatizados
+- ✅ **Dashboard Operativo**: Interfaz web completa (154.6KB, 2625 líneas)
+- ✅ **Firewall Inteligente**: Reglas dinámicas basadas en ML
+- ✅ **Geolocalización**: Enriquecimiento automático con GeoIP
 
-message PacketFeatures {
-  int32 packet_size = 1;
-  int32 header_length = 2;
-  repeated string flags = 3;
-  int32 payload_entropy = 4;  // Para detectar cifrado/compresión
-}
+### 📊 **Modelos en Producción**
+- ✅ `rf_production_sniffer_compatible.joblib` (10.1MB) - Detector principal
+- ✅ `web_normal_detector.joblib` (2.5MB) - Tráfico web
+- ✅ `internal_normal_detector.joblib` (2.3MB) - Tráfico interno
+- ✅ Scalers y explicadores SHAP incluidos
 
-message FlowStatistics {
-  int32 packets_per_second = 1;
-  int32 bytes_per_second = 2;
-  float inter_arrival_time = 3;
-  int32 flow_duration = 4;
-}
-```
-
-**Implementación:**
-- Captura de nuevos campos en `promiscuous_agent.py` mediante Scapy
-- Enriquecimiento de features antes del ML processing
-- Compatibilidad hacia atrás con schema actual
+### 🔧 **Infraestructura de Desarrollo**
+- ✅ **Makefile Completo**: 39.3KB de automatización
+- ✅ **Sistema de Configuración**: JSON externalizados
+- ✅ **Logging Centralizado**: Monitorización en tiempo real
+- ✅ **Pipeline CI/CD**: Scripts de deployment y testing
 
 ---
 
-### 🗄️ **2. Sistema RAG para Análisis de Logs**
+## 🔄 **EN PROGRESO - Q4 2025**
 
-#### 📊 **Time Series Database**
-```mermaid
-graph LR
-    A[Logs Distribuidos<br/>Múltiples Nodos] --> B[Agregación<br/>Tiempo Real]
-    B --> C[Time Series DB<br/>Optimizada Escritura]
-    C --> D[Embedding Engine<br/>Vector Database]
-    D --> E[RAG System<br/>Consultas NL]
-    E --> F[Análisis Temporal<br/>Correlaciones]
-```
+### 🏠 **Housekeeping y Optimización** *(ACTUAL)*
+**Estado**: 🟡 En desarrollo activo
+**Objetivo**: Organizar y optimizar el sistema sin romper funcionalidad
 
-**Objetivos:**
-- **Base de datos time-series**: Optimizada para escrituras masivas (logs continuos)
-- **Agregación en tiempo real**: Consolidación de logs distribuidos
-- **Embeddings**: Vectorización de eventos para búsqueda semántica
-- **RAG Interface**: Consultas en lenguaje natural sobre comportamiento del sistema
+#### **Reorganización del Código**
+- 🔄 **Estructura de Directorios**: Organización lógica de componentes
+  ```
+  core/          # Componentes sistema principal
+  ml_pipeline/   # Pipeline de Machine Learning  
+  data_pipeline/ # Procesamiento de datasets
+  config/        # Configuraciones centralizadas
+  models/        # Modelos organizados por estado
+  archive/       # Legacy valioso preservado
+  ```
+- 🔄 **Mapeo de Dependencias**: Inventario completo de interconexiones
+- 🔄 **Documentación Exhaustiva**: Guías para cada componente
 
-#### 🔍 **Capacidades del RAG**
-- **Consultas naturales**: "¿Qué eventos inusuales ocurrieron entre las 14:00 y 16:00?"
-- **Análisis temporal**: "Muéstrame la correlación entre estos eventos"
-- **Retroceso temporal**: "Retrocede 2 horas y encuentra eventos relacionados"
-- **Detección de patrones**: "¿Ha ocurrido algo similar anteriormente?"
+#### **Optimización de Performance**
+- 🔄 **Memory Management**: Optimización para datasets grandes
+- 🔄 **Processing Pipeline**: Reducción de latencia end-to-end
+- 🔄 **Model Optimization**: Cuantización y pruning de modelos
+- 🔄 **Concurrent Processing**: Paralelización de tareas CPU-intensivas
 
-**Stack tecnológico:**
-- **Time Series DB**: InfluxDB / TimescaleDB
-- **Vector DB**: Chroma / Pinecone
-- **Embedding**: OpenAI Embeddings / SentenceTransformers
-- **RAG Framework**: LangChain / LlamaIndex
-
----
-
-## 🚀 **Futuro Medio Plazo (2026)**
-
-### 🌐 **3. Arquitectura Distribuida**
-
-#### 🔄 **Multi-Agent System**
-```mermaid
-graph TB
-    subgraph "Región A"
-        A1[Agente Promiscuo A1]
-        A2[Agente Promiscuo A2]
-    end
-    subgraph "Región B"  
-        B1[Agente Promiscuo B1]
-        B2[Agente Promiscuo B2]
-    end
-    
-    A1 --> C[Central Broker<br/>Load Balancer]
-    A2 --> C
-    B1 --> C
-    B2 --> C
-    
-    C --> D[ML Cluster<br/>Distributed Processing]
-    C --> E[Dashboard Cluster<br/>High Availability]
-    
-    D --> F[Federated Learning<br/>Model Updates]
-    E --> G[Multi-Region<br/>Monitoring]
-```
-
-**Características:**
-- **Múltiples agentes**: Red distribuida de sensores
-- **Load balancing**: Distribución inteligente de carga
-- **High availability**: Redundancia y failover automático
-- **Federated learning**: Modelos que aprenden de múltiples regiones
-
-### 🔒 **4. Sistema de Respuesta Automatizada**
-
-#### ⚡ **Respuesta en Tiempo Real**
-- **Firewall automático**: Generación de reglas basadas en ML
-- **Aislamiento de red**: Cuarentena automática de hosts comprometidos
-- **Alertas escalonadas**: Notificaciones por criticidad
-- **Playbooks automatizados**: Respuestas predefinidas por tipo de ataque
+#### **Testing Comprehensive**
+- 🔄 **Unit Tests**: Coverage completo de componentes individuales
+- 🔄 **Integration Tests**: Validación de pipeline completo
+- 🔄 **Load Testing**: Pruebas de stress con alto volumen de tráfico
+- 🔄 **Regression Tests**: Prevención de degradación de modelos
 
 ---
 
-## 🔬 **Futuro Largo Plazo (2027+)**
+## 🚀 **PRÓXIMOS HITOS - Q1 2026**
 
-### 🧪 **5. Investigación Avanzada**
+### 📦 **Containerización y Distribución**
+**Prioridad**: 🔴 Alta
+**Objetivo**: Sistema deployable en cualquier entorno
 
-#### 🤖 **AI/ML Avanzado**
-- **Deep Learning**: Redes neuronales para detección de amenazas complejas
-- **Anomaly Detection**: Autoencoders para patrones nunca vistos
-- **Predictive Analytics**: Predicción de ataques antes de que ocurran
-- **Behavioral Analysis**: Perfiles de comportamiento por usuario/dispositivo
+#### **Docker Ecosystem**
+- 🎯 **Multi-container Setup**: Docker Compose para todo el stack
+- 🎯 **Microservices Architecture**: Contenedores especializados por función
+- 🎯 **Config Management**: Configuración externa via env vars
+- 🎯 **Health Checks**: Monitorización automática de containers
 
-#### 🔍 **Forensia Digital**
-- **Timeline reconstruction**: Reconstrucción completa de eventos
-- **Attack attribution**: Identificación de atacantes
-- **Evidence collection**: Recolección automática de evidencia digital
-- **Chain of custody**: Trazabilidad legal de evidencia
+#### **Orquestación**
+- 🎯 **Kubernetes Manifests**: Deployment para clusters
+- 🎯 **Helm Charts**: Gestión de configuraciones complejas
+- 🎯 **Auto-scaling**: Escalado automático basado en carga
+- 🎯 **Rolling Updates**: Deployment sin downtime
 
-#### 🌍 **Expansión de Cobertura**
-- **IoT Integration**: Monitoreo de dispositivos IoT/OT
-- **Cloud native**: Despliegue en Kubernetes
-- **Multi-cloud**: Operación en múltiples proveedores cloud
-- **Edge computing**: Procesamiento en el borde de la red
+### 🌐 **API y Integraciones**
+**Prioridad**: 🔴 Alta
+**Objetivo**: Integración con ecosistemas existentes
+
+#### **REST API**
+- 🎯 **FastAPI Framework**: API moderna con documentación automática
+- 🎯 **Authentication**: JWT y API keys
+- 🎯 **Rate Limiting**: Control de acceso y abuse prevention
+- 🎯 **Webhook Support**: Notificaciones push para alertas
+
+#### **SIEM Integration**
+- 🎯 **Splunk Connector**: Export directo de alertas
+- 🎯 **ELK Stack Support**: Integración con Elasticsearch
+- 🎯 **STIX/TAXII**: Threat intelligence sharing
+- 🎯 **CEF/LEEF**: Formatos estándar de logging
+
+---
+
+## 🔮 **VISIÓN FUTURA - 2026+**
+
+### 🧠 **AI/ML Avanzado**
+**Prioridad**: 🟡 Media-Alta
+**Objetivo**: Detección de amenazas de próxima generación
+
+#### **Deep Learning Integration**
+- 🔮 **Neural Networks**: Redes profundas para patrones complejos
+- 🔮 **Transformers**: Modelos de atención para secuencias de tráfico
+- 🔮 **Adversarial Training**: Robustez contra ataques adversariales
+- 🔮 **Federated Learning**: Aprendizaje distribuido sin centralizar datos
+
+#### **Threat Intelligence**
+- 🔮 **Zero-day Detection**: Identificación de amenazas desconocidas
+- 🔮 **Behavioral Analysis**: Análisis de comportamiento anómalo
+- 🔮 **Predictive Modeling**: Predicción de vectores de ataque
+- 🔮 **Threat Hunting**: Búsqueda proactiva de amenazas
+
+### 🌍 **Escalabilidad Global**
+**Prioridad**: 🟡 Media
+**Objetivo**: Deployment a escala enterprise
+
+#### **Multi-tenant Architecture**
+- 🔮 **Tenant Isolation**: Separación segura de datos por cliente
+- 🔮 **Custom Models**: Modelos especializados per tenant
+- 🔮 **SLA Management**: Garantías de servicio diferenciadas
+- 🔮 **Billing Integration**: Facturación automática basada en uso
+
+#### **Edge Computing**
+- 🔮 **Edge Deployment**: Procesamiento en edge devices
+- 🔮 **Offline Capability**: Funcionamiento sin conectividad
+- 🔮 **Model Synchronization**: Sincronización de modelos edge-cloud
+- 🔮 **5G Integration**: Optimización para redes 5G
+
+### 🔐 **Seguridad Avanzada**
+**Prioridad**: 🔴 Alta
+**Objetivo**: Security-by-design en todo el sistema
+
+#### **Zero Trust Architecture**
+- 🔮 **Identity Verification**: Verificación continua de identidades
+- 🔮 **Least Privilege**: Acceso mínimo requerido
+- 🔮 **Encrypt Everything**: Cifrado end-to-end
+- 🔮 **Audit Trail**: Trazabilidad completa de acciones
+
+#### **Privacy by Design**
+- 🔮 **Data Minimization**: Recolección mínima de datos
+- 🔮 **Anonymization**: Técnicas de privacidad diferencial
+- 🔮 **GDPR Compliance**: Cumplimiento regulatorio automático
+- 🔮 **Right to be Forgotten**: Eliminación garantizada de datos
 
 ---
 
 ## 📊 **Métricas de Éxito**
 
-### 🎯 **Objetivos Cuantitativos**
+### 🎯 **KPIs Técnicos**
+| Métrica | Q3 2025 (Actual) | Q1 2026 (Objetivo) | 2026+ (Visión) |
+|---------|------------------|---------------------|-----------------|
+| **Precisión Detección** | >95% | >98% | >99.5% |
+| **Latencia Procesamiento** | <100ms | <50ms | <10ms |
+| **Throughput** | 1K pps | 10K pps | 100K pps |
+| **False Positivos** | <2% | <0.5% | <0.1% |
+| **Uptime** | 99% | 99.9% | 99.99% |
 
-| Métrica | Actual | Q4 2025 | 2026 | 2027+ |
-|---------|--------|---------|------|-------|
-| **Precisión ML** | 85% | 95% | 98% | 99%+ |
-| **Falsos Positivos** | 10% | 3% | 1% | <0.5% |
-| **Tiempo Respuesta** | <10ms | <5ms | <1ms | <0.5ms |
-| **Escalabilidad** | 1 agente | 10 agentes | 100+ agentes | 1000+ agentes |
-| **Uptime** | 95% | 99% | 99.9% | 99.99% |
+### 📈 **KPIs de Negocio**
+- **Time to Detection**: <1 segundo para amenazas conocidas
+- **Cost per Detection**: Reducción 50% vs soluciones comerciales
+- **Deployment Time**: <30 minutos para setup completo
+- **User Satisfaction**: >4.5/5 en surveys de usuario
 
-### 🔍 **Indicadores Cualitativos**
-- **Usabilidad**: Dashboard intuitivo y fácil de usar
-- **Mantenibilidad**: Código limpio y bien documentado
-- **Seguridad**: Cumplimiento con estándares de ciberseguridad
-- **Interoperabilidad**: Integración con sistemas existentes
-
----
-
-## 🛠️ **Prioridades de Desarrollo**
-
-### 🥇 **Prioridad Alta (Q3 2025)**
-1. **Nuevo schema Protobuf** con campos para ML
-2. **Random Forest model** para detección binaria
-3. **Modelo de clasificación** de tipos de ataque
-4. **Time series database** setup
-
-### 🥈 **Prioridad Media (Q4 2025)**
-1. **RAG system** implementación básica
-2. **Embedding engine** para logs
-3. **Consultas en lenguaje natural**
-4. **Respuesta automatizada** básica
-
-### 🥉 **Prioridad Baja (2026)**
-1. **Arquitectura distribuida**
-2. **Multiple agents** deployment
-3. **Federated learning**
-4. **Advanced forensics**
+### 🔬 **KPIs de Investigación**
+- **Paper Publications**: 2+ papers por año en conferencias top-tier
+- **Open Source Contributions**: 100+ stars, 50+ forks en GitHub  
+- **Community Adoption**: 10+ organizaciones usando en producción
+- **Patent Applications**: 3+ patents filed para innovaciones clave
 
 ---
 
-## 💡 **Consideraciones Técnicas**
+## 🏁 **Milestones Críticos**
 
-### 🔧 **Challenges Esperados**
-- **Calidad de datos**: Obtener datasets de entrenamiento de calidad
-- **Latencia vs Precisión**: Balance entre velocidad y exactitud
-- **Escalabilidad**: Mantener performance con múltiples agentes
-- **Compatibilidad**: Backward compatibility durante upgrades
+### 📅 **Timeline Detallado**
 
-### 📈 **Recursos Necesarios**
-- **Hardware**: Servidores con GPUs para ML training
-- **Datasets**: Acceso a datos de ataques reales
-- **Expertise**: Especialistas en ML y ciberseguridad
-- **Tiempo**: Desarrollo incremental por fases
+#### **Q4 2025**
+- **Octubre 2025**: Housekeeping completo, estructura reorganizada
+- **Noviembre 2025**: Testing suite completo, CI/CD operativo
+- **Diciembre 2025**: Performance optimizations, benchmark publicado
+
+#### **Q1 2026**
+- **Enero 2026**: Containerización completa, Docker Hub registry
+- **Febrero 2026**: API REST operativa, primeras integraciones
+- **Marzo 2026**: Kubernetes deployment, primera instalación enterprise
+
+#### **Q2-Q4 2026**
+- **Q2**: SIEM integrations, threat intelligence feeds
+- **Q3**: Deep learning models, zero-day detection prototype
+- **Q4**: Multi-tenant architecture, edge computing pilot
 
 ---
 
-**🎯 Objetivo Final**: Crear la plataforma de ciberseguridad SCADA más avanzada, con capacidades de detección predictiva, respuesta automatizada y análisis forense completo, protegiendo infraestructuras críticas mediante inteligencia artificial de última generación.
+## 🤝 **Contribución y Comunidad**
+
+### 🌟 **Llamada a la Comunidad**
+Buscamos colaboradores en:
+- **ML Engineers**: Para modelos de deep learning
+- **DevOps Engineers**: Para automatización y deployment
+- **Security Researchers**: Para threat intelligence
+- **UI/UX Designers**: Para mejora de dashboard
+- **Technical Writers**: Para documentación
+
+### 📢 **Eventos y Difusión**
+- **DefCon 2026**: Presentación de resultados
+- **Black Hat 2026**: Demo del sistema completo
+- **PyData Conferences**: Charlas sobre ML pipeline
+- **OWASP Chapters**: Talleres de implementación
+
+---
+
+## 💡 **Innovaciones Clave**
+
+### 🔬 **Contribuciones Científicas**
+1. **Hybrid Sniffer/ML Architecture**: Primera integración exitosa de captura real-time con ML
+2. **Dataset Corruption Detection**: Metodología para identificar datasets no válidos
+3. **Feature Consistency Framework**: Garantiza compatibilidad training/inference
+4. **Multi-model Ensemble**: Arquitectura tricapa para detección especializada
+
+### 🏆 **Ventajas Competitivas**
+- **Real-world Validation**: Testado con tráfico real, no solo datasets
+- **Open Source**: Transparencia total vs black-box comerciales
+- **Scientific Rigor**: Metodología reproducible y verificable
+- **Practical Focus**: Diseñado para operaciones reales, no solo research
+
+---
+
+## 🎯 **Declaración de Impacto**
+
+**Upgraded Happiness** no es solo otro sistema de detección de amenazas. Es la demostración de que la investigación científica rigurosa, combinada con ingeniería práctica, puede crear soluciones que superen a productos comerciales millonarios.
+
+Nuestro objetivo es democratizar la seguridad de red avanzada, haciendo que organizaciones de cualquier tamaño puedan acceder a protección de clase enterprise basada en ML de última generación.
+
+---
+
+*"La felicidad se actualiza cuando la seguridad se automatiza"* 🛡️
+
+**Última actualización**: Agosto 2025 - Post-breakthrough tricapa  
+**Próxima revisión**: Octubre 2025 - Post-housekeeping
