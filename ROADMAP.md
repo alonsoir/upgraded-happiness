@@ -166,6 +166,41 @@ Crear el sistema de detección de amenazas de red más avanzado y confiable, com
 - 🔮 **GDPR Compliance**: Cumplimiento regulatorio automático
 - 🔮 **Right to be Forgotten**: Eliminación garantizada de datos
 
+## 🔄 **EN PROGRESO - Q4 2025**
+
+### 🏠 **Housekeeping y Optimización** *(ACTUAL)*
+**Estado**: 🟡 En desarrollo activo  
+**Objetivo**: Organizar y optimizar el sistema sin romper funcionalidad
+
+#### **Reorganización del Código**
+- 🔄 **Estructura de Directorios**: Organización lógica de componentes  
+- core/ # Componentes sistema principal
+- ml_pipeline/ # Pipeline de Machine Learning
+- data_pipeline/ # Procesamiento de datasets
+- config/ # Configuraciones centralizadas
+- models/ # Modelos organizados por estado
+- agents/ # Agentes autónomos (firewall, sniffer, ejector, etc.)
+- archive/ # Legacy valioso preservado
+- 🔄 **Mapeo de Dependencias**: Inventario completo de interconexiones
+- 🔄 **Documentación Exhaustiva**: Guías para cada componente
+
+#### **NUEVO: Fast Ejector Layer (HITO CRÍTICO)**
+🆕 **Módulo Autónomo de Contención y Observación de Intrusos**
+- 🛑 Detecta comportamiento interno sospechoso **en tiempo real**
+- 📤 Expulsa al intruso del nodo legítimo y actualiza el firewall local de inmediato
+- 🔀 Redirige automáticamente a un honeypot aislado y engañoso
+- 🎥 Captura PCAP y sesiones personalizadas con tcpdump/tcpwrapper
+- 🔐 Mantiene aislamiento completo del entorno real
+- 🧠 Propaga alertas para que otros nodos actualicen sus firewalls de forma preventiva
+- 📡 Lógica prioritaria incluso si el backend está caído (fail-safe local)
+- 📁 Generación de logs firmados y trazabilidad del incidente
+
+**Estado**: 🟡 Implementación de prototipo inicial en `agents/fast_ejector_layer.py`  
+**Meta**: Activación automática bajo tráfico anómalo no categorizado por `internal_normal_detector`
+
+...
+
+
 ---
 
 ## 📊 **Métricas de Éxito**
