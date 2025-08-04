@@ -1,5 +1,5 @@
 # SNIFFER FEATURE MAPPING
-# Modelo entrenado: 20250801_102857
+# Modelo entrenado: 20250804_092416
 # AUC Score: 1.0000
 
 FEATURES_ORDER = ['duration', 'spkts', 'dpkts', 'sbytes', 'dbytes', 'sload', 'smean', 'dmean', 'flow_iat_mean', 'flow_iat_std', 'fwd_psh_flags', 'bwd_psh_flags', 'fwd_urg_flags', 'bwd_urg_flags', 'packet_len_mean', 'packet_len_std', 'packet_len_var', 'fin_flag_count', 'syn_flag_count', 'rst_flag_count', 'psh_flag_count', 'ack_flag_count', 'urg_flag_count']
