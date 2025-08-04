@@ -1,0 +1,65 @@
+{
+  "training_config": {
+    "model_type": "RandomForest",
+    "test_size": 0.25,
+    "random_state": 42,
+    "cross_validation_folds": 3
+  },
+
+  "balancing_config": {
+    "balance_threshold": 0.15,
+    "smote_sampling_strategy": 0.8,
+    "smote_k_neighbors": 5,
+    "apply_undersampling": false,
+    "undersampling_ratio": 0.7
+  },
+
+  "model_params": {
+    "conservative": {
+      "n_estimators": 300,
+      "max_depth": 20,
+      "min_samples_split": 20,
+      "min_samples_leaf": 10,
+      "max_features": "sqrt",
+      "class_weight": "balanced",
+      "oob_score": true,
+      "max_samples": 0.8
+    },
+
+    "moderate": {
+      "n_estimators": 500,
+      "max_depth": 40,
+      "min_samples_split": 10,
+      "min_samples_leaf": 5,
+      "max_features": "sqrt",
+      "class_weight": "balanced",
+      "oob_score": true,
+      "max_samples": 0.9
+    },
+
+    "aggressive": {
+      "n_estimators": 1000,
+      "max_depth": 80,
+      "min_samples_split": 5,
+      "min_samples_leaf": 2,
+      "max_features": "log2",
+      "class_weight": "balanced_subsample",
+      "oob_score": true,
+      "max_samples": 1.0
+    }
+  },
+
+  "preprocessing": {
+    "imputation_strategy": "median",
+    "scaling_method": "StandardScaler",
+    "handle_infinites": true,
+    "categorical_encoding": "LabelEncoder"
+  },
+
+  "evaluation": {
+    "overfitting_alert_threshold": 0.98,
+    "perfect_score_alert_threshold": 0.99,
+    "show_feature_importance": true,
+    "top_features_count": 10
+  }
+}
