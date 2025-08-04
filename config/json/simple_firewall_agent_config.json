@@ -1,0 +1,266 @@
+{
+  "component": {
+    "name": "simple_firewall_agent",
+    "version": "2.0.0-ULTRA-SECURE",
+    "mode": "distributed_safe",
+    "description": "Distributed firewall agent with MAXIMUM SECURITY - Set it and forget it"
+  },
+  "node_id": "simple_firewall_agent_001",
+  "version": "2.0.0-ULTRA-SECURE",
+  "component_type": "firewall_agent",
+
+  "_security_notice": "🔒 CONFIGURACIÓN ULTRA-SEGURA - Diseñada para no requerir mantenimiento",
+
+  "network": {
+    "commands_input": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "bind",
+      "socket_type": "PULL",
+      "description": "Receives firewall commands from dashboard",
+      "high_water_mark": 500,
+      "connection_timeout": 3000,
+      "topic_filter": ""
+    },
+    "responses_output": {
+      "address": "localhost",
+      "port": 5581,
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "description": "Sends firewall responses to dashboard",
+      "high_water_mark": 500,
+      "connection_timeout": 3000
+    }
+  },
+
+  "zmq": {
+    "context_io_threads": 1,
+    "max_sockets": 32,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 60,
+    "immediate": true,
+    "linger_ms": 500,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 1000
+  },
+
+  "compression": {
+    "enabled": false,
+    "algorithm": "lz4",
+    "compression_level": 1,
+    "min_size_threshold": 1000,
+    "max_size_threshold": 10240,
+    "adaptive_algorithm": false
+  },
+
+  "encryption": {
+    "enabled": false,
+    "algorithm": "AES-256-GCM",
+    "key_system": "hierarchical",
+    "local_entropy_config": {
+      "entropy_sources": [
+        "pid",
+        "boot_time",
+        "random_bytes"
+      ]
+    },
+    "aad_includes": [
+      "node_id",
+      "component_name",
+      "timestamp"
+    ]
+  },
+
+  "firewall": {
+    "_security_comment": "🔒 MÁXIMA SEGURIDAD - Nunca puede dañar el firewall real",
+    "auto_detect_type": true,
+    "preferred_type": "iptables",
+
+    "sudo_enabled": false,
+    "dry_run": true,
+    "backup_rules": true,
+    "rule_timeout_default": 300,
+    "max_rules_per_ip": 3,
+    "max_total_rules": 50,
+
+    "_safety_overrides": {
+      "force_dry_run_if_root": true,
+      "force_dry_run_if_sudo": true,
+      "force_dry_run_if_container": false,
+      "auto_detect_permissions": true,
+      "never_flush_existing_rules": true,
+      "max_command_duration": 300
+    },
+
+    "supported_actions": ["MONITOR", "LIST_RULES"],
+    "blocked_actions": ["FLUSH_RULES", "BACKUP_RULES"],
+
+    "platform_specific": {
+      "linux": {
+        "firewall_type": "iptables",
+        "check_commands": ["iptables --version"],
+        "flush_on_startup": false,
+        "require_explicit_confirmation": true
+      },
+      "darwin": {
+        "firewall_type": "pfctl",
+        "check_commands": ["pfctl -s info"],
+        "flush_on_startup": false,
+        "require_explicit_confirmation": true
+      },
+      "windows": {
+        "firewall_type": "netsh",
+        "check_commands": ["netsh advfirewall show allprofiles"],
+        "flush_on_startup": false,
+        "require_explicit_confirmation": true
+      }
+    }
+  },
+
+  "processing": {
+    "threads": 1,
+    "command_queue_size": 100,
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 1,
+      "max_wait_time_ms": 1000
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "max_commands_per_minute": 10,
+      "burst_capacity": 3
+    },
+    "command_timeout_seconds": 10,
+    "max_concurrent_commands": 1
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 60,
+    "detailed_metrics": true,
+    "health_check": {
+      "enabled": true,
+      "check_interval_seconds": 120,
+      "firewall_connectivity_test": false,
+      "rule_application_test": false
+    },
+    "alerts": {
+      "max_error_rate_percent": 5.0,
+      "max_response_time_ms": 3000.0,
+      "max_queue_usage_percent": 50.0,
+      "min_success_rate_percent": 98.0
+    },
+    "log_applied_rules": true,
+    "log_failed_commands": true,
+    "log_security_events": true
+  },
+
+  "persistence": {
+    "enabled": true,
+    "rules_history_file": "data/firewall_rules_history.jsonl",
+    "max_history_entries": 1000,
+    "backup_interval_seconds": 600,
+    "state_file": "data/firewall_agent_state.json",
+    "security_log_file": "data/security_events.jsonl"
+  },
+
+  "security": {
+    "_comment": "🔒 VALIDACIÓN EXHAUSTIVA - Rechaza comandos peligrosos",
+    "input_validation": {
+      "enabled": true,
+      "validate_ip_addresses": true,
+      "validate_port_ranges": true,
+      "max_rule_duration_seconds": 300,
+      "min_rule_duration_seconds": 60,
+      "blocked_ip_ranges": [
+        "127.0.0.0/8",
+        "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16"
+      ],
+      "allowed_actions": ["MONITOR", "LIST_RULES"],
+      "max_ip_length": 15,
+      "require_valid_ipv4": true,
+      "block_private_ips": true
+    },
+    "command_authentication": {
+      "enabled": false,
+      "require_signed_commands": false,
+      "trusted_dashboard_ids": ["dashboard_main_001"]
+    },
+    "auto_safety": {
+      "enabled": true,
+      "detect_privilege_escalation": true,
+      "detect_container_environment": true,
+      "force_safe_mode_conditions": [
+        "running_as_root",
+        "sudo_available",
+        "unknown_environment",
+        "high_privilege_context"
+      ]
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [SAFE_MODE] - %(message)s",
+    "handlers": {
+      "file": {
+        "enabled": true,
+        "path": "./logs/firewall_agent_secure.log",
+        "max_size_mb": 50,
+        "backup_count": 10,
+        "rotation": "size"
+      },
+      "console": {
+        "enabled": true,
+        "colored": true,
+        "include_security_markers": true
+      },
+      "security_log": {
+        "enabled": true,
+        "path": "./logs/firewall_security_events.log",
+        "log_all_commands": true,
+        "log_rejected_commands": true,
+        "log_privilege_changes": true
+      },
+      "syslog": {
+        "enabled": false,
+        "facility": "authpriv",
+        "address": "/dev/log"
+      }
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-secure",
+    "component_role": "firewall_agent_safe",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "enable_privilege_detection": true,
+    "enable_safety_overrides": true
+  },
+
+  "debug": {
+    "enabled": true,
+    "sample_commands": false,
+    "sample_rate_percent": 0.0,
+    "log_protobuf_details": true,
+    "simulate_command_failures": false,
+    "failure_rate_percent": 0.0,
+    "log_security_decisions": true,
+    "log_environment_detection": true
+  },
+
+  "_safety_guarantees": {
+    "never_runs_as_root": "Detected automatically and forces dry_run",
+    "never_modifies_real_firewall": "All commands are dry_run by default",
+    "never_accepts_dangerous_commands": "Input validation blocks risky operations",
+    "auto_detects_environment": "Adapts safety level based on detected environment",
+    "comprehensive_logging": "All operations logged for audit trail",
+    "fail_safe_design": "Defaults to most secure option when in doubt"
+  }
+}
+
+
