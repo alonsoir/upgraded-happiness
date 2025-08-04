@@ -1,0 +1,75 @@
+version: '3.8'
+services:
+  etcd:
+    image: bitnami/etcd:latest
+    environment:
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER=etcd=http://etcd:2380
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-demo
+    networks:
+      - scada_net
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+
+  zmq_concentrator:
+    build: .
+    command: ["python", "zmq_concentrator.py"]
+    networks:
+      - scada_net
+    ports:
+      - "5555:5555" # PUB/SUB entrada de nodos
+      - "5556:5556" # PUB al dashboard
+      - "5557:5557" # Heartbeats
+    environment:
+      - ETCD_HOST=etcd
+      - GEO_FILTER=Europe
+
+  firewall_agent_1:
+    build: .
+    command: ["python", "simple_firewall_agent.py", "simple_firewall_agent_config_1.json"]
+    networks:
+      - scada_net
+    environment:
+      - ETCD_HOST=etcd
+
+  firewall_agent_2:
+    build: .
+    command: ["python", "simple_firewall_agent.py", "simple_firewall_agent_config_2.json"]
+    networks:
+      - scada_net
+    environment:
+      - ETCD_HOST=etcd
+
+  ml_detector_1:
+    build: .
+    command: ["python", "lightweight_ml_detector.py", "lightweight_ml_detector_config_1.json"]
+    networks:
+      - scada_net
+    environment:
+      - ETCD_HOST=etcd
+
+  ml_detector_2:
+    build: .
+    command: ["python", "lightweight_ml_detector.py", "lightweight_ml_detector_config_2.json"]
+    networks:
+      - scada_net
+    environment:
+      - ETCD_HOST=etcd
+
+  dashboard:
+    build: .
+    command: ["python", "real_zmq_dashboard_with_firewall.py", "dashboard_config.json"]
+    networks:
+      - scada_net
+    ports:
+      - "8050:8050"
+    environment:
+      - ETCD_HOST=etcd
+      - CONCENTRATOR_HOST=zmq_concentrator
+
+networks:
+  scada_net:
+    driver: bridge

@@ -1,0 +1,107 @@
+{
+  "ml": {
+    "enabled": true,
+    "_comment_phase_current": "FASE 3-CORREGIDA: UNSW-NB15 activado, CSE-CIC-IDS2018 y TON-IoT desactivados.",
+    "datasets": ["UNSW-NB15"],
+    "_comment_ton_iot": "TON-IoT comentado temporalmente por problemas de descarga/mapeo",
+    "_datasets_full_future": ["UNSW-NB15", "CSE-CIC-IDS2018", "TON-IoT"],
+    "anomaly_threshold": 0.78,
+    "high_risk_threshold": 0.92,
+    "confidence_threshold": 0.85,
+    "models": {
+      "random_forest": {
+        "n_estimators": 2000,
+        "max_depth": 120,
+        "min_samples_split": 2,
+        "min_samples_leaf": 1,
+        "max_features": "log2",
+        "class_weight": "balanced_subsample"
+      }
+    }
+  },
+  "geo": {
+    "city_db_path": "geodata/GeoLite2-City.mmdb",
+    "country_db_path": "geodata/GeoLite2-Country.mmdb",
+    "hq_coords": [40.4168, -3.7038],
+    "country_risk_scores": {
+      "CN": 0.8,
+      "RU": 0.85,
+      "IR": 0.9,
+      "KP": 0.95,
+      "US": 0.4,
+      "DE": 0.3,
+      "JP": 0.25,
+      "ES": 0.2
+    }
+  },
+  "datasets": {
+    "max_rows_per_dataset": 500000,
+    "_comment_dns_filtering": "ACTIVO: Filtrado automático de DNS en todos los datasets",
+    "dns_filter_enabled": true,
+    "dns_filter_columns": ["service", "Service", "protocol_type", "service_name"],
+    "_comment_label_mapping": "CRÍTICO: Mapeos corregidos después de debugging",
+    "label_mappings": {
+      "UNSW-NB15": {
+        "column": "label",
+        "mapper": "direct",
+        "description": "0=normal, 1=attack"
+      },
+      "CSE-CIC-IDS2018": {
+        "column": "Label",
+        "mapper": "categorical",
+        "description": "Benign=0, Others=1",
+        "_fix_applied": "Cambio de 'label' a 'Label' (mayúscula) - CRÍTICO"
+      },
+      "TON-IoT": {
+        "column": "label",
+        "mapper": "categorical",
+        "description": "normal=0, others=1",
+        "status": "postponed"
+      }
+    }
+  },
+  "_experiment_info": {
+    "name": "Multi-Dataset Training without DNS Bias - CORRECTED",
+    "version": "2.3-fixed-mapping",
+    "description": "Training RF with 2 datasets, DNS filtered, CORRECT label mapping",
+    "critical_fix": "CSE-CIC-IDS2018 'label' → 'Label' (mayúscula)",
+    "phases": [
+      "FASE 1: UNSW-NB15 only, no DNS ✅ (modelo base funcional)",
+      "FASE 2-BAD: 2 datasets, mapeo incorrecto ❌ (modelo inútil)",
+      "FASE 2-FIXED: 2 datasets, mapeo CORRECTO 🔧 (esperado: útil)"
+    ],
+    "expected_distribution": {
+      "UNSW-NB15": "33,932 normales + 27,033 ataques",
+      "CSE-CIC-IDS2018": "7,372,557 normales + 576,191 ataques DDoS",
+      "TOTAL": "7,406,489 normales (92.7%) + 603,224 ataques (7.3%)",
+      "improvement": "De 99.7%/0.3% a 92.7%/7.3% - MUCHÍSIMO mejor"
+    },
+    "debugging_lessons": [
+      "Siempre verificar case-sensitivity en nombres de columnas",
+      "Un dataset mal integrado puede arruinar todo el modelo",
+      "Más datos ≠ mejor modelo si están mal procesados",
+      "Debug step-by-step es crucial en ML"
+    ],
+    "expected_improvements": [
+      "576,191 ataques DDoS reales incluidos como ataques (no como normales)",
+      "Distribución realista 92.7% normal / 7.3% ataques",
+      "Menos dependencia de SMOTE (menos ataques sintéticos)",
+      "Modelo debería ser más robusto y menos agresivo",
+      "DNS queries NO deberían ser 95%+ peligrosas"
+    ]
+  },
+  "_validation_targets": {
+    "distribution_check": "92.7% normal, 7.3% ataques",
+    "dns_test": "DNS normal < 30% peligroso",
+    "ddos_coverage": "576,191 DDoS samples como ataques",
+    "model_behavior": "Menos agresivo que FASE 2-BAD",
+    "smote_reduction": "Menos ataques sintéticos necesarios"
+  },
+  "_next_steps": {
+    "immediate": "Entrenar con mapeo corregido",
+    "validation": "Probar DNS y otros eventos normales",
+    "if_successful": "Integrar en lightweight_ml_detector_v2",
+    "if_dns_still_bad": "Investigar otros datasets o feature engineering",
+    "future": "Añadir TON-IoT cuando se resuelvan problemas de descarga"
+  }
+}

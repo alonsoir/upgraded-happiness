@@ -1,0 +1,19 @@
+{
+  "ml": {
+    "datasets": ["normal_traffic_hybrid"]
+  },
+  "datasets": {
+    "label_mappings": {
+      "normal_traffic_hybrid": {
+        "column": "label",
+        "mapper": "direct",
+        "description": "0=normal, 1=attack"
+      },
+      "internal_traffic_hybrid": {
+        "column": "label",
+        "mapper": "direct",
+        "description": "0=internal, 1=attack"
+      }
+    }
+  }
+}

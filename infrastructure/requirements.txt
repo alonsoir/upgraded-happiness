@@ -1,0 +1,66 @@
+# requirements.txt
+# Core dependencies for SCADA distributed agents system + Protocol Research
+
+# === EXISTING SCADA DEPENDENCIES ===
+# ZeroMQ - High-performance asynchronous messaging library
+pyzmq>=25.1.0,<26.0.0
+
+# Scapy - Powerful packet manipulation library
+scapy>=2.5.0,<3.0.0
+
+# Configuration and data handling
+pyyaml>=6.0,<7.0           # YAML configuration files
+msgpack>=1.0.5,<2.0.0      # Binary serialization format
+
+# CLI and user interface
+click>=8.1.0,<9.0.0        # Command line interface creation
+colorama>=0.4.6,<1.0.0     # Colored terminal output
+
+# System monitoring and utilities
+psutil>=5.9.0,<6.0.0       # System and process utilities
+netifaces>=0.11.0,<1.0.0   # Network interface information
+
+# Data processing and analysis
+pandas>=2.0.0,<3.0.0       # Data manipulation and analysis
+numpy>=1.24.0,<2.0.0       # Numerical computing
+
+# Network and security
+cryptography>=41.0.0,<42.0.0  # Cryptographic recipes and primitives
+
+# Async and threading
+asyncio-mqtt>=0.13.0,<1.0.0  # MQTT client (for future IoT integration)
+
+# Database support (for future storage implementation)
+sqlalchemy>=2.0.0,<3.0.0   # SQL toolkit and ORM
+
+# HTTP and web framework (for future dashboard)
+fastapi>=0.100.0,<1.0.0    # Modern web framework
+uvicorn>=0.23.0,<1.0.0     # ASGI server
+websockets>=11.0.0,<12.0.0 # WebSocket client and server
+
+# Time series and monitoring
+influxdb-client>=1.37.0,<2.0.0  # InfluxDB client (for metrics storage)
+
+# Logging and monitoring
+structlog>=23.1.0,<24.0.0  # Structured logging
+prometheus-client>=0.17.0,<1.0.0  # Prometheus metrics
+
+# Validation and parsing
+pydantic>=2.0.0,<3.0.0     # Data validation using Python type hints
+python-dotenv>=1.0.0,<2.0.0  # Load environment variables from .env
+
+# === NEW PROTOCOL RESEARCH DEPENDENCIES ===
+# Serialization protocols
+protobuf>=4.21.0    # Protocol Buffers for efficient serialization
+
+# Compression algorithms
+lz4>=4.0.0,<5.0.0          # LZ4 compression library
+
+# Additional cryptography (ChaCha20 support)
+pycryptodome>=3.15.0,<4.0.0  # Additional crypto primitives (ChaCha20)
+
+# File I/O for async operations
+aiofiles>=0.8.0,<1.0.0     # Async file operations
+
+# Performance benchmarking
+pytest-benchmark>=4.0.0,<5.0.0  # Performance benchmarking for pytest

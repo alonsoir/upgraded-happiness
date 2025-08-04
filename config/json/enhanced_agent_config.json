@@ -1,0 +1,138 @@
+{
+  "component": {
+    "name": "promiscuous_agent",
+    "version": "3.0.0",
+    "mode": "distributed",
+    "description": "Promiscuous Agent with protobuf v3.0.0 support and dual GeoIP pipeline compatibility"
+  },
+  "node_id": "promiscuous_agent_v3_001",
+  "version": "3.0.0",
+  "agent_version": "3.0.0-distributed",
+
+  "_comment_network": "🔌 Red - BIND en 5559 para que geoip_enricher se conecte",
+  "network": {
+    "output_socket": {
+      "address": "localhost",
+      "port": 5559,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos protobuf v3.0.0 al geoip_enricher (BIND para recibir conexiones)"
+    }
+  },
+
+  "zmq": {
+    "output_port": 5559,
+    "sndhwm": 2000,
+    "linger_ms": 5000,
+    "send_timeout_ms": 100,
+    "_comment": "Configuración ZMQ optimizada para protobuf v3"
+  },
+
+  "backpressure": {
+    "enabled": true,
+    "max_retries": 3,
+    "retry_delays_ms": [1, 2, 5],
+    "drop_threshold_percent": 15.0,
+    "activation_threshold": 50,
+    "_comment": "Backpressure conservativo para estabilidad v3"
+  },
+
+  "_comment_capture": "🎯 Captura - Configuración probada y optimizada",
+  "capture": {
+    "mode": "real",
+    "interface": "any",
+    "promiscuous_mode": true,
+    "filter_expression": "",
+    "buffer_size": 65536,
+    "min_packet_size": 20,
+    "max_packet_size": 65536,
+    "excluded_ports": [22, 80, 443],
+    "included_protocols": ["tcp", "udp"],
+    "filter_rules": [],
+    "_comment": "Excluye SSH, HTTP, HTTPS para reducir ruido"
+  },
+
+  "_comment_processing": "⚙️ Procesamiento - Hilos optimizados para protobuf v3",
+  "processing": {
+    "internal_queue_size": 1000,
+    "processing_threads": 2,
+    "queue_timeout_seconds": 1.0,
+    "max_packets_per_second": 1000,
+    "batch_size": 1,
+    "_comment": "2 threads suficientes para most cases, ajustar según carga"
+  },
+
+  "_comment_protobuf": "📦 CRÍTICO: Protobuf v3.0.0 configuración",
+  "protobuf": {
+    "schema_version": "v3",
+    "compression": false,
+    "validate_before_send": true,
+    "error_handling": "log_and_drop",
+    "_comment": "ACTUALIZADO: v2 → v3 para nuevo schema con enriquecimiento dual"
+  },
+
+  "_comment_logging": "📝 ACTIVADO: Logging a disco habilitado",
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)-20s - %(levelname)-8s - [node_id:{node_id}] [pid:{pid}] [v3.0.0] - %(message)s",
+    "file": "logs/promiscuous_agent.log",
+    "max_file_size_mb": 100,
+    "backup_count": 5,
+    "include_performance_logs": true,
+    "_comment": "CORREGIDO: Formato de UNA línea + disco Y pantalla"
+  },
+
+  "_comment_monitoring": "📊 Monitoreo - Alertas ajustadas para v3",
+  "monitoring": {
+    "stats_interval_seconds": 30,
+    "performance_tracking": true,
+    "system_metrics": true,
+    "alerts": {
+      "max_drop_rate_percent": 10.0,
+      "max_backpressure_activations": 100,
+      "max_queue_usage_percent": 80.0,
+      "max_memory_usage_mb": 512,
+      "max_cpu_usage_percent": 80.0,
+      "_comment": "Alertas conservativas para detectar problemas temprano"
+    },
+    "health_check": {
+      "enabled": true,
+      "interval_seconds": 60,
+      "endpoint": null,
+      "_comment": "Health check interno habilitado"
+    },
+    "_comment_v3": "Nuevas métricas v3: eventos creados, handshakes, pipeline events"
+  },
+
+  "_comment_distributed": "🌐 Cluster - Configuración distribuida upgraded-happiness",
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "heartbeat_interval_seconds": 30,
+    "node_registration": {
+      "enabled": false,
+      "etcd_endpoints": [],
+      "registration_ttl_seconds": 60,
+      "_comment": "etcd registration disabled por ahora"
+    },
+    "_comment": "Cluster info para coordinación distribuida"
+  },
+
+  "_comment_features_v3": "🆕 Nuevas características v3.0.0",
+  "features_v3": {
+    "dual_geoip_support": true,
+    "enhanced_pipeline_tracking": true,
+    "improved_metadata": true,
+    "schema_versioning": true,
+    "_comment": "Características específicas de la versión 3.0.0"
+  },
+
+  "_comment_compatibility": "🔄 Compatibilidad con pipeline v2/v3 mixto",
+  "compatibility": {
+    "legacy_v2_support": true,
+    "forward_v3_features": true,
+    "auto_schema_detection": false,
+    "_comment": "Mantiene compatibilidad mientras pipeline migra"
+  }
+}
