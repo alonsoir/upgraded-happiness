@@ -1,8 +1,7 @@
 {
   "ml": {
     "enabled": true,
-    "_comment_datasets": ["CSE-CIC-IDS2018", "TON-IoT", "CIC-Bell-DNS-EXF-2021"],
-    "datasets": ["UNSW-NB15"],
+    "datasets": ["normal_traffic.csv"],
     "anomaly_threshold": 0.78,
     "high_risk_threshold": 0.92,
     "confidence_threshold": 0.85,

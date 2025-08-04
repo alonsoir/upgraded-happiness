@@ -86,6 +86,24 @@ logs/
 *.sqlite
 *.sqlite3
 
+data/
+data/*.*
+
+results/
+results/*.*
+
+cicids_2017_processed.csv
+cicids_data/
+models_cicids/
+cicids_data/*.*
+models_cicids/*.*
+
+normal_traffic.csv
+internal_traffic_dataset.csv
+
+validation_results/
+
+validation_results/*.*
 # Environment variables
 .env
 .env.local

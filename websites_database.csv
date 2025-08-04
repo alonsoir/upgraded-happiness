@@ -1,0 +1,330 @@
+site,country,category,description
+google.com,US,Search,Google Search
+youtube.com,US,Video,YouTube
+facebook.com,US,Social,Facebook
+amazon.com,US,Commerce,Amazon
+wikipedia.org,US,Education,Wikipedia
+twitter.com,US,Social,Twitter/X
+instagram.com,US,Social,Instagram
+linkedin.com,US,Social,LinkedIn Professional
+netflix.com,US,Streaming,Netflix
+microsoft.com,US,Technology,Microsoft
+apple.com,US,Technology,Apple
+github.com,US,Development,GitHub
+stackoverflow.com,US,Development,Stack Overflow
+reddit.com,US,Social,Reddit
+cnn.com,US,News,CNN News
+bbc.com,GB,News,BBC News
+amazon.co.uk,GB,Commerce,Amazon UK
+gov.uk,GB,Government,UK Government
+guardian.co.uk,GB,News,The Guardian
+dailymail.co.uk,GB,News,Daily Mail
+ebay.co.uk,GB,Commerce,eBay UK
+sky.com,GB,News,Sky News
+telegraph.co.uk,GB,News,The Telegraph
+independent.co.uk,GB,News,The Independent
+amazon.de,DE,Commerce,Amazon Germany
+spiegel.de,DE,News,Der Spiegel
+bild.de,DE,News,Bild
+zeit.de,DE,News,Die Zeit
+heise.de,DE,Technology,Heise Online
+chip.de,DE,Technology,Chip Magazine
+focus.de,DE,News,Focus
+welt.de,DE,News,Die Welt
+sueddeutsche.de,DE,News,Süddeutsche Zeitung
+amazon.fr,FR,Commerce,Amazon France
+lemonde.fr,FR,News,Le Monde
+lefigaro.fr,FR,News,Le Figaro
+liberation.fr,FR,News,Libération
+franceinfo.fr,FR,News,France Info
+orange.fr,FR,Technology,Orange
+free.fr,FR,Technology,Free
+sfr.fr,FR,Technology,SFR
+ovh.com,FR,Technology,OVH Cloud
+amazon.es,ES,Commerce,Amazon Spain
+elpais.com,ES,News,El País
+lavanguardia.com,ES,News,La Vanguardia
+abc.es,ES,News,ABC España
+elmundo.es,ES,News,El Mundo
+rtve.es,ES,News,RTVE
+marca.com,ES,Sports,Marca
+as.com,ES,Sports,AS
+sport.es,ES,Sports,Sport
+elconfidencial.com,ES,News,El Confidencial
+amazon.it,IT,Commerce,Amazon Italy
+corriere.it,IT,News,Corriere della Sera
+repubblica.it,IT,News,La Repubblica
+gazzetta.it,IT,Sports,Gazzetta dello Sport
+lastampa.it,IT,News,La Stampa
+ilsole24ore.com,IT,Business,Il Sole 24 Ore
+ansa.it,IT,News,ANSA
+mediaset.it,IT,Media,Mediaset
+rai.it,IT,Media,RAI
+yahoo.co.jp,JP,Search,Yahoo Japan
+nikkei.com,JP,Business,Nikkei
+asahi.com,JP,News,Asahi Shimbun
+mainichi.jp,JP,News,Mainichi Shimbun
+yomiuri.co.jp,JP,News,Yomiuri Shimbun
+rakuten.co.jp,JP,Commerce,Rakuten
+softbank.jp,JP,Technology,SoftBank
+ntt.com,JP,Technology,NTT
+sony.com,JP,Technology,Sony
+nintendo.com,JP,Gaming,Nintendo
+baidu.com,CN,Search,Baidu
+qq.com,CN,Social,Tencent QQ
+taobao.com,CN,Commerce,Taobao
+tmall.com,CN,Commerce,Tmall
+weibo.com,CN,Social,Sina Weibo
+jd.com,CN,Commerce,JD.com
+sohu.com,CN,Portal,Sohu
+163.com,CN,Portal,NetEase
+sina.com.cn,CN,Portal,Sina
+china.com,CN,News,China.com
+naver.com,KR,Search,Naver
+daum.net,KR,Portal,Daum
+samsung.com,KR,Technology,Samsung
+lge.com,KR,Technology,LG Electronics
+hyundai.com,KR,Automotive,Hyundai
+kia.com,KR,Automotive,Kia
+sk.com,KR,Business,SK Group
+posco.com,KR,Business,POSCO
+hanwha.com,KR,Business,Hanwha
+yandex.ru,RU,Search,Yandex
+mail.ru,RU,Email,Mail.ru
+vk.com,RU,Social,VKontakte
+odnoklassniki.ru,RU,Social,Odnoklassniki
+rambler.ru,RU,Portal,Rambler
+lenta.ru,RU,News,Lenta.ru
+rbc.ru,RU,Business,RBC
+kommersant.ru,RU,Business,Kommersant
+gazeta.ru,RU,News,Gazeta.ru
+rt.com,RU,News,Russia Today
+amazon.ca,CA,Commerce,Amazon Canada
+cbc.ca,CA,News,CBC News
+globeandmail.com,CA,News,Globe and Mail
+nationalpost.com,CA,News,National Post
+ctv.ca,CA,News,CTV News
+rogers.com,CA,Technology,Rogers
+bell.ca,CA,Technology,Bell Canada
+telus.com,CA,Technology,TELUS
+shopify.com,CA,Commerce,Shopify
+amazon.com.au,AU,Commerce,Amazon Australia
+news.com.au,AU,News,News.com.au
+smh.com.au,AU,News,Sydney Morning Herald
+theage.com.au,AU,News,The Age
+abc.net.au,AU,News,ABC Australia
+sbs.com.au,AU,News,SBS
+telstra.com.au,AU,Technology,Telstra
+optus.com.au,AU,Technology,Optus
+commonwealth.gov.au,AU,Government,Australian Government
+bom.gov.au,AU,Weather,Bureau of Meteorology
+amazon.com.br,BR,Commerce,Amazon Brazil
+globo.com,BR,Media,Globo
+uol.com.br,BR,Portal,UOL
+folha.uol.com.br,BR,News,Folha de S.Paulo
+estadao.com.br,BR,News,O Estado de S. Paulo
+g1.globo.com,BR,News,G1
+terra.com.br,BR,Portal,Terra
+abril.com.br,BR,Media,Abril
+vivo.com.br,BR,Technology,Vivo
+tim.com.br,BR,Technology,TIM Brasil
+mercadolibre.com.mx,MX,Commerce,MercadoLibre Mexico
+elnorte.com,MX,News,El Norte
+reforma.com,MX,News,Reforma
+excelsior.com.mx,MX,News,Excélsior
+milenio.com,MX,News,Milenio
+telcel.com,MX,Technology,Telcel
+telmex.com,MX,Technology,Telmex
+televisa.com,MX,Media,Televisa
+tv-azteca.com,MX,Media,TV Azteca
+pemex.com,MX,Energy,Pemex
+flipkart.com,IN,Commerce,Flipkart
+amazon.in,IN,Commerce,Amazon India
+timesofindia.com,IN,News,Times of India
+hindustantimes.com,IN,News,Hindustan Times
+indianexpress.com,IN,News,Indian Express
+ndtv.com,IN,News,NDTV
+zee5.com,IN,Streaming,ZEE5
+hotstar.com,IN,Streaming,Disney+ Hotstar
+airtel.in,IN,Technology,Bharti Airtel
+jio.com,IN,Technology,Reliance Jio
+kompas.com,ID,News,Kompas
+detik.com,ID,News,Detik
+liputan6.com,ID,News,Liputan6
+okezone.com,ID,News,Okezone
+tribunnews.com,ID,News,Tribun News
+telkom.co.id,ID,Technology,Telkom Indonesia
+indosat.com,ID,Technology,Indosat
+xl.co.id,ID,Technology,XL Axiata
+tokopedia.com,ID,Commerce,Tokopedia
+bukalapak.com,ID,Commerce,Bukalapak
+straitstimes.com,SG,News,Straits Times
+channelnewsasia.com,SG,News,CNA
+singtel.com,SG,Technology,Singtel
+starhub.com,SG,Technology,StarHub
+dbs.com.sg,SG,Banking,DBS Bank
+ocbc.com,SG,Banking,OCBC Bank
+uob.com.sg,SG,Banking,UOB
+shopee.sg,SG,Commerce,Shopee Singapore
+grab.com,SG,Technology,Grab
+lazada.sg,SG,Commerce,Lazada Singapore
+bangkok.post.com,TH,News,Bangkok Post
+nationtv.tv,TH,News,Nation TV
+thairath.co.th,TH,News,Thairath
+kapook.com,TH,Portal,Kapook
+sanook.com,TH,Portal,Sanook
+ais.co.th,TH,Technology,AIS
+truecorp.co.th,TH,Technology,True Corporation
+dtac.co.th,TH,Technology,DTAC
+lazada.co.th,TH,Commerce,Lazada Thailand
+shopee.co.th,TH,Commerce,Shopee Thailand
+vnexpress.net,VN,News,VnExpress
+vietnamnet.vn,VN,News,VietnamNet
+tuoitre.vn,VN,News,Tuoi Tre
+thanhnien.vn,VN,News,Thanh Nien
+dantri.com.vn,VN,News,Dan Tri
+viettel.com.vn,VN,Technology,Viettel
+mobifone.vn,VN,Technology,MobiFone
+vinaphone.com.vn,VN,Technology,VinaPhone
+shopee.vn,VN,Commerce,Shopee Vietnam
+tiki.vn,VN,Commerce,Tiki
+dawn.com,PK,News,Dawn
+tribune.com.pk,PK,News,The Express Tribune
+geo.tv,PK,News,Geo TV
+ary.com.pk,PK,News,ARY Digital
+dunyanews.tv,PK,News,Dunya News
+ptcl.com.pk,PK,Technology,PTCL
+telenor.com.pk,PK,Technology,Telenor Pakistan
+jazz.com.pk,PK,Technology,Jazz
+zong.com.pk,PK,Technology,Zong
+daraz.pk,PK,Commerce,Daraz Pakistan
+dailystar.com.bd,BD,News,Daily Star Bangladesh
+prothomalo.com,BD,News,Prothom Alo
+kalerkantho.com,BD,News,Kaler Kantho
+ittefaq.com.bd,BD,News,The Daily Ittefaq
+samakal.com,BD,News,Samakal
+grameenphone.com,BD,Technology,Grameenphone
+robi.com.bd,BD,Technology,Robi
+banglalink.net,BD,Technology,Banglalink
+airtel.bd,BD,Technology,Airtel Bangladesh
+daraz.com.bd,BD,Commerce,Daraz Bangladesh
+aljazeera.com,QA,News,Al Jazeera
+gulf-times.com,QA,News,Gulf Times
+thepeninsulaqatar.com,QA,News,The Peninsula
+ooredoo.qa,QA,Technology,Ooredoo Qatar
+vodafone.qa,QA,Technology,Vodafone Qatar
+qatarairways.com,QA,Travel,Qatar Airways
+visitqatar.qa,QA,Tourism,Visit Qatar
+qnb.com,QA,Banking,QNB
+cbq.qa,QA,Banking,Commercial Bank of Qatar
+alsadd.com,QA,Sports,Al Sadd Sports Club
+gulfnews.com,AE,News,Gulf News
+khaleejtimes.com,AE,News,Khaleej Times
+thenationalnews.com,AE,News,The National
+arabianbusiness.com,AE,Business,Arabian Business
+zawya.com,AE,Business,Zawya
+etisalat.ae,AE,Technology,Etisalat
+du.ae,AE,Technology,du
+emirates.com,AE,Travel,Emirates Airlines
+adnoc.ae,AE,Energy,ADNOC
+visitabudhabi.ae,AE,Tourism,Visit Abu Dhabi
+okaz.com.sa,SA,News,Okaz
+alyaum.com,SA,News,Al-Yaum
+aleqt.com,SA,Business,Aleqtisadiah
+spa.gov.sa,SA,Government,Saudi Press Agency
+vision2030.gov.sa,SA,Government,Saudi Vision 2030
+stc.com.sa,SA,Technology,STC
+mobily.com.sa,SA,Technology,Mobily
+zain.sa,SA,Technology,Zain Saudi Arabia
+saudia.com,SA,Travel,Saudia Airlines
+aramco.com,SA,Energy,Saudi Aramco
+ahram.org.eg,EG,News,Al-Ahram
+youm7.com,EG,News,Youm7
+masrawy.com,EG,News,Masrawy
+albawabhnews.com,EG,News,Al Bawaba
+shorouknews.com,EG,News,Al-Shorouk
+orange.eg,EG,Technology,Orange Egypt
+vodafone.com.eg,EG,Technology,Vodafone Egypt
+etisalat.eg,EG,Technology,Etisalat Egypt
+we.com.eg,EG,Technology,WE (Telecom Egypt)
+egyptair.com,EG,Travel,EgyptAir
+haaretz.com,IL,News,Haaretz
+jpost.com,IL,News,Jerusalem Post
+ynetnews.com,IL,News,Ynet
+maariv.co.il,IL,News,Maariv
+israelhayom.com,IL,News,Israel Hayom
+partner.co.il,IL,Technology,Partner
+cellcom.co.il,IL,Technology,Cellcom
+pelephone.co.il,IL,Technology,Pelephone
+bezeq.co.il,IL,Technology,Bezeq
+elal.com,IL,Travel,El Al
+hurriyet.com.tr,TR,News,Hürriyet
+sabah.com.tr,TR,News,Sabah
+milliyet.com.tr,TR,News,Milliyet
+cumhuriyet.com.tr,TR,News,Cumhuriyet
+sozcu.com.tr,TR,News,Sözcü
+turkcell.com.tr,TR,Technology,Turkcell
+vodafone.com.tr,TR,Technology,Vodafone Turkey
+turktelekom.com.tr,TR,Technology,Türk Telekom
+thy.com,TR,Travel,Turkish Airlines
+halkbank.com.tr,TR,Banking,Halkbank
+news24.com,ZA,News,News24
+timeslive.co.za,ZA,News,TimesLive
+iol.co.za,ZA,News,Independent Online
+mtn.co.za,ZA,Technology,MTN South Africa
+vodacom.co.za,ZA,Technology,Vodacom
+telkom.co.za,ZA,Technology,Telkom
+cellc.co.za,ZA,Technology,Cell C
+standardbank.co.za,ZA,Banking,Standard Bank
+fnb.co.za,ZA,Banking,First National Bank
+absa.co.za,ZA,Banking,Absa Bank
+punchng.com,NG,News,Punch Nigeria
+vanguardngr.com,NG,News,Vanguard Nigeria
+thenationonlineng.net,NG,News,The Nation Nigeria
+premiumtimesng.com,NG,News,Premium Times
+channelstv.com,NG,News,Channels TV
+mtn.ng,NG,Technology,MTN Nigeria
+glo.com,NG,Technology,Globacom
+airtel.com.ng,NG,Technology,Airtel Nigeria
+9mobile.com.ng,NG,Technology,9mobile
+gtbank.com,NG,Banking,GTBank
+dailynation.co.ke,KE,News,Daily Nation
+standardmedia.co.ke,KE,News,The Standard
+the-star.co.ke,KE,News,The Star Kenya
+citizentv.co.ke,KE,News,Citizen TV
+kbc.co.ke,KE,News,KBC
+safaricom.co.ke,KE,Technology,Safaricom
+airtel.co.ke,KE,Technology,Airtel Kenya
+telkom.co.ke,KE,Technology,Telkom Kenya
+kcb.co.ke,KE,Banking,KCB Bank
+equitybank.co.ke,KE,Banking,Equity Bank
+claroargentina.com,AR,Technology,Claro Argentina
+lanacion.com.ar,AR,News,La Nación
+clarin.com,AR,News,Clarín
+pagina12.com.ar,AR,News,Página/12
+infobae.com,AR,News,Infobae
+ole.com.ar,AR,Sports,Olé
+personal.com.ar,AR,Technology,Personal
+movistar.com.ar,AR,Technology,Movistar Argentina
+telecom.com.ar,AR,Technology,Telecom Argentina
+mercadolibre.com.ar,AR,Commerce,MercadoLibre Argentina
+emol.com,CL,News,El Mercurio Online
+latercera.com,CL,News,La Tercera
+biobiochile.cl,CL,News,Bío Bío Chile
+cooperativa.cl,CL,News,Cooperativa
+24horas.cl,CL,News,24Horas
+entel.cl,CL,Technology,Entel Chile
+movistar.cl,CL,Technology,Movistar Chile
+wom.cl,CL,Technology,WOM Chile
+claro.cl,CL,Technology,Claro Chile
+falabella.com,CL,Commerce,Falabella
+portafolio.co,CO,Business,Portafolio Colombia
+eltiempo.com,CO,News,El Tiempo
+elespectador.com,CO,News,El Espectador
+semana.com,CO,News,Semana
+caracoltv.com,CO,News,Caracol TV
+claro.com.co,CO,Technology,Claro Colombia
+movistar.com.co,CO,Technology,Movistar Colombia
+tigo.com.co,CO,Technology,Tigo Colombia
+wom.co,CO,Technology,WOM Colombia
+mercadolibre.com.co,CO,Commerce,MercadoLibre Colombia

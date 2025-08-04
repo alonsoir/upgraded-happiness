@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+"""
+advanced_trainer_no_dns.py - VERSIÓN CON TIMING DETALLADO
+🤖 Enhanced ML Trainer para Upgraded-Happiness - MULTI-DATASET SIN DNS BIAS
+- Filtrado automático de DNS para evitar sesgo
+- Soporte múltiples datasets con mapeo correcto
+- TIMING DETALLADO para entrenamientos largos
+- Logging de progreso y ETAs
+"""
+
 import os
 import json
 import zipfile
@@ -5,7 +15,7 @@ import argparse
 from pathlib import Path
 from collections import Counter
 import joblib
-from datetime import datetime
+from datetime import datetime, timedelta
 import geoip2.database
 import numpy as np
 import pandas as pd
@@ -18,6 +28,92 @@ from imblearn.under_sampling import RandomUnderSampler
 from imblearn.pipeline import Pipeline
 from kaggle.api.kaggle_api_extended import KaggleApi
 import shap
+import time
+
+
+# -----------------------------------------------------------------------------
+# ⏰ CLASE DE TIMING DETALLADO
+# -----------------------------------------------------------------------------
+class DetailedTimer:
+    """Clase para manejar timing detallado de entrenamientos largos"""
+
+    def __init__(self):
+        self.start_time = time.time()
+        self.phase_times = {}
+        self.current_phase = None
+        self.phase_start = None
+
+    def start_phase(self, phase_name: str):
+        """Inicia una nueva fase con timing"""
+        if self.current_phase:
+            self.end_phase()
+
+        self.current_phase = phase_name
+        self.phase_start = time.time()
+        elapsed = self.get_elapsed_time()
+        print(f"\n⏰ [{elapsed}] INICIANDO: {phase_name}")
+
+    def end_phase(self):
+        """Termina la fase actual"""
+        if self.current_phase and self.phase_start:
+            duration = time.time() - self.phase_start
+            self.phase_times[self.current_phase] = duration
+            print(f"✅ [{self.format_duration(duration)}] COMPLETADO: {self.current_phase}")
+            self.current_phase = None
+            self.phase_start = None
+
+    def get_elapsed_time(self) -> str:
+        """Obtiene tiempo transcurrido total"""
+        elapsed = time.time() - self.start_time
+        return self.format_duration(elapsed)
+
+    def format_duration(self, seconds: float) -> str:
+        """Formatea duración en formato legible"""
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}m"
+        else:
+            hours = seconds / 3600
+            minutes = (seconds % 3600) / 60
+            return f"{hours:.1f}h {minutes:.0f}m"
+
+    def log_progress(self, message: str):
+        """Log de progreso con timestamp"""
+        elapsed = self.get_elapsed_time()
+        print(f"📊 [{elapsed}] {message}")
+
+    def estimate_remaining(self, current_step: int, total_steps: int) -> str:
+        """Estima tiempo restante basado en progreso"""
+        if current_step == 0:
+            return "calculando..."
+
+        elapsed = time.time() - self.start_time
+        rate = elapsed / current_step
+        remaining_steps = total_steps - current_step
+        estimated_remaining = rate * remaining_steps
+
+        eta = datetime.now() + timedelta(seconds=estimated_remaining)
+        return f"ETA: {eta.strftime('%H:%M:%S')} ({self.format_duration(estimated_remaining)} restante)"
+
+    def print_summary(self):
+        """Imprime resumen final de tiempos"""
+        total_time = time.time() - self.start_time
+        print(f"\n⏰ RESUMEN DE TIEMPOS - TOTAL: {self.format_duration(total_time)}")
+        print("=" * 60)
+
+        for phase, duration in self.phase_times.items():
+            percentage = (duration / total_time) * 100
+            print(f"  📊 {phase:<30} {self.format_duration(duration):>10} ({percentage:.1f}%)")
+
+        print("=" * 60)
+        finish_time = datetime.now()
+        print(f"🏁 Completado: {finish_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+
+# Instancia global del timer
+timer = DetailedTimer()
 
 
 # -----------------------------------------------------------------------------
@@ -142,24 +238,81 @@ class GeoEnricher:
 
 
 # -----------------------------------------------------------------------------
-# ⬇️ CARGA DE DATASETS COMBINADOS
+# 🚫 FILTRO DNS - NUEVA FUNCIÓN CRÍTICA
+# -----------------------------------------------------------------------------
+def filter_dns_traffic(df, dataset_name):
+    """
+    Filtra el tráfico DNS para evitar sesgo de que DNS = ataque
+    """
+    initial_count = len(df)
+
+    # Detectar columnas de servicio posibles
+    service_columns = []
+    for col in ['service', 'Service', 'protocol_type', 'service_name']:
+        if col in df.columns:
+            service_columns.append(col)
+
+    if not service_columns:
+        print(f"   ⚠️  No se encontró columna de servicio en {dataset_name}")
+        return df
+
+    # Filtrar DNS de todas las columnas de servicio detectadas
+    dns_filtered = 0
+    for col in service_columns:
+        if col in df.columns:
+            # Contar DNS antes del filtro
+            dns_mask = df[col].astype(str).str.lower().str.contains('dns', na=False)
+            dns_count = dns_mask.sum()
+
+            if dns_count > 0:
+                print(f"   🚫 Filtrando {dns_count} filas DNS de columna '{col}' en {dataset_name}")
+
+                # Analizar labels antes de eliminar
+                if 'label' in df.columns or 'Label' in df.columns:
+                    label_col = 'label' if 'label' in df.columns else 'Label'
+                    dns_labels = df[dns_mask][label_col].value_counts()
+                    print(f"      📊 DNS labels: {dict(dns_labels)}")
+
+                # Filtrar DNS
+                df = df[~dns_mask]
+                dns_filtered += dns_count
+
+    final_count = len(df)
+    total_removed = initial_count - final_count
+
+    print(f"   ✅ {dataset_name}: {initial_count} → {final_count} filas ({total_removed} DNS removidas)")
+
+    return df
+
+
+# -----------------------------------------------------------------------------
+# ⬇️ CARGA DE DATASETS COMBINADOS (MODIFICADO)
 # -----------------------------------------------------------------------------
 def load_combined_datasets(config):
-    dataset_names = config['ml'].get('datasets', ["UNSW-NB15", "CSE-CIC-IDS2018", "TON-IoT"])
+    dataset_names = config['ml'].get('datasets', ["UNSW-NB15"])
     datasets = []
 
     for name in dataset_names:
         try:
+            print(f"\n[📁] Procesando dataset: {name}")
             df = load_dataset(config, name)
+
+            # NUEVO: Filtrar DNS ANTES de continuar
+            print(f"[🚫] Filtrando tráfico DNS de {name}...")
+            df = filter_dns_traffic(df, name)
+
             df['dataset_source'] = name
             datasets.append(df)
-            print(f"[✅] {name} cargado con {len(df)} registros")
+            print(f"[✅] {name} procesado con {len(df)} registros (sin DNS)")
 
-            # Verificar etiquetas en el dataset
+            # Verificar etiquetas en el dataset después del filtro
             if 'label' in df.columns:
-                print(f"  - Distribución de etiquetas: {dict(df['label'].value_counts())}")
+                print(f"  - Distribución de etiquetas post-filtro: {dict(df['label'].value_counts())}")
+            elif 'Label' in df.columns:
+                print(f"  - Distribución de etiquetas post-filtro: {dict(df['Label'].value_counts())}")
             else:
-                print("  - No se encontró columna 'label'")
+                print("  - No se encontró columna 'label' o 'Label'")
+
         except Exception as e:
             print(f"[❌] Error cargando {name}: {str(e)}")
 
@@ -168,80 +321,22 @@ def load_combined_datasets(config):
 
     # Combinar datasets
     combined = pd.concat(datasets, ignore_index=True)
-    print(f"[📊] Total de registros combinados: {len(combined)}")
+    print(f"\n[📊] Total de registros combinados (sin DNS): {len(combined)}")
+
+    # Verificar distribución por dataset
+    print(f"[📋] Registros por dataset:")
+    for name in dataset_names:
+        count = len(combined[combined['dataset_source'] == name])
+        print(f"  - {name}: {count:,} registros")
+
     return combined
-
-
-# -----------------------------------------------------------------------------
-# 🧠 ENTRENAMIENTO DE ALTA PRECISIÓN
-# -----------------------------------------------------------------------------
-def train_high_precision_rf(X_train, y_train, config):
-    # Parámetros optimizados para máxima precisión
-    rf_params = {
-        'n_estimators': 2000,
-        'max_depth': 120,
-        'min_samples_split': 2,
-        'min_samples_leaf': 1,
-        'max_features': 'log2',
-        'bootstrap': True,
-        'oob_score': True,
-        'n_jobs': -1,
-        'random_state': 42,
-        'class_weight': 'balanced_subsample',
-        'ccp_alpha': 0.0001,
-        'max_samples': 0.8
-    }
-
-    # Sobreescribir con configuración si existe
-    if 'random_forest' in config['ml']['models']:
-        rf_params.update(config['ml']['models']['random_forest'])
-
-    print("[🎯] Entrenando RandomForest para máxima precisión:")
-    for k, v in rf_params.items():
-        print(f"  - {k}: {v}")
-
-    # Validación cruzada estratificada
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    fold_scores = []
-    models = []
-
-    for fold, (train_idx, val_idx) in enumerate(skf.split(X_train, y_train)):
-        X_fold_train, y_fold_train = X_train[train_idx], y_train[train_idx]
-        X_val, y_val = X_train[val_idx], y_train[val_idx]
-
-        model = RandomForestClassifier(**rf_params)
-        model.fit(X_fold_train, y_fold_train)
-
-        # Calcular precisión en el fold de validación
-        y_pred = model.predict(X_val)
-        accuracy = np.mean(y_pred == y_val)
-        fold_scores.append(accuracy)
-        models.append(model)
-
-        print(f"[🔍] Fold {fold + 1} - Precisión: {accuracy:.4f}")
-
-    # Seleccionar el mejor modelo
-    best_idx = np.argmax(fold_scores)
-    best_model = models[best_idx]
-    print(f"[🏆] Mejor fold: {best_idx + 1} con precisión {fold_scores[best_idx]:.4f}")
-
-    # Entrenar modelo final con todos los datos
-    print("[🚀] Entrenando modelo final con todos los datos...")
-    final_model = RandomForestClassifier(**rf_params)
-    final_model.fit(X_train, y_train)
-
-    # Usar SHAP para explicabilidad
-    print("[🔎] Generando explicaciones SHAP...")
-    explainer = shap.TreeExplainer(final_model)
-    shap_values = explainer.shap_values(X_train[:1000])  # Muestra representativa
-
-    return final_model, explainer
 
 
 def load_dataset(config, dataset_name, max_rows=0):
     base_data_dir = Path("./data")
     base_data_dir.mkdir(exist_ok=True)
 
+    # ACTUALIZADO: Configuraciones para los 3 datasets
     dataset_config = {
         "UNSW-NB15": {
             "kaggle": "mrwellsdavid/unsw-nb15",
@@ -249,19 +344,14 @@ def load_dataset(config, dataset_name, max_rows=0):
             "label_col": "label"
         },
         "CSE-CIC-IDS2018": {
-            "kaggle": "devendra416/ddos-datasets",
-            "csv_file": "ddos_data.csv",
-            "label_col": "Label"
+            "kaggle": "solarmainframe/ids-intrusion-csv",
+            "csv_file": "Train_data.csv",
+            "label_col": "Label"  # Será detectado automáticamente
         },
         "TON-IoT": {
-            "kaggle": "kyeong500/toniot-network-dataset",
-            "csv_file": "TON_IoT_Network_Dataset_1.csv",
+            "kaggle": "programmer3/ton-iot-network-intrusion-dataset",
+            "csv_file": "TON_IoT_Network_dataset.csv",
             "label_col": "label"
-        },
-        "CIC-Bell-DNS-EXF-2021": {
-            "kaggle": "jesucristo/cicbell-dns-exf-2021",
-            "csv_file": "dns_exfiltration.csv",
-            "label_col": "malicious"
         }
     }
 
@@ -289,9 +379,26 @@ def load_dataset(config, dataset_name, max_rows=0):
         api.authenticate()
         api.dataset_download_files(ds_cfg["kaggle"], path=base_data_dir, quiet=False)
 
-        zip_file = base_data_dir / f"{dataset_name}.zip"
-        if not zip_file.exists():
-            raise FileNotFoundError(f"No se encontró el archivo descargado: {zip_file}")
+        # Buscar archivo ZIP descargado
+        possible_zip_names = [
+            f"{dataset_name}.zip",
+            f"{ds_cfg['kaggle'].split('/')[-1]}.zip"
+        ]
+
+        zip_file = None
+        for zip_name in possible_zip_names:
+            potential_zip = base_data_dir / zip_name
+            if potential_zip.exists():
+                zip_file = potential_zip
+                break
+
+        if not zip_file:
+            # Buscar cualquier ZIP recién descargado
+            zip_files = list(base_data_dir.glob("*.zip"))
+            if zip_files:
+                zip_file = max(zip_files, key=os.path.getctime)  # Más reciente
+            else:
+                raise FileNotFoundError(f"No se encontró archivo ZIP para {dataset_name}")
 
         print(f"[📦] Extrayendo {zip_file}...")
         with zipfile.ZipFile(zip_file, 'r') as zip_ref:
@@ -299,13 +406,22 @@ def load_dataset(config, dataset_name, max_rows=0):
 
         # Buscar archivo CSV
         csv_path = None
+
+        # Primero buscar el archivo específico
         for file in base_data_dir.glob("**/*.csv"):
             if ds_cfg["csv_file"] in file.name:
                 csv_path = file
                 break
 
+        # Si no se encuentra, tomar el CSV más grande
         if not csv_path:
-            raise FileNotFoundError(f"No se encontró {ds_cfg['csv_file']} en {zip_file}")
+            csv_files = list(base_data_dir.glob("**/*.csv"))
+            if csv_files:
+                csv_path = max(csv_files, key=lambda x: x.stat().st_size)
+                print(f"[📄] Usando CSV más grande encontrado: {csv_path.name}")
+
+        if not csv_path:
+            raise FileNotFoundError(f"No se encontró archivo CSV para {dataset_name}")
 
         print(f"[✅] {dataset_name} cargado desde: {csv_path}")
         df = pd.read_csv(csv_path, nrows=max_rows if max_rows > 0 else None)
@@ -329,7 +445,7 @@ def load_dataset(config, dataset_name, max_rows=0):
 
 
 # -----------------------------------------------------------------------------
-# 🧹 PREPROCESAMIENTO AVANZADO
+# 🧹 PREPROCESAMIENTO AVANZADO (SIN CAMBIOS)
 # -----------------------------------------------------------------------------
 def advanced_preprocessing(df, geo_enricher):
     # 1. Manejo de características temporales
@@ -392,8 +508,9 @@ def advanced_preprocessing(df, geo_enricher):
     if 'proto' in df.columns:
         df['proto'] = df['proto'].str.lower().str.replace('[^a-z0-9]', '', regex=True)
 
-    # 4. Eliminación de columnas problemáticas
-    drop_cols = ['id', 'attack_cat', 'flow_id', 'Unnamed: 0', 'Label']
+    # 4. Eliminación de columnas problemáticas (CORREGIDO - NO eliminar Label)
+    drop_cols = ['id', 'attack_cat', 'flow_id', 'Unnamed: 0']
+    # NOTA: NO eliminamos 'Label' porque contiene las etiquetas de clasificación en CSE-CIC-IDS2018
     df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors='ignore')
 
     # 5. Codificación de variables categóricas
@@ -419,7 +536,7 @@ def advanced_preprocessing(df, geo_enricher):
 
 
 # -----------------------------------------------------------------------------
-# ⚖️ BALANCEO HÍBRIDO
+# ⚖️ BALANCEO HÍBRIDO (SIN CAMBIOS)
 # -----------------------------------------------------------------------------
 def hybrid_balancing(X, y):
     print("[⚖️] Aplicando balanceo híbrido...")
@@ -456,15 +573,16 @@ def hybrid_balancing(X, y):
 
 
 # -----------------------------------------------------------------------------
-# 🧠 ENTRENAMIENTO AGGRESIVO DE RANDOM FOREST
+# 🧠 ENTRENAMIENTO DE ALTA PRECISIÓN (SIN CAMBIOS)
 # -----------------------------------------------------------------------------
-def train_aggressive_rf(X_train, y_train, config):
+def train_high_precision_rf(X_train, y_train, config):
+    # Parámetros optimizados para máxima precisión
     rf_params = {
-        'n_estimators': 1500,
-        'max_depth': 100,
+        'n_estimators': 2000,
+        'max_depth': 120,
         'min_samples_split': 2,
         'min_samples_leaf': 1,
-        'max_features': 'sqrt',
+        'max_features': 'log2',
         'bootstrap': True,
         'oob_score': True,
         'n_jobs': -1,
@@ -478,21 +596,61 @@ def train_aggressive_rf(X_train, y_train, config):
     if 'random_forest' in config['ml']['models']:
         rf_params.update(config['ml']['models']['random_forest'])
 
-    print("[🌲] Entrenando RandomForest con parámetros agresivos:")
+    print("[🎯] Entrenando RandomForest para máxima precisión:")
     for k, v in rf_params.items():
         print(f"  - {k}: {v}")
 
-    model = RandomForestClassifier(**rf_params)
-    model.fit(X_train, y_train)
+    # Validación cruzada estratificada con timing detallado
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    fold_scores = []
+    models = []
 
-    if hasattr(model, 'oob_score_'):
-        print(f"[🔍] Precisión OOB: {model.oob_score_:.4f}")
+    total_folds = 5
+    timer.log_progress(f"Iniciando validación cruzada: {total_folds} folds")
 
-    return model
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X_train, y_train)):
+        fold_start = time.time()
+
+        X_fold_train, y_fold_train = X_train[train_idx], y_train[train_idx]
+        X_val, y_val = X_train[val_idx], y_train[val_idx]
+
+        timer.log_progress(f"Fold {fold + 1}/{total_folds}: Entrenando con {len(X_fold_train):,} muestras...")
+
+        model = RandomForestClassifier(**rf_params)
+        model.fit(X_fold_train, y_fold_train)
+
+        # Calcular precisión en el fold de validación
+        y_pred = model.predict(X_val)
+        accuracy = np.mean(y_pred == y_val)
+        fold_scores.append(accuracy)
+        models.append(model)
+
+        fold_duration = time.time() - fold_start
+        remaining_time = timer.estimate_remaining(fold + 1, total_folds)
+
+        print(
+            f"[🔍] Fold {fold + 1} - Precisión: {accuracy:.4f} - Tiempo: {timer.format_duration(fold_duration)} - {remaining_time}")
+
+    # Seleccionar el mejor modelo
+    best_idx = np.argmax(fold_scores)
+    best_model = models[best_idx]
+    print(f"[🏆] Mejor fold: {best_idx + 1} con precisión {fold_scores[best_idx]:.4f}")
+
+    # Entrenar modelo final con todos los datos
+    timer.log_progress("Entrenando modelo final con todos los datos...")
+    final_model = RandomForestClassifier(**rf_params)
+    final_model.fit(X_train, y_train)
+
+    # Usar SHAP para explicabilidad
+    timer.log_progress("Generando explicaciones SHAP (muestra de 1000)...")
+    explainer = shap.TreeExplainer(final_model)
+    shap_values = explainer.shap_values(X_train[:1000])  # Muestra representativa
+
+    return final_model, explainer
 
 
 # -----------------------------------------------------------------------------
-# 📊 EVALUACIÓN AVANZADA
+# 📊 EVALUACIÓN AVANZADA (SIN CAMBIOS)
 # -----------------------------------------------------------------------------
 def advanced_evaluation(model, X_test, y_test):
     print("[🧪] Evaluando modelo...")
@@ -537,7 +695,7 @@ def advanced_evaluation(model, X_test, y_test):
 
 
 # -----------------------------------------------------------------------------
-# 💾 GUARDADO DE ARTEFACTOS
+# 💾 GUARDADO DE ARTEFACTOS (SIN CAMBIOS)
 # -----------------------------------------------------------------------------
 def save_advanced_artifacts(model, explainer, config, features, geo_enricher, evaluation_metrics, scaler):
     os.makedirs("models", exist_ok=True)
@@ -553,16 +711,21 @@ def save_advanced_artifacts(model, explainer, config, features, geo_enricher, ev
     explainer_path = model_dir / "shap_explainer.pkl"
     joblib.dump(explainer, explainer_path)
 
-    # 3. Guardar metadatos detallados
+    # 3. Guardar metadatos detallados (ACTUALIZADO con timing)
     metadata = {
         "training_date": timestamp,
+        "dns_filtered": True,  # NUEVO
+        "datasets_used": config['ml'].get('datasets', []),  # NUEVO
+        "timing_info": {  # NUEVO
+            "total_training_time": timer.get_elapsed_time(),
+            "phase_times": timer.phase_times,
+            "training_start": datetime.fromtimestamp(timer.start_time).isoformat()
+        },
         "feature_set": {
             "features": features,
             "descriptions": {feat: FEATURE_DESCRIPTIONS.get(feat, "Descripción no disponible")
                              for feat in features}
         },
-
-        "datasets": config['ml'].get('datasets', []),
         "model_params": model.get_params(),
         "geo_config": {
             "hq_coords": config['geo']['hq_coords'],
@@ -574,7 +737,7 @@ def save_advanced_artifacts(model, explainer, config, features, geo_enricher, ev
 
     metadata_path = model_dir / "metadata.json"
     with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=4)
+        json.dump(metadata, f, indent=4, default=str)
 
     # 4. Guardar sistema de reputación ASN
     asn_reputation = build_asn_reputation(model, features)
@@ -591,6 +754,8 @@ def save_advanced_artifacts(model, explainer, config, features, geo_enricher, ev
     print(f"  - Escalador: {scaler_path}")
     print(f"  - SHAP Explainer: {explainer_path}")
     print(f"  - Reputación ASN: {asn_path}")
+
+    timer.log_progress(f"Todos los artefactos guardados en {model_dir}")
 
 
 def generate_scapy_template(features):
@@ -635,29 +800,46 @@ def build_asn_reputation(model, features):
 
 
 # -----------------------------------------------------------------------------
-# 🚀 FUNCIÓN PRINCIPAL
+# 🚀 FUNCIÓN PRINCIPAL (MODIFICADA PARA MÚLTIPLES DATASETS)
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# 🚀 FUNCIÓN PRINCIPAL CON TIMING DETALLADO
 # -----------------------------------------------------------------------------
 def main():
+    print("🚀 ADVANCED TRAINER v2.3 - MULTI-DATASET CON TIMING DETALLADO")
+    print("=" * 70)
+    start_time = datetime.now()
+    print(f"🕐 Iniciado: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    timer.start_phase("Configuración inicial")
     config = load_config()
     geo_enricher = GeoEnricher(config)
+    timer.end_phase()
 
-    # Cargar y combinar datasets
+    # Cargar y combinar datasets (CON FILTRO DNS)
+    timer.start_phase("Carga y combinación de datasets")
     print("[🔍] Cargando y combinando datasets...")
+    print(f"[📋] Datasets configurados: {config['ml']['datasets']}")
     df = load_combined_datasets(config)
+    timer.log_progress(f"Datasets combinados: {len(df):,} registros")
+    timer.end_phase()
 
     # Preprocesamiento avanzado
-    print("[🧹] Realizando preprocesamiento avanzado...")
+    timer.start_phase("Preprocesamiento avanzado")
+    print("\n[🧹] Realizando preprocesamiento avanzado...")
     df = advanced_preprocessing(df, geo_enricher)
+    timer.log_progress(f"Preprocesamiento completado: {df.shape}")
+    timer.end_phase()
 
-    # Asignación robusta de etiquetas
+    # Asignación robusta de etiquetas (MEJORADA PARA MÚLTIPLES DATASETS)
+    timer.start_phase("Mapeo de etiquetas")
     print("[🏷️] Asignando etiquetas unificadas...")
 
-    # Definir mapeos de etiquetas por dataset (CORREGIDO)
+    # Definir mapeos de etiquetas por dataset (CORREGIDO FINALMENTE)
     label_mappings = {
-        'UNSW-NB15': ('label', lambda x: x),  # FIX: Mantener valores originales
-        'CSE-CIC-IDS2018': ('Label', lambda x: 1 if x != 'Benign' else 0),
-        'TON-IoT': ('label', lambda x: 1 if x != 'normal' else 0),
-        'CIC-Bell-DNS-EXF-2021': ('malicious', lambda x: int(x))
+        'UNSW-NB15': ('label', lambda x: x),  # Mantener valores originales
+        'CSE-CIC-IDS2018': ('Label', lambda x: 0 if str(x).lower() == 'benign' else 1),  # CORRECTO: Label mayúscula
+        'TON-IoT': ('label', lambda x: 1 if x != 'normal' else 0)
     }
 
     # Inicializar columna de etiqueta unificada
@@ -666,6 +848,7 @@ def main():
     for name in config['ml']['datasets']:
         if name in label_mappings:
             col_name, converter = label_mappings[name]
+
             if col_name in df.columns:
                 print(f"[🔖] Mapeando etiquetas para {name} usando columna '{col_name}'")
 
@@ -679,20 +862,43 @@ def main():
                 print(f"  - Distribución después de mapeo: {dict(counts)}")
             else:
                 print(f"[⚠️] Columna '{col_name}' no encontrada en {name}")
-                raise ValueError(f"Columna '{col_name}' no encontrada en dataset {name}")
+                # Debug: mostrar columnas disponibles
+                subset = df[df['dataset_source'] == name]
+                if not subset.empty:
+                    print(f"  - Columnas disponibles: {list(subset.columns)}")
+                    # Buscar columnas parecidas
+                    similar_cols = [c for c in subset.columns if 'label' in c.lower()]
+                    if similar_cols:
+                        print(f"  - Columnas similares encontradas: {similar_cols}")
+                continue
         else:
             print(f"[⚠️] No se encontró mapeo para {name}")
-            raise ValueError(f"No se encontró mapeo para dataset {name}")
+            continue
 
     # Verificar que todas las etiquetas estén asignadas
     if df['unified_label'].isna().any():
         missing_count = df['unified_label'].isna().sum()
         print(f"[❌] Error: {missing_count} filas sin etiqueta asignada")
+
+        # Mostrar diagnóstico
+        print("[🔍] Diagnóstico por dataset:")
+        for name in config['ml']['datasets']:
+            subset = df[df['dataset_source'] == name]
+            if not subset.empty:
+                missing_in_subset = subset['unified_label'].isna().sum()
+                print(f"  - {name}: {missing_in_subset} filas sin etiqueta")
+
         raise ValueError("Algunas filas no tienen etiqueta asignada")
 
     # Verificar distribución global
     class_counts = df['unified_label'].value_counts()
     print(f"\n[📊] Distribución global de etiquetas:\n{class_counts}")
+
+    # Calcular porcentajes
+    total = len(df)
+    normal_pct = (class_counts.get(0.0, 0) / total) * 100
+    attack_pct = (class_counts.get(1.0, 0) / total) * 100
+    timer.log_progress(f"Distribución final: {normal_pct:.1f}% normal, {attack_pct:.1f}% ataques")
 
     if len(class_counts) < 2:
         print("[🔍] Analizando distribución por dataset:")
@@ -704,8 +910,10 @@ def main():
 
         raise ValueError(
             "Solo se encontró una clase en los datos. Se necesitan ambas clases (benigno/maligno) para entrenar.")
+    timer.end_phase()
 
     # Preparar datos para entrenamiento
+    timer.start_phase("Preparación de datos")
     print("[⚙️] Preparando datos para entrenamiento...")
     X = df.drop(columns=['unified_label', 'dataset_source'])
     y = df['unified_label']
@@ -741,11 +949,15 @@ def main():
     class_dist = Counter(y)
     print(f"[⚖️] Distribución antes de balanceo: {class_dist}")
     print(f"[🔍] Valores únicos en y: {np.unique(y)}")
+    timer.end_phase()
 
     # Balanceo híbrido
+    timer.start_phase("Balanceo de datos")
     print("[⚖️] Aplicando balanceo híbrido...")
     try:
         X_balanced, y_balanced = hybrid_balancing(X.values, y.values)
+        balanced_dist = Counter(y_balanced)
+        timer.log_progress(f"Balanceo completado: {dict(balanced_dist)}")
     except Exception as e:
         print(f"[❌] Error en balanceo: {e}")
         print("[🔍] Verificando distribución por dataset:")
@@ -755,8 +967,10 @@ def main():
                 counts = subset['unified_label'].value_counts()
                 print(f"  - {name}: {dict(counts)}")
         raise
+    timer.end_phase()
 
     # División de datos
+    timer.start_phase("División de datos")
     print("[✂️] Dividiendo datos...")
     X_train, X_test, y_train, y_test = train_test_split(
         X_balanced, y_balanced,
@@ -765,36 +979,77 @@ def main():
         random_state=42
     )
 
+    train_size = len(X_train)
+    test_size = len(X_test)
+    timer.log_progress(f"División completada: {train_size:,} entrenamiento, {test_size:,} prueba")
+    timer.end_phase()
+
     # Escalado de características
+    timer.start_phase("Escalado de características")
     print("[📏] Escalando características...")
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
+    timer.end_phase()
 
     # Entrenamiento de alta precisión
+    timer.start_phase("Entrenamiento del modelo")
     print("[🧠] Entrenando modelo de alta precisión...")
+    timer.log_progress("Iniciando entrenamiento RandomForest con validación cruzada...")
     model, explainer = train_high_precision_rf(X_train, y_train, config)
+    timer.log_progress("Entrenamiento del modelo completado")
+    timer.end_phase()
 
     # Evaluación avanzada
+    timer.start_phase("Evaluación del modelo")
     print("[📊] Evaluando modelo...")
     eval_metrics = advanced_evaluation(model, X_test, y_test)
+    timer.end_phase()
 
     # Guardar artefactos con gestión de características
+    timer.start_phase("Guardado de artefactos")
     print("[💾] Guardando artefactos...")
     save_advanced_artifacts(model, explainer, config, feature_names, geo_enricher, eval_metrics, scaler)
 
-    # Reemplazar por:
+    # Guardar feature order
     with open("models/feature_order.txt", "w") as f:
-        f.write("\n".join(feature_names))  # ✅ CORRECTO
+        f.write("\n".join(feature_names))
+    timer.end_phase()
 
-    print("\n✅ Entrenamiento avanzado completado con éxito!")
+    # Resumen final
+    timer.print_summary()
+
+    final_time = datetime.now()
+    total_duration = final_time - start_time
+
+    print(f"\n✅ ENTRENAMIENTO AVANZADO COMPLETADO CON ÉXITO!")
+    print(f"🚫 DNS filtrado de todos los datasets para evitar sesgo")
+    print(f"📊 Datasets utilizados: {config['ml']['datasets']}")
+    print(f"⏰ Tiempo total: {total_duration}")
+    print(f"🏁 Finalizado: {final_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Guardar resumen de timing
+    timing_summary = {
+        "start_time": start_time.isoformat(),
+        "end_time": final_time.isoformat(),
+        "total_duration_seconds": total_duration.total_seconds(),
+        "phase_times": timer.phase_times,
+        "datasets_used": config['ml']['datasets'],
+        "final_distribution": dict(Counter(y_balanced)),
+        "model_metrics": eval_metrics
+    }
+
+    with open("models/training_timing_summary.json", "w") as f:
+        json.dump(timing_summary, f, indent=2, default=str)
+
+    print(f"📊 Resumen de timing guardado en: models/training_timing_summary.json")
 
 
 # -----------------------------------------------------------------------------
 # 🏁 EJECUCIÓN
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Entrenador avanzado de modelos de seguridad")
+    parser = argparse.ArgumentParser(description="Entrenador avanzado de modelos de seguridad - SIN DNS")
     parser.add_argument("--max_rows", type=int, default=0,
                         help="Límite de filas a cargar por dataset (0 = sin límite)")
     parser.add_argument("--use_local", action="store_true",
