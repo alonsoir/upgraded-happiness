@@ -5,301 +5,204 @@
 [![Network Security](https://img.shields.io/badge/Network-Security-red.svg)]()
 [![Real-time Detection](https://img.shields.io/badge/Detection-Real--time-orange.svg)]()
 
+---
+
 ## 🎯 Misión del Proyecto
 
 **Upgraded Happiness** es un sistema avanzado de detección de amenazas de red que combina técnicas de Machine Learning, análisis de tráfico en tiempo real y capacidades de firewall inteligente para crear una defensa multicapa contra amenazas de red.
-![pantallazo1.png](pantallazos/pantallazo1.png)
-![pantallazo2.png](pantallazos/pantallazo2.png)
-![pantallazo3.png](pantallazos/pantallazo3.png)
-![pantallazo4.png](pantallazos/pantallazo4.png)
-![pantallazo5.png](pantallazos/pantallazo5.png)
-![pantallazo6.png](pantallazos/pantallazo6.png)
-
-## 🏆 **HITO ALCANZADO - Q3 2025**
-
-✅ **Sistema de Detección Tricapa Operativo**: Hemos logrado entrenar exitosamente tres modelos especializados que trabajhan en conjunto:
-
-1. **🚨 Detector de Ataques**: Identifica si hay un ataque o no en el tráfico
-2. **🌐 Detector de Tráfico Web Normal**: Reconoce patrones legítimos de navegación web
-3. **🏢 Detector de Tráfico Interno Normal**: Distingue comunicaciones internas legítimas
-
-✅ **Híbrido Sniffer/ML-Detector**: Sistema integrado que escanea la red, extrae features y las procesa a través de los tres modelos para una detección precisa.
-
-✅ **Superación de Datasets Corruptos**: Después de encontrar múltiples datasets oficiales con valores desviados incompatibles con Scapy, aplicamos método científico riguroso para crear nuestro propio pipeline de datos confiable.
-
-## 🏗️ Arquitectura del Sistema
-
-### 🧠 Componentes Core
-
-#### **Sistema de Detección ML**
-- `lightweight_ml_detector.py` - Motor principal de inferencia ML
-- `rf_production_sniffer_compatible.joblib` - Modelo de detección de ataques (10.1MB)
-- `web_normal_detector.joblib` - Modelo de tráfico web normal (2.5MB)  
-- `internal_normal_detector.joblib` - Modelo de tráfico interno (2.3MB)
-
-#### **Captura y Análisis de Red**
-- `fixed_service_sniffer.py` - Sniffer de red optimizado
-- `enhanced_network_feature_extractor.py` - Extractor de características de red
-- `promiscuous_agent.py` / `promiscuous_agent_v2.py` - Agentes de captura promiscua
-
-#### **Enriquecimiento y Geolocalización**
-- `geoip_enricher.py` - Enriquecimiento con datos geográficos (75.6KB, 1185 líneas)
-- Soporte para GeoLite2 con actualizaciones automáticas
-
-#### **Firewall Inteligente**
-- `simple_firewall_agent.py` - Agente de firewall con ML integration (51.8KB, 950 líneas)
-- Reglas dinámicas basadas en predicciones ML
-
-#### **Dashboard y Monitorización**
-- `real_zmq_dashboard_with_firewall.py` - Dashboard principal (154.6KB, 2625 líneas)
-- Comunicación ZeroMQ entre componentes
-- Interfaz web para monitorización en tiempo real
-
-### 🤖 Pipeline de Machine Learning
-
-#### **Entrenamiento de Modelos**
-- `advanced_trainer.py` / `advanced_trainer_fixed.py` - Entrenadores principales
-- `sniffer_compatible_retrainer.py` - Re-entrenamiento con datos de sniffer
-- `cicids_retrainer.py` - Entrenamiento especializado con CICIDS 2017
-- `validate_ensemble_models.py` - Validación de modelos ensemble
-
-#### **Procesamiento de Datos**
-- `cicids_traditional_processor.py` - Procesador de CICIDS 2017 limpio
-- `extract_required_features.py` - Extracción de features críticas
-- `enhanced_network_feature_extractor.py` - Extractor compatible con Scapy
-
-#### **Generación de Datos de Entrenamiento**
-- `ml_sniffer.py` - Sniffer especializado para ML
-- `fixed_ml_network_sniffer.py` - Sniffer corregido para features
-- `traffic_generator.py` - Generador de tráfico para testing
-
-## 🚀 Inicio Rápido
-
-### Prerrequisitos
-```bash
-# Python 3.8+ y dependencias
-pip install -r requirements.txt
-
-# Permisos para captura de red
-sudo setcap cap_net_raw+ep $(which python3)
-```
-
-### Configuración Inicial
-```bash
-# Crear configuraciones necesarias
-make setup
-
-# Verificar dependencias
-make check-deps
-
-# Descargar base de datos GeoIP
-make check-geoip
-```
-
-### Ejecución del Sistema Completo
-```bash
-# Modo desarrollo - todos los componentes
-make dev-start
-
-# Solo componentes core
-make start-core
-
-# Con componentes avanzados
-make start-advanced
-```
-
-### Acceso al Dashboard
-- **Dashboard Principal**: http://localhost:8050
-- **Estado del Sistema**: `make status`
-- **Logs en Tiempo Real**: `make logs-tail`
-
-## 📊 Modelos de Machine Learning
-
-### 🏆 Modelos en Producción
-
-| Modelo | Propósito | Tamaño | Estado |
-|--------|-----------|---------|---------|
-| `rf_production_sniffer_compatible.joblib` | Detección de ataques | 10.1MB | ✅ PRODUCCIÓN |
-| `web_normal_detector.joblib` | Tráfico web normal | 2.5MB | ✅ PRODUCCIÓN |
-| `internal_normal_detector.joblib` | Tráfico interno normal | 2.3MB | ✅ PRODUCCIÓN |
-
-### 📈 Datasets Utilizados
-
-- **CICIDS 2017** (Procesado): 1044.1MB - Dataset principal limpio y verificado
-- **CSE-CIC-IDS2018**: 4051.9MB - Dataset complementario
-- **TON-IoT**: 4050.9MB - Datos de IoT para casos especializados
-
-## ⚙️ Configuración
-
-### Archivos de Configuración Principales
-- `config/lightweight_ml_detector_config.json` - Configuración del detector ML
-- `config/dashboard_config.json` - Configuración del dashboard
-- `config/simple_firewall_agent_config.json` - Reglas de firewall
-- `config/geoip_enricher_config.json` - Configuración de geolocalización
-
-### Variables de Entorno
-```bash
-export GEOIP_DB_PATH="./GeoLite2-City.mmdb"
-export ML_MODEL_PATH="./models/"
-export LOG_LEVEL="INFO"
-```
-
-## 🔧 Comandos Make Principales
-
-### Operación
-```bash
-make start          # Iniciar sistema completo
-make stop           # Parar todos los componentes
-make restart        # Reiniciar sistema
-make status         # Estado detallado
-```
-
-### Desarrollo
-```bash
-make dev-start      # Modo desarrollo
-make debug          # Modo debug con logs
-make test           # Ejecutar tests
-make clean          # Limpiar archivos temporales
-```
-
-### Monitorización
-```bash
-make monitor        # Monitor en tiempo real
-make logs           # Ver logs
-make logs-tail      # Seguir logs en vivo
-```
-
-## 📁 Estructura del Proyecto
-
-```
-upgraded-happiness/
-├── core/                          # Componentes del sistema principal
-│   ├── lightweight_ml_detector.py
-│   ├── simple_firewall_agent.py
-│   └── geoip_enricher.py
-├── ml_pipeline/                   # Pipeline de Machine Learning
-│   ├── advanced_trainer.py
-│   ├── model_analyzer_sniffer.py
-│   └── validate_ensemble_models.py
-├── data_pipeline/                 # Procesamiento de datasets
-│   ├── cicids_traditional_processor.py
-│   └── extract_required_features.py
-├── models/                        # Modelos entrenados
-│   ├── production/
-│   └── archive/
-├── config/                        # Configuraciones
-├── logs/                          # Archivos de log
-└── docs/                          # Documentación
-```
-
-## 🧪 Testing y Validación
-
-### Tests Automatizados
-```bash
-# Ejecutar suite completa de tests
-make test
-
-# Validar modelos específicos
-python validate_ensemble_models.py
-
-# Benchmark de performance
-make benchmark
-```
-
-### Validación Manual
-```bash
-# Verificar funcionamiento del sistema
-make verify
-
-# Estado detallado de componentes
-make status-detailed
-
-# Análisis de tráfico en vivo
-python ml_sniffer.py --live-analysis
-```
-
-## 📈 Monitorización y Métricas
-
-### Dashboard Web
-El dashboard principal proporciona:
-- **Estado en tiempo real** de todos los componentes
-- **Métricas de detección** ML
-- **Visualización de tráfico** de red
-- **Alertas de seguridad** automáticas
-- **Logs centralizados**
-
-### Métricas Clave
-- **Precisión de detección**: >95% en datasets de test
-- **Latencia de procesamiento**: <100ms por paquete
-- **Throughput**: 1000+ paquetes/segundo
-- **False positivos**: <2%
-
-## 🔬 Investigación y Desarrollo
-
-### Metodología Científica Aplicada
-1. **Análisis de Datasets**: Identificación de corrupción en datasets oficiales
-2. **Validación Cruzada**: Múltiples sources para verificar ground truth  
-3. **Feature Engineering**: Extracción de características compatibles con Scapy
-4. **Model Ensemble**: Combinación de múltiples detectores especializados
-
-### Lecciones Aprendidas
-- **Datasets Oficiales**: Muchos contienen valores incompatibles con herramientas reales
-- **Feature Consistency**: Crítico mantener consistency entre training y inference
-- **Model Specialization**: Mejor rendimiento con modelos especializados que generalistas
-- **Real-time Constraints**: Balance entre accuracy y latencia de respuesta
-
-## 🤝 Contribución
-
-### Desarrollo
-1. Fork del repositorio
-2. Crear feature branch: `git checkout -b feature/nueva-funcionalidad`
-3. Commit de cambios: `git commit -am 'Agregar nueva funcionalidad'`
-4. Push a branch: `git push origin feature/nueva-funcionalidad`
-5. Crear Pull Request
-
-### Estándares de Código
-- **Python**: PEP 8 compliance
-- **Documentación**: Docstrings para todas las funciones
-- **Testing**: Unit tests para nuevas funcionalidades
-- **Logging**: Uso consistente del sistema de logging
-
-## 📚 Documentación Adicional
-
-- [`ROADMAP.md`](ROADMAP.md) - Hoja de ruta del proyecto
-- [`refactor_plan.md`](refactor_plan.md) - Plan de refactorización
-- `docs/` - Documentación técnica detallada
-- `config/` - Ejemplos de configuración
-
-## 🐛 Issues Conocidos
-
-### En Desarrollo Activo
-- Optimización de memoria para datasets grandes
-- Mejora de UI del dashboard
-- Integración con sistemas SIEM externos
-
-### Solicitud de Features
-- Soporte para IPv6 completo
-- Detección de amenazas avanzadas (APT)
-- API REST para integración externa
-- Exportación de alertas a formatos estándar
-
-## 📄 Licencia
-
-Este proyecto está licenciado bajo la Licencia MIT - ver el archivo LICENSE para detalles.
-
-## 👥 Equipo
-
-- **Alonso** - Lead Developer & ML Engineer
-- **Contributors** - Ver [contributors](../../contributors)
-
-## 🙏 Agradecimientos
-
-- Comunidad de seguridad de red por datasets y herramientas
-- Proyectos open source que hacen posible este trabajo
-- Investigadores en ML aplicado a ciberseguridad
 
 ---
 
-**⭐ Si este proyecto te resulta útil, considera darle una estrella!**
+## 🏆 Hito Alcanzado - Q3 2025
 
-*Última actualización: Agosto 2025 - Sistema tricapa operativo*
+✅ **Sistema de Detección Tricapa Operativo**:  
+Tres modelos especializados operan en conjunto:  
+- 🚨 Detector de Ataques (ataque/no ataque)  
+- 🌐 Detector de Tráfico Web Normal  
+- 🏢 Detector de Tráfico Interno Normal  
+
+✅ **Sniffer/ML Detector Integrado**:  
+Captura, extrae features y procesa en tiempo real para detección precisa.
+
+✅ **Pipeline Propio de Datos Reales**:  
+Superamos problemas de datasets corruptos creando un flujo confiable basado en tráfico real.
+
+---
+
+## 🏗️ Arquitectura y Organización Actualizada
+
+### 🧠 Componentes Core
+
+- `core/` contiene los módulos base:
+  - `lightweight_ml_detector.py`  
+  - `simple_firewall_agent.py`  
+  - `geoip_enricher.py`  
+  - `promiscuous_agent.py` y `promiscuous_agent_v2.py`  
+  - `enhanced_network_feature_extractor.py`  
+  - `fixed_service_sniffer.py`  
+
+### 🤖 Pipeline de Machine Learning
+
+- `ml_pipeline/trainers/`  
+  - Entrenamiento y reentrenamiento de modelos  
+- `ml_pipeline/analyzers/`  
+  - Análisis, validación y extracción de features  
+- `ml_pipeline/data_generators/`  
+  - Generación de datasets a partir de tráfico real y sintético  
+
+### 📁 Procesamiento y Datos
+
+- `data_pipeline/` para procesar datasets oficiales y generar los datasets limpios usados en ML.  
+- `models/` con subcarpetas `production/` y `archive/` para modelos entrenados.  
+- `config/` centraliza todas las configuraciones JSON.  
+- `logs/` para registros y trazas.  
+- `docs/` con documentación técnica y roadmap.  
+
+---
+
+## 🚀 Inicio Rápido
+
+### Requisitos
+
+```bash
+pip install -r requirements.txt
+sudo setcap cap_net_raw+ep $(which python3)
+
+Configuración
+
+make setup
+make check-deps
+make check-geoip
+
+Ejecución
+
+make dev-start       # Todos los componentes en modo desarrollo
+make start-core      # Componentes principales corriendo
+make start-advanced  # Sistema completo con funcionalidades avanzadas
+
+
+Dashboard disponible en http://localhost:8080
+
+📊 Modelos en Producción
+
+| Modelo                                    | Propósito                | Tamaño | Estado   |
+| ----------------------------------------- | ------------------------ | ------ | -------- |
+| `rf_production_sniffer_compatible.joblib` | Detección de ataques     | 10.1MB | ✅ Activo |
+| `web_normal_detector.joblib`              | Tráfico web legítimo     | 2.5MB  | ✅ Activo |
+| `internal_normal_detector.joblib`         | Tráfico interno legítimo | 2.3MB  | ✅ Activo |
+
+
+🔜 Próximos Pasos (Q4 2025 - RELEASE 1.0.0)
+Integrar protocolo Protobuf v3.1 con cifrado y compresión opcionales
+Desarrollo de sistema distribuido con clave rotativa (etcd)
+Contenerización con K3s/Docker y perfiles de seguridad (AppArmor)
+Implementación del módulo RAG conversacional para detección avanzada
+Auto-reentrenamiento continuo con datos generados internamente
+Mejoras UI y monitorización extendida
+
+⚙️ Configuración y Variables de Entorno
+Variables recomendadas:
+
+export GEOIP_DB_PATH="./GeoLite2-City.mmdb"
+export ML_MODEL_PATH="./models/"
+export LOG_LEVEL="INFO"
+export IPAPI_TOKEN="tu_token_ipapi"
+
+🔧 Comandos Make Útiles
+Operación
+
+make start
+make stop
+make restart
+make status
+
+
+Desarrollo
+
+make dev-start
+make debug
+make test
+make clean
+
+Monitorización
+
+make monitor
+make logs
+make logs-tail
+
+🤝 Contribución
+Fork del repositorio
+Crear rama: git checkout -b feature/nueva-funcionalidad
+Commit y push
+Pull request describiendo cambios
+Se requiere cumplir con PEP8, pruebas unitarias y documentación.
+
+📚 Documentación Complementaria
+ROADMAP.md
+refactor_plan.md
+Carpeta docs/ para documentación técnica detallada
+
+🐛 Issues Actuales
+Optimización de memoria para grandes datasets
+Mejora del dashboard web
+Soporte completo para IPv6
+Integración con sistemas SIEM externos
+Integracion con un sistema RAG
+Integracion con k3s/docker para el modo distribuido
+Integracion con el sistema evolutivo de modelos. (Próximamente)
+
+📄 Licencia
+Proyecto licenciado bajo Licencia Blanca & Marcos (LBM-1.0), basada en MIT con cláusulas éticas adicionales. 
+Ver archivo LICENSE_LBM.txt.
+
+👥 Equipo Principal
+Alonso Isidoro - Lead Developer & ML Engineer
+Contributors - ver contributors
+
+🙏 Agradecimientos
+Gracias a la comunidad de seguridad y ML, proyectos open source y colaboradores que hacen esto posible.
+
+📌 Comparación con Suricata y Snort
+Este proyecto se parece a Suricata y Snort, pero con diferencias notables.
+Upgraded Happiness trata de averiguar lo ocurrido en una red distribuida usando agentes ligeros distribuidos y modelos 
+neuronales basados inicialmente en Random Forest con reentrenamiento regular usando datos del sistema en vivo. 
+La idea es que el sistema aprenda a reconocer actividades ilícitas a través de firmas digitales en forma de paquetes 
+TCP/IP, UDP u otros datagramas que fluyan por la red.
+
+## Comparativa con otras soluciones IDS/Monitorización
+
+En el ecosistema de la ciberseguridad existen varias herramientas ampliamente conocidas para detección y monitorización de amenazas, como **Suricata**, **Snort** y **Sysdig/Falco**. Nuestro sistema, **Upgraded Happiness Network Security System**, se diferencia en varios aspectos clave, lo que aporta ventajas importantes para entornos distribuidos y basados en Machine Learning.
+
+| Característica               | Suricata / Snort                              | Sysdig / Falco                                  | Upgraded Happiness (Nuestro sistema)             |
+|-----------------------------|-----------------------------------------------|------------------------------------------------|--------------------------------------------------|
+| **Tipo de herramienta**      | IDS/IPS tradicional basado en reglas y firmas| Monitorización host y contenedores basada en reglas y auditoría | IDS distribuido con agentes ligeros y ML integrado |
+| **Arquitectura**             | Centralizado o con sensores perimetrales      | Centralizado o con agentes, no orquestación distribuida real | Sistema distribuido con orquestación, cifrado y sincronización de reglas y modelos |
+| **Captura y análisis**       | Captura activa de paquetes TCP/IP, análisis profundo | Auditoría de llamadas al sistema y comportamiento de procesos | Captura activa de paquetes, análisis ML en tiempo real, enriquecimiento GeoIP |
+| **Modelo de detección**      | Basado en reglas y firmas definidas           | Basado en reglas para eventos de sistema       | Modelos Machine Learning (Random Forest y futuros DL), scoring en tiempo real |
+| **Actualización y aprendizaje** | Actualización manual o automatizada de reglas | Actualización manual de reglas                  | Reentrenamiento automático y actualización distribuida de modelos y firewalls |
+| **Seguridad y comunicación**| Comunicación estándar, sin cifrado avanzado   | Comunicación estándar, sin cifrado avanzado     | Comunicación cifrada, con compresión y gestión de claves en memoria (ETCD) |
+| **Distribución y escalabilidad** | Limitado a despliegues centralizados o sensores distribuidos sin sincronización | Similar a Suricata/Snort, no diseñado para mallas dinámicas | Arquitectura distribuida nativa, con sincronización dinámica y baja latencia |
+| **Integración con ML**       | No integrada nativamente                       | No integrada nativamente                         | Integración nativa y centralizada de pipelines ML completos |
+| **Enfoque principal**        | Defensa perimetral basada en firmas            | Auditoría y monitorización de comportamiento    | Defensa proactiva, detección temprana y reacción automática en red distribuida |
+
+---
+
+### Conclusión
+
+- **Suricata y Snort** son IDS/IPS clásicos potentes para análisis de tráfico de red basados en firmas y reglas.  
+- **Sysdig y Falco** ofrecen monitorización profunda a nivel host/contenedor con reglas orientadas a llamadas sistema y comportamientos, pero sin una arquitectura distribuida ni ML nativo.  
+- **Upgraded Happiness** propone un enfoque innovador y distribuido, con agentes ligeros que capturan y analizan tráfico en tiempo real, integrando ML, cifrado y sincronización rápida para detectar y reaccionar ante amenazas emergentes en una red distribuida.
+
+Esta arquitectura permite superar limitaciones de sistemas centralizados y brinda capacidad de adaptación y aprendizaje continuo para escenarios complejos y cambiantes.
+
+---
+
+Creemos que esta aproximación proactiva basada en detección temprana y scoring de amenazas con redes evolutivas es 
+novedosa, y puede solventar en teoría, al análisis tradicional de logs que pueden ser modificados o manipulados antes 
+del parsing. 
+Nuestra aproximación captura paquetes, geolocaliza ips peligrosas y permite actuar muy rápido sobre los firewalls de los 
+nodos afectados, habilitando una defensa perimetral mucho más efectiva.
+Idealmente, esta solucion se puede integrar con multiples IDS/IPS.
+
+⭐ Si este proyecto te es útil, por favor danos una estrella ⭐
+Última actualización: Agosto 2025 - Housekeeping y reorganización
