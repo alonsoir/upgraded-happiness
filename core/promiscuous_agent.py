@@ -33,7 +33,7 @@ except ImportError:
 # 📦 Protobuf v3.0.0 - ACTUALIZADO
 try:
     # 🆕 CAMBIO CRÍTICO: Importar protobuf v3
-    import src.protocols.protobuf.network_event_extended_v3_pb2 as NetworkEventProto
+    import protocols.current.network_event_extended_v3_pb2 as NetworkEventProto
 
     PROTOBUF_AVAILABLE = True
     PROTOBUF_VERSION = "v3.0.0"
