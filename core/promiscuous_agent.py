@@ -4,6 +4,7 @@ promiscuous_agent_v3.py - Agente distribuido con captura real y protobuf v3.0.0
 🆕 ACTUALIZADO: Soporte para NetworkEvent v3.0.0
 🔄 COMPATIBLE: Funciona con pipeline v3 y componentes v2
 🚀 MEJORADO: Usa nuevos campos v3 para mejor tracking
+🔧 FIXED: Importaciones robustas manteniendo filosofía original
 """
 
 import zmq
@@ -21,37 +22,83 @@ from threading import Event
 from typing import Dict, Any, Optional, List
 from queue import Queue, Empty
 
-# 📦 Dependencias para captura de paquetes
+# 📦 Dependencias para captura de paquetes - REQUERIDAS
 try:
     from scapy.all import sniff, Ether, IP, TCP, UDP
 
     SCAPY_AVAILABLE = True
 except ImportError:
-    print("⚠️ Scapy no disponible - usando modo simulación")
     SCAPY_AVAILABLE = False
 
-# 📦 Protobuf v3.0.0 - ACTUALIZADO
-try:
-    # 🆕 CAMBIO CRÍTICO: Importar protobuf v3
-    import protocols.current.network_event_extended_v3_pb2 as NetworkEventProto
+# 📦 Protobuf v3.0.0 - REQUERIDO - Importación robusta
+PROTOBUF_AVAILABLE = False
+PROTOBUF_VERSION = "unavailable"
+NetworkEventProto = None
 
-    PROTOBUF_AVAILABLE = True
-    PROTOBUF_VERSION = "v3.0.0"
-except ImportError:
-    print("⚠️ Protobuf v3 no disponible - generar con: protoc --python_out=. network_event_extended_v3.proto")
-    PROTOBUF_AVAILABLE = False
-    PROTOBUF_VERSION = "unavailable"
+
+# 🔧 Rutas de importación robustas para protobuf
+def import_protobuf_module():
+    """Importa el módulo protobuf con múltiples estrategias"""
+    global NetworkEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+
+    # Estrategia 1: Importación relativa desde protocols.current
+    import_strategies = [
+        ("protocols.current.network_event_extended_v3_pb2", "Paquete protocols.current"),
+        ("protocols.network_event_extended_v3_pb2", "Paquete protocols"),
+        ("network_event_extended_v3_pb2", "Importación directa"),
+    ]
+
+    for import_path, description in import_strategies:
+        try:
+            NetworkEventProto = __import__(import_path, fromlist=[''])
+            PROTOBUF_AVAILABLE = True
+            PROTOBUF_VERSION = "v3.0.0"
+            print(f"✅ Protobuf v3 cargado: {description} ({import_path})")
+            return True
+        except ImportError:
+            continue
+
+    # Estrategia 2: Añadir path dinámico y importar
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(current_dir, '..', 'protocols', 'current'),
+        os.path.join(current_dir, 'protocols', 'current'),
+        os.path.join(os.getcwd(), 'protocols', 'current'),
+    ]
+
+    for protocols_path in possible_paths:
+        protocols_path = os.path.abspath(protocols_path)
+        pb2_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+
+        if os.path.exists(pb2_file):
+            try:
+                sys.path.insert(0, protocols_path)
+                import network_event_extended_v3_pb2 as NetworkEventProto
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.0.0"
+                print(f"✅ Protobuf v3 cargado desde path: {protocols_path}")
+                return True
+            except ImportError as e:
+                sys.path.remove(protocols_path)
+                continue
+
+    return False
+
+
+# Ejecutar importación al inicio
+import_protobuf_module()
 
 
 class DistributedPromiscuousAgent:
     """
     Agente promiscuo distribuido completamente configurable desde JSON v3.0.0
-    - Captura real de paquetes de red
-    - Serialización protobuf v3.0.0 con nuevos campos
-    - node_id y PID para gestión distribuida
-    - Backpressure configurable
+    - Captura REAL de paquetes de red con Scapy
+    - Serialización protobuf v3.0.0 binaria
+    - Comunicación ZeroMQ distribuida
+    - Configuración 100% desde JSON
     - Sin valores hardcodeados
     - 🆕 Soporte completo para nuevos campos v3
+    - 🔧 Importaciones robustas manteniendo filosofía original
     """
 
     def __init__(self, config_file: str):
@@ -106,7 +153,7 @@ class DistributedPromiscuousAgent:
         self.running = True
         self.handshake_sent = False
 
-        # ✅ Verificar dependencias críticas
+        # ✅ Verificar dependencias críticas - FALLA si no están disponibles
         self._verify_dependencies()
 
         self.logger.info(f"🚀 Distributed Promiscuous Agent v3.0.0 inicializado")
@@ -211,23 +258,37 @@ class DistributedPromiscuousAgent:
         }
 
     def _verify_dependencies(self):
-        """Verifica que las dependencias críticas estén disponibles"""
+        """Verifica dependencias críticas - FALLA si no están disponibles"""
         issues = []
 
+        # 🔍 Verificar Scapy - CRÍTICO
         if not SCAPY_AVAILABLE:
-            if self.config["capture"]["mode"] == "real":
-                issues.append("❌ Scapy requerido para captura real - pip install scapy")
+            issues.append("❌ Scapy REQUERIDO para captura de paquetes - ejecutar: pip install scapy")
 
+        # 🔍 Verificar Protobuf - CRÍTICO
         if not PROTOBUF_AVAILABLE:
-            issues.append("❌ Protobuf v3 no generado - ejecutar: protoc --python_out=. network_event_extended_v3.proto")
+            issues.append("❌ Protobuf v3 REQUERIDO - generar con:")
+            issues.append("   cd protocols/current/")
+            issues.append("   protoc --python_out=. --proto_path=. network_event_extended_v3.proto")
+            issues.append("   Verificar que existe: network_event_extended_v3_pb2.py")
 
+        # 🚨 FALLAR INMEDIATAMENTE si faltan dependencias críticas
         if issues:
+            print("\n🚨 DEPENDENCIAS CRÍTICAS FALTANTES:")
             for issue in issues:
                 print(issue)
-            raise RuntimeError("❌ Dependencias críticas faltantes")
+            print("\n💡 FILOSOFÍA DEL PROYECTO:")
+            print("   - Scapy: Captura REAL de paquetes de red")
+            print("   - Protobuf: Serialización binaria eficiente")
+            print("   - ZeroMQ: Comunicación distribuida")
+            print("   - JSON config: Sin hardcodear parámetros")
+            print("\n🔧 ARREGLA LAS DEPENDENCIAS Y VUELVE A EJECUTAR")
+            raise RuntimeError("❌ Dependencias críticas faltantes - proyecto requiere tecnologías base")
+
+        print("✅ Todas las dependencias críticas disponibles")
 
     def setup_socket(self):
-        """Configuración ZMQ desde archivo usando nueva estructura network"""
+        """Configuración ZeroMQ desde archivo usando nueva estructura network"""
         # 🆕 Leer desde la nueva sección "network"
         network_config = self.config.get("network", {})
         output_socket_config = network_config.get("output_socket", {})
@@ -347,9 +408,10 @@ class DistributedPromiscuousAgent:
         """
         Crea evento protobuf v3.0.0 desde datos de paquete
         🆕 ACTUALIZADO: Usa nuevos campos v3 para mejor tracking
+        🔧 REQUIERE: Protobuf disponible (falla si no está)
         """
         if not PROTOBUF_AVAILABLE:
-            raise RuntimeError("❌ Protobuf v3 no disponible")
+            raise RuntimeError("❌ Protobuf v3 REQUERIDO - generar archivos protobuf primero")
 
         try:
             # 📦 Crear evento protobuf v3.0.0
@@ -478,12 +540,6 @@ class DistributedPromiscuousAgent:
             event.legacy_compatibility_mode = False  # Usando v3 nativo
             # deprecated_fields se deja vacío por ahora
 
-            # 📊 MÉTRICAS DE RENDIMIENTO (campos 96-99) - Solo campos disponibles
-            # geoip_lookup_latency_ms = 0 (no aplicable aquí)
-            # cache_hits_count = 0 (no aplicable aquí)
-            # cache_misses_count = 0 (no aplicable aquí)
-            # enrichment_success_rate = 0 (no aplicable aquí)
-
             # 🔄 Serializar a bytes
             serialized_data = event.SerializeToString()
 
@@ -607,17 +663,16 @@ class DistributedPromiscuousAgent:
         return True
 
     def start_packet_capture(self):
-        """Inicia captura de paquetes"""
+        """Inicia captura de paquetes con Scapy - REAL PACKET CAPTURE"""
         capture_config = self.config["capture"]
 
         if not SCAPY_AVAILABLE:
-            self.logger.error("❌ Scapy no disponible - no se puede capturar paquetes")
-            return
+            raise RuntimeError("❌ Scapy REQUERIDO para captura de paquetes - pip install scapy")
 
         interface = capture_config["interface"]
         filter_expr = capture_config.get("filter_expression", "")
 
-        self.logger.info(f"🎯 Iniciando captura de paquetes v3.0.0:")
+        self.logger.info(f"🎯 Iniciando captura REAL de paquetes v3.0.0:")
         self.logger.info(f"   📡 Interface: {interface}")
         self.logger.info(f"   🔍 Filtro: {filter_expr or 'sin filtro'}")
         self.logger.info(f"   🎭 Promiscuo: {capture_config['promiscuous_mode']}")
@@ -635,6 +690,7 @@ class DistributedPromiscuousAgent:
         except Exception as e:
             self.logger.error(f"❌ Error en captura de paquetes: {e}")
             self.logger.error("💡 Tip: ejecutar con sudo para captura promiscua")
+            raise
 
     def process_packets(self):
         """Thread para procesar paquetes de la cola"""
