@@ -31,13 +31,69 @@ from pathlib import Path
 # Add src to path for protobuf imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-try:
-    from src.protocols.protobuf import firewall_commands_pb2
+# 📦 Protobuf Firewall Commands - Importación robusta
+PROTOBUF_AVAILABLE = False
+PROTOBUF_VERSION = "unavailable"
+firewall_commands_pb2 = None
 
-    print("✅ Protobuf imports successful")
-except ImportError as e:
-    print(f"❌ Protobuf import failed: {e}")
-    print("📁 Please ensure protobuf files are generated")
+
+def import_firewall_protobuf_module():
+    """Importa el módulo firewall_commands_pb2 con múltiples estrategias"""
+    global firewall_commands_pb2, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+
+    # Estrategia 1: Importación desde diferentes ubicaciones
+    import_strategies = [
+        ("protocols.current.firewall_commands_pb2", "Paquete protocols.current"),
+        ("protocols.firewall_commands_pb2", "Paquete protocols"),
+        ("firewall_commands_pb2", "Importación directa"),
+    ]
+
+    for import_path, description in import_strategies:
+        try:
+            firewall_commands_pb2 = __import__(import_path, fromlist=[''])
+            PROTOBUF_AVAILABLE = True
+            PROTOBUF_VERSION = "v3.0.0"
+            print(f"✅ Firewall protobuf cargado: {description} ({import_path})")
+            return True
+        except ImportError:
+            continue
+
+    # Estrategia 2: Añadir path dinámico y importar
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(current_dir, '..', 'protocols', 'current'),
+        os.path.join(current_dir, 'protocols', 'current'),
+        os.path.join(os.getcwd(), 'protocols', 'current'),
+    ]
+
+    for protocols_path in possible_paths:
+        protocols_path = os.path.abspath(protocols_path)
+        pb2_file = os.path.join(protocols_path, 'firewall_commands_pb2.py')
+
+        if os.path.exists(pb2_file):
+            try:
+                sys.path.insert(0, protocols_path)
+                import firewall_commands_pb2
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.0.0"
+                print(f"✅ Firewall protobuf cargado desde path: {protocols_path}")
+                return True
+            except ImportError as e:
+                print(f"⚠️ Error importando desde {protocols_path}: {e}")
+                sys.path.remove(protocols_path)
+                continue
+
+    # Si llegamos aquí, no se pudo importar el módulo
+    print("❌ No se pudo cargar firewall_commands_pb2")
+    print(f"   📁 Directorio actual: {os.getcwd()}")
+    print(f"   📁 Script location: {os.path.abspath(__file__)}")
+    return False
+
+
+# Ejecutar importación al inicio
+if not import_firewall_protobuf_module():
+    print("❌ Firewall protobuf import failed")
+    print("📁 Please ensure firewall_commands_pb2.py exists in protocols/current/")
     sys.exit(1)
 
 # Import crypto/compression utils (when ready)
@@ -718,6 +774,11 @@ class UltraSecureFirewallAgent:
 
         # ✅ CONFIGURAR LOGGING ANTES DE CREAR OTROS COMPONENTES
         self.setup_logging()
+
+        # ✅ VERIFICAR PROTOBUF DISPONIBLE
+        if not PROTOBUF_AVAILABLE:
+            self.logger.error("❌ CRITICAL: Protobuf module not available")
+            raise RuntimeError("Firewall protobuf module is required")
 
         # 🔒 INICIALIZAR MONITOR DE SEGURIDAD
         self.security_monitor = SecurityMonitor(self.logger)
