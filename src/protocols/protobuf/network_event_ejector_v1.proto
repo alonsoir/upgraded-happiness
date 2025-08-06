@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package network.events.ejector;
+
+message EjectionEvent {
+  string event_id = 1;
+  string timestamp = 2;
+  string source_ip = 3;
+  string source_mac = 4;
+  string target_node = 5;
+  string reason = 6; // Ej: "lateral_movement", "port_scan", etc.
+  string action_taken = 7; // "blocked", "redirected_to_honeypot", etc.
+  string honeypot_ip = 8;
+  string pcap_filename = 9;
+  repeated string related_ips = 10;
+  map<string, string> geoip_info = 11;
+  bool high_risk = 12;
+}

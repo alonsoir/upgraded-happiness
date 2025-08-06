@@ -1,0 +1,37 @@
+{
+  "ml": {
+    "enabled": true,
+    "datasets": ["normal_traffic.csv"],
+    "anomaly_threshold": 0.78,
+    "high_risk_threshold": 0.92,
+    "confidence_threshold": 0.85,
+    "models": {
+      "random_forest": {
+        "n_estimators": 2000,
+        "max_depth": 120,
+        "min_samples_split": 2,
+        "min_samples_leaf": 1,
+        "max_features": "log2",
+        "class_weight": "balanced_subsample"
+      }
+    }
+  },
+  "geo": {
+    "city_db_path": "geodata/GeoLite2-City.mmdb",
+    "country_db_path": "geodata/GeoLite2-Country.mmdb",
+    "hq_coords": [40.4168, -3.7038],
+    "country_risk_scores": {
+      "CN": 0.8,
+      "RU": 0.85,
+      "IR": 0.9,
+      "KP": 0.95,
+      "US": 0.4,
+      "DE": 0.3,
+      "JP": 0.25,
+      "ES": 0.2
+    }
+  },
+  "datasets": {
+    "max_rows_per_dataset": 500000
+  }
+}

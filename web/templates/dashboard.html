@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCADA Dashboard - Arquitectura 3 Puertos</title>
+
+    <!-- 🗺️ Leaflet CSS - DEBE ir antes que el JavaScript -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+
+    <!-- 🎨 Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 🎨 CSS Unificado del Dashboard -->
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- 🖥️ Header -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>SCADA Dashboard - Arquitectura 3 Puertos</span>
+            </div>
+            <div class="status-indicators">
+                <!-- 🔥 ESTADO GENERAL -->
+                <div class="status-indicator" onclick="showConnectionDetails('overall')">
+                    <div class="status-dot connecting" id="overall-status"></div>
+                    <span id="overall-status-text">Connecting...</span>
+                </div>
+
+                <!-- 🔥 COMPONENTES ESPECÍFICOS -->
+                <div class="status-indicator" onclick="showConnectionDetails('promiscuous-agent')">
+                    <div class="status-dot disconnected" id="promiscuous-agent-status"></div>
+                    <span>Promiscuous Agent</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('geoip-enricher')">
+                    <div class="status-dot disconnected" id="geoip-enricher-status"></div>
+                    <span>GeoIP Enricher</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('ml-detector')">
+                    <div class="status-dot disconnected" id="ml-detector-status"></div>
+                    <span>ML Detector</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('firewall-agent')">
+                    <div class="status-dot disconnected" id="firewall-agent-status"></div>
+                    <span>Firewall Agent</span>
+                </div>
+
+                <!-- INFO DEL SISTEMA -->
+                <div class="status-indicator" onclick="showSystemInfo()">
+                    <span id="current-time">--:--:--</span>
+                </div>
+                <div class="status-indicator" onclick="showEventsSummary()">
+                    <span>Events: <span id="events-counter">0</span></span>
+                </div>
+                <div class="status-indicator" onclick="showConfirmationsSummary()">
+                    <span>Conf: <span id="confirmations-counter">0</span></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 🗺️ Área principal del mapa -->
+        <main class="main-content">
+            <div class="map-controls">
+                <button class="map-control-btn" onclick="clearAllMarkers()" title="Limpiar todos los marcadores del mapa">
+                    <i class="fas fa-eraser"></i> Clear Map
+                </button>
+                <button class="map-control-btn" onclick="centerMap()" title="Centrar mapa en nodo local">
+                    <i class="fas fa-crosshairs"></i> Center
+                </button>
+                <button class="map-control-btn" onclick="toggleHeatmap()" title="Activar/desactivar mapa de calor">
+                    <i class="fas fa-fire"></i> Heatmap
+                </button>
+                <button class="map-control-btn" onclick="showMapLegend()" title="Mostrar leyenda del mapa">
+                    <i class="fas fa-info-circle"></i> Legend
+                </button>
+                <button class="map-control-btn" onclick="sendTestFirewallCommand()" title="Enviar evento de prueba al firewall">
+                    <i class="fas fa-vial"></i> Test FW
+                </button>
+            </div>
+            <!-- 🌍 CRÍTICO: Contenedor del mapa -->
+            <div id="map"></div>
+        </main>
+
+        <!-- 📊 Sidebar -->
+        <aside class="sidebar">
+            <!-- 🏗️ Información de Arquitectura -->
+            <div class="collapsible-section" id="architecture-section">
+                <div class="section-header" onclick="toggleSection('architecture')">
+                    <div class="architecture-title">
+                        🏗️ Arquitectura 3 Puertos
+                        <i class="fas fa-chevron-down toggle-icon" id="architecture-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="architecture-content">
+                    <div class="architecture-info">
+                        <div>Eventos: <span id="events-count" class="clickable-counter" onclick="showEventsDetail(event)">0</span> |
+                             Comandos: <span id="commands-count" class="clickable-counter" onclick="showCommandsDetail(event)">0</span> |
+                             Confirmaciones: <span id="confirmations-count" class="clickable-counter" onclick="showConfirmationsDetail(event)">0</span></div>
+                        <div class="port-info events" onclick="showPortDetails(5570, event)">
+                            <span class="port-number">Puerto 5570:</span> ml_detector → dashboard
+                        </div>
+                        <div class="port-info commands" onclick="showPortDetails(5580, event)">
+                            <span class="port-number">Puerto 5580:</span> dashboard → firewall_agent
+                        </div>
+                        <div class="port-info confirmations" onclick="showPortDetails(5581, event)">
+                            <span class="port-number">Puerto 5581:</span> firewall_agent → dashboard
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔧 Estado de Componentes -->
+            <div class="collapsible-section" id="components-section">
+                <div class="section-header" onclick="toggleSection('components')">
+                    <div class="section-title">
+                        🔧 Estado de Componentes
+                        <i class="fas fa-cogs clickable-icon"></i>
+                        <i class="fas fa-chevron-down toggle-icon" id="components-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="components-content">
+                    <!-- 🔥 PROMISCUOUS AGENT -->
+                    <div class="component-item promiscuous-agent" onclick="showComponentDetail('promiscuous-agent')">
+                        <div class="component-header">
+                            <span class="component-name">Promiscuous Agent</span>
+                            <span class="component-health healthy" id="promiscuous-agent-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('promiscuous-agent-packets', event)">
+                                Packets: <span id="promiscuous-agent-packets">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-interfaces', event)">
+                                Interfaces: <span id="promiscuous-agent-interfaces">eth0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-filtered', event)">
+                                Filtered: <span id="promiscuous-agent-filtered">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-rate', event)">
+                                Rate: <span id="promiscuous-agent-rate">0 pkt/s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔥 GEOIP ENRICHER -->
+                    <div class="component-item geoip-enricher" onclick="showComponentDetail('geoip-enricher')">
+                        <div class="component-header">
+                            <span class="component-name">GeoIP Enricher</span>
+                            <span class="component-health warning" id="geoip-enricher-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('geoip-enricher-lookups', event)">
+                                Lookups: <span id="geoip-enricher-lookups">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-cached', event)">
+                                Cached: <span id="geoip-enricher-cached">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-enriched', event)">
+                                Enriched: <span id="geoip-enricher-enriched">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-latency', event)">
+                                Latency: <span id="geoip-enricher-latency">0ms</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ML DETECTOR -->
+                    <div class="component-item ml-detector" onclick="showComponentDetail('ml-detector')">
+                        <div class="component-header">
+                            <span class="component-name">ML Detector</span>
+                            <span class="component-health healthy" id="ml-detector-health">HEALTHY</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('ml-detector-node', event)">
+                                Node: <span id="ml-detector-node">ml_detector_distributed_001</span>
+                            </div>
+                            <div onclick="showComponentMetric('ml-detector-latency', event)">
+                                Latency: <span id="ml-detector-latency">0ms</span>
+                            </div>
+                            <div onclick="showComponentMetric('ml-detector-processed', event)">
+                                Processed: <span id="ml-detector-processed">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('ml-detector-backpressure', event)">
+                                Backpressure: <span id="ml-detector-backpressure">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FIREWALL AGENT -->
+                    <div class="component-item firewall-agent" onclick="showComponentDetail('firewall-agent')">
+                        <div class="component-header">
+                            <span class="component-name">Firewall Agent</span>
+                            <span class="component-health healthy" id="firewall-agent-health">HEALTHY</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('firewall-agent-node', event)">
+                                Node: <span id="firewall-agent-node">firewall_agent_001</span>
+                            </div>
+                            <div onclick="showComponentMetric('firewall-active-rules', event)">
+                                Rules: <span id="firewall-active-rules">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('firewall-applied', event)">
+                                Applied: <span id="firewall-applied">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('firewall-failed', event)">
+                                Failed: <span id="firewall-failed">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DASHBOARD -->
+                    <div class="component-item dashboard" onclick="showComponentDetail('dashboard')">
+                        <div class="component-header">
+                            <span class="component-name">Dashboard</span>
+                            <span class="component-health healthy" id="dashboard-health">HEALTHY</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('dashboard-node', event)">
+                                Node: <span id="dashboard-node">dashboard_distributed_001</span>
+                            </div>
+                            <div onclick="showComponentMetric('dashboard-uptime', event)">
+                                Uptime: <span id="dashboard-uptime">0s</span>
+                            </div>
+                            <div onclick="showComponentMetric('dashboard-memory', event)">
+                                Memory: <span id="dashboard-memory">0MB</span>
+                            </div>
+                            <div onclick="showComponentMetric('dashboard-cpu', event)">
+                                CPU: <span id="dashboard-cpu">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📨 Eventos Entrantes -->
+            <div class="collapsible-section" id="events-section">
+                <div class="section-header" onclick="toggleSection('events')">
+                    <div class="section-title">
+                        📨 Eventos Entrantes
+                        <span class="event-count-badge" id="live-events-count">0</span>
+                        <i class="fas fa-chevron-down toggle-icon" id="events-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="events-content">
+                    <div class="events-controls">
+                        <button class="mini-btn" onclick="clearEventsList()" title="Limpiar lista de eventos">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="mini-btn" onclick="pauseEventsUpdate()" title="Pausar/reanudar actualización" id="pause-events-btn">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                        <button class="mini-btn" onclick="sendTestFirewallCommand()" title="Enviar evento de prueba">
+                            <i class="fas fa-vial"></i>
+                        </button>
+                        <select id="events-filter" onchange="filterEvents()" class="mini-select">
+                            <option value="all">Todos</option>
+                            <option value="high">Alto Riesgo</option>
+                            <option value="medium">Medio Riesgo</option>
+                            <option value="low">Bajo Riesgo</option>
+                        </select>
+                    </div>
+                    <div class="events-list" id="events-list">
+                        <div class="no-events-placeholder">
+                            <i class="fas fa-inbox"></i>
+                            <p>No hay eventos recientes</p>
+                            <button onclick="sendTestFirewallCommand()" class="btn btn-primary">
+                                🧪 Generar Evento de Prueba
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔥 NUEVA SECCIÓN: Eventos del Firewall -->
+            <div class="collapsible-section" id="firewall-events-section">
+                <div class="section-header" onclick="toggleSection('firewall-events')">
+                    <div class="section-title">
+                        🔥 Eventos del Firewall
+                        <span class="event-count-badge" id="firewall-events-count" style="background: #00ff88;">0</span>
+                        <i class="fas fa-chevron-down toggle-icon" id="firewall-events-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="firewall-events-content">
+                    <!-- Estadísticas del Firewall -->
+                    <div class="firewall-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; margin-bottom: 12px;">
+                        <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 4px; padding: 6px; text-align: center;">
+                            <div style="font-size: 9px; color: #888; text-transform: uppercase;">Comandos</div>
+                            <div style="font-size: 14px; font-weight: bold; color: #00ff88;" id="firewall-commands-sent">0</div>
+                        </div>
+                        <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 4px; padding: 6px; text-align: center;">
+                            <div style="font-size: 9px; color: #888; text-transform: uppercase;">Resp. OK</div>
+                            <div style="font-size: 14px; font-weight: bold; color: #00ff88;" id="firewall-responses-ok">0</div>
+                        </div>
+                        <div style="background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.3); border-radius: 4px; padding: 6px; text-align: center;">
+                            <div style="font-size: 9px; color: #888; text-transform: uppercase;">Errores</div>
+                            <div style="font-size: 14px; font-weight: bold; color: #ff4444;" id="firewall-errors">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Controles del Firewall -->
+                    <div class="events-controls">
+                        <button class="mini-btn" onclick="clearFirewallEventsList()" title="Limpiar eventos del firewall">
+                            <i class="fas fa-fire"></i>
+                        </button>
+                        <button class="mini-btn" onclick="pauseFirewallEventsUpdate()" title="Pausar/reanudar eventos firewall" id="pause-firewall-events-btn">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                        <button class="mini-btn" onclick="sendTestFirewallCommand()" title="Enviar comando test al firewall" style="border-color: #00aaff; color: #00aaff;">
+                            <i class="fas fa-vial"></i>
+                        </button>
+                    </div>
+
+                    <!-- Lista de Eventos del Firewall -->
+                    <div class="events-list" id="firewall-events-list" style="max-height: 250px;">
+                        <div class="no-firewall-events" style="text-align: center; color: #666; padding: 20px; font-style: italic;">
+                            <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                            <p>No hay eventos del firewall</p>
+                            <button onclick="sendTestFirewallCommand()" class="btn btn-primary" style="margin-top: 10px;">
+                                🧪 Enviar Test Firewall
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Info último agente -->
+                    <div style="margin-top: 10px; font-size: 9px; color: #666; text-align: center;">
+                        Último Agent: <span id="firewall-last-agent" style="color: #00ff88;">N/A</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📊 Contadores Reactivos -->
+            <div class="collapsible-section" id="counters-section">
+                <div class="section-header" onclick="toggleSection('counters')">
+                    <div class="section-title">
+                        📊 Métricas en Tiempo Real
+                        <i class="fas fa-chevron-down toggle-icon" id="counters-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="counters-content">
+                    <div class="counters-section">
+                        <div class="counter events" onclick="showEventsPerMinuteDetail()">
+                            <span class="number" id="events-per-min">0</span>
+                            <span class="label">Eventos/min</span>
+                        </div>
+                        <div class="counter commands" onclick="showHighRiskEventsDetail()">
+                            <span class="number" id="high-risk-count">0</span>
+                            <span class="label">Alto Riesgo</span>
+                        </div>
+                        <div class="counter confirmations" onclick="showSuccessRateDetail()">
+                            <span class="number" id="success-rate">0</span>
+                            <span class="label">Éxito</span>
+                        </div>
+                        <div class="counter failures" onclick="showFailuresDetail()">
+                            <span class="number" id="failure-count">0</span>
+                            <span class="label">Fallos</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔌 Estado ZeroMQ Reactivo -->
+            <div class="collapsible-section" id="zmq-section">
+                <div class="section-header" onclick="toggleSection('zmq')">
+                    <div class="section-title">
+                        🔌 Conexiones ZeroMQ
+                        <i class="fas fa-info-circle clickable-icon"></i>
+                        <i class="fas fa-chevron-down toggle-icon" id="zmq-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="zmq-content">
+                    <!-- Topología de conexión clickeable -->
+                    <div class="connection-topology">
+                        <div class="topology-line active" onclick="showTopologyLineDetail('ml-events')">
+                            <strong>ML Events:</strong> PULL:CONNECT → :5570
+                            <span class="topology-status" id="topology-ml-status">●</span>
+                        </div>
+                        <div class="topology-line active" onclick="showTopologyLineDetail('fw-commands')">
+                            <strong>FW Commands:</strong> PUB:BIND → :5580
+                            <span class="topology-status" id="topology-fw-cmd-status">●</span>
+                        </div>
+                        <div class="topology-line active" onclick="showTopologyLineDetail('fw-responses')">
+                            <strong>FW Responses:</strong> PULL:BIND → :5581
+                            <span class="topology-status" id="topology-fw-resp-status">●</span>
+                        </div>
+                    </div>
+
+                    <!-- Conexiones ZMQ detalladas -->
+                    <div class="zmq-connections-list">
+                        <!-- ML Events Connection -->
+                        <div class="zmq-connection active" id="zmq-ml-events" onclick="showZMQConnectionDetail('ml-events')">
+                            <div class="connection-header">
+                                <span class="connection-name">📡 ML Events Input</span>
+                                <span class="connection-status active" id="ml-events-status">CONNECTED</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="ml-events-endpoint">tcp://localhost:5570</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Messages:</span> <span id="ml-messages">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Last Activity:</span> <span id="ml-last-activity">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Firewall Commands Connection -->
+                        <div class="zmq-connection active" id="zmq-fw-commands" onclick="showZMQConnectionDetail('fw-commands')">
+                            <div class="connection-header">
+                                <span class="connection-name">🔥 Firewall Commands</span>
+                                <span class="connection-status active" id="fw-commands-status">BOUND</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="fw-commands-endpoint">tcp://*:5580</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Commands:</span> <span id="fw-cmd-count">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Subscribers:</span> <span id="fw-subscribers">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Firewall Responses Connection -->
+                        <div class="zmq-connection active" id="zmq-fw-responses" onclick="showZMQConnectionDetail('fw-responses')">
+                            <div class="connection-header">
+                                <span class="connection-name">📥 Firewall Responses</span>
+                                <span class="connection-status active" id="fw-responses-status">BOUND</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="fw-responses-endpoint">tcp://*:5581</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Responses:</span> <span id="fw-resp-count">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Success Rate:</span> <span id="fw-success-rate">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🐛 Debug Log Interactivo -->
+            <div class="collapsible-section" id="debug-section">
+                <div class="section-header" onclick="toggleSection('debug')">
+                    <div class="section-title">
+                        🐛 Debug Log
+                        <i class="fas fa-terminal clickable-icon"></i>
+                        <i class="fas fa-chevron-down toggle-icon" id="debug-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="debug-content">
+                    <div class="debug-log" id="debug-log" onclick="showDebugLogDetail()">
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard iniciado con componentes distribuidos</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Backend ZeroMQ conectado</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Esperando eventos del pipeline...</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Mapa Leaflet inicializado</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🎛️ Botones de Acción Reactivos -->
+            <div class="action-buttons">
+                <button class="btn update" onclick="refreshDashboard()" title="Actualizar todas las métricas">
+                    <i class="fas fa-sync"></i> Actualizar
+                </button>
+                <button class="btn clear" onclick="clearDebugLog()" title="Limpiar log de debug">
+                    <i class="fas fa-trash"></i> Limpiar
+                </button>
+                <button class="btn test" onclick="testAllConnections()" title="Probar conectividad de los 3 puertos">
+                    <i class="fas fa-plug"></i> Test 3 Puertos
+                </button>
+                <button class="btn confirmations" onclick="sendTestFirewallCommand()" title="Enviar evento de prueba al firewall">
+                    <i class="fas fa-vial"></i> Test Firewall
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 📋 Modal para mostrar detalles de eventos -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal()"></div>
+    <div class="detail-modal" id="detail-modal">
+        <div class="modal-header">
+            <h3 id="modal-title">Detalles</h3>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-content" id="modal-content">
+            <!-- El contenido se cargará dinámicamente -->
+        </div>
+        <div class="modal-actions" id="modal-actions">
+            <!-- Los botones se cargarán dinámicamente -->
+        </div>
+    </div>
+
+    <!-- ⚠️ Indicador de amenaza -->
+    <div class="threat-indicator" id="threat-indicator">
+        ⚠️ Nueva amenaza detectada!
+    </div>
+
+    <!-- 📢 Notificaciones toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- 🗺️ Leaflet JavaScript - DEBE ir después del CSS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- 🔧 Dashboard JavaScript -->
+    <script src="/static/js/dashboard.js"></script>
+
+    <!-- 🚀 Inicialización -->
+    <script>
+        // Inicialización del dashboard cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 DOM cargado, inicializando dashboard...');
+            initializeDashboard();
+        });
+
+        // 🔧 Debug: Detectar errores de CSP
+        window.addEventListener('securitypolicyviolation', function(e) {
+            console.error('🔒 CSP Violation:', e.violatedDirective, e.blockedURI);
+            const debugLog = document.getElementById('debug-log');
+            if (debugLog) {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry error';
+                entry.innerHTML = `[ERROR] CSP Violation: ${e.violatedDirective} - ${e.blockedURI}`;
+                debugLog.appendChild(entry);
+            }
+        });
+
+        // 🔧 Debug: Detectar si Leaflet está disponible
+        window.addEventListener('load', function() {
+            if (typeof L === 'undefined') {
+                console.error('❌ Leaflet no está disponible');
+                const debugLog = document.getElementById('debug-log');
+                if (debugLog) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry error';
+                    entry.innerHTML = '[ERROR] Leaflet library no está disponible';
+                    debugLog.appendChild(entry);
+                }
+            } else {
+                console.log('✅ Leaflet está disponible:', L.version);
+                const debugLog = document.getElementById('debug-log');
+                if (debugLog) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry info';
+                    entry.innerHTML = `[INFO] Leaflet ${L.version} cargado correctamente`;
+                    debugLog.appendChild(entry);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
