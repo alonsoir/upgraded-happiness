@@ -32,23 +32,63 @@ from pathlib import Path
 from collections import deque, defaultdict
 from typing import Dict, Any, Optional, Tuple, List
 from threading import Event
+# 📦 Protobuf v3.0.0 - REQUERIDO - Importación robusta
+PROTOBUF_AVAILABLE = False
+PROTOBUF_VERSION = "unavailable"
+NetworkEventProto = None
 
-# 📦 Protobuf v3.0.0 - NUEVA VERSIÓN CON ENRIQUECIMIENTO DUAL
-try:
-    import src.protocols.protobuf.network_event_extended_v3_pb2 as NetworkEventProto
 
-    PROTOBUF_AVAILABLE = True
-    PROTOBUF_VERSION = "v3.0.0"
-except ImportError:
-    try:
-        from src.protocols.protobuf import network_event_extended_v3_pb2 as NetworkEventProto
+# 🔧 Rutas de importación robustas para protobuf
+def import_protobuf_module():
+    """Importa el módulo protobuf con múltiples estrategias"""
+    global NetworkEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
-        PROTOBUF_AVAILABLE = True
-        PROTOBUF_VERSION = "v3.0.0"
-    except ImportError:
-        print("⚠️ Protobuf network_event_extended_v3 no disponible")
-        PROTOBUF_AVAILABLE = False
-        PROTOBUF_VERSION = "none"
+    # Estrategia 1: Importación relativa desde protocols.current
+    import_strategies = [
+        ("protocols.current.network_event_extended_v3_pb2", "Paquete protocols.current"),
+        ("protocols.network_event_extended_v3_pb2", "Paquete protocols"),
+        ("network_event_extended_v3_pb2", "Importación directa"),
+    ]
+
+    for import_path, description in import_strategies:
+        try:
+            NetworkEventProto = __import__(import_path, fromlist=[''])
+            PROTOBUF_AVAILABLE = True
+            PROTOBUF_VERSION = "v3.0.0"
+            print(f"✅ Protobuf v3 cargado: {description} ({import_path})")
+            return True
+        except ImportError:
+            continue
+
+    # Estrategia 2: Añadir path dinámico y importar
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(current_dir, '..', 'protocols', 'current'),
+        os.path.join(current_dir, 'protocols', 'current'),
+        os.path.join(os.getcwd(), 'protocols', 'current'),
+    ]
+
+    for protocols_path in possible_paths:
+        protocols_path = os.path.abspath(protocols_path)
+        pb2_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+
+        if os.path.exists(pb2_file):
+            try:
+                sys.path.insert(0, protocols_path)
+                import network_event_extended_v3_pb2 as NetworkEventProto
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.0.0"
+                print(f"✅ Protobuf v3 cargado desde path: {protocols_path}")
+                return True
+            except ImportError as e:
+                sys.path.remove(protocols_path)
+                continue
+
+    return False
+
+
+# Ejecutar importación al inicio
+import_protobuf_module()
 
 # 📦 ML Libraries - SOLO 2 algoritmos ligeros para local
 try:

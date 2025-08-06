@@ -91,8 +91,8 @@ FIREWALL_CONFIG = $(CONFIG_DIR)/simple_firewall_agent_config.json
 NEURAL_CONFIG = $(CONFIG_DIR)/advanced_trainer_v2_config.json
 
 # Configuraciones adicionales (segundo parámetro)
-DASHBOARD_FIREWALL_CONFIG = config/firewall_rules_dashboard.json
-FIREWALL_AGENT_RULES_CONFIG = config/firewall_rules_agent.json
+DASHBOARD_FIREWALL_CONFIG = config/json/firewall_rules_dashboard.json
+FIREWALL_AGENT_RULES_CONFIG = config/json/firewall_rules_agent.json
 
 # =============================================================================
 # DIRECTORIOS ECOSISTEMA (POST-HOUSEKEEPING)
@@ -216,6 +216,11 @@ help:
 	@echo "  debug                    - Modo debug interactivo"
 	@echo "  benchmark                - Ejecutar benchmarks"
 	@echo ""
+	@echo "  health-check             - Análisis completo de salud del sistema"
+	@echo "  monitor-live             - Monitor en tiempo real (actualización cada 3s)"
+	@echo "  dashboard-terminal       - Dashboard compacto en terminal"
+	@echo "  test-sequence            - Verificar secuencia de arranque (dry run)"
+	@echo "  generate-monitor-script  - Generar script de monitoreo avanzado"
 	@echo "$(YELLOW)ℹ️  INFORMACIÓN:$(NC)"
 	@echo "  show-architecture        - Mostrar arquitectura del sistema"
 	@echo "  show-roadmap             - Ver roadmap y estado actual"
@@ -415,6 +420,139 @@ verify-protobuf-compiled:
 		$(MAKE) compile-protobuf; \
 	fi
 
+verify-firewall-rules:
+	@echo "$(BLUE)🔍 Verificando archivos de reglas de firewall...$(NC)"
+	@if [ ! -f "$(DASHBOARD_FIREWALL_CONFIG)" ]; then \
+		echo "$(YELLOW)⚠️  Creando $(DASHBOARD_FIREWALL_CONFIG)...$(NC)"; \
+		mkdir -p config/json; \
+		echo '{"firewall_rules": {"rules": [], "manual_actions": {}, "firewall_agents": {}, "global_settings": {}}}' > $(DASHBOARD_FIREWALL_CONFIG); \
+		echo "$(GREEN)✅ $(DASHBOARD_FIREWALL_CONFIG) creado$(NC)"; \
+	else \
+		echo "$(GREEN)✅ $(DASHBOARD_FIREWALL_CONFIG) encontrado$(NC)"; \
+	fi
+	@if [ ! -f "$(FIREWALL_AGENT_RULES_CONFIG)" ]; then \
+		echo "$(YELLOW)⚠️  Creando $(FIREWALL_AGENT_RULES_CONFIG)...$(NC)"; \
+		mkdir -p config/json; \
+		echo '{"firewall_rules": {"rules": [], "manual_actions": {}, "firewall_agents": {}, "global_settings": {}}}' > $(FIREWALL_AGENT_RULES_CONFIG); \
+		echo "$(GREEN)✅ $(FIREWALL_AGENT_RULES_CONFIG) creado$(NC)"; \
+	else \
+		echo "$(GREEN)✅ $(FIREWALL_AGENT_RULES_CONFIG) encontrado$(NC)"; \
+	fi
+
+# Añadir después de verify-firewall-rules (alrededor de línea 500)
+
+test-sequence:
+	@echo "$(CYAN)🧪 TEST DE SECUENCIA DE ARRANQUE$(NC)"
+	@echo "$(CYAN)====================================$(NC)"
+	@echo ""
+	@echo "$(YELLOW)📋 Verificando archivos de configuración...$(NC)"
+	@for config in $(PROMISCUOUS_CONFIG) $(GEOIP_CONFIG) $(ML_CONFIG) $(DASHBOARD_CONFIG) $(FIREWALL_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG); do \
+		if [ -f "$$config" ]; then \
+			echo "  ✅ $$config"; \
+		else \
+			echo "  ❌ $$config FALTA"; \
+		fi \
+	done
+	@echo ""
+	@echo "$(YELLOW)📋 Verificando ejecutables...$(NC)"
+	@for component in $(PROMISCUOUS_AGENT) $(GEOIP_ENRICHER) $(ML_DETECTOR) $(DASHBOARD) $(FIREWALL_AGENT); do \
+		if [ -f "$$component" ]; then \
+			SIZE=$$(ls -lh "$$component" | awk '{print $$5}'); \
+			echo "  ✅ $$component ($$SIZE)"; \
+		else \
+			echo "  ❌ $$component FALTA"; \
+		fi \
+	done
+	@echo ""
+	@echo "$(YELLOW)🔧 Comandos que se ejecutarán (DRY RUN):$(NC)"
+	@echo ""
+	@echo "  $(BLUE)1.$(NC) Firewall Agent:"
+	@echo "     $(GREEN)$(PYTHON_VENV) $(FIREWALL_AGENT) \\$(NC)"
+	@echo "       $(GREEN)$(FIREWALL_CONFIG) \\$(NC)"
+	@echo "       $(GREEN)$(FIREWALL_AGENT_RULES_CONFIG)$(NC)"
+	@echo ""
+	@echo "  $(BLUE)2.$(NC) Promiscuous Agent (requiere sudo):"
+	@echo "     $(GREEN)sudo $(PYTHON_VENV) $(PROMISCUOUS_AGENT) \\$(NC)"
+	@echo "       $(GREEN)$(PROMISCUOUS_CONFIG)$(NC)"
+	@echo ""
+	@echo "  $(BLUE)3.$(NC) GeoIP Enricher:"
+	@echo "     $(GREEN)$(PYTHON_VENV) $(GEOIP_ENRICHER) \\$(NC)"
+	@echo "       $(GREEN)$(GEOIP_CONFIG)$(NC)"
+	@echo ""
+	@echo "  $(BLUE)4.$(NC) ML Detector:"
+	@echo "     $(GREEN)$(PYTHON_VENV) $(ML_DETECTOR) \\$(NC)"
+	@echo "       $(GREEN)$(ML_CONFIG)$(NC)"
+	@echo ""
+	@echo "  $(BLUE)5.$(NC) Dashboard:"
+	@echo "     $(GREEN)$(PYTHON_VENV) $(DASHBOARD) \\$(NC)"
+	@echo "       $(GREEN)$(DASHBOARD_CONFIG) \\$(NC)"
+	@echo "       $(GREEN)$(DASHBOARD_FIREWALL_CONFIG)$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🔍 Verificando puertos...$(NC)"
+	@for port in $(CAPTURE_PORT) $(GEOIP_PORT) $(ML_PORT) $(FIREWALL_PORT) $(DASHBOARD_WEB_PORT); do \
+		if lsof -ti:$$port >/dev/null 2>&1; then \
+			echo "  ⚠️  Puerto $$port EN USO (PID: $$(lsof -ti:$$port))"; \
+		else \
+			echo "  ✅ Puerto $$port libre"; \
+		fi \
+	done
+	@echo ""
+	@echo "$(YELLOW)🔍 Verificando entorno virtual...$(NC)"
+	@if [ -d "$(VENV_NAME)" ]; then \
+		echo "  ✅ Entorno virtual existe: $(VENV_NAME)"; \
+		if [ -f "$(PYTHON_VENV)" ]; then \
+			echo "  ✅ Python: $(PYTHON_VENV)"; \
+			$(PYTHON_VENV) --version 2>/dev/null | sed 's/^/     /' || echo "     ❌ Error verificando versión"; \
+		else \
+			echo "  ❌ Python no encontrado en venv"; \
+		fi \
+	else \
+		echo "  ❌ Entorno virtual NO existe"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)🔍 Verificando permisos sudo...$(NC)"
+	@if sudo -n true 2>/dev/null; then \
+		echo "  ✅ Permisos sudo disponibles (sin password)"; \
+	else \
+		echo "  ⚠️  Se requerirá password para sudo"; \
+	fi
+	@echo ""
+	@echo "$(PURPLE)📊 RESUMEN:$(NC)"
+	@echo "  Para ejecutar el sistema: $(GREEN)make start$(NC)"
+	@echo "  Para parada normal: $(YELLOW)make stop$(NC)"
+	@echo "  Para parada nuclear: $(RED)make stop-nuclear$(NC)"
+
+monitor-live:
+	@echo "$(CYAN)🔄 Iniciando monitor en tiempo real...$(NC)"
+	@./scripts/utils/monitor_autoinmune.sh 3
+
+# Añadir después de monitor-live
+
+dashboard-terminal:
+	@echo "$(CYAN)📊 DASHBOARD TERMINAL - Sistema Autoinmune$(NC)"
+	@echo "$(CYAN)==========================================$(NC)"
+	@watch -n 2 -c '$(MAKE) -s health-check-compact'
+
+health-check-compact:
+	@echo "$(date '+%H:%M:%S') - SISTEMA AUTOINMUNE DIGITAL"
+	@echo "----------------------------------------"
+	@echo "COMPONENTES:"
+	@pgrep -f "simple_firewall_agent" >/dev/null && echo "  [✓] Firewall" || echo "  [✗] Firewall"
+	@pgrep -f "promiscuous_agent" >/dev/null && echo "  [✓] Promiscuous" || echo "  [✗] Promiscuous"
+	@pgrep -f "geoip_enricher" >/dev/null && echo "  [✓] GeoIP" || echo "  [✗] GeoIP"
+	@pgrep -f "lightweight_ml_detector" >/dev/null && echo "  [✓] ML Detector" || echo "  [✗] ML Detector"
+	@pgrep -f "real_zmq_dashboard" >/dev/null && echo "  [✓] Dashboard" || echo "  [✗] Dashboard"
+	@echo ""
+	@echo "RECURSOS:"
+	@ps aux | grep -E "python.*(core/)" | grep -v grep | awk '{cpu+=$$3; mem+=$$4} END {printf "  CPU Total: %.1f%%\n  MEM Total: %.1f%%\n", cpu, mem}'
+	@echo ""
+	@echo "ACTIVIDAD:"
+	@for log in $(LOGS_DIR)/*.log; do \
+		if [ -f "$$log" ]; then \
+			echo "  $$(basename $$log .log): $$(tail -1 $$log | cut -c1-50)..."; \
+		fi \
+	done | head -5
+
 check-protobuf-imports:
 	@echo "$(BLUE)🔍 Verificando imports de Protobuf en componentes core...$(NC)"
 	@echo "$(YELLOW)📋 Archivos que deben importar desde protocols/current/:$(NC)"
@@ -573,7 +711,7 @@ clean:
 # =============================================================================
 # GESTIÓN DEL SISTEMA PRINCIPAL (ACTUALIZADA POST-HOUSEKEEPING)
 # =============================================================================
-start: install verify check-geoip compile-protobuf stop
+start: install verify check-geoip compile-protobuf verify-firewall-rules stop
 	@echo "$(GREEN)🚀 Iniciando Sistema Autoinmune Digital v2.0 POST-HOUSEKEEPING...$(NC)"
 	@echo "$(CYAN)================================================================$(NC)"
 	@echo "$(PURPLE)Branch: $(BRANCH)$(NC)"
@@ -596,7 +734,7 @@ start: install verify check-geoip compile-protobuf stop
 	@echo ""
 
 	@echo "$(BLUE)1. 🛡️  Firewall Agent ($(FIREWALL_AGENT))...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 3
 
 	@echo "$(BLUE)2. 🕵️  Promiscuous Agent → Puerto $(CAPTURE_PORT)...$(NC)"
@@ -612,7 +750,7 @@ start: install verify check-geoip compile-protobuf stop
 	@sleep 3
 
 	@echo "$(BLUE)5. 📊 Dashboard Web ($(ML_PORT) → UI $(DASHBOARD_WEB_PORT))...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
 	@sleep 5
 
 	@echo ""
@@ -634,7 +772,7 @@ start-core: install verify verify-protobuf-compiled stop
 	@test -f $(DASHBOARD_CONFIG) || (mkdir -p $(CONFIG_DIR) && echo '{"port": 8080, "host": "localhost", "debug": false}' > $(DASHBOARD_CONFIG))
 	@test -f $(ML_CONFIG) || (mkdir -p $(CONFIG_DIR) && echo '{"model_path": "models/production/", "tricapa_enabled": true}' > $(ML_CONFIG))
 
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $! > $(FIREWALL_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
 	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $! > $(PROMISCUOUS_PID)'
 	@sleep 2
@@ -642,7 +780,7 @@ start-core: install verify verify-protobuf-compiled stop
 	@sleep 2
 	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $! > $(ML_PID)
 	@sleep 2
-	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $! > $(DASHBOARD_PID)
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
 	@echo "$(GREEN)✅ Componentes core iniciados con estructura post-housekeeping$(NC)"
 
 start-advanced:
@@ -665,7 +803,7 @@ start-bg: install verify check-geoip verify-protobuf-compiled stop
 	@echo "$(GREEN)🚀 Iniciando sistema (background mode)...$(NC)"
 	@test -f $(FIREWALL_CONFIG) || (mkdir -p config && echo '{"rules": [], "enabled": true, "mode": "agent"}' > $(FIREWALL_CONFIG))
 	@test -f $(DASHBOARD_CONFIG) || (mkdir -p config && echo '{"dashboard_rules": [], "monitoring": true, "mode": "dashboard"}' > $(DASHBOARD_CONFIG))
-	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $! > $(FIREWALL_PID)
+	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(FIREWALL_AGENT) $(FIREWALL_CONFIG) $(FIREWALL_AGENT_RULES_CONFIG) > $(FIREWALL_LOG) 2>&1 & echo $$! > $(FIREWALL_PID)
 	@sleep 2
 	@sudo bash -c 'nohup $(PYTHON_VENV) $(PROMISCUOUS_AGENT) $(PROMISCUOUS_CONFIG) > $(PROMISCUOUS_LOG) 2>&1 & echo $! > $(PROMISCUOUS_PID)'
 	@sleep 2
@@ -673,7 +811,7 @@ start-bg: install verify check-geoip verify-protobuf-compiled stop
 	@sleep 2
 	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(ML_DETECTOR) $(ML_CONFIG) > $(ML_LOG) 2>&1 & echo $! > $(ML_PID)
 	@sleep 2
-	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $! > $(DASHBOARD_PID)
+	@$(ACTIVATE) && nohup $(PYTHON_VENV) $(DASHBOARD) $(DASHBOARD_CONFIG) $(DASHBOARD_FIREWALL_CONFIG) > $(DASHBOARD_LOG) 2>&1 & echo $$! > $(DASHBOARD_PID)
 	@echo "$(GREEN)✅ Sistema iniciado en background$(NC)"
 	@echo "$(YELLOW)📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
 
@@ -760,49 +898,129 @@ stop:
 
 	@echo "$(GREEN)✅ Sistema post-housekeeping detenido correctamente$(NC)"
 
+# Añadir después de stop, antes de stop-nuclear
+
+stop-force:
+	@echo "$(YELLOW)⚡ Parada forzada (más agresiva que stop, menos que nuclear)$(NC)"
+	@$(MAKE) stop
+	@sleep 2
+	@echo "$(YELLOW)🔨 Aplicando fuerza adicional...$(NC)"
+	@-pkill -9 -f "core/.*\.py" 2>/dev/null || true
+	@-sudo pkill -9 -f "promiscuous_agent" 2>/dev/null || true
+	@for port in $(CAPTURE_PORT) $(GEOIP_PORT) $(ML_PORT) $(FIREWALL_PORT) $(DASHBOARD_WEB_PORT); do \
+		lsof -ti:$$port 2>/dev/null | xargs -r kill -9 2>/dev/null || true; \
+	done
+	@rm -f $(PIDS_DIR)/*.pid
+	@echo "$(GREEN)✅ Parada forzada completada$(NC)"
+
 # Comando de emergency stop (nuclear) - VERSIÓN MEJORADA POST-HOUSEKEEPING
+# Reemplazar el stop-nuclear existente con esta versión mejorada
+
 stop-nuclear:
-	@echo "$(RED)🚨 PARADA NUCLEAR POST-HOUSEKEEPING ACTIVADA$(NC)"
-	@echo "$(RED)=============================================$(NC)"
-	@echo "$(RED)⚠️  EMERGENCIA: Matando TODOS los procesos relacionados$(NC)"
+	@echo "$(RED)☢️  PARADA NUCLEAR ULTRA POST-HOUSEKEEPING ACTIVADA ☢️$(NC)"
+	@echo "$(RED)======================================================$(NC)"
+	@echo "$(RED)⚠️  DEFCON 1: Exterminación total de procesos$(NC)"
+	@echo ""
 
-	# Nuclear 1: Matar TODOS los procesos Python del proyecto
-	@echo "💀 Método Nuclear 1: Todos los procesos Python del proyecto..."
-	@-ps aux | grep -E "python.*upgraded|python.*core/|python.*ml_pipeline/" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
-	@-ps aux | grep -E "python.*upgraded|python.*core/|python.*ml_pipeline/" | grep -v grep | awk '{print $2}' | xargs -r sudo kill -9 2>/dev/null || true
+	# Pre-check: Mostrar lo que vamos a matar
+	@echo "$(YELLOW)🔍 Procesos objetivo detectados:$(NC)"
+	@ps aux | grep -E "python.*upgraded|python.*core/|python.*ml_pipeline/" | grep -v grep | awk '{print "  🎯 " $$2 " - " $$11}' | head -10 || echo "  No hay procesos detectados"
+	@echo ""
 
-	# Nuclear 2: Matar por nombres específicos de archivos
-	@echo "💀 Método Nuclear 2: Por nombres de archivos específicos..."
-	@-ps aux | grep -E "promiscuous_agent|geoip_enricher|lightweight_ml_detector|dashboard_with_firewall|simple_firewall_agent|fixed_service_sniffer" | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
-	@-ps aux | grep -E "promiscuous_agent|geoip_enricher|lightweight_ml_detector|dashboard_with_firewall|simple_firewall_agent|fixed_service_sniffer" | grep -v grep | awk '{print $2}' | xargs -r sudo kill -9 2>/dev/null || true
+	# Nuclear 1: Soft kill primero (dar oportunidad de cleanup)
+	@echo "$(YELLOW)💀 Fase 1: Soft kill (SIGTERM)...$(NC)"
+	@-pkill -TERM -f "promiscuous_agent|geoip_enricher|lightweight_ml_detector|dashboard_with_firewall|simple_firewall_agent" 2>/dev/null || true
+	@sleep 1
 
-	# Nuclear 3: Limpiar procesos sudo colgados
-	@echo "💀 Método Nuclear 3: Procesos sudo colgados..."
+	# Nuclear 2: Kill por nombres específicos
+	@echo "$(YELLOW)💀 Fase 2: Kill específico por componentes...$(NC)"
+	@-pkill -9 -f "promiscuous_agent" 2>/dev/null || true
+	@-pkill -9 -f "geoip_enricher" 2>/dev/null || true
+	@-pkill -9 -f "lightweight_ml_detector" 2>/dev/null || true
+	@-pkill -9 -f "real_zmq_dashboard_with_firewall" 2>/dev/null || true
+	@-pkill -9 -f "simple_firewall_agent" 2>/dev/null || true
+	@-pkill -9 -f "fixed_service_sniffer" 2>/dev/null || true
+	@sleep 1
+
+	# Nuclear 3: Sudo kill para procesos con privilegios
+	@echo "$(YELLOW)💀 Fase 3: Sudo kill (procesos privilegiados)...$(NC)"
 	@-sudo pkill -9 -f "python.*promiscuous" 2>/dev/null || true
 	@-sudo pkill -9 -f "python.*core/" 2>/dev/null || true
+	@-sudo pkill -9 -f "python.*ml_pipeline/" 2>/dev/null || true
 
-	# Nuclear 4: Liberar puertos ZeroMQ forzado
-	@echo "💀 Método Nuclear 4: Liberando puertos ZeroMQ..."
-	@-lsof -ti:5559,5560,5561,5562,8080,8090 2>/dev/null | xargs -r kill -9 2>/dev/null || true
-	@-sudo lsof -ti:5559,5560,5561,5562,8080,8090 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
+	# Nuclear 4: Matar por PID files si existen
+	@echo "$(YELLOW)💀 Fase 4: Kill por archivos PID...$(NC)"
+	@for pidfile in $(PIDS_DIR)/*.pid; do \
+		if [ -f "$$pidfile" ]; then \
+			PID=$$(cat "$$pidfile" 2>/dev/null); \
+			if [ ! -z "$$PID" ]; then \
+				echo "  Matando PID $$PID desde $$pidfile"; \
+				kill -9 "$$PID" 2>/dev/null || sudo kill -9 "$$PID" 2>/dev/null || true; \
+			fi; \
+			rm -f "$$pidfile"; \
+		fi \
+	done
 
-	# Nuclear 5: Limpiar todos los archivos de estado
-	@echo "💀 Método Nuclear 5: Limpiando archivos de estado..."
-	@-rm -f $(PIDS_DIR)/*.pid
+	# Nuclear 5: Liberar puertos (más agresivo)
+	@echo "$(YELLOW)💀 Fase 5: Liberación forzada de puertos...$(NC)"
+	@for port in $(CAPTURE_PORT) $(GEOIP_PORT) $(ML_PORT) $(FIREWALL_PORT) $(DASHBOARD_WEB_PORT); do \
+		PIDS=$$(lsof -ti:$$port 2>/dev/null); \
+		if [ ! -z "$$PIDS" ]; then \
+			echo "  Puerto $$port ocupado por PIDs: $$PIDS"; \
+			echo "$$PIDS" | xargs -r kill -9 2>/dev/null || echo "$$PIDS" | xargs -r sudo kill -9 2>/dev/null || true; \
+		fi \
+	done
+
+	# Nuclear 6: Buscar y destruir por patrón amplio
+	@echo "$(YELLOW)💀 Fase 6: Búsqueda y destrucción por patrón...$(NC)"
+	@-ps aux | grep -E "python.*(upgraded|core/|ml_pipeline/|config/json)" | grep -v grep | awk '{print $$2}' | xargs -r kill -9 2>/dev/null || true
+	@-ps aux | grep -E "python.*(upgraded|core/|ml_pipeline/|config/json)" | grep -v grep | awk '{print $$2}' | xargs -r sudo kill -9 2>/dev/null || true
+
+	# Nuclear 7: Limpieza total de archivos temporales
+	@echo "$(YELLOW)💀 Fase 7: Limpieza de archivos temporales...$(NC)"
+	@-rm -rf $(PIDS_DIR)/*.pid
 	@-rm -f $(LOGS_DIR)/*.log.lock 2>/dev/null || true
-	@-sudo rm -f /tmp/*upgraded*happiness* 2>/dev/null || true
+	@-rm -f /tmp/*upgraded*happiness* 2>/dev/null || true
+	@-rm -f /tmp/zmq* 2>/dev/null || true
+	@-sudo rm -f /var/run/*upgraded* 2>/dev/null || true
 
-	# Nuclear 6: Verificar que no quede nada
-	@echo "🔍 Verificación post-nuclear..."
-	@SURVIVORS=$(ps aux | grep -E "python.*upgraded|python.*core/|python.*ml_pipeline/" | grep -v grep | wc -l); \
-	if [ $SURVIVORS -gt 0 ]; then \
-		echo "$(RED)⚠️  $SURVIVORS procesos supervivientes encontrados$(NC)"; \
-		ps aux | grep -E "python.*upgraded|python.*core/|python.*ml_pipeline/" | grep -v grep | sed 's/^/  /' || true; \
+	# Nuclear 8: Verificación final ULTRA
+	@echo ""
+	@echo "$(RED)☢️  VERIFICACIÓN POST-NUCLEAR:$(NC)"
+	@SURVIVORS=$$(ps aux | grep -E "python.*(upgraded|core/|ml_pipeline/)" | grep -v grep | wc -l); \
+	if [ $$SURVIVORS -gt 0 ]; then \
+		echo "$(RED)⚠️  ALERTA: $$SURVIVORS procesos supervivientes detectados$(NC)"; \
+		echo "$(YELLOW)Intentando exterminación final...$(NC)"; \
+		ps aux | grep -E "python.*(upgraded|core/|ml_pipeline/)" | grep -v grep | awk '{print $$2}' | while read pid; do \
+			echo "  ☠️  Exterminando superviviente PID: $$pid"; \
+			kill -9 $$pid 2>/dev/null || sudo kill -9 $$pid 2>/dev/null || true; \
+		done; \
+		sleep 2; \
+		FINAL_CHECK=$$(ps aux | grep -E "python.*(upgraded|core/|ml_pipeline/)" | grep -v grep | wc -l); \
+		if [ $$FINAL_CHECK -gt 0 ]; then \
+			echo "$(RED)⚠️  SUPERVIVIENTES INMORTALES:$(NC)"; \
+			ps aux | grep -E "python.*(upgraded|core/|ml_pipeline/)" | grep -v grep | sed 's/^/    /' || true; \
+			echo "$(RED)Requiere intervención manual con: sudo kill -9 <PID>$(NC)"; \
+		else \
+			echo "$(GREEN)✅ Exterminación completa - 0 supervivientes$(NC)"; \
+		fi \
 	else \
-		echo "$(GREEN)✅ Parada nuclear completada - 0 supervivientes$(NC)"; \
+		echo "$(GREEN)☢️  ÉXITO TOTAL: 0 supervivientes$(NC)"; \
 	fi
 
-	@echo "$(GREEN)💀 PARADA NUCLEAR POST-HOUSEKEEPING COMPLETADA$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🔍 Estado de puertos después de la purga:$(NC)"
+	@for port in $(CAPTURE_PORT) $(GEOIP_PORT) $(ML_PORT) $(FIREWALL_PORT) $(DASHBOARD_WEB_PORT); do \
+		if lsof -ti:$$port >/dev/null 2>&1; then \
+			echo "  ❌ Puerto $$port AÚN OCUPADO"; \
+		else \
+			echo "  ✅ Puerto $$port liberado"; \
+		fi \
+	done
+
+	@echo ""
+	@echo "$(GREEN)☢️  PARADA NUCLEAR ULTRA COMPLETADA ☢️$(NC)"
+	@echo "$(GREEN)Sistema listo para reinicio limpio con 'make start'$(NC)"
 
 restart: stop
 	@sleep 3

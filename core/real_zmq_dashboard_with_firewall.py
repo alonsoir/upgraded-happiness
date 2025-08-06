@@ -30,6 +30,96 @@ from urllib.parse import urlparse
 import mimetypes
 from collections import defaultdict, deque
 
+# 📦 Protobuf v3.0.0 - REQUERIDO - Importación robusta para Dashboard
+PROTOBUF_AVAILABLE = False
+PROTOBUF_VERSION = "unavailable"
+NetworkEventProto = None
+FirewallCommandsProto = None
+
+
+def import_dashboard_protobuf_modules():
+    """Importa los módulos protobuf necesarios para el dashboard con múltiples estrategias"""
+    global NetworkEventProto, FirewallCommandsProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+
+    # Necesitamos importar dos módulos
+    network_event_imported = False
+    firewall_commands_imported = False
+
+    # Estrategia 1: Importación desde protocols.current
+    import_strategies = [
+        ("protocols.current", "Paquete protocols.current"),
+        ("protocols", "Paquete protocols"),
+        ("", "Importación directa"),
+    ]
+
+    for base_path, description in import_strategies:
+        try:
+            if base_path:
+                # Importar network_event_extended_v3_pb2
+                module_path = f"{base_path}.network_event_extended_v3_pb2"
+                NetworkEventProto = __import__(module_path, fromlist=[''])
+                network_event_imported = True
+
+                # Importar firewall_commands_pb2
+                module_path = f"{base_path}.firewall_commands_pb2"
+                FirewallCommandsProto = __import__(module_path, fromlist=[''])
+                firewall_commands_imported = True
+            else:
+                # Importación directa
+                import network_event_extended_v3_pb2 as NetworkEventProto
+                network_event_imported = True
+
+                import firewall_commands_pb2 as FirewallCommandsProto
+                firewall_commands_imported = True
+
+            if network_event_imported and firewall_commands_imported:
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.0.0"
+                print(f"✅ Protobuf v3 módulos cargados: {description}")
+                return True
+
+        except ImportError:
+            continue
+
+    # Estrategia 2: Añadir path dinámico y importar
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(current_dir, '..', 'protocols', 'current'),
+        os.path.join(current_dir, 'protocols', 'current'),
+        os.path.join(os.getcwd(), 'protocols', 'current'),
+    ]
+
+    for protocols_path in possible_paths:
+        protocols_path = os.path.abspath(protocols_path)
+        network_pb2_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+        firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_pb2.py')
+
+        if os.path.exists(network_pb2_file) and os.path.exists(firewall_pb2_file):
+            try:
+                sys.path.insert(0, protocols_path)
+
+                # Importar ambos módulos
+                import network_event_extended_v3_pb2 as NetworkEventProto
+                import firewall_commands_pb2 as FirewallCommandsProto
+
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.0.0"
+                print(f"✅ Protobuf v3 módulos cargados desde path: {protocols_path}")
+                return True
+
+            except ImportError as e:
+                print(f"⚠️ Error importando desde {protocols_path}: {e}")
+                sys.path.remove(protocols_path)
+                continue
+
+    # Si llegamos aquí, no se pudieron importar los módulos
+    print("❌ No se pudieron cargar los módulos protobuf del dashboard")
+    print(f"   Buscados: network_event_extended_v3_pb2.py y firewall_commands_pb2.py")
+    return False
+
+
+# Ejecutar importación al inicio
+import_dashboard_protobuf_modules()
 
 class ConfigurationError(Exception):
     """Error de configuración del dashboard"""
@@ -1608,10 +1698,11 @@ class SecurityDashboard:
         try:
             # ✅ INTENTAR IMPORTAR PROTOBUF V3 PRIMERO
             try:
-                import src.protocols.protobuf.network_event_extended_v3_pb2 as network_v3_pb2
+                if not PROTOBUF_AVAILABLE or NetworkEventProto is None:
+                    raise ImportError("Protobuf modules not available")
 
                 # ✅ Intentar parsear como NetworkEvent V3
-                event = network_v3_pb2.NetworkEvent()
+                event = NetworkEventProto.NetworkEvent()
                 event.ParseFromString(data)
 
                 # ✅ CONVERTIR V3 A DICCIONARIO COMPLETO
@@ -2014,10 +2105,11 @@ class SecurityDashboard:
         try:
             # Intentar con protobuf V2/legacy
             try:
-                import src.protocols.protobuf.network_event_extended_v3_pb2 as network_pb2
+                if not PROTOBUF_AVAILABLE or NetworkEventProto is None:
+                    raise ImportError("Protobuf modules not available")
 
                 # Intentar parsear como NetworkEvent
-                event = network_pb2.NetworkEvent()
+                event = NetworkEventProto.NetworkEvent()
                 event.ParseFromString(data)
 
                 # Convertir a diccionario con estructura V2
@@ -2398,29 +2490,30 @@ class SecurityDashboard:
     def _send_firewall_command_with_rules(self, command: FirewallCommand, worker_id: int):
         """Enviar comando de firewall usando configuración de reglas JSON - MEJORADO"""
         try:
-            # Importar protobuf
-            import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
+            # Verificar protobuf disponible
+            if not PROTOBUF_AVAILABLE or FirewallCommandsProto is None:
+                raise ImportError("Firewall protobuf module not available")
 
             # Convertir comando Python a protobuf
-            proto_command = fw_pb2.FirewallCommand()
+            proto_command = FirewallCommandsProto.FirewallCommand()
             proto_command.command_id = getattr(command, 'event_id', f"cmd_{int(time.time())}")
 
             # ✅ CORREGIDO: Mapear action string a enum
             action_mapping = {
-                'BLOCK_IP': fw_pb2.CommandAction.BLOCK_IP,
-                'UNBLOCK_IP': fw_pb2.CommandAction.UNBLOCK_IP,
-                'RATE_LIMIT_IP': fw_pb2.CommandAction.RATE_LIMIT_IP,  # ✅ CORREGIDO: Nombre completo
-                'RATE_LIMIT': fw_pb2.CommandAction.RATE_LIMIT_IP,  # ✅ ALIAS para compatibilidad
-                'MONITOR': fw_pb2.CommandAction.ALLOW_IP_TEMP,  # ✅ CORREGIDO: MONITOR es ALLOW_IP_TEMP
-                'ALLOW_IP_TEMP': fw_pb2.CommandAction.ALLOW_IP_TEMP,  # ✅ AÑADIDO: Nombre directo
-                'LIST_RULES': fw_pb2.CommandAction.LIST_RULES,
-                'FLUSH_RULES': fw_pb2.CommandAction.FLUSH_RULES,
-                'BACKUP_RULES': fw_pb2.CommandAction.BACKUP_RULES,  # ✅ AÑADIDO: Faltaba
-                'RESTORE_RULES': fw_pb2.CommandAction.RESTORE_RULES  # ✅ AÑADIDO: Faltaba
+                'BLOCK_IP': FirewallCommandsProto.CommandAction.BLOCK_IP,
+                'UNBLOCK_IP': FirewallCommandsProto.CommandAction.UNBLOCK_IP,
+                'RATE_LIMIT_IP': FirewallCommandsProto.CommandAction.RATE_LIMIT_IP,  # ✅ CORREGIDO: Nombre completo
+                'RATE_LIMIT': FirewallCommandsProto.CommandAction.RATE_LIMIT_IP,  # ✅ ALIAS para compatibilidad
+                'MONITOR': FirewallCommandsProto.CommandAction.ALLOW_IP_TEMP,  # ✅ CORREGIDO: MONITOR es ALLOW_IP_TEMP
+                'ALLOW_IP_TEMP': FirewallCommandsProto.CommandAction.ALLOW_IP_TEMP,  # ✅ AÑADIDO: Nombre directo
+                'LIST_RULES': FirewallCommandsProto.CommandAction.LIST_RULES,
+                'FLUSH_RULES': FirewallCommandsProto.CommandAction.FLUSH_RULES,
+                'BACKUP_RULES': FirewallCommandsProto.CommandAction.BACKUP_RULES,  # ✅ AÑADIDO: Faltaba
+                'RESTORE_RULES': FirewallCommandsProto.CommandAction.RESTORE_RULES  # ✅ AÑADIDO: Faltaba
             }
 
             action_str = getattr(command, 'action', 'LIST_RULES')
-            proto_command.action = action_mapping.get(action_str, fw_pb2.CommandAction.LIST_RULES)
+            proto_command.action = action_mapping.get(action_str, FirewallCommandsProto.CommandAction.LIST_RULES)
 
             proto_command.target_ip = getattr(command, 'target_ip', '127.0.0.1')
             proto_command.target_port = getattr(command, 'port', 0)
@@ -2441,13 +2534,13 @@ class SecurityDashboard:
             if manual_action_info:
                 priority_str = manual_action_info.get('priority', 'MEDIUM')
                 priority_mapping = {
-                    'LOW': fw_pb2.CommandPriority.LOW,
-                    'MEDIUM': fw_pb2.CommandPriority.MEDIUM,
-                    'HIGH': fw_pb2.CommandPriority.HIGH
+                    'LOW': FirewallCommandsProto.CommandPriority.LOW,
+                    'MEDIUM': FirewallCommandsProto.CommandPriority.MEDIUM,
+                    'HIGH': FirewallCommandsProto.CommandPriority.HIGH
                 }
-                proto_command.priority = priority_mapping.get(priority_str, fw_pb2.CommandPriority.MEDIUM)
+                proto_command.priority = priority_mapping.get(priority_str, FirewallCommandsProto.CommandPriority.MEDIUM)
             else:
-                proto_command.priority = fw_pb2.CommandPriority.MEDIUM
+                proto_command.priority = FirewallCommandsProto.CommandPriority.MEDIUM
 
             # 🔥 Dry run basado en configuración global
             global_settings = self.firewall_rules_engine.global_settings
@@ -2506,11 +2599,12 @@ class SecurityDashboard:
 
                 # ✅ PARSER ESPECÍFICO PARA FIREWALL RESPONSE
                 try:
-                    # ✅ Importar protobuf de firewall
-                    import src.protocols.protobuf.firewall_commands_pb2 as fw_pb2
+                    # ✅ Verificar protobuf disponible
+                    if not PROTOBUF_AVAILABLE or FirewallCommandsProto is None:
+                        raise ImportError("Firewall protobuf module not available")
 
                     # ✅ Parsear como FirewallResponse
-                    pb_response = fw_pb2.FirewallResponse()
+                    pb_response = FirewallCommandsProto.FirewallResponse()
                     pb_response.ParseFromString(response_bytes)
 
                     # ✅ Convertir a dict para procesamiento
