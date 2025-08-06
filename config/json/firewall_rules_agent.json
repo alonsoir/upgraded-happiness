@@ -1,0 +1,110 @@
+{
+  "firewall_rules": {
+    "version": "1.0-ULTRA-SECURE",
+    "last_updated": "2025-07-25T12:00:00Z",
+    "description": "ULTRA-SECURE firewall rules - Set it and forget it",
+    "author": "upgraded-happiness architecture - security hardened",
+
+    "_security_notice": "🔒 TODAS las reglas están configuradas para máxima seguridad",
+
+    "rules": [
+      {
+        "risk_range": [0, 100],
+        "action": "MONITOR",
+        "description": "ULTRA-SECURE: Solo monitoreo para todos los niveles de riesgo",
+        "params": {
+          "duration": 60,
+          "log_level": "info",
+          "alert_threshold": false,
+          "max_duration": 300
+        },
+        "priority": "LOW",
+        "dry_run": true,
+        "enabled": true,
+        "safety_override": "force_monitor_only"
+      }
+    ],
+
+    "manual_actions": {
+      "MONITOR": {
+        "description": "Monitorear IP - SEGURO",
+        "params": {
+          "duration": 300,
+          "max_duration": 300
+        },
+        "requires_confirmation": false,
+        "safety_level": "SAFE",
+        "enabled": true
+      },
+      "LIST_RULES": {
+        "description": "Listar reglas activas - SEGURO",
+        "params": {
+          "timeout": 10
+        },
+        "requires_confirmation": false,
+        "safety_level": "SAFE",
+        "enabled": true
+      },
+      "BLOCK_IP": {
+        "description": "Bloquear IP - DESHABILITADO EN MODO SEGURO",
+        "params": {
+          "duration": 0,
+          "permanent": false
+        },
+        "requires_confirmation": true,
+        "safety_level": "DANGEROUS",
+        "enabled": false,
+        "disabled_reason": "Ultra-secure mode: blocking disabled"
+      },
+      "RATE_LIMIT": {
+        "description": "Rate limiting - DESHABILITADO EN MODO SEGURO",
+        "params": {
+          "requests_per_minute": 0,
+          "duration": 0
+        },
+        "requires_confirmation": true,
+        "safety_level": "DANGEROUS",
+        "enabled": false,
+        "disabled_reason": "Ultra-secure mode: rate limiting disabled"
+      }
+    },
+
+    "firewall_agents": {
+      "simple_firewall_agent_001": {
+        "node_id": "simple_firewall_agent_001",
+        "endpoint": "tcp://localhost:5580",
+        "capabilities": ["MONITOR", "LIST_RULES"],
+        "blocked_capabilities": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+        "max_rules": 10,
+        "default_rule_duration": 60,
+        "safety_mode": "ULTRA_SECURE",
+        "auto_force_dry_run": true
+      }
+    },
+
+    "global_settings": {
+      "max_concurrent_actions": 1,
+      "action_timeout_seconds": 10,
+      "retry_attempts": 1,
+      "log_all_actions": true,
+      "require_confirmation_above_risk": 0,
+      "force_dry_run_global": true,
+      "max_rule_duration_global": 300,
+      "safety_mode": "ULTRA_SECURE",
+      "auto_safety_overrides": {
+        "detect_root_user": true,
+        "detect_sudo_context": true,
+        "detect_container": true,
+        "force_safe_defaults": true
+      }
+    },
+
+    "_security_guarantees": {
+      "no_real_firewall_changes": "All actions are dry_run or monitoring only",
+      "no_dangerous_commands": "Only MONITOR and LIST_RULES are enabled",
+      "automatic_safety": "Detects dangerous conditions and becomes more secure",
+      "comprehensive_logging": "All commands logged for security audit",
+      "fail_safe_design": "When in doubt, chooses the most secure option"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "ml": {
+    "enabled": true,
+    "kaggle_dataset": "mrwellsdavid/unsw-nb15",
+    "dataset_path": "",
+    "anomaly_threshold": 0.75,
+    "high_risk_threshold": 0.92,
+    "confidence_threshold": 0.8,
+    "models": {
+      "random_forest": {
+        "n_estimators": 500,
+        "class_weight": "balanced_subsample",
+        "random_state": 42,
+        "max_depth": 50,
+        "min_samples_leaf": 2,
+        "max_features": "sqrt",
+        "n_jobs": -1
+      }
+    }
+  }
+}

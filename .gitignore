@@ -89,6 +89,8 @@ logs/
 data/
 data/*.*
 
+RISK_ASSESSMENT.md
+
 results/
 results/*.*
 

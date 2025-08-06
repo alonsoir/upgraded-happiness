@@ -1,0 +1,80 @@
+{
+  "validation_info": {
+    "name": "Ensemble Model Validation Suite",
+    "version": "1.1.0",
+    "description": "Testing suite para validar modelos antes de producción - UPDATED",
+    "created": "2025-07-30T09:28:34.731857",
+    "updated": "2025-07-30T14:42:48.000000"
+  },
+  "models": {
+    "attack_detector": {
+      "path": "models/model_20250730_144248/model.pkl",
+      "scaler_path": "models/model_20250730_144248/scaler.pkl",
+      "metadata_path": "models/model_20250730_144248/metadata.json",
+      "type": "advanced",
+      "expected_features": 21,
+      "description": "Detector general de ataques conocidos - MULTI-DATASET SIN DNS BIAS",
+      "training_info": {
+        "datasets": ["UNSW-NB15"],
+        "dns_filtered": true,
+        "total_samples": 8009713,
+        "final_accuracy": 0.9978,
+        "fpr": 0.0024,
+        "detection_rate": 1.0000
+      }
+    },
+    "normal_behavior": {
+      "path": "models/rf_normal_behavior.joblib",
+      "feature_order_path": "models/feature_order.txt",
+      "type": "simple",
+      "expected_features": 28,
+      "description": "Modelo de comportamiento normal público"
+    },
+    "internal_behavior": {
+      "path": "models/rf_internal_behavior.joblib",
+      "feature_order_path": "models/feature_order.txt",
+      "type": "simple",
+      "expected_features": 28,
+      "description": "Modelo de comportamiento interno privado"
+    }
+  },
+  "test_scenarios": {
+    "dns_lookup": {
+      "description": "Lookup DNS normal - NO debe ser 100% peligroso",
+      "expected_classification": "NORMAL",
+      "max_anomaly_score": 0.3,
+      "critical_test": true
+    },
+    "normal_web": {
+      "description": "Tráfico web normal HTTP/HTTPS",
+      "expected_classification": "NORMAL",
+      "max_anomaly_score": 0.2
+    },
+    "internal_communication": {
+      "description": "Comunicación interna entre IPs privadas",
+      "expected_classification": "NORMAL_INTERNAL",
+      "max_anomaly_score": 0.25
+    },
+    "suspicious_scan": {
+      "description": "Posible port scan",
+      "expected_classification": "ANOMALOUS",
+      "min_anomaly_score": 0.6
+    },
+    "obvious_attack": {
+      "description": "Ataque obvio con patrón conocido",
+      "expected_classification": "ATTACK",
+      "min_anomaly_score": 0.8
+    }
+  },
+  "validation_thresholds": {
+    "attack_threshold": 0.75,
+    "normal_threshold": 0.85,
+    "anomaly_threshold": 0.25,
+    "confidence_threshold": 0.7
+  },
+  "output": {
+    "detailed_report": "validation_results/detailed_report.json",
+    "summary_report": "validation_results/summary_report.txt",
+    "failed_tests": "validation_results/failed_tests.json"
+  }
+}

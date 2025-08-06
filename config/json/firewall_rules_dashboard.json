@@ -1,0 +1,97 @@
+{
+  "firewall_rules": {
+    "version": "1.0",
+    "last_updated": "2025-07-21T12:00:00Z",
+    "description": "Reglas de acción del firewall basadas en risk_score",
+    "author": "upgraded-happiness architecture",
+    "rules": [
+      {
+        "risk_range": [0, 30],
+        "action": "MONITOR",
+        "description": "Riesgo bajo - solo monitorear",
+        "params": {
+          "duration": 300,
+          "log_level": "info",
+          "alert_threshold": false
+        },
+        "priority": "LOW",
+        "dry_run": true,
+        "enabled": true
+      },
+      {
+        "risk_range": [31, 70],
+        "action": "RATE_LIMIT",
+        "description": "Riesgo medio - aplicar rate limiting",
+        "params": {
+          "requests_per_minute": 10,
+          "duration": 600,
+          "burst_size": 5,
+          "log_level": "warning"
+        },
+        "priority": "MEDIUM",
+        "dry_run": false,
+        "enabled": true
+      },
+      {
+        "risk_range": [71, 100],
+        "action": "BLOCK_IP",
+        "description": "Riesgo alto - bloqueo inmediato de IP",
+        "params": {
+          "duration": 3600,
+          "permanent": false,
+          "log_level": "critical",
+          "notify_admin": true
+        },
+        "priority": "HIGH",
+        "dry_run": false,
+        "enabled": true
+      }
+    ],
+    "manual_actions": {
+      "BLOCK_IP": {
+        "description": "Bloquear IP específica",
+        "params": {
+          "duration": 1800,
+          "permanent": false
+        },
+        "requires_confirmation": true
+      },
+      "RATE_LIMIT": {
+        "description": "Aplicar rate limiting a IP",
+        "params": {
+          "requests_per_minute": 5,
+          "duration": 300
+        },
+        "requires_confirmation": false
+      },
+      "MONITOR": {
+        "description": "Monitorear IP sin restricciones",
+        "params": {
+          "duration": 600
+        },
+        "requires_confirmation": false
+      },
+      "LIST_RULES": {
+        "description": "Listar reglas activas del firewall",
+        "params": {},
+        "requires_confirmation": false
+      }
+    },
+    "firewall_agents": {
+      "simple_firewall_agent_001": {
+        "node_id": "simple_firewall_agent_001",
+        "endpoint": "tcp://localhost:5580",
+        "capabilities": ["BLOCK_IP", "RATE_LIMIT", "MONITOR", "LIST_RULES"],
+        "max_rules": 1000,
+        "default_rule_duration": 600
+      }
+    },
+    "global_settings": {
+      "max_concurrent_actions": 10,
+      "action_timeout_seconds": 30,
+      "retry_attempts": 3,
+      "log_all_actions": true,
+      "require_confirmation_above_risk": 80
+    }
+  }
+}
