@@ -91,6 +91,14 @@ data/*.*
 
 RISK_ASSESSMENT.md
 
+datasets/
+datasets/ddos/*.*
+datasets/ddos/*.zip
+
+datasets/ransomware/*.*
+datasets/ransomware/*.csv
+datasets_parquet/
+
 results/
 results/*.*
 
