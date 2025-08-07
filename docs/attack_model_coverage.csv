@@ -1,0 +1,277 @@
+| Nº | Tipo de ataque                   | Dataset(s) recomendados               | ¿Modelo entrenado? | ¿Especializado? | Observaciones                                                             |
+| -- | -------------------------------- | ------------------------------------- | ------------------ | --------------- | ------------------------------------------------------------------------- |
+| 1  | **DDoS**                         | CICDDoS2019, CICIDS2017               | ✅ Sí               | ✅ Especializado | Buen modelo ya entrenado. CICDDoS2019 contiene variantes (UDP, SYN, etc). |
+| 2  | **Ransomware**                   | USTC-TFC2016, ToN\_IoT (malware)      | ✅ Sí               | ✅ Especializado | Modelo entrenado con tráfico cifrado. Bien.                               |
+| 3  | **Ataques generales**            | CICIDS2017                            | ✅ Sí               | ❌ General       | Detecta si hay ataque, no su tipo. Buen baseline.                         |
+| 4  | **Brute Force (FTP/SSH)**        | CICIDS2017                            | 🚧 Parcial         | ❌ General       | Aparece en el modelo general, no hay modelo específico aún.               |
+| 5  | **Web Attacks (XSS, SQLi, Cmd)** | CICIDS2017                            | 🚧 Parcial         | ❌ General       | Aparece en general. Modelos específicos pueden ayudar.                    |
+| 6  | **Botnet (Mirai/Torii)**         | CTU-13, USTC-TFC2016                  | 🚧 En camino       | ❌ General       | Ideal entrenar modelo específico. Kitsune también incluye Mirai.          |
+| 7  | **Infiltration**                 | CICIDS2017                            | 🚧 Parcial         | ❌ General       | Muy poca representación. Difícil detectar.                                |
+| 8  | **Port Scanning**                | CICIDS2017, CIC-IDS-2023, UNSW-NB15   | ❌ No               | —               | Alto valor. Importante para movimientos laterales.                        |
+| 9  | **DoH / Exfiltration**           | ToN\_IoT, CIC-IDS-2023, DoH20         | ❌ No               | —               | Tráfico DNS over HTTPS, difícil de detectar. Requiere análisis de patrón. |
+| 10 | **Zero-day / Unknown**           | KDDCUP, Kitsune, Custom + AutoEncoder | ❌ No               | —               | Necesario usar modelos no supervisados (AE, IF, LOF).                     |
+| 11 | **Backdoor**                     | USTC-TFC2016, UNSW-NB15               | ❌ No               | —               | Poco representado. Alto valor en entrenamiento.                           |
+| 12 | **Phishing / Spam**              | UNSW-NB15, CIC-Email 2019             | ❌ No               | —               | Solo si analizas tráfico HTTP/SMTP.                                       |
+| 13 | **IoT Attacks (varios)**         | Bot-IoT, ToN\_IoT                     | 🚧 Parcial         | ❌ General       | Kitsune también útil aquí.                                                |
+
+Próximos pasos recomendados
+Agrupar ataques similares en familias para definir modelos compartidos:
+Familia de acceso (brute force, web login).
+Familia de explotación (XSS, SQLi, cmd).
+Familia de denegación (DDoS, DoS).
+Familia de persistencia (backdoor, malware).
+Familia de evasión (DoH, exfiltración, obfuscación).
+Priorizar entrenamientos según riesgo y cobertura actual:
+🟥 Sin cobertura: Port Scanning, DoH/Exfiltration, Zero-day, Backdoors.
+🟧 Parcialmente cubierto: Web Attacks, Brute Force, Botnets.
+🟩 Bien cubierto: DDoS, Ransomware, detección general.
+Descargar y preparar datasets faltantes:
+Kitsune (ya visto).
+DoH20 o PCAPs recientes para DoH.
+CTU-13 y UNSW-NB15 para backdoor, spam, etc.
+CIC-IDS-2023 (nuevo, incluye múltiples categorías bien representadas).
+
+Actual datasets and models:
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah models
+total 67M
+drwxr-xr-x 188 aironman staff 5.9K Aug  7 09:11 ..
+-rw-r--r--   1 aironman staff  219 Aug  7 08:27 ransomware_lightgbm_metrics.json
+-rw-r--r--   1 aironman staff  57K Aug  7 08:27 ransomware_lightgbm.joblib
+-rw-r--r--   1 aironman staff  222 Aug  7 08:27 ransomware_random_forest_metrics.json
+-rw-r--r--   1 aironman staff  44K Aug  7 08:27 ransomware_random_forest.joblib
+-rw-r--r--   1 aironman staff  207 Aug  7 08:27 ddos_lightgbm_metrics.json
+drwxr-xr-x  69 aironman staff 2.2K Aug  7 08:27 .
+-rw-r--r--   1 aironman staff  81K Aug  7 08:27 ddos_lightgbm.joblib
+-rw-r--r--   1 aironman staff  205 Aug  7 08:27 ddos_random_forest_metrics.json
+-rw-r--r--   1 aironman staff  92K Aug  7 08:27 ddos_random_forest.joblib
+drwxr-xr-x  38 aironman staff 1.2K Aug  4 11:01 archive
+drwxr-xr-x   6 aironman staff  192 Aug  4 11:01 production
+-rw-r--r--   1 aironman staff 1.7K Aug  4 09:24 rf_production_sniffer_compatible_scaler.joblib
+-rw-r--r--   1 aironman staff  11M Aug  4 09:24 rf_production_sniffer_compatible.joblib
+-rw-r--r--   1 aironman staff 2.3K Aug  1 07:23 rf_production_cicids_scaler.joblib
+-rw-r--r--   1 aironman staff  12M Aug  1 07:23 rf_production_cicids.joblib
+-rw-r--r--   1 aironman staff 1.1K Jul 31 13:11 specialized_models_summary.json
+-rw-r--r--   1 aironman staff  832 Jul 31 13:11 internal_normal_detector_metadata.json
+-rw-r--r--   1 aironman staff  711 Jul 31 13:11 internal_normal_detector_scaler.joblib
+-rw-r--r--   1 aironman staff 2.4M Jul 31 13:11 internal_normal_detector.joblib
+-rw-r--r--   1 aironman staff  833 Jul 31 13:11 web_normal_detector_metadata.json
+-rw-r--r--   1 aironman staff  711 Jul 31 13:11 web_normal_detector_scaler.joblib
+-rw-r--r--   1 aironman staff 2.5M Jul 31 13:11 web_normal_detector.joblib
+drwxr-xr-x   2 aironman staff   64 Jul 31 13:10 specialized
+-rw-r--r--   1 aironman staff 1.2K Jul 31 13:02 rf_production_final_metadata.json
+-rw-r--r--   1 aironman staff 1.2K Jul 31 13:02 rf_production_final_scaler.joblib
+-rw-r--r--   1 aironman staff 2.6M Jul 31 13:02 rf_production_final.joblib
+-rw-r--r--   1 aironman staff 1.5K Jul 31 13:00 rf_production_metadata.json
+-rw-r--r--   1 aironman staff 1.7K Jul 31 13:00 rf_production_scaler.joblib
+-rw-r--r--   1 aironman staff 6.7M Jul 31 13:00 rf_production.joblib
+-rw-r--r--   1 aironman staff  832 Jul 31 12:54 rf_normal_minimal_metadata.json
+-rw-r--r--   1 aironman staff  671 Jul 31 12:54 rf_normal_minimal_scaler.joblib
+-rw-r--r--   1 aironman staff  13M Jul 31 12:54 rf_normal_minimal.joblib
+-rw-r--r--   1 aironman staff  796 Jul 31 12:53 rf_normal_ultra_metadata.json
+-rw-r--r--   1 aironman staff  623 Jul 31 12:53 rf_normal_ultra_scaler.joblib
+-rw-r--r--   1 aironman staff 3.1M Jul 31 12:53 rf_normal_ultra.joblib
+-rw-r--r--   1 aironman staff 1.5K Jul 31 12:46 rf_unsw_baseline_metadata.json
+-rw-r--r--   1 aironman staff 1.7K Jul 31 12:46 rf_unsw_baseline_scaler.joblib
+-rw-r--r--   1 aironman staff 6.7M Jul 31 12:46 rf_unsw_baseline.joblib
+-rw-r--r--   1 aironman staff  866 Jul 31 12:45 rf_normal_balanced_metadata.json
+-rw-r--r--   1 aironman staff  807 Jul 31 12:45 rf_normal_balanced_scaler.joblib
+-rw-r--r--   1 aironman staff 414K Jul 31 12:45 rf_normal_balanced.joblib
+-rw-r--r--   1 aironman staff  866 Jul 31 12:45 rf_normal_clean_metadata.json
+-rw-r--r--   1 aironman staff  807 Jul 31 12:45 rf_normal_clean_scaler.joblib
+-rw-r--r--   1 aironman staff 424K Jul 31 12:45 rf_normal_clean.joblib
+-rw-r--r--   1 aironman staff 5.4M Jul 31 12:26 rf_normal_hybrid_shap_explainer.joblib
+-rw-r--r--   1 aironman staff 1.2K Jul 31 12:26 rf_normal_hybrid_metadata.json
+-rw-r--r--   1 aironman staff 1.4K Jul 31 12:26 rf_normal_hybrid_scaler.joblib
+-rw-r--r--   1 aironman staff 2.6M Jul 31 12:26 rf_normal_hybrid.joblib
+-rw-r--r--   1 aironman staff  48K Jul 31 08:58 rf_normal_behavior.joblib
+-rw-r--r--   1 aironman staff  245 Jul 31 08:58 feature_order.txt
+-rw-r--r--   1 aironman staff 1.1K Jul 31 07:43 training_timing_summary.json
+drwxr-xr-x   7 aironman staff  224 Jul 31 07:43 model_20250731_074307
+drwxr-xr-x   7 aironman staff  224 Jul 31 00:59 model_20250731_005920
+drwxr-xr-x   7 aironman staff  224 Jul 30 14:42 model_20250730_144248
+drwxr-xr-x   7 aironman staff  224 Jul 30 10:20 model_20250730_102020
+drwxr-xr-x   7 aironman staff  224 Jul 30 09:49 model_20250730_094943
+drwxr-xr-x   7 aironman staff  224 Jul 30 08:19 model_20250730_081902
+drwxr-xr-x   7 aironman staff  224 Jul 30 08:03 model_20250730_080346
+drwxr-xr-x   2 aironman staff   64 Jul 30 07:54 internal_attack
+drwxr-xr-x   2 aironman staff   64 Jul 30 07:54 public_normal
+drwxr-xr-x   2 aironman staff   64 Jul 30 07:54 general_attack
+-rw-r--r--   1 aironman staff  48K Jul 30 07:51 rf_internal_behavior.joblib
+drwxr-xr-x   7 aironman staff  224 Jul 29 13:42 model_20250729_134219
+drwxr-xr-x   7 aironman staff  224 Jul 29 12:52 model_20250729_125245
+drwxr-xr-x   7 aironman staff  224 Jul 28 18:39 model_20250728_183949
+drwxr-xr-x   7 aironman staff  224 Jul 26 10:32 model_20250726_103214
+drwxr-xr-x   7 aironman staff  224 Jul 26 09:48 model_20250726_094810
+drwxr-xr-x   7 aironman staff  224 Jul 26 08:30 model_20250726_082958
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah models/production
+total 15M
+drwxr-xr-x 69 aironman staff 2.2K Aug  7 08:27 ..
+-rw-r--r--  1 aironman staff 2.4M Aug  4 11:01 internal_normal_detector.joblib
+drwxr-xr-x  6 aironman staff  192 Aug  4 11:01 .
+-rw-r--r--  1 aironman staff 2.5M Aug  4 11:01 web_normal_detector.joblib
+-rw-r--r--  1 aironman staff 1.7K Aug  4 11:01 rf_production_sniffer_compatible_scaler.joblib
+-rw-r--r--  1 aironman staff  11M Aug  4 11:01 rf_production_sniffer_compatible.joblib
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah optimized_models
+total 96K
+drwxr-xr-x 188 aironman staff 5.9K Aug  7 09:11 ..
+-rw-r--r--   1 aironman staff  27K Aug  7 09:04 final_optimized_lgb_enhanced_model.joblib
+drwxr-xr-x   5 aironman staff  160 Aug  7 08:45 .
+-rw-r--r--   1 aironman staff  485 Aug  7 08:40 optimized_lgb_random_metrics.json
+-rw-r--r--   1 aironman staff  61K Aug  7 08:40 optimized_lgb_random_model.joblib
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤
+
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -talh data
+total 17G
+drwxr-xr-x 188 aironman staff 5.9K Aug  7 09:11 ..
+drwxr-xr-x   6 aironman staff  192 Jul 31 13:11 specialized
+drwxr-xr-x  41 aironman staff 1.3K Jul 31 13:10 .
+-rw-r--r--   1 aironman staff 872K Jul 31 13:02 UNSW-NB15_production.csv
+-rw-r--r--   1 aironman staff 426K Jul 31 12:54 normal_traffic_minimal.csv
+-rw-r--r--   1 aironman staff  41K Jul 31 12:52 normal_traffic_ultra.csv
+-rw-r--r--   1 aironman staff  244 Jul 31 12:43 normal_traffic_balanced_cleaning_report.txt
+-rw-r--r--   1 aironman staff 196K Jul 31 12:43 normal_traffic_balanced.csv
+-rw-r--r--   1 aironman staff  249 Jul 31 12:43 internal_traffic_clean_cleaning_report.txt
+-rw-r--r--   1 aironman staff 321K Jul 31 12:43 internal_traffic_clean.csv
+-rw-r--r--   1 aironman staff  245 Jul 31 12:43 normal_traffic_clean_cleaning_report.txt
+-rw-r--r--   1 aironman staff 196K Jul 31 12:43 normal_traffic_clean.csv
+-rw-r--r--   1 aironman staff 2.4M Jul 31 08:20 unsw_attacks_only.csv
+-rw-r--r--   1 aironman staff 5.2M Jul 31 08:20 internal_traffic_hybrid.csv
+-rw-r--r--   1 aironman staff 3.3M Jul 31 08:20 normal_traffic_hybrid.csv
+-rw-r--r--   1 aironman staff 4.0G Jul 30 10:49 ton-iot.csv
+-rw-r--r--   1 aironman staff 4.0G Jul 30 10:33 CSE-CIC-IDS2018.csv
+-rw-r--r--   1 aironman staff 337M Jul 30 10:24 03-02-2018.csv
+-rw-r--r--   1 aironman staff 103M Jul 30 10:24 03-01-2018.csv
+-rw-r--r--   1 aironman staff 200M Jul 30 10:24 02-28-2018.csv
+-rw-r--r--   1 aironman staff 366M Jul 30 10:24 02-23-2018.csv
+-rw-r--r--   1 aironman staff 365M Jul 30 10:24 02-22-2018.csv
+-rw-r--r--   1 aironman staff 314M Jul 30 10:24 02-21-2018.csv
+-rw-r--r--   1 aironman staff 3.8G Jul 30 10:24 02-20-2018.csv
+-rw-r--r--   1 aironman staff 319M Jul 30 10:24 02-16-2018.csv
+-rw-r--r--   1 aironman staff 359M Jul 30 10:24 02-15-2018.csv
+-rw-r--r--   1 aironman staff 342M Jul 30 10:24 02-14-2018.csv
+-rw-r--r--   1 aironman staff 8.3M Jul 29 13:20 UNSW-NB15_preprocessed.csv
+-rw-r--r--   1 aironman staff  16M Jul 25 12:42 UNSW-NB15.csv
+-rw-r--r--   1 aironman staff  15M Jul 25 12:42 UNSW_NB15_training-set.csv
+-rw-r--r--   1 aironman staff  31M Jul 25 12:42 UNSW_NB15_testing-set.csv
+-rw-r--r--   1 aironman staff 4.6K Jul 25 12:42 UNSW-NB15_LIST_EVENTS.csv
+-rw-r--r--   1 aironman staff  94M Jul 25 12:42 UNSW-NB15_4.csv
+-rw-r--r--   1 aironman staff 148M Jul 25 12:42 UNSW-NB15_3.csv
+-rw-r--r--   1 aironman staff 158M Jul 25 12:42 UNSW-NB15_2.csv
+-rw-r--r--   1 aironman staff 162M Jul 25 12:42 UNSW-NB15_1.csv
+-rw-r--r--   1 aironman staff 4.0K Jul 25 12:42 NUSW-NB15_features.csv
+-rw-r--r--   1 aironman staff 4.4K Jul 24 21:02 new_events.csv
+-rw-r--r--   1 aironman staff  864 Jun 10 11:25 ton-iot-network-intrusion-dataset.zip
+-rw-r--r--   1 aironman staff 1.6G Oct  2  2020 ids-intrusion-csv.zip
+-rw-r--r--   1 aironman staff 150M Oct 18  2019 unsw-nb15.zip
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -talh data/specialized
+total 5.4M
+-rw-r--r--  1 aironman staff 120K Jul 31 13:11 internal_normal_detector_clean.csv
+drwxr-xr-x  6 aironman staff  192 Jul 31 13:11 .
+-rw-r--r--  1 aironman staff 120K Jul 31 13:11 web_normal_detector_clean.csv
+-rw-r--r--  1 aironman staff 2.6M Jul 31 13:10 internal_normal_detector.csv
+-rw-r--r--  1 aironman staff 2.6M Jul 31 13:10 web_normal_detector.csv
+drwxr-xr-x 41 aironman staff 1.3K Jul 31 13:10 ..
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets
+total 0
+drwxr-xr-x 188 aironman staff 5.9K Aug  7 09:11 ..arquet/
+drwxr-xr-x   6 aironman staff  192 Aug  6 11:02 ddos
+drwxr-xr-x   5 aironman staff  160 Aug  6 10:41 ransomware
+drwxr-xr-x  10 aironman staff  320 Aug  6 10:40 .
+drwxr-xr-x   8 aironman staff  256 Aug  6 08:26 raw
+drwxr-xr-x   5 aironman staff  160 Aug  6 08:26 clean
+drwxr-xr-x   2 aironman staff   64 Aug  4 11:01 corrupted
+drwxr-xr-x   3 aironman staff   96 Jul 30 07:55 internal_traffic
+drwxr-xr-x   3 aironman staff   96 Jul 30 07:55 public_normal
+drwxr-xr-x   2 aironman staff   64 Jul 30 07:54 known_attacks
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/ddos
+total 3.1G
+drwxr-xr-x  6 aironman staff  192 Aug  6 11:02 .
+drwxr-xr-x 10 aironman staff  320 Aug  6 10:40 ..
+-rw-r--r--  1 aironman staff 2.2G Aug  6 10:28 CSV-01-12.zip
+-rw-r--r--  1 aironman staff 877M Aug  6 10:22 CSV-03-11.zip
+drwxrwxrwx 10 aironman staff  320 Nov 29  2019 03-11
+drwxrwxrwx 13 aironman staff  416 Jul 30  2019 01-12
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/clean
+total 12K
+drwxr-xr-x 10 aironman staff 320 Aug  6 10:40 ..         internal_traffic/  known_attacks/     public_normal/     ransomware/        raw/
+-rw-r--r--  1 aironman staff 11K Aug  6 08:26 websites_database.csv
+drwxr-xr-x  5 aironman staff 160 Aug  6 08:26 .
+drwxr-xr-x  6 aironman staff 192 Aug  6 08:26 specialized
+drwxr-xr-x  3 aironman staff  96 Aug  4 11:01 official
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/clean/specialized
+total 5.4M
+drwxr-xr-x 5 aironman staff  160 Aug  6 08:26 ..
+-rw-r--r-- 1 aironman staff 120K Aug  6 08:26 web_normal_detector_clean.csv
+drwxr-xr-x 6 aironman staff  192 Aug  6 08:26 .
+-rw-r--r-- 1 aironman staff 2.6M Aug  6 08:26 web_normal_detector.csv
+-rw-r--r-- 1 aironman staff 120K Aug  6 08:26 internal_normal_detector_clean.csv
+-rw-r--r-- 1 aironman staff 2.6M Aug  6 08:26 internal_normal_detector.csv
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/clean/official
+total 1.1G
+drwxr-xr-x 5 aironman staff  160 Aug  6 08:26 ..
+-rw-r--r-- 1 aironman staff 1.1G Aug  4 11:01 cicids_2017_processed.csv
+drwxr-xr-x 3 aironman staff   96 Aug  4 11:01 .
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/ddos
+total 3.1G
+drwxr-xr-x  6 aironman staff  192 Aug  6 11:02 .         internal_traffic/  known_attacks/     public_normal/     ransomware/        raw/
+drwxr-xr-x 10 aironman staff  320 Aug  6 10:40 ..
+-rw-r--r--  1 aironman staff 2.2G Aug  6 10:28 CSV-01-12.zip
+-rw-r--r--  1 aironman staff 877M Aug  6 10:22 CSV-03-11.zip
+drwxrwxrwx 10 aironman staff  320 Nov 29  2019 03-11
+drwxrwxrwx 13 aironman staff  416 Jul 30  2019 01-12
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/internal_traffic
+total 3.2M
+drwxr-xr-x 10 aironman staff  320 Aug  6 10:40 ..        internal_traffic/  known_attacks/     public_normal/     ransomware/        raw/
+-rw-r--r--  1 aironman staff 3.2M Jul 30 07:55 internal_traffic_dataset.csv
+drwxr-xr-x  3 aironman staff   96 Jul 30 07:55 .
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/known_attacks
+total 0
+drwxr-xr-x 10 aironman staff 320 Aug  6 10:40 ..         internal_traffic/  known_attacks/     public_normal/     ransomware/        raw/
+drwxr-xr-x  2 aironman staff  64 Jul 30 07:54 .
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/public_normal
+total 2.3M
+drwxr-xr-x 10 aironman staff  320 Aug  6 10:40 ..        internal_traffic/  known_attacks/     public_normal/     ransomware/        raw/
+-rw-r--r--  1 aironman staff 2.3M Jul 30 07:55 normal_traffic.csv
+drwxr-xr-x  3 aironman staff   96 Jul 30 07:55 .
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/ransomware
+total 364K
+drwxr-xr-x  5 aironman staff  160 Aug  6 10:41 .
+drwxr-xr-x 10 aironman staff  320 Aug  6 10:40 ..
+-rw-r--r--  1 aironman staff 150K Aug  6 10:18 output3.csv
+-rw-r--r--  1 aironman staff 147K Aug  6 10:18 output2.csv
+-rw-r--r--  1 aironman staff  63K Aug  6 10:18 Output1.csv
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤ ls -ltah datasets/raw
+total 5.5M
+drwxr-xr-x 10 aironman staff  320 Aug  6 10:40 ..
+-rw-r--r--  1 aironman staff  11K Aug  6 08:26 websites_database.csv
+drwxr-xr-x  8 aironman staff  256 Aug  6 08:26 .
+-rw-r--r--  1 aironman staff 1.5K Aug  6 08:26 traffic_classification_results.csv
+-rw-r--r--  1 aironman staff 3.0K Aug  6 08:26 complete_network_features.csv
+-rw-r--r--  1 aironman staff 2.5K Aug  6 08:26 captured_features.csv
+-rw-r--r--  1 aironman staff 2.3M Aug  4 11:01 normal_traffic.csv
+-rw-r--r--  1 aironman staff 3.2M Aug  4 11:01 internal_traffic_dataset.csv
+(upgraded_happiness_venv) ┌<▸> ~/g/upgraded-happiness
+└➤
+

@@ -187,8 +187,6 @@ ml_models/versions/*.*
 
 logs/*.*
 
-docs/*.*
-
 data/*.*
 
 data/dataset/*.*
