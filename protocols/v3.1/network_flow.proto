@@ -1,0 +1,297 @@
+// network_flow.proto - UPGRADED HAPPINESS ML Features
+// Schema para detección de DDoS y Ransomware en tiempo real
+// Compatible con modelos entrenados (82 features base + extensiones)
+// Generado: Agosto 7, 2025
+
+syntax = "proto3";
+
+package upgraded_happiness;
+
+// Mensaje principal para un flujo de red analizado
+message NetworkFlow {
+    // ========================================
+    // INFORMACIÓN BÁSICA DEL FLUJO (4 fields)
+    // ========================================
+
+    // Puertos y protocolo
+    int32 source_port = 1;           // Puerto origen
+    int32 destination_port = 2;      // Puerto destino
+    int32 protocol = 3;              // Protocolo (6=TCP, 17=UDP, 1=ICMP)
+
+    // Duración del flujo
+    double flow_duration = 4;        // Duración en microsegundos
+
+    // ========================================
+    // ESTADÍSTICAS DE PAQUETES (4 fields)
+    // ========================================
+
+    int64 total_fwd_packets = 5;     // Total paquetes hacia adelante
+    int64 total_backward_packets = 6; // Total paquetes hacia atrás
+    int64 total_length_fwd_packets = 7; // Bytes totales forward
+    int64 total_length_bwd_packets = 8; // Bytes totales backward
+
+    // ========================================
+    // LONGITUD PAQUETES FORWARD (4 fields)
+    // ========================================
+
+    double fwd_packet_length_max = 9;  // Longitud máxima paquete forward
+    double fwd_packet_length_min = 10; // Longitud mínima paquete forward
+    double fwd_packet_length_mean = 11; // Longitud promedio paquete forward
+    double fwd_packet_length_std = 12;  // Desviación estándar longitud forward
+
+    // ========================================
+    // LONGITUD PAQUETES BACKWARD (4 fields)
+    // ========================================
+
+    double bwd_packet_length_max = 13;  // Longitud máxima paquete backward
+    double bwd_packet_length_min = 14;  // Longitud mínima paquete backward
+    double bwd_packet_length_mean = 15; // Longitud promedio paquete backward
+    double bwd_packet_length_std = 16;  // Desviación estándar longitud backward
+
+    // ========================================
+    // VELOCIDAD DE FLUJO (2 fields)
+    // ========================================
+
+    double flow_bytes_per_s = 17;    // Bytes por segundo del flujo
+    double flow_packets_per_s = 18;  // Paquetes por segundo del flujo
+
+    // ========================================
+    // TIEMPOS INTER-LLEGADA FLOW (4 fields)
+    // ========================================
+
+    double flow_iat_mean = 19;       // Tiempo promedio entre paquetes
+    double flow_iat_std = 20;        // Desviación estándar IAT
+    double flow_iat_max = 21;        // Tiempo máximo entre paquetes
+    double flow_iat_min = 22;        // Tiempo mínimo entre paquetes
+
+    // ========================================
+    // TIEMPOS FORWARD IAT (5 fields)
+    // ========================================
+
+    double fwd_iat_total = 23;       // Tiempo total forward
+    double fwd_iat_mean = 24;        // Tiempo promedio forward IAT
+    double fwd_iat_std = 25;         // Desviación estándar forward IAT
+    double fwd_iat_max = 26;         // Tiempo máximo forward IAT
+    double fwd_iat_min = 27;         // Tiempo mínimo forward IAT
+
+    // ========================================
+    // TIEMPOS BACKWARD IAT (5 fields)
+    // ========================================
+
+    double bwd_iat_total = 28;       // Tiempo total backward
+    double bwd_iat_mean = 29;        // Tiempo promedio backward IAT
+    double bwd_iat_std = 30;         // Desviación estándar backward IAT
+    double bwd_iat_max = 31;         // Tiempo máximo backward IAT
+    double bwd_iat_min = 32;         // Tiempo mínimo backward IAT
+
+    // ========================================
+    // FLAGS TCP (12 fields)
+    // ========================================
+
+    int32 fwd_psh_flags = 33;        // Flags PSH en forward
+    int32 bwd_psh_flags = 34;        // Flags PSH en backward
+    int32 fwd_urg_flags = 35;        // Flags URG en forward
+    int32 bwd_urg_flags = 36;        // Flags URG en backward
+    int32 fin_flag_count = 37;       // Número de flags FIN
+    int32 syn_flag_count = 38;       // Número de flags SYN (crítico DDoS)
+    int32 rst_flag_count = 39;       // Número de flags RST
+    int32 psh_flag_count = 40;       // Número de flags PSH
+    int32 ack_flag_count = 41;       // Número de flags ACK
+    int32 urg_flag_count = 42;       // Número de flags URG
+    int32 cwe_flag_count = 43;       // Flags congestion window reduced
+    int32 ece_flag_count = 44;       // Flags ECN-echo
+
+    // ========================================
+    // HEADERS Y LONGITUDES (3 fields)
+    // ========================================
+
+    int64 fwd_header_length = 45;    // Longitud header forward
+    int64 bwd_header_length = 46;    // Longitud header backward
+    int64 fwd_header_length_2 = 47;  // Longitud header forward (duplicado)
+
+    // ========================================
+    // ESTADÍSTICAS PAQUETES/S (2 fields)
+    // ========================================
+
+    double fwd_packets_per_s = 48;   // Paquetes por segundo forward
+    double bwd_packets_per_s = 49;   // Paquetes por segundo backward
+
+    // ========================================
+    // ESTADÍSTICAS LONGITUD (5 fields)
+    // ========================================
+
+    double min_packet_length = 50;   // Longitud mínima de paquete
+    double max_packet_length = 51;   // Longitud máxima de paquete
+    double packet_length_mean = 52;  // Longitud promedio de paquete
+    double packet_length_std = 53;   // Desviación estándar longitud
+    double packet_length_variance = 54; // Varianza longitud de paquete
+
+    // ========================================
+    // RATIOS Y PROMEDIOS (4 fields)
+    // ========================================
+
+    double down_up_ratio = 55;       // Ratio downstream/upstream (crítico ransomware)
+    double average_packet_size = 56; // Tamaño promedio de paquete
+    double avg_fwd_segment_size = 57; // Tamaño promedio segmento forward
+    double avg_bwd_segment_size = 58; // Tamaño promedio segmento backward
+
+    // ========================================
+    // BULK TRANSFER (6 fields)
+    // ========================================
+
+    double fwd_avg_bytes_bulk = 59;    // Promedio bytes por bulk forward
+    double fwd_avg_packets_bulk = 60;  // Promedio paquetes por bulk forward
+    double fwd_avg_bulk_rate = 61;     // Tasa promedio bulk forward
+    double bwd_avg_bytes_bulk = 62;    // Promedio bytes por bulk backward
+    double bwd_avg_packets_bulk = 63;  // Promedio paquetes por bulk backward
+    double bwd_avg_bulk_rate = 64;     // Tasa promedio bulk backward
+
+    // ========================================
+    // SUBFLOWS (4 fields)
+    // ========================================
+
+    int64 subflow_fwd_packets = 65;  // Paquetes en subflujo forward
+    int64 subflow_fwd_bytes = 66;    // Bytes en subflujo forward
+    int64 subflow_bwd_packets = 67;  // Paquetes en subflujo backward
+    int64 subflow_bwd_bytes = 68;    // Bytes en subflujo backward
+
+    // ========================================
+    // VENTANA TCP (2 fields)
+    // ========================================
+
+    int32 init_win_bytes_forward = 69;  // Ventana inicial TCP forward
+    int32 init_win_bytes_backward = 70; // Ventana inicial TCP backward
+
+    // ========================================
+    // ESTADÍSTICAS ADICIONALES (2 fields)
+    // ========================================
+
+    int64 act_data_pkt_fwd = 71;     // Paquetes con datos activos forward
+    double min_seg_size_forward = 72; // Tamaño mínimo segmento forward
+
+    // ========================================
+    // TIEMPOS DE ACTIVIDAD (4 fields)
+    // ========================================
+
+    double active_mean = 73;         // Tiempo promedio activo (crítico ransomware)
+    double active_std = 74;          // Desviación estándar tiempo activo
+    double active_max = 75;          // Tiempo máximo activo
+    double active_min = 76;          // Tiempo mínimo activo
+
+    // ========================================
+    // TIEMPOS INACTIVOS (4 fields)
+    // ========================================
+
+    double idle_mean = 77;           // Tiempo promedio inactivo (crítico ransomware)
+    double idle_std = 78;            // Desviación estándar tiempo inactivo
+    double idle_max = 79;            // Tiempo máximo inactivo
+    double idle_min = 80;            // Tiempo mínimo inactivo
+
+    // ========================================
+    // CARACTERÍSTICAS ESPECIALES (2 fields)
+    // ========================================
+
+    double similar_http = 81;        // Similitud con tráfico HTTP
+    int32 inbound = 82;              // Dirección del tráfico (0=outbound, 1=inbound)
+
+    // ========================================
+    // ETIQUETA Y METADATOS
+    // ========================================
+
+    // Etiqueta de clasificación (ground truth para entrenamiento)
+    int32 label = 83;                // 0=benigno, 1=ataque
+
+    // ========================================
+    // EXTENSIONES PARA PRODUCCIÓN (8+ fields)
+    // ========================================
+
+    // Información temporal
+    int64 timestamp = 84;            // Timestamp Unix del flujo
+    int64 first_packet_time = 85;    // Tiempo primer paquete
+    int64 last_packet_time = 86;     // Tiempo último paquete
+
+    // Información de red
+    string source_ip = 87;           // IP origen (formato string)
+    string destination_ip = 88;      // IP destino (formato string)
+    string flow_id = 89;             // ID único del flujo
+
+    // Información geográfica (opcional)
+    string source_country = 90;      // País origen (código ISO)
+    string destination_country = 91; // País destino (código ISO)
+
+    // Información de aplicación
+    string application_protocol = 92; // HTTP, HTTPS, FTP, etc.
+    string user_agent = 93;          // User-Agent (si HTTP)
+
+    // ========================================
+    // PREDICCIONES ML (4 fields)
+    // ========================================
+
+    // Predicciones de los modelos
+    double ddos_probability = 94;     // Probabilidad DDoS [0.0-1.0]
+    double ransomware_probability = 95; // Probabilidad ransomware [0.0-1.0]
+    bool is_attack = 96;             // Predicción final (true=ataque)
+    string attack_type = 97;         // Tipo de ataque detectado ("DDoS", "Ransomware", "Normal")
+
+    // ========================================
+    // METADATOS DEL SISTEMA (6 fields)
+    // ========================================
+
+    string model_version = 98;       // Versión del modelo usado
+    double confidence_score = 99;    // Score de confianza [0.0-1.0]
+    int64 processing_time_us = 100;  // Tiempo procesamiento en microsegundos
+    string capture_interface = 101;  // Interfaz de captura (eth0, en0, etc.)
+    string analyzer_version = 102;   // Versión del analizador
+    map<string, double> custom_features = 103; // Features adicionales dinámicas
+}
+
+// Mensaje para batch de flujos (para procesamiento en lotes)
+message NetworkFlowBatch {
+    repeated NetworkFlow flows = 1;   // Lista de flujos
+    int32 batch_size = 2;            // Número de flujos en el batch
+    int64 batch_timestamp = 3;       // Timestamp del batch
+    string batch_id = 4;             // ID único del batch
+}
+
+// Mensaje para alertas de seguridad
+message SecurityAlert {
+    NetworkFlow flow = 1;            // Flujo que causó la alerta
+    string alert_type = 2;           // "DDoS", "Ransomware", "Anomaly"
+    string severity = 3;             // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+    string description = 4;          // Descripción de la alerta
+    int64 alert_timestamp = 5;       // Cuándo se generó la alerta
+    double risk_score = 6;           // Score de riesgo [0.0-1.0]
+    repeated string indicators = 7;  // Lista de indicadores específicos
+}
+
+// Mensaje para estadísticas agregadas
+message FlowStatistics {
+    int64 total_flows = 1;           // Total flujos analizados
+    int64 attack_flows = 2;          // Flujos clasificados como ataque
+    int64 normal_flows = 3;          // Flujos clasificados como normales
+    double attack_rate = 4;          // Tasa de ataques [0.0-1.0]
+    map<string, int64> attack_types = 5; // Conteos por tipo de ataque
+    int64 analysis_start_time = 6;   // Inicio del período de análisis
+    int64 analysis_end_time = 7;     // Fin del período de análisis
+}
+
+// Configuración del analizador
+message AnalyzerConfig {
+    // Umbrales de detección
+    double ddos_threshold = 1;       // Umbral DDoS [0.0-1.0]
+    double ransomware_threshold = 2; // Umbral ransomware [0.0-1.0]
+
+    // Configuración de captura
+    int32 flow_timeout = 3;          // Timeout flujo en segundos
+    int32 max_flows = 4;             // Máximo flujos simultáneos
+    bool enable_geolocation = 5;     // Habilitar geolocalización
+
+    // Configuración de modelos
+    string model_path = 6;           // Ruta a los modelos ML
+    bool enable_optimization = 7;    // Habilitar optimizaciones
+
+    // Configuración de alertas
+    bool enable_alerts = 8;          // Habilitar alertas
+    string alert_endpoint = 9;       // Endpoint para enviar alertas
+    repeated string notification_emails = 10; // Emails para notificaciones
+}
