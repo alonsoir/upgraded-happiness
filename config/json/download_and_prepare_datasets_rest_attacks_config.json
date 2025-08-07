@@ -1,0 +1,22 @@
+{
+  "mawi": {
+    "url": "https://www.dropbox.com/scl/fi/example/mawi_dataset.csv?rlkey=abc123&dl=1",
+    "folder": "mawi",
+    "manual_download": false
+  },
+  "ustc_tfc2016": {
+    "url": "https://www.dropbox.com/scl/fi/example/ustc_dataset.csv?rlkey=abc123&dl=1",
+    "folder": "ustc_tfc2016",
+    "manual_download": false
+  },
+  "stratosphere": {
+    "url": "https://www.dropbox.com/scl/fi/example/stratosphere_dataset.csv?rlkey=abc123&dl=1",
+    "folder": "stratosphere",
+    "manual_download": false
+  },
+  "iscx_botnet": {
+    "url": null,
+    "folder": "iscx_botnet",
+    "manual_download": true
+  }
+}
