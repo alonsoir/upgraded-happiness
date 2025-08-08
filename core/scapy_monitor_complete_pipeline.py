@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+# Suprimir warnings de sklearn
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
+warnings.filterwarnings("ignore", message=".*Parallel.*")
+
 """
 🚀 UPGRADED HAPPINESS - MONITOR COMPLETO CON PIPELINE DE 3 NIVELES
 

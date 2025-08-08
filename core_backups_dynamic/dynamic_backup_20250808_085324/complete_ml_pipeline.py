@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-
-# Suprimir warnings de sklearn
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
-warnings.filterwarnings("ignore", message="X does not have valid feature names")
-warnings.filterwarnings("ignore", message=".*Parallel.*")
-
 """
 🚀 UPGRADED HAPPINESS - PIPELINE ML COMPLETO DE 3 NIVELES
 
@@ -36,7 +29,6 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 MODELS_DIR = PROJECT_ROOT / "models"
 PRODUCTION_DIR = MODELS_DIR / "production"
-TRICAPA_DIR = PRODUCTION_DIR / "tricapa"
 
 
 class CompleteMlPipeline:
@@ -73,7 +65,7 @@ class CompleteMlPipeline:
 
         for model_name, filename in level2_models:
             try:
-                model_path = TRICAPA_DIR / filename
+                model_path = MODELS_DIR / filename
                 self.models[model_name] = joblib.load(model_path)
                 print(f"✅ Nivel 2: {model_name} (82 features)")
             except Exception as e:
