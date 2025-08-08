@@ -1,297 +1,459 @@
-// network_flow.proto - UPGRADED HAPPINESS ML Features
-// Schema para detección de DDoS y Ransomware en tiempo real
-// Compatible con modelos entrenados (82 features base + extensiones)
-// Generado: Agosto 7, 2025
+// network_security_v3.1.proto
+// FECHA CREACIÓN: 8 de agosto de 2025
+// DESCRIPCIÓN: Protobuf unificado para sistema tricapa distribuido revolucionario
+//
+// ARQUITECTURA INNOVADORA:
+// - Sistema tricapa con 83+ features unificadas
+// - Modo distribuido con cifrado/compresión
+// - Time windows + colas para procesamiento
+// - GeoIP enrichment + metadatos contextuales
+// - RAG + Human-in-the-loop integration
+//
+// VISIÓN: Sistema distribuido de ciberseguridad ML nunca antes implementado
 
 syntax = "proto3";
 
-package upgraded_happiness;
+package upgraded_happiness.security.v31;
 
-// Mensaje principal para un flujo de red analizado
-message NetworkFlow {
-    // ========================================
-    // INFORMACIÓN BÁSICA DEL FLUJO (4 fields)
-    // ========================================
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/any.proto";
 
-    // Puertos y protocolo
-    int32 source_port = 1;           // Puerto origen
-    int32 destination_port = 2;      // Puerto destino
-    int32 protocol = 3;              // Protocolo (6=TCP, 17=UDP, 1=ICMP)
+// =====================================================================
+// CORE DATA STRUCTURES - Features Unificadas
+// =====================================================================
 
-    // Duración del flujo
-    double flow_duration = 4;        // Duración en microsegundos
+message NetworkFeatures {
+  // IDENTIFICACIÓN BÁSICA
+  string source_ip = 1;
+  string destination_ip = 2;
+  uint32 source_port = 3;
+  uint32 destination_port = 4;
+  uint32 protocol = 5;
 
-    // ========================================
-    // ESTADÍSTICAS DE PAQUETES (4 fields)
-    // ========================================
+  // TIMING Y DURACIÓN
+  google.protobuf.Timestamp flow_start_time = 6;
+  google.protobuf.Duration flow_duration = 7;
+  uint64 flow_duration_microseconds = 8;
 
-    int64 total_fwd_packets = 5;     // Total paquetes hacia adelante
-    int64 total_backward_packets = 6; // Total paquetes hacia atrás
-    int64 total_length_fwd_packets = 7; // Bytes totales forward
-    int64 total_length_bwd_packets = 8; // Bytes totales backward
+  // ESTADÍSTICAS DE PAQUETES (Features 1-20)
+  uint64 total_fwd_packets = 10;
+  uint64 total_backward_packets = 11;
+  uint64 total_length_fwd_packets = 12;
+  uint64 total_length_bwd_packets = 13;
 
-    // ========================================
-    // LONGITUD PAQUETES FORWARD (4 fields)
-    // ========================================
+  // LONGITUDES FORWARD (Features 21-30)
+  uint64 fwd_packet_length_max = 20;
+  uint64 fwd_packet_length_min = 21;
+  double fwd_packet_length_mean = 22;
+  double fwd_packet_length_std = 23;
 
-    double fwd_packet_length_max = 9;  // Longitud máxima paquete forward
-    double fwd_packet_length_min = 10; // Longitud mínima paquete forward
-    double fwd_packet_length_mean = 11; // Longitud promedio paquete forward
-    double fwd_packet_length_std = 12;  // Desviación estándar longitud forward
+  // LONGITUDES BACKWARD (Features 31-40)
+  uint64 bwd_packet_length_max = 30;
+  uint64 bwd_packet_length_min = 31;
+  double bwd_packet_length_mean = 32;
+  double bwd_packet_length_std = 33;
 
-    // ========================================
-    // LONGITUD PAQUETES BACKWARD (4 fields)
-    // ========================================
+  // VELOCIDADES Y RATIOS (Features 41-50)
+  double flow_bytes_s = 40;
+  double flow_packets_s = 41;
+  double fwd_packets_s = 42;
+  double bwd_packets_s = 43;
+  double down_up_ratio = 44;
+  double average_packet_size = 45;
+  double avg_fwd_segment_size = 46;
+  double avg_bwd_segment_size = 47;
 
-    double bwd_packet_length_max = 13;  // Longitud máxima paquete backward
-    double bwd_packet_length_min = 14;  // Longitud mínima paquete backward
-    double bwd_packet_length_mean = 15; // Longitud promedio paquete backward
-    double bwd_packet_length_std = 16;  // Desviación estándar longitud backward
+  // INTER-ARRIVAL TIMES (Features 51-60)
+  double flow_iat_mean = 50;
+  double flow_iat_std = 51;
+  uint64 flow_iat_max = 52;
+  uint64 flow_iat_min = 53;
+  double fwd_iat_total = 54;
+  double fwd_iat_mean = 55;
+  double fwd_iat_std = 56;
+  uint64 fwd_iat_max = 57;
+  uint64 fwd_iat_min = 58;
+  double bwd_iat_total = 59;
+  double bwd_iat_mean = 60;
+  double bwd_iat_std = 61;
+  uint64 bwd_iat_max = 62;
+  uint64 bwd_iat_min = 63;
 
-    // ========================================
-    // VELOCIDAD DE FLUJO (2 fields)
-    // ========================================
+  // TCP FLAGS (Features 61-70)
+  uint32 fin_flag_count = 65;
+  uint32 syn_flag_count = 66;
+  uint32 rst_flag_count = 67;
+  uint32 psh_flag_count = 68;
+  uint32 ack_flag_count = 69;
+  uint32 urg_flag_count = 70;
+  uint32 cwe_flag_count = 71;
+  uint32 ece_flag_count = 72;
+  uint32 fwd_psh_flags = 73;
+  uint32 bwd_psh_flags = 74;
+  uint32 fwd_urg_flags = 75;
+  uint32 bwd_urg_flags = 76;
 
-    double flow_bytes_per_s = 17;    // Bytes por segundo del flujo
-    double flow_packets_per_s = 18;  // Paquetes por segundo del flujo
+  // HEADERS Y BULK (Features 71-80)
+  double fwd_header_length = 77;
+  double bwd_header_length = 78;
+  double fwd_avg_bytes_bulk = 79;
+  double fwd_avg_packets_bulk = 80;
+  double fwd_avg_bulk_rate = 81;
+  double bwd_avg_bytes_bulk = 82;
+  double bwd_avg_packets_bulk = 83;
+  double bwd_avg_bulk_rate = 84;
 
-    // ========================================
-    // TIEMPOS INTER-LLEGADA FLOW (4 fields)
-    // ========================================
+  // FEATURES ADICIONALES TRICAPA (Features 81-83+)
+  uint64 min_packet_length = 85;
+  uint64 max_packet_length = 86;
+  double packet_length_mean = 87;
+  double packet_length_std = 88;
+  double packet_length_variance = 89;
 
-    double flow_iat_mean = 19;       // Tiempo promedio entre paquetes
-    double flow_iat_std = 20;        // Desviación estándar IAT
-    double flow_iat_max = 21;        // Tiempo máximo entre paquetes
-    double flow_iat_min = 22;        // Tiempo mínimo entre paquetes
-
-    // ========================================
-    // TIEMPOS FORWARD IAT (5 fields)
-    // ========================================
-
-    double fwd_iat_total = 23;       // Tiempo total forward
-    double fwd_iat_mean = 24;        // Tiempo promedio forward IAT
-    double fwd_iat_std = 25;         // Desviación estándar forward IAT
-    double fwd_iat_max = 26;         // Tiempo máximo forward IAT
-    double fwd_iat_min = 27;         // Tiempo mínimo forward IAT
-
-    // ========================================
-    // TIEMPOS BACKWARD IAT (5 fields)
-    // ========================================
-
-    double bwd_iat_total = 28;       // Tiempo total backward
-    double bwd_iat_mean = 29;        // Tiempo promedio backward IAT
-    double bwd_iat_std = 30;         // Desviación estándar backward IAT
-    double bwd_iat_max = 31;         // Tiempo máximo backward IAT
-    double bwd_iat_min = 32;         // Tiempo mínimo backward IAT
-
-    // ========================================
-    // FLAGS TCP (12 fields)
-    // ========================================
-
-    int32 fwd_psh_flags = 33;        // Flags PSH en forward
-    int32 bwd_psh_flags = 34;        // Flags PSH en backward
-    int32 fwd_urg_flags = 35;        // Flags URG en forward
-    int32 bwd_urg_flags = 36;        // Flags URG en backward
-    int32 fin_flag_count = 37;       // Número de flags FIN
-    int32 syn_flag_count = 38;       // Número de flags SYN (crítico DDoS)
-    int32 rst_flag_count = 39;       // Número de flags RST
-    int32 psh_flag_count = 40;       // Número de flags PSH
-    int32 ack_flag_count = 41;       // Número de flags ACK
-    int32 urg_flag_count = 42;       // Número de flags URG
-    int32 cwe_flag_count = 43;       // Flags congestion window reduced
-    int32 ece_flag_count = 44;       // Flags ECN-echo
-
-    // ========================================
-    // HEADERS Y LONGITUDES (3 fields)
-    // ========================================
-
-    int64 fwd_header_length = 45;    // Longitud header forward
-    int64 bwd_header_length = 46;    // Longitud header backward
-    int64 fwd_header_length_2 = 47;  // Longitud header forward (duplicado)
-
-    // ========================================
-    // ESTADÍSTICAS PAQUETES/S (2 fields)
-    // ========================================
-
-    double fwd_packets_per_s = 48;   // Paquetes por segundo forward
-    double bwd_packets_per_s = 49;   // Paquetes por segundo backward
-
-    // ========================================
-    // ESTADÍSTICAS LONGITUD (5 fields)
-    // ========================================
-
-    double min_packet_length = 50;   // Longitud mínima de paquete
-    double max_packet_length = 51;   // Longitud máxima de paquete
-    double packet_length_mean = 52;  // Longitud promedio de paquete
-    double packet_length_std = 53;   // Desviación estándar longitud
-    double packet_length_variance = 54; // Varianza longitud de paquete
-
-    // ========================================
-    // RATIOS Y PROMEDIOS (4 fields)
-    // ========================================
-
-    double down_up_ratio = 55;       // Ratio downstream/upstream (crítico ransomware)
-    double average_packet_size = 56; // Tamaño promedio de paquete
-    double avg_fwd_segment_size = 57; // Tamaño promedio segmento forward
-    double avg_bwd_segment_size = 58; // Tamaño promedio segmento backward
-
-    // ========================================
-    // BULK TRANSFER (6 fields)
-    // ========================================
-
-    double fwd_avg_bytes_bulk = 59;    // Promedio bytes por bulk forward
-    double fwd_avg_packets_bulk = 60;  // Promedio paquetes por bulk forward
-    double fwd_avg_bulk_rate = 61;     // Tasa promedio bulk forward
-    double bwd_avg_bytes_bulk = 62;    // Promedio bytes por bulk backward
-    double bwd_avg_packets_bulk = 63;  // Promedio paquetes por bulk backward
-    double bwd_avg_bulk_rate = 64;     // Tasa promedio bulk backward
-
-    // ========================================
-    // SUBFLOWS (4 fields)
-    // ========================================
-
-    int64 subflow_fwd_packets = 65;  // Paquetes en subflujo forward
-    int64 subflow_fwd_bytes = 66;    // Bytes en subflujo forward
-    int64 subflow_bwd_packets = 67;  // Paquetes en subflujo backward
-    int64 subflow_bwd_bytes = 68;    // Bytes en subflujo backward
-
-    // ========================================
-    // VENTANA TCP (2 fields)
-    // ========================================
-
-    int32 init_win_bytes_forward = 69;  // Ventana inicial TCP forward
-    int32 init_win_bytes_backward = 70; // Ventana inicial TCP backward
-
-    // ========================================
-    // ESTADÍSTICAS ADICIONALES (2 fields)
-    // ========================================
-
-    int64 act_data_pkt_fwd = 71;     // Paquetes con datos activos forward
-    double min_seg_size_forward = 72; // Tamaño mínimo segmento forward
-
-    // ========================================
-    // TIEMPOS DE ACTIVIDAD (4 fields)
-    // ========================================
-
-    double active_mean = 73;         // Tiempo promedio activo (crítico ransomware)
-    double active_std = 74;          // Desviación estándar tiempo activo
-    double active_max = 75;          // Tiempo máximo activo
-    double active_min = 76;          // Tiempo mínimo activo
-
-    // ========================================
-    // TIEMPOS INACTIVOS (4 fields)
-    // ========================================
-
-    double idle_mean = 77;           // Tiempo promedio inactivo (crítico ransomware)
-    double idle_std = 78;            // Desviación estándar tiempo inactivo
-    double idle_max = 79;            // Tiempo máximo inactivo
-    double idle_min = 80;            // Tiempo mínimo inactivo
-
-    // ========================================
-    // CARACTERÍSTICAS ESPECIALES (2 fields)
-    // ========================================
-
-    double similar_http = 81;        // Similitud con tráfico HTTP
-    int32 inbound = 82;              // Dirección del tráfico (0=outbound, 1=inbound)
-
-    // ========================================
-    // ETIQUETA Y METADATOS
-    // ========================================
-
-    // Etiqueta de clasificación (ground truth para entrenamiento)
-    int32 label = 83;                // 0=benigno, 1=ataque
-
-    // ========================================
-    // EXTENSIONES PARA PRODUCCIÓN (8+ fields)
-    // ========================================
-
-    // Información temporal
-    int64 timestamp = 84;            // Timestamp Unix del flujo
-    int64 first_packet_time = 85;    // Tiempo primer paquete
-    int64 last_packet_time = 86;     // Tiempo último paquete
-
-    // Información de red
-    string source_ip = 87;           // IP origen (formato string)
-    string destination_ip = 88;      // IP destino (formato string)
-    string flow_id = 89;             // ID único del flujo
-
-    // Información geográfica (opcional)
-    string source_country = 90;      // País origen (código ISO)
-    string destination_country = 91; // País destino (código ISO)
-
-    // Información de aplicación
-    string application_protocol = 92; // HTTP, HTTPS, FTP, etc.
-    string user_agent = 93;          // User-Agent (si HTTP)
-
-    // ========================================
-    // PREDICCIONES ML (4 fields)
-    // ========================================
-
-    // Predicciones de los modelos
-    double ddos_probability = 94;     // Probabilidad DDoS [0.0-1.0]
-    double ransomware_probability = 95; // Probabilidad ransomware [0.0-1.0]
-    bool is_attack = 96;             // Predicción final (true=ataque)
-    string attack_type = 97;         // Tipo de ataque detectado ("DDoS", "Ransomware", "Normal")
-
-    // ========================================
-    // METADATOS DEL SISTEMA (6 fields)
-    // ========================================
-
-    string model_version = 98;       // Versión del modelo usado
-    double confidence_score = 99;    // Score de confianza [0.0-1.0]
-    int64 processing_time_us = 100;  // Tiempo procesamiento en microsegundos
-    string capture_interface = 101;  // Interfaz de captura (eth0, en0, etc.)
-    string analyzer_version = 102;   // Versión del analizador
-    map<string, double> custom_features = 103; // Features adicionales dinámicas
+  // NUEVAS FEATURES INNOVADORAS v3.1
+  repeated double custom_ml_features = 100; // Features específicas del modelo
+  map<string, double> dynamic_features = 101; // Features dinámicas
 }
 
-// Mensaje para batch de flujos (para procesamiento en lotes)
-message NetworkFlowBatch {
-    repeated NetworkFlow flows = 1;   // Lista de flujos
-    int32 batch_size = 2;            // Número de flujos en el batch
-    int64 batch_timestamp = 3;       // Timestamp del batch
-    string batch_id = 4;             // ID único del batch
+// =====================================================================
+// GEOLOCATION ENRICHMENT - Datos GeoIP
+// =====================================================================
+
+message GeoIPInfo {
+  string country = 1;
+  string country_code = 2;
+  string region = 3;
+  string city = 4;
+  double latitude = 5;
+  double longitude = 6;
+  string isp = 7;
+  string organization = 8;
+  string asn = 9;
+  string timezone = 10;
+  bool is_anonymous_proxy = 11;
+  bool is_satellite_provider = 12;
+  ThreatLevel threat_level = 13;
+
+  enum ThreatLevel {
+    UNKNOWN = 0;
+    LOW = 1;
+    MEDIUM = 2;
+    HIGH = 3;
+    CRITICAL = 4;
+  }
 }
 
-// Mensaje para alertas de seguridad
-message SecurityAlert {
-    NetworkFlow flow = 1;            // Flujo que causó la alerta
-    string alert_type = 2;           // "DDoS", "Ransomware", "Anomaly"
-    string severity = 3;             // "LOW", "MEDIUM", "HIGH", "CRITICAL"
-    string description = 4;          // Descripción de la alerta
-    int64 alert_timestamp = 5;       // Cuándo se generó la alerta
-    double risk_score = 6;           // Score de riesgo [0.0-1.0]
-    repeated string indicators = 7;  // Lista de indicadores específicos
+message GeoEnrichment {
+  GeoIPInfo source_geo = 1;
+  GeoIPInfo destination_geo = 2;
+  double geographic_distance_km = 3;
+  bool cross_border_communication = 4;
+  bool suspicious_geolocation = 5;
+  repeated string threat_intelligence_matches = 6;
 }
 
-// Mensaje para estadísticas agregadas
-message FlowStatistics {
-    int64 total_flows = 1;           // Total flujos analizados
-    int64 attack_flows = 2;          // Flujos clasificados como ataque
-    int64 normal_flows = 3;          // Flujos clasificados como normales
-    double attack_rate = 4;          // Tasa de ataques [0.0-1.0]
-    map<string, int64> attack_types = 5; // Conteos por tipo de ataque
-    int64 analysis_start_time = 6;   // Inicio del período de análisis
-    int64 analysis_end_time = 7;     // Fin del período de análisis
+// =====================================================================
+// TIME WINDOWS & FLOW AGGREGATION - Sistema de Ventanas
+// =====================================================================
+
+message TimeWindow {
+  google.protobuf.Timestamp window_start = 1;
+  google.protobuf.Timestamp window_end = 2;
+  google.protobuf.Duration window_size = 3;
+  uint64 sequence_number = 4;
+  WindowType type = 5;
+
+  enum WindowType {
+    SLIDING = 0;
+    TUMBLING = 1;
+    SESSION_BASED = 2;
+    ADAPTIVE = 3;
+  }
 }
 
-// Configuración del analizador
-message AnalyzerConfig {
-    // Umbrales de detección
-    double ddos_threshold = 1;       // Umbral DDoS [0.0-1.0]
-    double ransomware_threshold = 2; // Umbral ransomware [0.0-1.0]
+message FlowAggregation {
+  TimeWindow time_window = 1;
+  uint64 total_flows = 2;
+  uint64 total_packets = 3;
+  uint64 total_bytes = 4;
+  repeated NetworkFeatures flows = 5;
+  map<string, uint64> protocol_distribution = 6;
+  map<string, uint64> port_distribution = 7;
+  double anomaly_score = 8;
+}
 
-    // Configuración de captura
-    int32 flow_timeout = 3;          // Timeout flujo en segundos
-    int32 max_flows = 4;             // Máximo flujos simultáneos
-    bool enable_geolocation = 5;     // Habilitar geolocalización
+// =====================================================================
+// MACHINE LEARNING PIPELINE - Tricapa + Modelos
+// =====================================================================
 
-    // Configuración de modelos
-    string model_path = 6;           // Ruta a los modelos ML
-    bool enable_optimization = 7;    // Habilitar optimizaciones
+message ModelPrediction {
+  string model_name = 1;
+  string model_version = 2;
+  ModelType model_type = 3;
+  double confidence = 4;
+  string prediction_class = 5;
+  repeated double class_probabilities = 6;
+  google.protobuf.Timestamp prediction_time = 7;
+  google.protobuf.Duration processing_time = 8;
 
-    // Configuración de alertas
-    bool enable_alerts = 8;          // Habilitar alertas
-    string alert_endpoint = 9;       // Endpoint para enviar alertas
-    repeated string notification_emails = 10; // Emails para notificaciones
+  enum ModelType {
+    RANDOM_FOREST = 0;
+    LIGHTGBM = 1;
+    NEURAL_NETWORK = 2;
+    SVM = 3;
+    ENSEMBLE = 4;
+    TRANSFORMER = 5;
+  }
+}
+
+message TricapaAnalysis {
+  // NIVEL 1 - Filtro General
+  ModelPrediction level1_prediction = 1; // CICDS2017
+  bool level1_attack_detected = 2;
+  double level1_confidence = 3;
+
+  // NIVEL 2 - Especialización Contextual
+  ModelPrediction level2_web_prediction = 4;
+  ModelPrediction level2_internal_prediction = 5;
+  string traffic_context = 6; // "WEB", "INTERNAL", "EXTERNAL"
+
+  // NIVEL 3 - Amenazas Específicas
+  repeated ModelPrediction level3_predictions = 7; // DDOS, Ransomware, etc.
+  string final_threat_classification = 8;
+  double ensemble_confidence = 9;
+
+  // METADATOS DEL ANÁLISIS
+  google.protobuf.Duration total_analysis_time = 10;
+  repeated string activated_models = 11;
+  map<string, double> feature_importance = 12;
+}
+
+// =====================================================================
+// DISTRIBUTED MODE - Sistema Distribuido
+// =====================================================================
+
+message NodeInfo {
+  string node_id = 1;
+  string node_name = 2;
+  string ip_address = 3;
+  string location = 4;
+  NodeRole role = 5;
+  NodeStatus status = 6;
+  google.protobuf.Timestamp last_heartbeat = 7;
+  map<string, string> capabilities = 8;
+
+  enum NodeRole {
+    SNIFFER = 0;        // Captura paquetes
+    PROCESSOR = 1;      // Procesa features
+    ANALYZER = 2;       // Ejecuta ML
+    COORDINATOR = 3;    // Orquesta todo
+    STORAGE = 4;        // Almacena datos
+    DASHBOARD = 5;      // Visualiza resultados
+  }
+
+  enum NodeStatus {
+    ACTIVE = 0;
+    INACTIVE = 1;
+    MAINTENANCE = 2;
+    ERROR = 3;
+    OVERLOADED = 4;
+  }
+}
+
+message DistributedTask {
+  string task_id = 1;
+  TaskType task_type = 2;
+  string assigned_node = 3;
+  TaskStatus status = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp completed_at = 7;
+  google.protobuf.Any task_payload = 8;
+  google.protobuf.Any task_result = 9;
+
+  enum TaskType {
+    PACKET_CAPTURE = 0;
+    FEATURE_EXTRACTION = 1;
+    ML_INFERENCE = 2;
+    GEOIP_ENRICHMENT = 3;
+    THREAT_ANALYSIS = 4;
+    DATA_AGGREGATION = 5;
+    ALERT_GENERATION = 6;
+  }
+
+  enum TaskStatus {
+    PENDING = 0;
+    RUNNING = 1;
+    COMPLETED = 2;
+    FAILED = 3;
+    CANCELLED = 4;
+  }
+}
+
+// =====================================================================
+// COMPRESSION & ENCRYPTION - Optimización de Red
+// =====================================================================
+
+message CompressionMetadata {
+  CompressionAlgorithm algorithm = 1;
+  uint64 original_size = 2;
+  uint64 compressed_size = 3;
+  double compression_ratio = 4;
+  google.protobuf.Duration compression_time = 5;
+
+  enum CompressionAlgorithm {
+    NONE = 0;
+    GZIP = 1;
+    LZ4 = 2;
+    ZSTD = 3;
+    SNAPPY = 4;
+    BROTLI = 5;
+  }
+}
+
+message EncryptionMetadata {
+  EncryptionAlgorithm algorithm = 1;
+  string key_id = 2;
+  bytes initialization_vector = 3;
+  google.protobuf.Duration encryption_time = 4;
+
+  enum EncryptionAlgorithm {
+    NONE = 0;
+    AES_256_GCM = 1;
+    CHACHA20_POLY1305 = 2;
+    AES_256_CBC = 3;
+  }
+}
+
+// =====================================================================
+// RAG & HUMAN-IN-THE-LOOP - Sistemas Inteligentes
+// =====================================================================
+
+message RAGContext {
+  string query = 1;
+  repeated string retrieved_documents = 2;
+  repeated double relevance_scores = 3;
+  string generated_response = 4;
+  double confidence = 5;
+  repeated string source_references = 6;
+  google.protobuf.Timestamp generated_at = 7;
+}
+
+message HumanFeedback {
+  string feedback_id = 1;
+  string user_id = 2;
+  string alert_id = 3;
+  FeedbackType feedback_type = 4;
+  bool is_true_positive = 5;
+  string explanation = 6;
+  repeated string tags = 7;
+  google.protobuf.Timestamp provided_at = 8;
+
+  enum FeedbackType {
+    VALIDATION = 0;
+    CORRECTION = 1;
+    ENHANCEMENT = 2;
+    FALSE_POSITIVE = 3;
+    ADDITIONAL_INFO = 4;
+  }
+}
+
+message HumanInTheLoop {
+  bool requires_human_review = 1;
+  string review_priority = 2; // "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  repeated string review_reasons = 3;
+  HumanFeedback feedback = 4;
+  google.protobuf.Timestamp escalated_at = 5;
+  google.protobuf.Timestamp reviewed_at = 6;
+}
+
+// =====================================================================
+// MAIN MESSAGE - Estructura Principal Unificada
+// =====================================================================
+
+message NetworkSecurityEvent {
+  // IDENTIFICACIÓN ÚNICA
+  string event_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string source_node = 3;
+
+  // DATOS CORE
+  NetworkFeatures features = 4;
+  GeoEnrichment geo_enrichment = 5;
+  TimeWindow time_window = 6;
+
+  // ANÁLISIS ML
+  TricapaAnalysis tricapa_analysis = 7;
+  repeated ModelPrediction additional_predictions = 8;
+
+  // SISTEMA DISTRIBUIDO
+  NodeInfo capturing_node = 9;
+  repeated DistributedTask related_tasks = 10;
+
+  // OPTIMIZACIÓN
+  CompressionMetadata compression = 11;
+  EncryptionMetadata encryption = 12;
+
+  // INTELIGENCIA AUMENTADA
+  RAGContext rag_context = 13;
+  HumanInTheLoop human_interaction = 14;
+
+  // METADATOS
+  uint32 schema_version = 15; // 31 para v3.1
+  map<string, string> custom_metadata = 16;
+  repeated string tags = 17;
+  double overall_threat_score = 18;
+
+  // TRAZABILIDAD
+  string correlation_id = 19;
+  repeated string parent_event_ids = 20;
+  repeated string child_event_ids = 21;
+}
+
+// =====================================================================
+// STREAMING & BATCH PROCESSING - Procesamiento
+// =====================================================================
+
+message StreamingBatch {
+  repeated NetworkSecurityEvent events = 1;
+  uint64 batch_id = 2;
+  google.protobuf.Timestamp batch_timestamp = 3;
+  uint32 batch_size = 4;
+  ProcessingMode processing_mode = 5;
+
+  enum ProcessingMode {
+    REAL_TIME = 0;
+    NEAR_REAL_TIME = 1;
+    BATCH = 2;
+    HISTORICAL = 3;
+  }
+}
+
+// =====================================================================
+// CONFIGURATION - Configuración del Sistema
+// =====================================================================
+
+message SystemConfiguration {
+  // Configuración de modelos ML
+  repeated string enabled_models = 1;
+  map<string, double> model_thresholds = 2;
+
+  // Configuración de tiempo
+  google.protobuf.Duration time_window_size = 3;
+  uint32 max_flows_per_window = 4;
+
+  // Configuración distribuida
+  repeated NodeInfo available_nodes = 5;
+  map<string, string> node_assignments = 6;
+
+  // Configuración de seguridad
+  bool encryption_enabled = 7;
+  bool compression_enabled = 8;
+  string encryption_key_id = 9;
+
+  // Configuración RAG
+  bool rag_enabled = 10;
+  string rag_model_endpoint = 11;
+  repeated string knowledge_sources = 12;
 }
