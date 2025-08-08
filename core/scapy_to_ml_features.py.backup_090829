@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-
-# Suprimir warnings de sklearn
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
-warnings.filterwarnings("ignore", message="X does not have valid feature names")
-warnings.filterwarnings("ignore", message=".*Parallel.*")
-
 """
 scapy_to_ml_features.py
 
@@ -389,15 +382,14 @@ class RealTimeNetworkMLMonitor:
     """Monitor ML de red en tiempo real"""
 
     def __init__(self, models_dir="./models"):
-        tricapa_dir = f"{models_dir}/production/tricapa"
         self.flow_tracker = FlowTracker(flow_timeout=120)  # 2 minutos timeout
 
         # Cargar modelos entrenados
         model_paths = {
-            'ddos_rf': f'{tricapa_dir}/ddos_random_forest.joblib',
-            'ddos_lgb': f'{tricapa_dir}/ddos_lightgbm.joblib',
-            'ransomware_rf': f'{tricapa_dir}/ransomware_random_forest.joblib',
-            'ransomware_lgb': f'{tricapa_dir}/ransomware_lightgbm.joblib',
+            'ddos_rf': f'{models_dir}/ddos_random_forest.joblib',
+            'ddos_lgb': f'{models_dir}/ddos_lightgbm.joblib',
+            'ransomware_rf': f'{models_dir}/ransomware_random_forest.joblib',
+            'ransomware_lgb': f'{models_dir}/ransomware_lightgbm.joblib',
         }
 
         self.predictor = MLPredictor(model_paths)
