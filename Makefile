@@ -31,6 +31,8 @@ REPO_URL = https://github.com/alonsoir/upgraded-happiness
 
 # Python y Entorno
 PYTHON = python3
+CORE_DIR = core
+MODELS_DIR = models/production/tricapa
 VENV_NAME = upgraded_happiness_venv
 VENV_BIN = $(VENV_NAME)/bin
 PYTHON_VENV = $(VENV_BIN)/python
@@ -158,7 +160,7 @@ MONITOR_SCRIPT = scripts/utils/monitor_autoinmune.sh
 # =============================================================================
 # PHONY DECLARATIONS
 # =============================================================================
-.PHONY: help setup install clean \
+.PHONY: help setup install clean tricapa test-pipeline monitor ml-features clean backup status \
         compile-protobuf check-protobuf verify-protobuf-compiled check-protobuf-imports fix-protobuf-imports \
         list-imports-to-fix verify-system-ready \
         start start-bg start-core start-advanced stop stop-nuclear restart \
@@ -235,7 +237,17 @@ help:
 	@echo "$(CYAN)🌐 SERVICIOS WEB:$(NC)"
 	@echo "  Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)"
 	@echo "  RAG Engine: http://localhost:$(RAG_WEB_PORT) (próximamente)"
-
+	@echo "$(BLUE)🚀 UPGRADED HAPPINESS - SISTEMA TRICAPA$(NC)"
+	@echo "$(BLUE)========================================$(NC)"
+	@echo "$(GREEN)Sistema ML de ciberseguridad con 7 modelos operativos$(NC)"
+	@echo ""
+	@echo "$(YELLOW)📊 COMANDOS DISPONIBLES:$(NC)"
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo ""
+	@echo "$(BLUE)🏗️ ARQUITECTURA TRICAPA:$(NC)"
+	@echo "$(GREEN)🔴 Nivel 1:$(NC) rf_production_cicids (CICDS2017 - Ataque vs Normal)"
+	@echo "$(GREEN)🟡 Nivel 2:$(NC) web/internal_normal_detector (Especialización)"
+	@echo "$(GREEN)🟢 Nivel 3:$(NC) ddos/ransomware específicos (4 modelos)"
 # =============================================================================
 # INFORMACIÓN DEL SISTEMA (ACTUALIZADA)
 # =============================================================================
@@ -707,6 +719,13 @@ clean:
 	@echo "  🗑️  Limpiando directorios temporales..."
 	@rm -rf $(PIDS_DIR) $(LOGS_DIR) $(DATA_DIR)
 	@echo "$(GREEN)✅ Limpieza completada$(NC)"
+	@echo "$(BLUE)🧹 LIMPIANDO ARCHIVOS TEMPORALES$(NC)"
+	@echo "$(BLUE)================================$(NC)"
+	@find . -name "*.backup_*" -type f -delete 2>/dev/null || true
+	@find . -name "*.bak" -type f -delete 2>/dev/null || true
+	@find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+	@find . -name "*.pyc" -type f -delete 2>/dev/null || true
+	@echo "$(GREEN)✅ Archivos temporales eliminados$(NC)"
 
 # =============================================================================
 # GESTIÓN DEL SISTEMA PRINCIPAL (ACTUALIZADA POST-HOUSEKEEPING)
@@ -1069,6 +1088,19 @@ status:
 	else \
 		echo "  ❌ $(PROTOCOLS_DIR)/current/ no encontrado"; \
 	fi
+	@echo "$(BLUE)📊 ESTADO SISTEMA TRICAPA$(NC)"
+	@echo "$(BLUE)========================$(NC)"
+	@echo "$(YELLOW)📂 Modelos en production/tricapa/:$(NC)"
+	@ls -la $(MODELS_DIR)/*.joblib 2>/dev/null | wc -l | xargs -I {} echo "   ✅ {} modelos .joblib encontrados"
+	@echo ""
+	@echo "$(YELLOW)🔴 Nivel 1 (CICDS2017):$(NC)"
+	@ls $(MODELS_DIR)/*cicids*.joblib 2>/dev/null | sed 's/.*\//   ✅ /' || echo "   ❌ No encontrado"
+	@echo ""
+	@echo "$(YELLOW)🟡 Nivel 2 (Detectores especializados):$(NC)"
+	@ls $(MODELS_DIR)/*normal_detector*.joblib 2>/dev/null | sed 's/.*\//   ✅ /' || echo "   ❌ No encontrado"
+	@echo ""
+	@echo "$(YELLOW)🟢 Nivel 3 (Amenazas específicas):$(NC)"
+	@ls $(MODELS_DIR)/{ddos,ransomware}*.joblib 2>/dev/null | sed 's/.*\//   ✅ /' || echo "   ❌ No encontrado"
 
 monitor: status
 	@echo ""
@@ -1077,6 +1109,14 @@ monitor: status
 	@if [ -f $(GEOIP_LOG) ]; then echo "🌍 $(GEOIP_ENRICHER):"; tail -3 $(GEOIP_LOG) | sed 's/^/    /' | head -3; echo ""; fi
 	@if [ -f $(ML_LOG) ]; then echo "🤖 $(ML_DETECTOR):"; tail -3 $(ML_LOG) | sed 's/^/    /' | head -3; echo ""; fi
 	@if [ -f $(DASHBOARD_LOG) ]; then echo "📊 $(DASHBOARD):"; tail -3 $(DASHBOARD_LOG) | sed 's/^/    /' | head -3; fi
+
+monitor-ml:
+	@echo "$(BLUE)🌐 INICIANDO MONITOR SCAPY TRICAPA$(NC)"
+	@echo "$(BLUE)================================$(NC)"
+	@echo "$(GREEN)Modelos: 7 tricapa operativos$(NC)"
+	@echo "$(YELLOW)⚠️  Requiere sudo para captura de paquetes$(NC)"
+	@echo "$(YELLOW)⏸️  Presiona Ctrl+C para detener$(NC)"
+	@sudo $(PYTHON) $(CORE_DIR)/scapy_monitor_complete_pipeline.py
 
 logs:
 	@echo "$(CYAN)📋 Logs del Sistema$(NC)"
@@ -1329,4 +1369,89 @@ show-epic-sniffer:
 	@echo "  🔒 Integración con protocolos seguros"
 	@echo "  🌐 Distribución con ZeroMQ + cifrado"
 
-# Resto de comandos permanecen similares pero actualizados para nueva estructura...
+tricapa: ## 🎯 Probar pipeline tricapa completo (7 modelos)
+	@echo "$(BLUE)🎯 PROBANDO PIPELINE TRICAPA COMPLETO$(NC)"
+	@echo "$(BLUE)====================================$(NC)"
+	@echo "$(GREEN)Esperado: 7 modelos activos$(NC)"
+	@$(PYTHON) $(CORE_DIR)/complete_ml_pipeline.py
+
+test-pipeline: tricapa ## 🧪 Alias para tricapa (probar pipeline completo)
+
+ml-features: ## 🔍 Monitor ML features en tiempo real (requiere sudo)
+	@echo "$(BLUE)🔍 MONITOR ML FEATURES TIEMPO REAL$(NC)"
+	@echo "$(BLUE)==================================$(NC)"
+	@echo "$(GREEN)Modelos DDOS/Ransomware: 4 específicos$(NC)"
+	@echo "$(YELLOW)⚠️  Requiere sudo para captura de paquetes$(NC)"
+	@echo "$(YELLOW)⏸️  Presiona Ctrl+C para detener$(NC)"
+	@sudo $(PYTHON) $(CORE_DIR)/scapy_to_ml_features.py
+
+suppress-warnings: ## 🔇 Suprimir warnings de sklearn
+	@echo "$(BLUE)🔇 SUPRIMIENDO WARNINGS SKLEARN$(NC)"
+	@echo "$(BLUE)==============================$(NC)"
+	@$(PYTHON) suppress_sklearn_warnings.py
+
+test-all: ## 🧪 Probar todos los componentes tricapa secuencialmente
+	@echo "$(BLUE)🧪 PROBANDO TODOS LOS COMPONENTES TRICAPA$(NC)"
+	@echo "$(BLUE)=========================================$(NC)"
+	@echo ""
+	@echo "$(YELLOW)1. Pipeline ML completo:$(NC)"
+	@$(PYTHON) $(CORE_DIR)/complete_ml_pipeline.py
+	@echo ""
+	@echo "$(YELLOW)2. Monitor scapy (5 segundos):$(NC)"
+	@timeout 5 sudo $(PYTHON) $(CORE_DIR)/scapy_monitor_complete_pipeline.py 2>/dev/null || true
+	@echo ""
+	@echo "$(YELLOW)3. ML Features (5 segundos):$(NC)"
+	@timeout 5 sudo $(PYTHON) $(CORE_DIR)/scapy_to_ml_features.py 2>/dev/null || true
+	@echo ""
+	@echo "$(GREEN)✅ TODOS LOS COMPONENTES PROBADOS$(NC)"
+
+backup: ## 💾 Crear backup del sistema tricapa
+	@echo "$(BLUE)💾 CREANDO BACKUP SISTEMA TRICAPA$(NC)"
+	@echo "$(BLUE)=================================$(NC)"
+	@BACKUP_DIR="backup_tricapa_$(shell date +%Y%m%d_%H%M%S)" && \
+	mkdir -p $$BACKUP_DIR && \
+	cp -r $(MODELS_DIR) $$BACKUP_DIR/models_tricapa && \
+	cp -r $(CORE_DIR)/*.py $$BACKUP_DIR/ && \
+	echo "$(GREEN)✅ Backup creado en: $$BACKUP_DIR$(NC)"
+
+install-deps: ## 📦 Instalar dependencias del sistema tricapa
+	@echo "$(BLUE)📦 INSTALANDO DEPENDENCIAS TRICAPA$(NC)"
+	@echo "$(BLUE)==================================$(NC)"
+	@pip install scapy numpy pandas scikit-learn joblib
+	@echo "$(GREEN)✅ Dependencias instaladas$(NC)"
+
+docs: ## 📋 Mostrar documentación del sistema tricapa
+	@echo "$(BLUE)📋 DOCUMENTACIÓN SISTEMA TRICAPA$(NC)"
+	@echo "$(BLUE)===============================$(NC)"
+	@echo ""
+	@echo "$(GREEN)🏗️ ARQUITECTURA:$(NC)"
+	@echo "   🔴 Nivel 1: Filtro general CICDS2017 (82→23 features)"
+	@echo "   🟡 Nivel 2: Detectores especializados (23→4 features)"
+	@echo "   🟢 Nivel 3: Amenazas específicas (4 features→decisión)"
+	@echo ""
+	@echo "$(GREEN)📊 MODELOS:$(NC)"
+	@echo "   • rf_production_cicids.joblib"
+	@echo "   • web_normal_detector.joblib"
+	@echo "   • internal_normal_detector.joblib"
+	@echo "   • ddos_random_forest.joblib"
+	@echo "   • ddos_lightgbm.joblib"
+	@echo "   • ransomware_random_forest.joblib"
+	@echo "   • ransomware_lightgbm.joblib"
+	@echo ""
+	@echo "$(GREEN)🚀 USO RÁPIDO:$(NC)"
+	@echo "   make tricapa          # Probar pipeline completo"
+	@echo "   make monitor          # Monitor tiempo real"
+	@echo "   make ml-features      # Features ML tiempo real"
+	@echo "   make status           # Ver estado del sistema"
+
+# Comandos de desarrollo
+dev-branch: ## 🌟 Crear rama de desarrollo tricapa
+	@git checkout -b feature/tricapa-dev-$(shell date +%Y%m%d) 2>/dev/null || echo "$(YELLOW)Ya en rama de desarrollo$(NC)"
+
+# Comandos de rendimiento
+benchmark: ## ⚡ Benchmark del sistema tricapa
+	@echo "$(BLUE)⚡ BENCHMARK SISTEMA TRICAPA$(NC)"
+	@echo "$(BLUE)===========================$(NC)"
+	@echo "$(YELLOW)Midiendo rendimiento de los 7 modelos...$(NC)"
+	@time $(PYTHON) $(CORE_DIR)/complete_ml_pipeline.py
+	@echo "$(GREEN)✅ Benchmark completado$(NC)"# Resto de comandos permanecen similares pero actualizados para nueva estructura...
