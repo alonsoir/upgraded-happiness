@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore", message=".*Parallel.*")
 
 """
 🚀 UPGRADED HAPPINESS - PIPELINE ML COMPLETO DE 3 NIVELES
-
+complete_ml_pipeline.py
 ARQUITECTURA DESCUBIERTA:
 - Nivel 1: RF Production (23 features) → ¿HAY ATAQUE?
 - Nivel 2: DDoS/Ransomware (82 features) → ¿QUÉ TIPO?
@@ -19,7 +19,7 @@ Features mapping:
 - 82 → 4 (para nivel 3)
 - 82 (directo para nivel 2)
 
-Autor: Alonso Rodriguez
+Autor: Alonso Isidoro, Claude
 Fecha: Agosto 7, 2025
 """
 
