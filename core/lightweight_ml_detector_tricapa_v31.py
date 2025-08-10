@@ -229,25 +229,49 @@ class TricapaMLDetectorV31JsonControlled:
             raise RuntimeError(f"❌ CRÍTICO: Error parseando JSON: {e}")
 
     def setup_model_paths(self):
-        """Configurar rutas de modelos desde JSON"""
+        """Configurar rutas de modelos desde JSON - RUTAS CORREGIDAS"""
         script_dir = Path(__file__).parent
         project_root = script_dir.parent
 
         # Usar rutas del JSON si están disponibles
         tricapa_paths = self.tricapa_config.get("model_paths", {})
 
+        # ✅ RUTAS CORREGIDAS - Siempre partir de models/
         base_dir = tricapa_paths.get("base_models_dir", "models")
-        production_subdir = tricapa_paths.get("production_subdir", "production")
-        tricapa_subdir = tricapa_paths.get("tricapa_subdir", "production/tricapa")
 
+        # Construir rutas completas correctamente
         self.models_dir = project_root / base_dir
-        self.production_dir = project_root / production_subdir
-        self.tricapa_dir = project_root / tricapa_subdir
 
-        print(f"📂 Rutas de modelos desde JSON:")
+        # ✅ CRUCIAL: production debe estar DENTRO de models/
+        self.production_dir = self.models_dir / "production"
+
+        # ✅ CRUCIAL: tricapa debe estar DENTRO de models/production/
+        self.tricapa_dir = self.models_dir / "production" / "tricapa"
+
+        print(f"📂 Rutas de modelos CORREGIDAS desde JSON:")
         print(f"   📁 Base: {self.models_dir}")
         print(f"   📁 Production: {self.production_dir}")
         print(f"   📁 Tricapa: {self.tricapa_dir}")
+
+        # 🔍 VERIFICACIÓN DE RUTAS
+        print(f"📋 Verificando estructura de directorios:")
+        print(f"   📁 {self.models_dir} existe: {self.models_dir.exists()}")
+        print(f"   📁 {self.production_dir} existe: {self.production_dir.exists()}")
+        print(f"   📁 {self.tricapa_dir} existe: {self.tricapa_dir.exists()}")
+
+        if not self.production_dir.exists():
+            self.logger.warning(f"⚠️ Production dir no encontrado: {self.production_dir}")
+        if not self.tricapa_dir.exists():
+            self.logger.warning(f"⚠️ Tricapa dir no encontrado: {self.tricapa_dir}")
+
+        # 🔍 LISTAR ARCHIVOS ENCONTRADOS PARA DEBUG
+        if self.production_dir.exists():
+            production_files = list(self.production_dir.glob("*.joblib"))
+            print(f"   📄 Archivos en production: {[f.name for f in production_files]}")
+
+        if self.tricapa_dir.exists():
+            tricapa_files = list(self.tricapa_dir.glob("*.joblib"))
+            print(f"   📄 Archivos en tricapa: {[f.name for f in tricapa_files]}")
 
     def setup_logging(self):
         """Setup logging desde JSON"""
