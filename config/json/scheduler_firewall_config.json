@@ -1,0 +1,326 @@
+{
+  "node_id": "scheduler_firewall_001",
+  "component": {
+    "name": "scheduler_firewall",
+    "version": "1.0.0",
+    "mode": "distributed_decision_engine",
+    "role": "firewall_scheduler_nogui",
+    "description": "JSON-controlled Firewall Decision Engine - No GUI"
+  },
+
+  "_comment_architecture": "🎯 ARQUITECTURA: ml_detector:5580(PUB) → scheduler:5580(SUB) → firewall_agent:5580(PUSH) ← → scheduler:5581(PULL)",
+
+  "network": {
+    "ml_events_input": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "SUB",
+      "high_water_mark": 500,
+      "expected_publishers": 1,
+      "description": "Receives events from ML Detector V3.1.2 tricapa (4 models)",
+      "_comment": "🔧 CONSERVADOR: Basado en números actuales ml_detector"
+    },
+
+    "firewall_commands_output": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "high_water_mark": 200,
+      "expected_subscribers": 1,
+      "description": "Sends commands to firewall_agent",
+      "_comment": "🔥 MISMO PUERTO que firewall_agent BIND - revisar si necesita ajuste"
+    },
+
+    "firewall_responses_input": {
+      "address": "localhost",
+      "port": 5581,
+      "mode": "bind",
+      "socket_type": "PULL",
+      "high_water_mark": 200,
+      "expected_publishers": 1,
+      "description": "Receives responses from firewall_agent"
+    }
+  },
+
+  "zmq": {
+    "_comment_conservative": "🔒 CONFIGURACIÓN ULTRA CONSERVADORA basada en ml_detector con 4 modelos",
+    "context_io_threads": 1,
+    "_comment_io_threads": "📉 REDUCIDO de 2 a 1 para ser más conservador que ml_detector",
+
+    "max_sockets": 16,
+    "_comment_max_sockets": "📉 REDUCIDO de 64 a 16 - scheduler solo necesita 3 sockets",
+
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": false,
+    "_comment_immediate": "false = mejor throughput como ml_detector",
+
+    "_comment_timeouts": "⏱️ TIMEOUTS: Basados en ml_detector pero más conservadores",
+    "linger_ms": 0,
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 250,
+    "_comment_timeouts_detail": "recv_timeout igual ml_detector, send_timeout igual ml_detector",
+
+    "_comment_buffers": "📦 BUFFERS: Conservadores, menores que ml_detector",
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 131072,
+    "_comment_buffers_detail": "recv reducido 50%, send reducido 50% vs ml_detector",
+
+    "max_message_size": 50000,
+    "_comment_max_message_size": "Igual que ml_detector para compatibilidad V3.1.2",
+
+    "scheduler_optimizations": {
+      "_comment": "🎯 OPTIMIZACIONES ESPECÍFICAS DEL SCHEDULER",
+      "conflate": false,
+      "_comment_conflate": "false = todos los eventos son importantes para decisiones",
+      "recovery_ivl": 10000,
+      "sndbuf": 131072,
+      "rcvbuf": 65536
+    }
+  },
+
+  "processing": {
+    "_comment_threads": "🧵 ULTRA CONSERVADOR: 1 thread por función para evitar race conditions",
+    "threads": {
+      "ml_events_consumers": 1,
+      "_comment_ml_consumers": "📉 REDUCIDO: Solo 1 vs 3 del ml_detector",
+
+      "firewall_command_producers": 1,
+      "_comment_command_producers": "🔥 1 thread para procesar decisiones y crear comandos",
+
+      "firewall_response_consumers": 1,
+      "_comment_response_consumers": "📥 1 thread para recibir respuestas del firewall_agent"
+    },
+
+    "_comment_queues": "📋 COLAS CONSERVADORAS: Basadas en ml_detector pero reducidas",
+    "internal_queues": {
+      "ml_events_queue_size": 200,
+      "_comment_ml_queue": "📉 REDUCIDO de 200 ml_detector para backpressure control",
+
+      "firewall_commands_queue_size": 100,
+      "_comment_commands_queue": "🔥 Buffer para comandos hacia firewall_agent",
+
+      "firewall_responses_queue_size": 100,
+      "_comment_responses_queue": "📥 Buffer para respuestas del firewall_agent"
+    },
+
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0,
+      "_comment": "🚨 Gestión de colas para prevenir saturación"
+    },
+
+    "_comment_performance": "⚡ CONFIGURACIÓN DE RENDIMIENTO",
+    "decision_engine": {
+      "max_decisions_per_second": 50,
+      "_comment_max_decisions": "🎯 Límite para no saturar firewall_agent",
+
+      "decision_timeout_ms": 100,
+      "batch_processing": false,
+      "_comment_batch": "false = procesar eventos individualmente para mejor latencia",
+
+      "cache_decisions": false,
+      "_comment_cache": "false = siempre consultar reglas JSON para máxima flexibilidad"
+    },
+
+    "backpressure": {
+      "_comment_backpressure": "🔄 BACKPRESSURE: Inspirado en ml_detector pero adaptado",
+      "enabled": true,
+      "max_retries": 2,
+      "retry_delays_ms": [1, 5],
+      "drop_threshold_percent": 10.0,
+      "activation_threshold": 15,
+      "_comment_activation": "📉 REDUCIDO de 20 a 15 para activar antes",
+      "queue_full_strategy": "drop_oldest"
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 60,
+    "_comment_stats_interval": "🕒 60s para reducir overhead vs 20s del ml_detector",
+
+    "detailed_metrics": true,
+    "health_check_interval": 120,
+
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 100.0,
+      "_comment_latency": "📊 100ms más estricto que dashboard para decisiones rápidas",
+
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 256,
+      "_comment_memory": "📉 256MB límite conservador",
+
+      "max_cpu_usage_percent": 40.0,
+      "_comment_cpu": "📉 40% más conservador que dashboard (60%)",
+
+      "_comment_decision_alerts": "🎯 ALERTAS ESPECÍFICAS DEL DECISION ENGINE",
+      "max_decision_latency_ms": 50.0,
+      "min_decisions_per_minute": 1,
+      "max_consecutive_errors": 5
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "_comment_level": "🔍 INFO para ver decisiones importantes sin saturar",
+
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [scheduler:{node_id}] [pid:{pid}] - %(message)s",
+
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "path": "logs/scheduler_firewall.log",
+        "level": "INFO",
+        "max_size": "50MB",
+        "backup_count": 5,
+        "rotation": "size"
+      },
+      "decision_log": {
+        "_comment": "🎯 LOG ESPECÍFICO PARA DECISIONES",
+        "enabled": true,
+        "path": "logs/scheduler_decisions.log",
+        "level": "INFO",
+        "log_all_decisions": true,
+        "log_rule_applications": true,
+        "include_event_context": true
+      }
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 50000,
+      "_comment_validation": "📏 Validación igual que ml_detector",
+
+      "validate_risk_scores": true,
+      "risk_score_min": 0.0,
+      "risk_score_max": 1.0,
+
+      "validate_ip_addresses": true,
+      "require_valid_ipv4": true
+    },
+
+    "decision_safety": {
+      "_comment": "🛡️ SEGURIDAD EN DECISIONES",
+      "enabled": true,
+      "require_firewall_agent_validation": true,
+      "max_block_decisions_per_minute": 10,
+      "force_dry_run_above_rate": 20,
+      "_comment_safety": "🚨 Si >20 decisiones/min, forzar dry_run por seguridad"
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "firewall_decision_engine_scheduler",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 6,
+      "_comment_hops": "📊 Trackeo completo del pipeline como ml_detector"
+    },
+
+    "scheduler_specific": {
+      "_comment": "🎯 CONFIGURACIÓN ESPECÍFICA DEL SCHEDULER",
+      "track_decision_latency": true,
+      "track_rule_applications": true,
+      "track_firewall_responses": true,
+      "enable_decision_analytics": true
+    }
+  },
+
+  "decision_engine": {
+    "_comment_engine": "🎯 CONFIGURACIÓN DEL MOTOR DE DECISIONES",
+    "rules_file_check_interval": 30,
+    "_comment_rules_check": "🔄 Verificar cambios en reglas cada 30s",
+
+    "default_risk_threshold": 0.5,
+    "emergency_mode_threshold": 0.95,
+    "_comment_emergency": "🚨 Si risk > 95%, usar configuración de emergencia",
+
+    "decision_cache": {
+      "enabled": false,
+      "_comment_cache": "❌ DESHABILITADO: Siempre consultar JSON para máxima flexibilidad"
+    },
+
+    "fallback_behavior": {
+      "enabled": true,
+      "default_action": "MONITOR",
+      "default_duration": 300,
+      "default_priority": "MEDIUM",
+      "force_dry_run": true,
+      "_comment_fallback": "🛡️ Comportamiento seguro si fallan las reglas"
+    }
+  },
+
+  "debug": {
+    "enabled": false,
+    "_comment_debug": "❌ DEBUG DESHABILITADO para máximo rendimiento",
+
+    "log_all_events": false,
+    "log_decision_details": false,
+    "log_protobuf_parsing": false,
+    "performance_profiling": false,
+
+    "_comment_production": "🚀 Configuración de producción - sin debug overhead"
+  },
+
+  "_config_metadata": {
+    "config_version": "1.0.0-conservative",
+    "created_for": "HW Actual - Configuración conservadora basada en ml_detector 4 modelos",
+    "optimization_level": "CONSERVATIVE_SCHEDULER",
+    "based_on": "ml_detector V3.1.2 numbers with reductions for scheduler",
+    "description": "Configuración conservadora para scheduler: 1 thread, HWM reducidos, timeouts seguros",
+    "hw_profile": "CURRENT_LIMITED_CONSERVATIVE",
+    "socket_pattern": "SUB/PUSH/PULL",
+    "firewall_integration": "Ultra-secure JSON-controlled",
+    "performance_target": "STABLE_DECISION_ENGINE_WITH_BACKPRESSURE_CONTROL",
+
+    "_comment_numbers": "📊 NÚMEROS CONSERVADORES vs ML_DETECTOR",
+    "reductions_applied": {
+      "io_threads": "2 → 1 (50% reduction)",
+      "max_sockets": "64 → 16 (75% reduction)",
+      "recv_buffer": "131072 → 65536 (50% reduction)",
+      "ml_consumers": "3 → 1 (67% reduction)",
+      "queue_sizes": "200-300 → 100-200 (reduced)",
+      "cpu_limit": "50% → 40% (más conservador)",
+      "memory_limit": "256MB → 256MB (igual, ya conservador)"
+    },
+
+    "_comment_scaling": "🔄 ESCALABILIDAD FUTURA",
+    "scaling_notes": "Para HW mejor, aumentar: io_threads→2, max_sockets→32, buffers x2, threads→2-3",
+    "dynamic_config_ready": true,
+    "etcd_compatible": true,
+    "jinja2_templating_ready": true
+  },
+
+  "_architecture_notes": {
+    "ml_detector_connection": "SUB a puerto 5580 - ml_detector PUB",
+    "firewall_agent_commands": "PUSH a puerto 5580 - ⚠️ POSIBLE CONFLICTO con ml_detector",
+    "firewall_agent_responses": "PULL BIND puerto 5581 - firewall_agent PUSH/CONNECT",
+
+    "_warning_port_conflict": "⚠️ REVISAR: ml_detector PUB:5580 y scheduler→firewall_agent PUSH:5580",
+    "_solution_options": [
+      "Opción A: firewall_agent usar puerto diferente (ej: 5582)",
+      "Opción B: scheduler usar puerto diferente para commands",
+      "Opción C: dashboard y scheduler compartir puerto con firewall_agent somehow"
+    ],
+
+    "_current_assumption": "Asumiendo que simple_firewall_agent.py BIND en 5580 para commands",
+    "_needs_verification": "Verificar configuración real de simple_firewall_agent.py"
+  }
+}
