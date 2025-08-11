@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-lightweight_ml_detector_tricapa_v31.py - FULLY JSON-CONTROLLED VERSION
+lightweight_ml_detector_tricapa_v31.py - FULLY JSON-CONTROLLED VERSION WITH PUB/SUB
 🚀 UPGRADED HAPPINESS - TRICAPA ML DETECTOR v3.1.2 - 100% PORTABLE
 
-CARACTERÍSTICAS v3.1.2:
+CARACTERÍSTICAS v3.1.2-PUBSUB:
 - 🎯 100% controlado por JSON (sin hardcoding)
 - 🔒 ZMQ sockets protegidos con locks (thread-safe)
 - 🧵 Pool de workers optimizado
@@ -11,20 +11,23 @@ CARACTERÍSTICAS v3.1.2:
 - ⚡ Performance boost completo
 - 🌐 PORTABLE entre diferentes configuraciones HW
 - 📋 Respeta completamente enabled/disabled del JSON
+- 📡 SOPORTE PUB/SUB para múltiples suscriptores
 
 PORTABILIDAD:
 - HW Limitado: Usar config con modelos LGB disabled
 - HW Potente: Usar config con todos los modelos enabled
 - Script idéntico, solo cambia JSON
+- PUSH/PULL: Un solo consumidor
+- PUB/SUB: Múltiples consumidores (dashboard + no-gui)
 
 FILOSOFÍA:
 - Script: Lee 100% del JSON, sin asumir nada
-- Config: Controla completamente qué modelos cargar
+- Config: Controla completamente qué modelos cargar Y qué patrón ZMQ usar
 - Hardware: Solo cambiar JSON para diferentes capacidades
 
 Autor: Alonso Isidoro, Claude
-Fecha: Agosto 10, 2025
-Versión: 3.1.2-json-controlled
+Fecha: Agosto 11, 2025
+Versión: 3.1.2-json-controlled-pubsub
 """
 
 # Suprimir warnings de sklearn
@@ -128,13 +131,14 @@ except ImportError as e:
 
 class TricapaMLDetectorV31JsonControlled:
     """
-    🚀 Detector ML Tricapa v3.1.2 - 100% JSON CONTROLLED
+    🚀 Detector ML Tricapa v3.1.2 - 100% JSON CONTROLLED CON PUB/SUB
     - 🎯 Sin hardcoding - respeta completamente JSON
     - 🔒 ZMQ sockets protegidos con locks
     - 🧵 Pool de workers optimizado
     - 📊 Logs informativos VISIBLES
     - ⚡ Performance boost completo
     - 🌐 PORTABLE entre configuraciones HW
+    - 📡 SOPORTE PUB/SUB para múltiples suscriptores
     """
 
     def __init__(self, config_file: str):
@@ -155,7 +159,12 @@ class TricapaMLDetectorV31JsonControlled:
         # 📝 Setup logging PRIMERO
         self.setup_logging()
 
+        # 🔍 Detectar patrón de socket desde JSON - SIN HARDCODING
+        output_config = self.config.get("network", {}).get("output_socket", {})
+        self.socket_pattern = output_config.get("socket_type", "PUSH").upper()
+
         print(f"🔌 Configurando sockets ZMQ JSON-controlled para {self.node_id}...")
+        print(f"📡 Patrón detectado desde JSON: {self.socket_pattern}")
 
         # 🔌 Setup ZeroMQ desde JSON
         self.context = zmq.Context()
@@ -328,12 +337,12 @@ class TricapaMLDetectorV31JsonControlled:
             self.logger.info(f"📁 Protobuf logging: {self.proto_log_dir}")
 
     def setup_sockets_from_json(self):
-        """🔒 Configuración ZMQ 100% desde JSON"""
+        """🔒 Configuración ZMQ 100% desde JSON - CON SOPORTE PUB/SUB"""
         network_config = self.config.get("network", {})
         zmq_config = self.config.get("zmq", {})
 
         try:
-            # Socket de entrada desde JSON
+            # Socket de entrada desde JSON (sin cambios)
             input_config = network_config.get("input_socket", {})
             self.input_socket = self.context.socket(zmq.PULL)
 
@@ -350,25 +359,61 @@ class TricapaMLDetectorV31JsonControlled:
             input_address = f"tcp://{input_config.get('address', 'localhost')}:{input_config.get('port', 5560)}"
             self.input_socket.connect(input_address)
 
-            # Socket de salida desde JSON
+            # 📡 Socket de salida desde JSON - SOPORTE PUB/SUB COMPLETO
             output_config = network_config.get("output_socket", {})
-            self.output_socket = self.context.socket(zmq.PUSH)
+            socket_type = output_config.get("socket_type", "PUSH").upper()
 
-            self.output_socket.setsockopt(zmq.SNDHWM, zmq_config.get("sndhwm", 500))
+            if socket_type == "PUB":
+                self.output_socket = self.context.socket(zmq.PUB)
+                self.socket_pattern = "PUB"
+                self.logger.info("🔄 Usando patrón PUB/SUB para múltiples suscriptores")
+            else:
+                self.output_socket = self.context.socket(zmq.PUSH)
+                self.socket_pattern = "PUSH"
+                self.logger.info("🔄 Usando patrón PUSH/PULL para un solo consumidor")
+
+            # 📈 Configuración optimizada según el patrón
+            if socket_type == "PUB":
+                # Configuración específica para PUB
+                self.output_socket.setsockopt(zmq.SNDHWM, zmq_config.get("sndhwm", 1000))
+                send_buffer_size = zmq_config.get("send_buffer_size", 262144)
+
+                # Optimizaciones PUB específicas desde JSON
+                pub_opts = zmq_config.get("pub_socket_optimizations", {})
+
+                if pub_opts.get("tcp_keepalive", True):
+                    self.output_socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                    self.output_socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, pub_opts.get("tcp_keepalive_idle", 300))
+
+                # Configuración de immediate para PUB
+                if not pub_opts.get("immediate", False):
+                    self.output_socket.setsockopt(zmq.IMMEDIATE, 0)
+
+            else:
+                # Configuración estándar para PUSH
+                self.output_socket.setsockopt(zmq.SNDHWM, zmq_config.get("sndhwm", 500))
+                send_buffer_size = zmq_config.get("send_buffer_size", 131072)
+
+            # Configuración común
             self.output_socket.setsockopt(zmq.SNDTIMEO, zmq_config.get("send_timeout_ms", 250))
             self.output_socket.setsockopt(zmq.LINGER, zmq_config.get("linger_ms", 0))
             self.output_socket.setsockopt(zmq.MAXMSGSIZE, zmq_config.get("max_message_size", 50000))
-
-            # Buffer desde JSON si está disponible
-            if "send_buffer_size" in zmq_config:
-                self.output_socket.setsockopt(zmq.SNDBUF, zmq_config["send_buffer_size"])
+            self.output_socket.setsockopt(zmq.SNDBUF, send_buffer_size)
 
             output_address = f"tcp://*:{output_config.get('port', 5580)}"
             self.output_socket.bind(output_address)
 
             self.logger.info(f"🔌 Sockets ZMQ desde JSON:")
             self.logger.info(f"   📥 Input: {input_address} (HWM: {zmq_config.get('rcvhwm', 500)})")
-            self.logger.info(f"   📤 Output: {output_address} (HWM: {zmq_config.get('sndhwm', 500)})")
+            self.logger.info(
+                f"   📤 Output: {output_address} ({socket_type}, HWM: {zmq_config.get('sndhwm', 500 if socket_type == 'PUSH' else 1000)})")
+
+            if socket_type == "PUB":
+                self.logger.info(f"   🔄 Patrón: PUB/SUB (múltiples suscriptores permitidos)")
+                self.logger.info(
+                    f"   📡 Suscriptores pueden conectarse a: tcp://localhost:{output_config.get('port', 5580)}")
+            else:
+                self.logger.info(f"   🔄 Patrón: PUSH/PULL (un solo consumidor)")
 
         except Exception as e:
             raise RuntimeError(f"❌ Error configurando sockets ZMQ: {e}")
@@ -422,7 +467,7 @@ class TricapaMLDetectorV31JsonControlled:
                 self.ml_config["enabled"] = False
 
     def load_models_from_json(self):
-        """🧠 Cargar modelos 100% DESDE JSON - sin hardcoding"""
+        """🧠 Cargar modelos 100% DESDE JSON - INTELIGENTE (solo carga lo que existe)"""
         self.logger.info("🔄 Cargando modelos 100% desde configuración JSON...")
 
         if not self.ml_config.get("enabled", True):
@@ -436,7 +481,8 @@ class TricapaMLDetectorV31JsonControlled:
 
         models_loaded = 0
         models_failed = 0
-        models_skipped = 0
+        models_skipped_disabled = 0
+        models_skipped_missing = 0
 
         # Limpiar estructuras
         self.models = {}
@@ -455,13 +501,42 @@ class TricapaMLDetectorV31JsonControlled:
                 continue
 
             if not model_config.get("enabled", False):
-                models_skipped += 1
+                models_skipped_disabled += 1
                 self.logger.info(f"⏭️ {model_name}: SKIP (disabled en JSON)")
                 continue
 
-            # Intentar cargar el modelo
+            # 🔍 VERIFICACIÓN PREVIA DE EXISTENCIA - CLAVE DEL ÉXITO
+            model_file = model_config.get("model_file")
+            if not model_file:
+                models_skipped_missing += 1
+                self.logger.warning(f"⚠️ {model_name}: No model_file configurado")
+                continue
+
+            model_location = model_config.get("model_location", "tricapa")
+
+            # Determinar path según location
+            if model_location == "production":
+                model_path = self.production_dir / model_file
+            elif model_location == "tricapa":
+                model_path = self.tricapa_dir / model_file
+            elif model_location == "tricapa_or_production":
+                model_path = self.tricapa_dir / model_file
+                if not model_path.exists():
+                    model_path = self.production_dir / model_file
+            else:
+                models_skipped_missing += 1
+                self.logger.warning(f"⚠️ {model_name}: model_location desconocido: {model_location}")
+                continue
+
+            # 🚨 VERIFICACIÓN CRÍTICA: Solo proceder si el archivo existe
+            if not model_path.exists():
+                models_skipped_missing += 1
+                self.logger.warning(f"⚠️ {model_name}: Archivo no disponible: {model_path}")
+                continue
+
+            # Solo intentar cargar si el archivo existe físicamente
             try:
-                success = self._load_individual_model(model_name, model_config)
+                success = self._load_individual_model_verified(model_name, model_config, model_path)
                 if success:
                     models_loaded += 1
                     self.enabled_models.append(model_name)
@@ -491,45 +566,31 @@ class TricapaMLDetectorV31JsonControlled:
 
         self.logger.info(f"🎯 CARGA DE MODELOS DESDE JSON COMPLETADA:")
         self.logger.info(f"   📊 Total en config: {total_in_config}")
-        self.logger.info(f"   ✅ Cargados: {models_loaded}")
-        self.logger.info(f"   ⏭️ Saltados (disabled): {models_skipped}")
-        self.logger.info(f"   ❌ Fallidos: {models_failed}")
+        self.logger.info(f"   ✅ Cargados exitosamente: {models_loaded}")
+        self.logger.info(f"   ⏭️ Saltados (disabled): {models_skipped_disabled}")
+        self.logger.info(f"   ⚠️ No disponibles (missing): {models_skipped_missing}")
+        self.logger.info(f"   ❌ Fallidos (error): {models_failed}")
         self.logger.info(f"   🧠 Modelos activos: {self.enabled_models}")
 
+        # 🚀 LÓGICA INTELIGENTE: Permitir continuar con modelos disponibles
+        min_models_required = self.ml_config.get("degraded_mode", {}).get("min_models_required", 0)
+
         if models_loaded == 0:
-            raise RuntimeError("❌ CRÍTICO: No se pudo cargar ningún modelo desde JSON")
+            if min_models_required > 0:
+                raise RuntimeError("❌ CRÍTICO: No se pudo cargar ningún modelo desde JSON")
+            else:
+                self.logger.warning("⚠️ ADVERTENCIA: No hay modelos disponibles - continuando en modo heurístico")
+                return False
+        elif models_loaded < min_models_required:
+            self.logger.warning(f"⚠️ Solo {models_loaded}/{min_models_required} modelos requeridos - modo degradado")
 
         self.logger.info(f"✅ Sistema tricapa OPERATIVO con {models_loaded} modelos desde JSON")
+        return True
 
-    def _load_individual_model(self, model_name: str, model_config: Dict[str, Any]) -> bool:
-        """Cargar modelo individual según configuración JSON"""
+    def _load_individual_model_verified(self, model_name: str, model_config: Dict[str, Any], model_path: Path) -> bool:
+        """Cargar modelo individual con path ya verificado"""
         try:
-            model_file = model_config.get("model_file")
-            if not model_file:
-                self.logger.error(f"❌ {model_name}: No model_file en config")
-                return False
-
-            model_location = model_config.get("model_location", "tricapa")
-
-            # Determinar path según location
-            if model_location == "production":
-                model_path = self.production_dir / model_file
-            elif model_location == "tricapa":
-                model_path = self.tricapa_dir / model_file
-            elif model_location == "tricapa_or_production":
-                # Buscar en tricapa primero, luego production
-                model_path = self.tricapa_dir / model_file
-                if not model_path.exists():
-                    model_path = self.production_dir / model_file
-            else:
-                self.logger.error(f"❌ {model_name}: model_location desconocido: {model_location}")
-                return False
-
-            if not model_path.exists():
-                self.logger.error(f"❌ {model_name}: Archivo no encontrado: {model_path}")
-                return False
-
-            # Cargar modelo
+            # Cargar modelo (sabemos que el archivo existe)
             model_data = joblib.load(model_path)
 
             # Manejar diferentes formatos de modelo
@@ -553,6 +614,8 @@ class TricapaMLDetectorV31JsonControlled:
                         if scaler_path.exists():
                             scaler_key = f"{model_name}_scaler" if model_name != "level1_attack_detector" else "level1_scaler"
                             self.scalers[scaler_key] = joblib.load(scaler_path)
+                        else:
+                            self.logger.warning(f"⚠️ {model_name}: Scaler no encontrado: {scaler_path}")
 
             return True
 
@@ -599,13 +662,14 @@ class TricapaMLDetectorV31JsonControlled:
 
     def _log_configuration_summary(self):
         """Log resumen de configuración cargada"""
-        self.logger.info(f"🚀 TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED inicializado")
+        self.logger.info(f"🚀 TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB inicializado")
         self.logger.info(f"   🏷️ Node ID: {self.node_id}")
         self.logger.info(f"   🔢 PID: {self.process_id}")
         self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
         self.logger.info(f"   🧠 Modelos desde JSON: {len(self.enabled_models)} ({self.enabled_models})")
         self.logger.info(f"   🔒 Thread Safety: ZMQ sockets protegidos")
         self.logger.info(f"   🧵 Workers desde JSON: {self.worker_pool_size}")
+        self.logger.info(f"   📡 Patrón ZMQ: {getattr(self, 'socket_pattern', 'PUSH')} (configurado desde JSON)")
         self.logger.info(f"   ⚡ Performance: Configuración desde JSON")
         self.logger.info(f"   🌐 PORTABLE: 100% controlado por JSON")
 
@@ -758,7 +822,7 @@ class TricapaMLDetectorV31JsonControlled:
                             if model_name in self.models:
                                 try:
                                     ransomware_proba = \
-                                    self.models[model_name].predict_proba(features_82.reshape(1, -1))[0]
+                                        self.models[model_name].predict_proba(features_82.reshape(1, -1))[0]
                                     ransomware_scores[model_name] = float(ransomware_proba[1])
                                     results['models_used'].append(model_name)
                                     self.logger.info(
@@ -915,7 +979,7 @@ class TricapaMLDetectorV31JsonControlled:
 
             # Metadatos
             enriched_event.schema_version = 31
-            enriched_event.protobuf_version = "3.1.2-json-controlled"
+            enriched_event.protobuf_version = "3.1.2-json-controlled-pubsub"
 
             # Incrementar estadísticas thread-safe
             with self.stats_lock:
@@ -952,7 +1016,7 @@ class TricapaMLDetectorV31JsonControlled:
 
     def receive_protobuf_events(self):
         """🔒 Thread ÚNICO de recepción"""
-        self.logger.info("📡 Iniciando recepción protobuf tricapa v3.1.2 JSON-CONTROLLED...")
+        self.logger.info("📡 Iniciando recepción protobuf tricapa v3.1.2 JSON-CONTROLLED-PUBSUB...")
 
         consecutive_empty_receives = 0
 
@@ -1009,7 +1073,7 @@ class TricapaMLDetectorV31JsonControlled:
 
     def process_protobuf_events_worker(self, worker_id: int):
         """🛠️ Worker de procesamiento JSON-controlled"""
-        self.logger.info(f"⚙️ Worker {worker_id} iniciado para procesamiento tricapa JSON-CONTROLLED...")
+        self.logger.info(f"⚙️ Worker {worker_id} iniciado para procesamiento tricapa JSON-CONTROLLED-PUBSUB...")
 
         local_stats = {'processed': 0, 'errors': 0}
 
@@ -1054,8 +1118,8 @@ class TricapaMLDetectorV31JsonControlled:
             self.stats['processing_errors'] += local_stats['errors']
 
     def send_enriched_events(self):
-        """📤 Thread ÚNICO de envío"""
-        self.logger.info("📤 Iniciando envío tricapa v3.1.2 JSON-CONTROLLED...")
+        """📤 Thread ÚNICO de envío - SOPORTE PUB/SUB"""
+        self.logger.info(f"📤 Iniciando envío tricapa v3.1.2 JSON-CONTROLLED ({self.socket_pattern})...")
 
         local_sent_count = 0
         consecutive_empty_sends = 0
@@ -1073,17 +1137,22 @@ class TricapaMLDetectorV31JsonControlled:
 
                 with self.socket_lock:
                     try:
+                        # 🚀 Envío unificado (PUB y PUSH usan el mismo método)
                         self.output_socket.send(enriched_protobuf, zmq.NOBLOCK)
                         local_sent_count += 1
+
                     except zmq.Again:
+                        # Retry una vez si está ocupado
                         time.sleep(0.001)
                         try:
                             self.output_socket.send(enriched_protobuf, zmq.NOBLOCK)
                             local_sent_count += 1
                         except zmq.Again:
+                            # Si falla después del retry, contar como drop
                             with self.stats_lock:
                                 self.stats['dropped_send_timeout'] += 1
 
+                # Actualizar stats periódicamente
                 if local_sent_count % 50 == 0:
                     with self.stats_lock:
                         self.stats['sent'] += local_sent_count
@@ -1094,6 +1163,7 @@ class TricapaMLDetectorV31JsonControlled:
             except Exception:
                 time.sleep(0.1)
 
+        # Actualizar stats finales
         with self.stats_lock:
             self.stats['sent'] += local_sent_count
 
@@ -1112,7 +1182,7 @@ class TricapaMLDetectorV31JsonControlled:
         with self.stats_lock:
             current_stats = dict(self.stats)
 
-        self.logger.info(f"📊 TRICAPA v3.1.2 JSON-CONTROLLED Stats:")
+        self.logger.info(f"📊 TRICAPA v3.1.2 JSON-CONTROLLED-PUBSUB Stats:")
         self.logger.info(f"   📨 Recibidos: {current_stats.get('received', 0)}")
         self.logger.info(f"   🎯 Procesados: {current_stats.get('processed', 0)}")
         self.logger.info(f"   📤 Enviados: {current_stats.get('sent', 0)}")
@@ -1139,9 +1209,9 @@ class TricapaMLDetectorV31JsonControlled:
                 self.stats[key] = 0
 
     def run(self):
-        """🚀 Ejecutar detector tricapa v3.1.2 - JSON CONTROLLED"""
-        print(f"🚀 Iniciando TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED...")
-        self.logger.info("🚀 Iniciando TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED...")
+        """🚀 Ejecutar detector tricapa v3.1.2 - JSON CONTROLLED CON PUB/SUB"""
+        print(f"🚀 Iniciando TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB...")
+        self.logger.info("🚀 Iniciando TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB...")
 
         threads = []
 
@@ -1175,24 +1245,40 @@ class TricapaMLDetectorV31JsonControlled:
             thread.start()
 
         total_threads = len(threads)
-        print(f"✅ TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED iniciado:")
+
+        # Información de arquitectura según patrón
+        if self.socket_pattern == "PUB":
+            distribution_info = "📡 PUB/SUB: dashboard + no-gui pueden suscribirse simultáneamente"
+            subscriber_cmd = f"tcp://localhost:{self.config.get('network', {}).get('output_socket', {}).get('port', 5580)}"
+        else:
+            distribution_info = "📤 PUSH/PULL: un solo consumidor"
+            subscriber_cmd = "Un solo componente puede conectarse"
+
+        print(f"✅ TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB iniciado:")
         print(f"   🧵 Threads: {total_threads} ({self.worker_pool_size} workers + 3 control)")
         print(f"   🧠 Modelos JSON: {len(self.enabled_models)} ({self.enabled_models})")
         print(f"   🔒 Thread Safety: ZMQ sockets protegidos")
+        print(f"   📡 Patrón: {self.socket_pattern}")
+        print(f"   {distribution_info}")
+        if self.socket_pattern == "PUB":
+            print(f"   🔌 Suscribirse en: {subscriber_cmd}")
         print(f"   🌐 PORTABLE: 100% controlado por JSON")
         print(f"   📊 Logs: VISIBLES (scores ML + stats)")
 
-        self.logger.info(f"✅ TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED iniciado:")
+        self.logger.info(f"✅ TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB iniciado:")
         self.logger.info(f"   🧵 Threads: {total_threads} ({self.worker_pool_size} workers + 3 control)")
         self.logger.info(f"   🧠 Modelos activos: {len(self.enabled_models)} {self.enabled_models}")
         self.logger.info(f"   🔒 Thread Safety: ZMQ sockets protegidos")
+        self.logger.info(f"   📡 Patrón: {self.socket_pattern}")
+        if self.socket_pattern == "PUB":
+            self.logger.info(f"   📡 Múltiples suscriptores permitidos en: {subscriber_cmd}")
         self.logger.info(f"   🌐 PORTABLE: 100% configuración desde JSON")
 
         try:
             while self.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.logger.info("🛑 Deteniendo TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED...")
+            self.logger.info("🛑 Deteniendo TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB...")
 
         self.shutdown_json_controlled(threads)
 
@@ -1221,12 +1307,12 @@ class TricapaMLDetectorV31JsonControlled:
         with self.stats_lock:
             final_stats = dict(self.stats)
 
-        self.logger.info("📊 STATS FINALES JSON-CONTROLLED:")
+        self.logger.info("📊 STATS FINALES JSON-CONTROLLED-PUBSUB:")
         self.logger.info(f"   📨 Recibidos: {final_stats.get('received', 0)}")
         self.logger.info(f"   🎯 Procesados: {final_stats.get('processed', 0)}")
         self.logger.info(f"   📤 Enviados: {final_stats.get('sent', 0)}")
 
-        self.logger.info("✅ TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED cerrado")
+        self.logger.info("✅ TRICAPA ML DETECTOR v3.1.2 JSON-CONTROLLED-PUBSUB cerrado")
 
 
 # 🚀 Main
