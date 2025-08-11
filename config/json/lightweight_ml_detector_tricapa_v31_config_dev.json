@@ -1,8 +1,8 @@
 {
   "component": {
     "name": "lightweight_ml_detector_tricapa_v31",
-    "version": "3.1.2-optimized",
-    "mode": "tricapa_json_controlled"
+    "version": "3.1.2-pubsub-optimized",
+    "mode": "tricapa_json_controlled_pubsub"
   },
   "node_id": "ml_detector_tricapa_v31_001",
   "version": "3.1.2",
@@ -20,8 +20,9 @@
       "address": "localhost",
       "port": 5580,
       "mode": "bind",
-      "socket_type": "PUSH",
-      "description": "Envía eventos v3.1 con análisis tricapa según JSON"
+      "socket_type": "PUB",
+      "_comment_change": "🔄 CAMBIO CRÍTICO: PUSH → PUB para múltiples suscriptores",
+      "description": "Publica eventos v3.1 con análisis tricapa (dashboard + no-gui + futuros)"
     }
   },
 
@@ -29,34 +30,46 @@
     "input_port": 5560,
     "output_port": 5580,
 
-    "_comment_hwm": "🚀 OPTIMIZADO: HWM aumentados para mejor throughput",
+    "_comment_hwm": "🚀 HWM OPTIMIZADO para PUB/SUB",
     "rcvhwm": 500,
-    "sndhwm": 500,
+    "sndhwm": 1000,
+    "_comment_sndhwm": "📈 SNDHWM aumentado para múltiples suscriptores",
 
     "_comment_timeouts": "Timeouts optimizados",
     "recv_timeout_ms": 500,
     "send_timeout_ms": 250,
 
-    "_comment_buffers": "🔥 BUFFERS OPTIMIZADOS para performance",
+    "_comment_buffers": "🔥 BUFFERS OPTIMIZADOS para PUB performance",
     "recv_buffer_size": 131072,
-    "send_buffer_size": 131072,
+    "send_buffer_size": 262144,
+    "_comment_send_buffer": "📦 Buffer de envío aumentado para PUB",
 
     "linger_ms": 0,
     "max_message_size": 50000,
+
+    "pub_socket_optimizations": {
+      "_comment": "🎯 OPTIMIZACIONES ESPECÍFICAS PARA PUB",
+      "tcp_keepalive": true,
+      "tcp_keepalive_idle": 300,
+      "immediate": false,
+      "conflate": false,
+      "_comment_immediate": "false = mejor throughput para múltiples suscriptores",
+      "_comment_conflate": "false = todos los eventos son importantes"
+    },
 
     "vertical_scaling_optimizations": {
       "io_threads": 2,
       "max_sockets": 64,
       "tcp_keepalive": true,
       "tcp_keepalive_idle": 300,
-      "immediate": true,
+      "immediate": false,
       "conflate": false
     }
   },
 
   "backpressure": {
     "enabled": true,
-    "_comment_optimized": "🚀 BACKPRESSURE OPTIMIZADO: 70% threshold",
+    "_comment_optimized": "🚀 BACKPRESSURE OPTIMIZADO para PUB",
     "max_retries": 2,
     "retry_delays_ms": [1, 5],
     "drop_threshold_percent": 5.0,
@@ -65,7 +78,9 @@
 
     "emergency_drop_enabled": true,
     "emergency_drop_threshold_percent": 70.0,
-    "force_flush_interval_ms": 100
+    "force_flush_interval_ms": 100,
+
+    "_comment_pubsub": "Con PUB, el backpressure es menos crítico pero mantenemos control"
   },
 
   "processing": {
@@ -75,12 +90,12 @@
     "ml_worker_processes": 3,
     "max_workers": 4,
 
-    "_comment_queues": "📋 COLAS OPTIMIZADAS: Más grandes para mejor throughput",
+    "_comment_queues": "📋 COLAS OPTIMIZADAS para PUB throughput",
     "internal_queue_size": 200,
     "protobuf_queue_size": 300,
     "queue_timeout_seconds": 1.0,
 
-    "performance_mode": "tricapa_optimized_v312",
+    "performance_mode": "tricapa_optimized_pubsub_v312",
     "enable_heuristics": true,
     "enable_alerts": true,
     "max_processing_time": 5.0,
@@ -230,7 +245,7 @@
 
   "tricapa": {
     "enabled": true,
-    "version": "3.1.2-json-controlled",
+    "version": "3.1.2-json-controlled-pubsub",
 
     "architecture": {
       "level1_name": "General Attack Detection",
@@ -259,7 +274,7 @@
     },
 
     "performance": {
-      "_comment_performance": "🚀 OPTIMIZACIONES DE PERFORMANCE",
+      "_comment_performance": "🚀 OPTIMIZACIONES DE PERFORMANCE para PUB",
       "parallel_level2_predictions": false,
       "cache_feature_extractions": true,
       "cache_size": 500,
@@ -372,7 +387,7 @@
 
   "distributed": {
     "cluster_name": "upgraded-happiness-cluster-v31",
-    "component_role": "ml_detector_tricapa_v31_json_controlled",
+    "component_role": "ml_detector_tricapa_v31_json_controlled_pubsub",
     "enable_container_detection": true,
     "enable_system_info_collection": false,
 
@@ -454,14 +469,34 @@
   },
 
   "_config_metadata": {
-    "config_version": "3.1.2-hw-current",
-    "created_for": "HW Actual - MacBook con limitaciones",
-    "optimization_level": "HIGH_PERFORMANCE",
+    "config_version": "3.1.2-hw-current-pubsub",
+    "created_for": "HW Actual - MacBook con limitaciones + PUB/SUB",
+    "optimization_level": "HIGH_PERFORMANCE_PUBSUB",
     "models_enabled_count": 4,
     "models_disabled_count": 3,
-    "description": "Config para HW actual: 4 modelos eficientes habilitados",
+    "description": "Config para HW actual: 4 modelos eficientes + patrón PUB/SUB",
     "hw_profile": "LIMITED_MEMORY",
+    "socket_pattern": "PUB/SUB",
+    "subscribers_supported": "dashboard + dashboard_nogui + futuros",
     "portability": "Para HW mejor, cambiar enabled:false -> enabled:true en modelos LGB y web_detector",
-    "performance_target": "OPTIMIZED_THROUGHPUT_WITH_STABILITY"
+    "performance_target": "OPTIMIZED_THROUGHPUT_WITH_PUBSUB_DISTRIBUTION"
+  },
+
+  "_pubsub_info": {
+    "publisher": "ml_detector_tricapa_v31_001",
+    "publisher_port": 5580,
+    "socket_type": "PUB",
+    "subscribers": [
+      "dashboard_v31 (tcp://localhost:5580 SUB)",
+      "dashboard_nogui_v31 (tcp://localhost:5580 SUB)",
+      "future_components (tcp://localhost:5580 SUB)"
+    ],
+    "scaling": "Añadir suscriptores sin modificar publisher",
+    "benefits": [
+      "Un solo puerto para múltiples consumidores",
+      "Distribución automática de eventos",
+      "Escalabilidad sin límites",
+      "Pipeline modo terminal + GUI según necesidad"
+    ]
   }
 }
