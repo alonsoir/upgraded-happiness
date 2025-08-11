@@ -1120,19 +1120,18 @@ class FirewallScheduler:
             self.logger.error(f"❌ Worker {worker_id} - Error making firewall decision: {e}")
             return None
 
-    def _create_firewall_command(self, decision: FirewallDecision, worker_id: int) -> bool:
-        """Crear y enviar comando de firewall basado en decisión"""
+    def _create_firewall_command_batch(self, decision: FirewallDecision, worker_id: int) -> bool:
+        """Crear comando usando FirewallCommandBatch que SÍ tiene target_node_id y timestamp"""
         try:
             if not PROTOBUF_AVAILABLE or not FirewallCommandsProto:
                 self.logger.error(f"❌ Worker {worker_id} - Firewall protobuf not available")
                 return False
 
-            # Crear comando protobuf
+            # Crear comando individual
             pb_command = FirewallCommandsProto.FirewallCommand()
             pb_command.command_id = decision.command_id
-            pb_command.node_id = decision.firewall_node_id
 
-            # Mapear acción a enum protobuf
+            # Mapear acción
             action_mapping = {
                 'BLOCK_IP': FirewallCommandsProto.CommandAction.BLOCK_IP,
                 'RATE_LIMIT': FirewallCommandsProto.CommandAction.RATE_LIMIT_IP,
@@ -1141,58 +1140,74 @@ class FirewallScheduler:
                 'ALLOW_IP_TEMP': FirewallCommandsProto.CommandAction.ALLOW_IP_TEMP,
                 'LIST_RULES': FirewallCommandsProto.CommandAction.LIST_RULES
             }
-
             pb_command.action = action_mapping.get(decision.recommended_action,
                                                    FirewallCommandsProto.CommandAction.LIST_RULES)
 
-            # Configurar IP objetivo
-            if decision.recommended_action in ['BLOCK_IP', 'RATE_LIMIT', 'RATE_LIMIT_IP', 'MONITOR', 'ALLOW_IP_TEMP']:
-                pb_command.target_ip = decision.target_ip
-            else:
-                pb_command.target_ip = 'all'
-
-            pb_command.target_port = 0  # No específico
-
-            # Duración desde parámetros de la regla
-            duration = decision.action_params.get('duration', 300)
-            pb_command.duration_seconds = int(duration)
-
-            # Razón de la decisión
+            pb_command.target_ip = decision.target_ip
+            pb_command.target_port = 0
+            pb_command.duration_seconds = int(decision.action_params.get('duration', 300))
             pb_command.reason = f"Scheduler decision: {decision.decision_reason} (risk: {decision.risk_percentage}%)"
 
-            # Prioridad
             priority_mapping = {
                 'LOW': FirewallCommandsProto.CommandPriority.LOW,
                 'MEDIUM': FirewallCommandsProto.CommandPriority.MEDIUM,
                 'HIGH': FirewallCommandsProto.CommandPriority.HIGH
             }
             pb_command.priority = priority_mapping.get(decision.priority, FirewallCommandsProto.CommandPriority.MEDIUM)
-
-            # Dry run según regla
             pb_command.dry_run = decision.dry_run
 
-            pb_command.timestamp = int(time.time() * 1000)
+            # Rate limit rule si aplica
+            if decision.recommended_action in ['RATE_LIMIT', 'RATE_LIMIT_IP']:
+                rate_limit = decision.action_params.get('rate_limit', '10/min')
+                pb_command.rate_limit_rule = rate_limit
 
-            # Serializar comando
-            command_bytes = pb_command.SerializeToString()
+            # ✅ AÑADIR extra_params también en el comando individual del batch
+            pb_command.extra_params["scheduler_node_id"] = self.config.node_id
+            pb_command.extra_params["firewall_node_id"] = decision.firewall_node_id
+            pb_command.extra_params["timestamp"] = str(int(time.time() * 1000))
+            pb_command.extra_params["source_ip"] = decision.source_ip
+            pb_command.extra_params["event_id"] = decision.event_id
+            pb_command.extra_params["worker_id"] = str(worker_id)
+            pb_command.extra_params["risk_score"] = str(decision.risk_score)
+            pb_command.extra_params["risk_percentage"] = str(decision.risk_percentage)
+
+            # Crear batch que SÍ tiene los campos que necesitamos
+            pb_batch = FirewallCommandsProto.FirewallCommandBatch()
+            pb_batch.batch_id = f"batch_{decision.command_id}"
+            pb_batch.target_node_id = decision.firewall_node_id  # ✅ ESTE CAMPO SÍ EXISTE
+            pb_batch.timestamp = int(time.time() * 1000)  # ✅ ESTE CAMPO SÍ EXISTE
+            pb_batch.generated_by = "scheduler"
+            pb_batch.dry_run_all = decision.dry_run
+            pb_batch.description = f"Single command from scheduler: {decision.recommended_action}"
+            pb_batch.source_event_id = decision.event_id
+            pb_batch.confidence_score = 1.0 - decision.risk_score  # Invertir risk_score
+            pb_batch.expected_execution_time = 5
+
+            # Añadir comando al batch
+            pb_batch.commands.append(pb_command)
+
+            # Serializar batch
+            command_bytes = pb_batch.SerializeToString()
 
             # Enviar comando
             if not self.firewall_commands_queue.full():
                 self.firewall_commands_queue.put({
                     'command_bytes': command_bytes,
                     'decision': decision,
-                    'worker_id': worker_id
+                    'worker_id': worker_id,
+                    'is_batch': True
                 }, timeout=1.0)
 
                 self.logger.info(
-                    f"🔥 Worker {worker_id} - Command created: {decision.recommended_action} for {decision.target_ip}")
+                    f"🔥 Worker {worker_id} - Batch command created: {decision.recommended_action} for {decision.target_ip}")
+                self.logger.debug(f"📋 Batch ID: {pb_batch.batch_id}")
                 return True
             else:
                 self.logger.warning(f"⚠️ Worker {worker_id} - Firewall commands queue full")
                 return False
 
         except Exception as e:
-            self.logger.error(f"❌ Worker {worker_id} - Error creating firewall command: {e}")
+            self.logger.error(f"❌ Worker {worker_id} - Error creating firewall batch command: {e}")
             return False
 
     def _firewall_command_sender(self, worker_id: int):
