@@ -1,0 +1,35 @@
+{
+  "axiom_id": "",
+  "timestamp": "",
+  "source_proto_info": {
+    "proto_filename": "",
+    "proto_version": "",
+    "message_type": "",
+    "message_id": ""
+  },
+  "event": {
+    "event_id": "",
+    "source_ip": "",
+    "destination_ip": "",
+    "protocol": "",
+    "ml_prediction": "",
+    "ml_confidence": 0.0
+  },
+  "policy_context": {
+    "rule_matched": "",
+    "policy_action": ""
+  },
+  "scheduler_decision": {
+    "final_action": "",
+    "reason": ""
+  },
+  "axiom": {
+    "logic": "",
+    "type": "",
+    "source": []
+  },
+  "training_flag": {
+    "retrain_candidate": false,
+    "reason": ""
+  }
+}
