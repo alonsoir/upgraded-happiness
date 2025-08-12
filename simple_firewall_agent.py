@@ -1256,7 +1256,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="ULTRA-SECURE Firewall Agent - Set it and forget it - FIXED")
     parser.add_argument("config", help="Configuration file path (simple_firewall_agent_config.json)")
-    parser.add_argument("rules", help="Firewall rules JSON file (firewall_rules_dashboard.json)")
+    parser.add_argument("rules", help="Firewall rules JSON file (firewall_rules_v31.json)")
     parser.add_argument("--log-level", default="INFO", help="Log level")
 
     args = parser.parse_args()
@@ -1269,7 +1269,7 @@ def main():
 
     if not Path(args.rules).exists():
         print(f"❌ ERROR: Archivo de reglas no encontrado: {args.rules}")
-        print("📁 Necesario: firewall_rules_dashboard.json")
+        print("📁 Necesario: firewall_rules_v31.json")
         sys.exit(1)
 
     print("🔒 ULTRA-SECURE FIREWALL AGENT - Starting with maximum safety - FIXED")
