@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-scheduler-firewall.py - FIREWALL DECISION ENGINE NO-GUI V1.0.0
+scheduler-firewall.py - FIREWALL DECISION ENGINE NO-GUI V1.0.0 - V3.1 PROTOBUF
 ✅ JSON-controlled decision engine para upgraded-happiness
 ✅ Compatible con ML Detector V3.1.2 tricapa (4 modelos)
 ✅ Configuración conservadora basada en números actuales
 ✅ Zero hardcoding - Todo desde JSON
+✅ V3.1 PROTOBUF EXCLUSIVO - con node_id y timestamp nativos
 ✅ Preparado para configuración dinámica futura
 ✅ Logs enriquecidos con contexto completo
 """
@@ -28,85 +29,154 @@ from collections import defaultdict, deque
 # Add protocols path for protobuf imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
 
-# 📦 Protobuf V3 - Importación robusta igual que dashboard
+# 📦 Protobuf V3.1 - Importación exclusiva (TODO O NADA)
 PROTOBUF_AVAILABLE = False
 PROTOBUF_VERSION = "unavailable"
 NetworkEventProto = None
 FirewallCommandsProto = None
 
 
-def import_scheduler_protobuf_modules():
-    """Importa los módulos protobuf necesarios para el scheduler con múltiples estrategias"""
+def import_scheduler_protobuf_v31():
+    """Importa protobuf V3.1 EXCLUSIVO para scheduler - TODO O NADA"""
     global NetworkEventProto, FirewallCommandsProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
-    # Estrategia 1: Importación desde protocols.current
-    import_strategies = [
-        ("protocols.current", "Paquete protocols.current"),
-        ("protocols", "Paquete protocols"),
-        ("", "Importación directa"),
+    print("🔍 Scheduler: Buscando protobuf V3.1 EXCLUSIVO...")
+
+    # 1. IMPORTAR FIREWALL COMMANDS V3.1
+    firewall_imported = False
+    firewall_strategies = [
+        ("firewall_commands_v31_pb2", "Importación directa"),
+        ("protocols.v3.1.firewall_commands_v31_pb2", "Paquete protocols.v3.1"),
     ]
 
-    for base_path, description in import_strategies:
+    for import_path, description in firewall_strategies:
         try:
-            if base_path:
-                # Importar network_event_extended_v3_pb2
-                module_path = f"{base_path}.network_event_extended_v3_pb2"
-                NetworkEventProto = __import__(module_path, fromlist=[''])
-
-                # Importar firewall_commands_pb2
-                module_path = f"{base_path}.firewall_commands_pb2"
-                FirewallCommandsProto = __import__(module_path, fromlist=[''])
-            else:
-                # Importación directa
-                import network_event_extended_v3_pb2 as NetworkEventProto
-                import firewall_commands_pb2 as FirewallCommandsProto
-
-            PROTOBUF_AVAILABLE = True
-            PROTOBUF_VERSION = "v3.1.2"
-            print(f"✅ Scheduler Protobuf V3 modules loaded: {description}")
-            return True
-
+            FirewallCommandsProto = __import__(import_path, fromlist=[''])
+            firewall_imported = True
+            print(f"✅ FirewallCommands v3.1 cargado: {description}")
+            break
         except ImportError:
             continue
 
-    # Estrategia 2: Path dinámico
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_paths = [
-        os.path.join(current_dir, '..', 'protocols', 'current'),
-        os.path.join(current_dir, 'protocols', 'current'),
-        os.path.join(os.getcwd(), 'protocols', 'current'),
+    # 2. IMPORTAR NETWORK EVENT (ML Detector events)
+    network_imported = False
+    network_strategies = [
+        ("network_security_clean_v31_pb2", "Importación directa v3.1"),
+        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
+        ("network_event_extended_v3_pb2", "Importación directa v3.0"),
+        ("protocols.v3.1.network_event_extended_v3_pb2", "Paquete protocols.v3.1 v3.0"),
     ]
 
-    for protocols_path in possible_paths:
-        protocols_path = os.path.abspath(protocols_path)
-        network_pb2_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
-        firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_pb2.py')
+    for import_path, description in network_strategies:
+        try:
+            NetworkEventProto = __import__(import_path, fromlist=[''])
+            network_imported = True
+            print(f"✅ NetworkEvent cargado: {description}")
+            break
+        except ImportError:
+            continue
 
-        if os.path.exists(network_pb2_file) and os.path.exists(firewall_pb2_file):
-            try:
-                sys.path.insert(0, protocols_path)
-                import network_event_extended_v3_pb2 as NetworkEventProto
-                import firewall_commands_pb2 as FirewallCommandsProto
+    # 3. ESTRATEGIA DE BÚSQUEDA POR PATHS DINÁMICOS
+    if not firewall_imported or not network_imported:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths = [
+            os.path.join(current_dir, '..', 'protocols', 'v3.1'),
+            os.path.join(current_dir, 'protocols', 'v3.1'),
+            current_dir,
+            os.path.join(current_dir, '..'),
+        ]
 
-                PROTOBUF_AVAILABLE = True
-                PROTOBUF_VERSION = "v3.1.2"
-                print(f"✅ Scheduler Protobuf V3 loaded from path: {protocols_path}")
+        for protocols_path in possible_paths:
+            protocols_path = os.path.abspath(protocols_path)
+
+            # Buscar FirewallCommands V3.1
+            if not firewall_imported:
+                firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_v31_pb2.py')
+                if os.path.exists(firewall_pb2_file):
+                    try:
+                        sys.path.insert(0, protocols_path)
+                        import firewall_commands_v31_pb2 as FirewallCommandsProto
+                        firewall_imported = True
+                        print(f"✅ FirewallCommands v3.1 cargado desde: {protocols_path}")
+                    except ImportError as e:
+                        if protocols_path in sys.path:
+                            sys.path.remove(protocols_path)
+
+            # Buscar NetworkEvent
+            if not network_imported:
+                # Prioridad 1: V3.1 limpio
+                network_v31_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
+                network_v3_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+
+                if os.path.exists(network_v31_file):
+                    try:
+                        if protocols_path not in sys.path:
+                            sys.path.insert(0, protocols_path)
+                        import network_security_clean_v31_pb2 as NetworkEventProto
+                        network_imported = True
+                        print(f"✅ NetworkEvent v3.1 limpio cargado desde: {protocols_path}")
+                    except ImportError:
+                        pass
+
+                # Fallback: V3.0 compatible
+                elif os.path.exists(network_v3_file):
+                    try:
+                        if protocols_path not in sys.path:
+                            sys.path.insert(0, protocols_path)
+                        import network_event_extended_v3_pb2 as NetworkEventProto
+                        network_imported = True
+                        print(f"✅ NetworkEvent v3.0 cargado desde: {protocols_path}")
+                    except ImportError:
+                        pass
+
+    # 4. VERIFICACIÓN FINAL - TODO O NADA
+    if firewall_imported and network_imported:
+        PROTOBUF_AVAILABLE = True
+        PROTOBUF_VERSION = "v3.1.0"
+        print(f"🎯 Scheduler: Protobuf V3.1 COMPLETO cargado exitosamente")
+
+        # Verificar que FirewallCommand tiene los campos nativos
+        try:
+            test_command = FirewallCommandsProto.FirewallCommand()
+            fields = [field.name for field in test_command.DESCRIPTOR.fields]
+
+            if 'node_id' in fields and 'timestamp' in fields:
+                print(f"✅ Verificado: FirewallCommand V3.1 tiene node_id y timestamp nativos")
+                print(f"📋 Campos disponibles: {fields}")
                 return True
+            else:
+                print(f"❌ ERROR: FirewallCommand no tiene campos V3.1 requeridos")
+                print(f"📋 Campos encontrados: {fields}")
+                print(f"📋 Campos requeridos: node_id, timestamp")
+                return False
 
-            except ImportError as e:
-                print(f"⚠️ Error importing from {protocols_path}: {e}")
-                if protocols_path in sys.path:
-                    sys.path.remove(protocols_path)
-                continue
+        except Exception as e:
+            print(f"❌ ERROR verificando campos V3.1: {e}")
+            return False
+    else:
+        # FALLO TOTAL - Mostrar lo que falta
+        print(f"❌ Scheduler: Protobuf V3.1 REQUERIDO pero NO ENCONTRADO")
+        print(f"📋 Estado:")
+        print(f"   FirewallCommands V3.1: {'✅' if firewall_imported else '❌'}")
+        print(f"   NetworkEvent: {'✅' if network_imported else '❌'}")
+        print(f"📁 Archivos requeridos:")
+        print(f"   • firewall_commands_v31_pb2.py")
+        print(f"   • network_security_clean_v31_pb2.py (o network_event_extended_v3_pb2.py)")
+        print(f"📍 Ubicaciones buscadas:")
+        for path in [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'protocols', 'v3.1'),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'protocols', 'v3.1'),
+        ]:
+            print(f"   • {os.path.abspath(path)}")
+        print(f"🔧 SOLUCIÓN: Instalar protobuf V3.1 o compilar .proto files")
+        return False
 
-    print("❌ Could not load scheduler protobuf modules")
-    print(f"   📁 Current dir: {os.getcwd()}")
-    print(f"   📁 Script location: {os.path.abspath(__file__)}")
-    return False
 
-
-# Ejecutar importación al inicio
-import_scheduler_protobuf_modules()
+# Ejecutar importación V3.1 EXCLUSIVA
+if not import_scheduler_protobuf_v31():
+    print(f"💥 FATAL: Scheduler requiere protobuf V3.1 para funcionar")
+    print(f"🛑 PARAR EJECUCIÓN - Sin V3.1 no hay scheduler")
+    sys.exit(1)
 
 
 class SchedulerConfigurationError(Exception):
@@ -625,8 +695,8 @@ class FirewallScheduler:
 
         # Verificar protobuf disponible
         if not PROTOBUF_AVAILABLE:
-            self.logger.error("❌ CRITICAL: Protobuf modules not available")
-            raise RuntimeError("Protobuf modules are required for scheduler")
+            self.logger.error("❌ CRITICAL: Protobuf V3.1 modules not available")
+            raise RuntimeError("Protobuf V3.1 modules are required for scheduler")
 
         # Estadísticas del scheduler
         self.stats = SchedulerStats(uptime_start=time.time())
@@ -844,6 +914,14 @@ class FirewallScheduler:
             self.threads.append(thread)
             self.logger.info(f"🎯 Decision Processor {i} started")
 
+        # 🔧 FIX: AGREGAR FIREWALL COMMAND SENDERS (ESTO FALTABA!)
+        for i in range(self.config.firewall_command_producers):
+            thread = threading.Thread(target=self._firewall_command_sender, args=(i,))
+            thread.daemon = True
+            thread.start()
+            self.threads.append(thread)
+            self.logger.info(f"🔥 Firewall Command Sender {i} started")
+
         # Firewall Response Consumers
         for i in range(self.config.firewall_response_consumers):
             thread = threading.Thread(target=self._firewall_responses_receiver, args=(i,))
@@ -853,7 +931,7 @@ class FirewallScheduler:
             self.logger.info(f"📥 Firewall Responses Receiver {i} started")
 
         total_threads = (self.config.ml_events_consumers +
-                         self.config.firewall_command_producers +
+                         self.config.firewall_command_producers * 2 +  # *2 porque ahora hay decision + sender
                          self.config.firewall_response_consumers)
 
         self.logger.info(f"✅ Total threads started: {total_threads}")
@@ -1120,18 +1198,20 @@ class FirewallScheduler:
             self.logger.error(f"❌ Worker {worker_id} - Error making firewall decision: {e}")
             return None
 
-    def _create_firewall_command_batch(self, decision: FirewallDecision, worker_id: int) -> bool:
-        """Crear comando usando FirewallCommandBatch que SÍ tiene target_node_id y timestamp"""
+    def _create_firewall_command(self, decision: FirewallDecision, worker_id: int) -> bool:
+        """Crear y enviar comando de firewall basado en decisión - V3.1 EXCLUSIVO"""
         try:
             if not PROTOBUF_AVAILABLE or not FirewallCommandsProto:
-                self.logger.error(f"❌ Worker {worker_id} - Firewall protobuf not available")
+                self.logger.error(f"❌ Worker {worker_id} - Firewall protobuf V3.1 not available")
                 return False
 
-            # Crear comando individual
+            # Crear comando protobuf V3.1
             pb_command = FirewallCommandsProto.FirewallCommand()
+
+            # ✅ CAMPOS BÁSICOS
             pb_command.command_id = decision.command_id
 
-            # Mapear acción
+            # Mapear acción a enum protobuf
             action_mapping = {
                 'BLOCK_IP': FirewallCommandsProto.CommandAction.BLOCK_IP,
                 'RATE_LIMIT': FirewallCommandsProto.CommandAction.RATE_LIMIT_IP,
@@ -1140,20 +1220,34 @@ class FirewallScheduler:
                 'ALLOW_IP_TEMP': FirewallCommandsProto.CommandAction.ALLOW_IP_TEMP,
                 'LIST_RULES': FirewallCommandsProto.CommandAction.LIST_RULES
             }
+
             pb_command.action = action_mapping.get(decision.recommended_action,
                                                    FirewallCommandsProto.CommandAction.LIST_RULES)
 
-            pb_command.target_ip = decision.target_ip
-            pb_command.target_port = 0
-            pb_command.duration_seconds = int(decision.action_params.get('duration', 300))
+            # Configurar IP objetivo
+            if decision.recommended_action in ['BLOCK_IP', 'RATE_LIMIT', 'RATE_LIMIT_IP', 'MONITOR', 'ALLOW_IP_TEMP']:
+                pb_command.target_ip = decision.target_ip
+            else:
+                pb_command.target_ip = 'all'
+
+            pb_command.target_port = 0  # No específico
+
+            # Duración desde parámetros de la regla
+            duration = decision.action_params.get('duration', 300)
+            pb_command.duration_seconds = int(duration)
+
+            # Razón de la decisión
             pb_command.reason = f"Scheduler decision: {decision.decision_reason} (risk: {decision.risk_percentage}%)"
 
+            # Prioridad
             priority_mapping = {
                 'LOW': FirewallCommandsProto.CommandPriority.LOW,
                 'MEDIUM': FirewallCommandsProto.CommandPriority.MEDIUM,
                 'HIGH': FirewallCommandsProto.CommandPriority.HIGH
             }
             pb_command.priority = priority_mapping.get(decision.priority, FirewallCommandsProto.CommandPriority.MEDIUM)
+
+            # Dry run según regla
             pb_command.dry_run = decision.dry_run
 
             # Rate limit rule si aplica
@@ -1161,53 +1255,54 @@ class FirewallScheduler:
                 rate_limit = decision.action_params.get('rate_limit', '10/min')
                 pb_command.rate_limit_rule = rate_limit
 
-            # ✅ AÑADIR extra_params también en el comando individual del batch
+            # ✅ CAMPOS NATIVOS V3.1 (sin verificación - se asume que existen)
+            pb_command.node_id = decision.firewall_node_id
+            pb_command.timestamp = int(time.time() * 1000)
+
+            # Extra params para metadata adicional
             pb_command.extra_params["scheduler_node_id"] = self.config.node_id
-            pb_command.extra_params["firewall_node_id"] = decision.firewall_node_id
-            pb_command.extra_params["timestamp"] = str(int(time.time() * 1000))
             pb_command.extra_params["source_ip"] = decision.source_ip
             pb_command.extra_params["event_id"] = decision.event_id
             pb_command.extra_params["worker_id"] = str(worker_id)
             pb_command.extra_params["risk_score"] = str(decision.risk_score)
             pb_command.extra_params["risk_percentage"] = str(decision.risk_percentage)
+            pb_command.extra_params["protobuf_version"] = "v3.1"
 
-            # Crear batch que SÍ tiene los campos que necesitamos
-            pb_batch = FirewallCommandsProto.FirewallCommandBatch()
-            pb_batch.batch_id = f"batch_{decision.command_id}"
-            pb_batch.target_node_id = decision.firewall_node_id  # ✅ ESTE CAMPO SÍ EXISTE
-            pb_batch.timestamp = int(time.time() * 1000)  # ✅ ESTE CAMPO SÍ EXISTE
-            pb_batch.generated_by = "scheduler"
-            pb_batch.dry_run_all = decision.dry_run
-            pb_batch.description = f"Single command from scheduler: {decision.recommended_action}"
-            pb_batch.source_event_id = decision.event_id
-            pb_batch.confidence_score = 1.0 - decision.risk_score  # Invertir risk_score
-            pb_batch.expected_execution_time = 5
+            # Serializar comando
+            command_bytes = pb_command.SerializeToString()
 
-            # Añadir comando al batch
-            pb_batch.commands.append(pb_command)
-
-            # Serializar batch
-            command_bytes = pb_batch.SerializeToString()
+            # Log información del comando creado
+            self.logger.debug(
+                f"🎯 Worker {worker_id} - V3.1 command: node_id={pb_command.node_id}, timestamp={pb_command.timestamp}")
 
             # Enviar comando
             if not self.firewall_commands_queue.full():
                 self.firewall_commands_queue.put({
                     'command_bytes': command_bytes,
                     'decision': decision,
-                    'worker_id': worker_id,
-                    'is_batch': True
+                    'worker_id': worker_id
                 }, timeout=1.0)
 
                 self.logger.info(
-                    f"🔥 Worker {worker_id} - Batch command created: {decision.recommended_action} for {decision.target_ip}")
-                self.logger.debug(f"📋 Batch ID: {pb_batch.batch_id}")
+                    f"🔥 Worker {worker_id} - Command created: {decision.recommended_action} for {decision.target_ip} "
+                    f"(V3.1, {len(command_bytes)}b)")
                 return True
             else:
                 self.logger.warning(f"⚠️ Worker {worker_id} - Firewall commands queue full")
                 return False
 
+        except AttributeError as attr_error:
+            # Error específico de campo no encontrado
+            if "node_id" in str(attr_error) or "timestamp" in str(attr_error):
+                self.logger.error(f"❌ Worker {worker_id} - V3.1 field missing: {attr_error}")
+                self.logger.error(f"🚨 CRITICAL: protobuf V3.1 with node_id/timestamp is REQUIRED")
+                self.logger.error(f"📁 Expected file: firewall_commands_v31_pb2.py")
+                self.logger.error(f"🛑 Scheduler cannot continue without V3.1")
+            else:
+                self.logger.error(f"❌ Worker {worker_id} - Attribute error: {attr_error}")
+            return False
         except Exception as e:
-            self.logger.error(f"❌ Worker {worker_id} - Error creating firewall batch command: {e}")
+            self.logger.error(f"❌ Worker {worker_id} - Error creating firewall command: {e}")
             return False
 
     def _firewall_command_sender(self, worker_id: int):
@@ -1511,9 +1606,9 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    print("🚀 Firewall Scheduler - JSON-controlled Decision Engine")
+    print("🚀 Firewall Scheduler - JSON-controlled Decision Engine V3.1")
     print("✅ Compatible with ML Detector V3.1.2 tricapa (4 models)")
-    print("🔥 Zero hardcoding - All logic from JSON")
+    print("🔥 V3.1 PROTOBUF EXCLUSIVO - con node_id y timestamp nativos")
     print("📊 Conservative configuration for current HW")
 
     # Verificar argumentos

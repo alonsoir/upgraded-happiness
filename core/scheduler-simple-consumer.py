@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-scheduler-simple-consumer.py - CONSUMER PARA DRENAR MENSAJES DEL SCHEDULER
+scheduler-simple-consumer.py - CONSUMER PARA DRENAR MENSAJES DEL SCHEDULER V3.1
+✅ PUERTOS CORREGIDOS: Recibe en 5582, responde en 5581
 ✅ Recibe comandos FirewallCommand del scheduler-firewall.py
-✅ Debug de protobuf y análisis de mensajes
+✅ Debug de protobuf V3.1 y análisis de mensajes
+✅ V3.1 PROTOBUF EXCLUSIVO - con node_id y timestamp nativos
 ✅ Logging detallado para troubleshooting
 """
 import zmq
@@ -23,70 +25,102 @@ PROTOBUF_AVAILABLE = False
 FirewallCommandsProto = None
 
 
-def import_consumer_protobuf():
-    """Importar protobuf para el consumer"""
+def import_consumer_protobuf_v31():
+    """Importa protobuf V3.1 EXCLUSIVO para consumer - TODO O NADA"""
     global FirewallCommandsProto, PROTOBUF_AVAILABLE
 
-    # Múltiples estrategias de importación
-    strategies = [
-        ("protocols.current.firewall_commands_pb2", "protocols.current"),
-        ("protocols.firewall_commands_pb2", "protocols"),
-        ("firewall_commands_pb2", "direct import")
+    print("🔍 Consumer: Buscando protobuf V3.1 EXCLUSIVO...")
+
+    # Estrategias de importación múltiples
+    import_strategies = [
+        ("firewall_commands_v31_pb2", "Importación directa"),
+        ("protocols.v3.1.firewall_commands_v31_pb2", "Paquete protocols.v3.1"),
     ]
 
-    for module_name, description in strategies:
+    for import_path, description in import_strategies:
         try:
-            if "." in module_name:
-                parts = module_name.split(".")
-                module = __import__(module_name, fromlist=[parts[-1]])
-            else:
-                module = __import__(module_name)
-
-            FirewallCommandsProto = module
+            FirewallCommandsProto = __import__(import_path, fromlist=[''])
             PROTOBUF_AVAILABLE = True
-            print(f"✅ Consumer Protobuf loaded: {description}")
-            return True
-        except ImportError as e:
-            print(f"⚠️ Failed to import {module_name}: {e}")
+            print(f"✅ Consumer: FirewallCommands v3.1 cargado: {description}")
+
+            # Verificar que tiene los campos V3.1
+            try:
+                test_command = FirewallCommandsProto.FirewallCommand()
+                fields = [field.name for field in test_command.DESCRIPTOR.fields]
+
+                if 'node_id' in fields and 'timestamp' in fields:
+                    print(f"✅ Consumer: Verificado FirewallCommand V3.1 con node_id y timestamp")
+                    return True
+                else:
+                    print(f"❌ Consumer: FirewallCommand sin campos V3.1 requeridos")
+                    return False
+            except Exception as e:
+                print(f"❌ Consumer: Error verificando campos: {e}")
+                return False
+
+        except ImportError:
             continue
 
-    # Try with path manipulation
+    # Estrategia 2: Búsqueda por paths dinámicos
     current_dir = os.path.dirname(os.path.abspath(__file__))
     possible_paths = [
-        os.path.join(current_dir, '..', 'protocols', 'current'),
-        os.path.join(current_dir, 'protocols', 'current'),
-        os.path.join(os.getcwd(), 'protocols', 'current'),
+        os.path.join(current_dir, '..', 'protocols', 'v3.1'),
+        os.path.join(current_dir, 'protocols', 'v3.1'),
+        current_dir,
+        os.path.join(current_dir, '..'),
     ]
 
     for protocols_path in possible_paths:
         protocols_path = os.path.abspath(protocols_path)
-        pb2_file = os.path.join(protocols_path, 'firewall_commands_pb2.py')
+        pb2_file = os.path.join(protocols_path, 'firewall_commands_v31_pb2.py')
 
         if os.path.exists(pb2_file):
             try:
                 sys.path.insert(0, protocols_path)
-                import firewall_commands_pb2 as FirewallCommandsProto
+                import firewall_commands_v31_pb2 as FirewallCommandsProto
                 PROTOBUF_AVAILABLE = True
-                print(f"✅ Consumer Protobuf loaded from path: {protocols_path}")
-                return True
+                print(f"✅ Consumer: FirewallCommands v3.1 cargado desde: {protocols_path}")
+
+                # Verificar campos V3.1
+                test_command = FirewallCommandsProto.FirewallCommand()
+                fields = [field.name for field in test_command.DESCRIPTOR.fields]
+
+                if 'node_id' in fields and 'timestamp' in fields:
+                    print(f"✅ Consumer: Verificado V3.1 desde path")
+                    return True
+                else:
+                    print(f"❌ Consumer: Archivo encontrado pero sin campos V3.1")
+                    return False
+
             except ImportError as e:
-                print(f"⚠️ Error importing from {protocols_path}: {e}")
                 if protocols_path in sys.path:
                     sys.path.remove(protocols_path)
                 continue
 
-    print("❌ Could not load consumer protobuf modules")
+    print(f"❌ Consumer: Protobuf V3.1 REQUERIDO pero NO ENCONTRADO")
+    print(f"📁 Archivo requerido: firewall_commands_v31_pb2.py")
+    print(f"📍 Ubicaciones buscadas:")
+    for path in possible_paths:
+        print(f"   • {os.path.abspath(path)}")
     return False
 
 
-# Import protobuf
-import_consumer_protobuf()
+# Ejecutar importación V3.1 EXCLUSIVA
+if not import_consumer_protobuf_v31():
+    print(f"💥 FATAL: Consumer requiere protobuf V3.1 para funcionar")
+    print(f"🛑 PARAR EJECUCIÓN - Sin V3.1 no hay consumer")
+    sys.exit(1)
 
 
 class SimpleFirewallConsumer:
-    """Consumer simple para recibir comandos del scheduler"""
+    """Consumer simple para recibir comandos del scheduler - PUERTOS CORREGIDOS"""
 
-    def __init__(self, consumer_port=5580, response_port=5581):
+    def __init__(self, consumer_port=5582, response_port=5581):
+        """
+        🔧 PUERTOS CORREGIDOS POR DEFECTO:
+        - consumer_port=5582: Donde scheduler PUSH envía comandos (era 5580)
+        - response_port=5581: Donde scheduler PULL recibe respuestas (correcto)
+        """
         self.consumer_port = consumer_port
         self.response_port = response_port
         self.running = False
@@ -106,32 +140,36 @@ class SimpleFirewallConsumer:
         self.context = zmq.Context()
         self.setup_sockets()
 
-        print(f"🔥 Simple Firewall Consumer initialized")
-        print(f"📥 Listening on port: {consumer_port}")
-        print(f"📤 Response port: {response_port}")
+        print(f"🔥 Simple Firewall Consumer V3.1 - PUERTOS CORREGIDOS")
+        print(f"📥 Commands port (BIND): {consumer_port} - 🔧 CORREGIDO: ahora 5582")
+        print(f"📤 Response port (CONNECT): {response_port} - ✅ CORRECTO: mantener 5581")
 
     def setup_sockets(self):
-        """Setup ZMQ sockets"""
+        """Setup ZMQ sockets - CONFIGURACIÓN CORREGIDA"""
         try:
             # Socket para recibir comandos del scheduler (PULL)
             self.commands_socket = self.context.socket(zmq.PULL)
             self.commands_socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second timeout
             self.commands_socket.setsockopt(zmq.LINGER, 0)
 
-            # BIND en el puerto donde scheduler envía (PUSH)
+            # BIND en el puerto 5582 donde scheduler PUSH envía
             commands_endpoint = f"tcp://localhost:{self.consumer_port}"
             self.commands_socket.bind(commands_endpoint)
-            print(f"✅ Commands socket BIND on {commands_endpoint}")
+            print(f"✅ Commands socket BIND on {commands_endpoint} - 🔧 NUEVO PUERTO")
 
             # Socket para enviar respuestas al scheduler (PUSH)
             self.responses_socket = self.context.socket(zmq.PUSH)
             self.responses_socket.setsockopt(zmq.SNDTIMEO, 1000)
             self.responses_socket.setsockopt(zmq.LINGER, 0)
 
-            # CONNECT al puerto donde scheduler escucha respuestas
+            # CONNECT al puerto 5581 donde scheduler PULL escucha respuestas
             responses_endpoint = f"tcp://localhost:{self.response_port}"
             self.responses_socket.connect(responses_endpoint)
-            print(f"✅ Responses socket CONNECT to {responses_endpoint}")
+            print(f"✅ Responses socket CONNECT to {responses_endpoint} - ✅ CORRECTO")
+
+            print(f"🎯 FLUJO CORREGIDO:")
+            print(f"   scheduler:5582(PUSH) → consumer:5582(PULL) ✅")
+            print(f"   consumer:5581(PUSH) → scheduler:5581(PULL) ✅")
 
         except Exception as e:
             print(f"❌ Error setting up ZMQ sockets: {e}")
@@ -258,7 +296,7 @@ class SimpleFirewallConsumer:
             if "FirewallCommand" in message_type_name:
                 command_fields = ['command_id', 'action', 'target_ip', 'target_port',
                                   'duration_seconds', 'reason', 'priority', 'dry_run',
-                                  'rate_limit_rule', 'extra_params']
+                                  'rate_limit_rule', 'extra_params', 'node_id', 'timestamp']
             elif "FirewallCommandBatch" in message_type_name:
                 command_fields = ['batch_id', 'target_node_id', 'timestamp', 'generated_by',
                                   'dry_run_all', 'commands', 'description', 'source_event_id',
@@ -353,12 +391,89 @@ class SimpleFirewallConsumer:
         except Exception as e:
             print(f"❌ Error sending response: {e}")
 
+    def display_protobuf_data(self, data, parsing_method="protobuf"):
+        """Mostrar datos de protobuf V3.1 parseados - RESALTA CAMPOS NATIVOS"""
+        message_type = "FirewallCommand" if "command" in parsing_method else "FirewallCommandBatch"
+
+        print(f"📋 PROTOBUF V3.1 DATA ({message_type}) - RECIBIDO EN PUERTO 5582:")
+        print(f"   Message Type: {data.get('message_type', 'unknown')}")
+
+        # Como estamos en V3.1 exclusivo, sabemos que tiene los campos
+        print(f"🎯 VERSION: V3.1 (✅ Native node_id + timestamp GUARANTEED)")
+
+        if 'available_fields' in data:
+            print(f"   Available Fields: {data['available_fields']}")
+
+            # Verificar que efectivamente tiene los campos V3.1
+            v31_fields = ['node_id', 'timestamp']
+            missing_fields = [field for field in v31_fields if field not in data['available_fields']]
+            if missing_fields:
+                print(f"   ⚠️ WARNING: Missing expected V3.1 fields: {missing_fields}")
+            else:
+                print(f"   ✅ V3.1 NATIVE FIELDS CONFIRMED: node_id, timestamp")
+
+        if 'fields' in data:
+            print(f"   Field Values:")
+            for field, value in data['fields'].items():
+                # Destacar campos V3.1 nativos
+                if field == 'node_id':
+                    print(f"      🎯 {field}: {value} (V3.1 NATIVE - scheduler identifier)")
+                elif field == 'timestamp':
+                    # Convertir timestamp a fecha legible
+                    try:
+                        if isinstance(value, (int, float)) and value > 1000000000000:  # timestamp en ms
+                            from datetime import datetime
+                            dt = datetime.fromtimestamp(value / 1000)
+                            readable_time = dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                            print(f"      ⏰ {field}: {value} (V3.1 NATIVE - {readable_time})")
+                        else:
+                            print(f"      ⏰ {field}: {value} (V3.1 NATIVE)")
+                    except:
+                        print(f"      ⏰ {field}: {value} (V3.1 NATIVE)")
+                elif field == 'extra_params':
+                    print(f"      📦 {field}: (V3.1 ADDITIONAL METADATA)")
+                    if isinstance(value, dict):
+                        for key, val in value.items():
+                            if key in ['scheduler_node_id', 'source_ip', 'event_id']:
+                                print(f"         🔍 {key}: {val} (scheduler metadata)")
+                            elif key == 'protobuf_version':
+                                print(f"         📋 {key}: {val} (version confirmation)")
+                            else:
+                                print(f"         • {key}: {val}")
+                    else:
+                        print(f"         {value}")
+                elif field in ['command_id', 'action', 'target_ip']:
+                    print(f"      🔥 {field}: {value} (core command)")
+                elif field in ['duration_seconds', 'reason', 'priority', 'dry_run']:
+                    print(f"      ⚙️ {field}: {value} (execution params)")
+                elif isinstance(value, dict):
+                    print(f"      {field}: {json.dumps(value, indent=8, default=str)}")
+                else:
+                    print(f"      {field}: {value}")
+
+        print(f"   🔧 PUERTO CONFIRMATION:")
+        print(f"      ✅ Message received on corrected port 5582")
+        print(f"      ✅ Will respond on port 5581 to scheduler")
+        print(f"      🎯 Port configuration now matches scheduler expectations")
+
+    def display_json_data(self, data):
+        """Mostrar datos JSON"""
+        print(f"📋 JSON DATA (RECIBIDO EN PUERTO 5582):")
+        print(json.dumps(data, indent=2, default=str))
+
+    def display_raw_data(self, data):
+        """Mostrar datos raw"""
+        print(f"📋 RAW DATA (RECIBIDO EN PUERTO 5582):")
+        for key, value in data.items():
+            print(f"   {key}: {value}")
+
     def start(self):
         """Iniciar el consumer"""
         self.running = True
-        print(f"\n🚀 Starting Simple Firewall Consumer...")
-        print(f"📋 Protobuf available: {PROTOBUF_AVAILABLE}")
-        print(f"🎯 Ready to receive firewall commands...")
+        print(f"\n🚀 Starting Simple Firewall Consumer V3.1 - PUERTOS CORREGIDOS...")
+        print(f"📋 Protobuf V3.1 available: {PROTOBUF_AVAILABLE}")
+        print(f"🎯 Ready to receive firewall commands on port 5582...")
+        print(f"📤 Will send responses to scheduler on port 5581...")
         print(f"⏹️ Press Ctrl+C to stop\n")
 
         try:
@@ -369,7 +484,7 @@ class SimpleFirewallConsumer:
                     self.stats['messages_received'] += 1
 
                     timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                    print(f"\n📨 [{timestamp}] Message received ({len(message_bytes)} bytes)")
+                    print(f"\n📨 [{timestamp}] Message received on port 5582 ({len(message_bytes)} bytes)")
 
                     # Parsear mensaje
                     parsed_data, parsing_method = self.parse_firewall_command(message_bytes)
@@ -389,11 +504,11 @@ class SimpleFirewallConsumer:
 
                         # Enviar respuesta de confirmación
                         self.send_response(parsed_data, success=True,
-                                           message=f"Command processed by consumer ({parsing_method})")
+                                           message=f"Command processed by consumer on port 5582 ({parsing_method})")
                     else:
                         print(f"❌ Failed to parse message")
                         # Enviar respuesta de error
-                        self.send_response({}, success=False, message="Parse error")
+                        self.send_response({}, success=False, message="Parse error on port 5582")
 
                 except zmq.Again:
                     # No hay mensajes, continuar
@@ -408,76 +523,10 @@ class SimpleFirewallConsumer:
         finally:
             self.stop()
 
-    def display_protobuf_data(self, data, parsing_method="protobuf"):
-        """Mostrar datos de protobuf parseados"""
-        message_type = "FirewallCommand" if "command" in parsing_method else "FirewallCommandBatch"
-
-        print(f"📋 PROTOBUF DATA ({message_type}):")
-        print(f"   Message Type: {data.get('message_type', 'unknown')}")
-
-        if 'available_fields' in data:
-            print(f"   Available Fields: {data['available_fields']}")
-
-        if 'fields' in data:
-            print(f"   Field Values:")
-            for field, value in data['fields'].items():
-                if isinstance(value, dict):
-                    print(f"      {field}: {json.dumps(value, indent=8, default=str)}")
-                else:
-                    print(f"      {field}: {value}")
-
-        if 'known_fields_status' in data:
-            print(f"   Known Fields Status:")
-            for field, status in data['known_fields_status'].items():
-                if status.get('exists'):
-                    if 'value' in status:
-                        print(f"      ✅ {field}: {status['value']}")
-                    else:
-                        print(f"      ⚠️ {field}: {status.get('error', 'access error')}")
-                else:
-                    print(f"      ❌ {field}: NOT FOUND")
-
-        # Mostrar diferencias clave entre los dos tipos
-        if message_type == "FirewallCommand":
-            print(f"   🔍 FirewallCommand Notes:")
-            print(f"      • NO tiene node_id field")
-            print(f"      • NO tiene timestamp field")
-            print(f"      • Usar extra_params para metadata adicional")
-        elif message_type == "FirewallCommandBatch":
-            print(f"   🔍 FirewallCommandBatch Notes:")
-            print(f"      • SÍ tiene target_node_id field")
-            print(f"      • SÍ tiene timestamp field")
-            print(f"      • Contiene array de FirewallCommand en 'commands'")
-
-        # Análisis específico del scheduler error
-        if message_type == "FirewallCommand":
-            if 'fields' in data and 'extra_params' in data['fields']:
-                print(f"   🎯 Scheduler Metadata in extra_params:")
-                extra_params = data['fields']['extra_params']
-                if isinstance(extra_params, dict):
-                    for key, value in extra_params.items():
-                        print(f"      • {key}: {value}")
-                elif hasattr(extra_params, 'items'):
-                    for key in extra_params:
-                        print(f"      • {key}: {extra_params[key]}")
-                else:
-                    print(f"      • raw extra_params: {extra_params}")
-
-    def display_json_data(self, data):
-        """Mostrar datos JSON"""
-        print(f"📋 JSON DATA:")
-        print(json.dumps(data, indent=2, default=str))
-
-    def display_raw_data(self, data):
-        """Mostrar datos raw"""
-        print(f"📋 RAW DATA:")
-        for key, value in data.items():
-            print(f"   {key}: {value}")
-
     def show_stats(self):
         """Mostrar estadísticas"""
         uptime = time.time() - self.stats['start_time']
-        print(f"\n📊 CONSUMER STATISTICS:")
+        print(f"\n📊 CONSUMER STATISTICS (PUERTO 5582):")
         print(f"   ⏱️ Uptime: {uptime:.1f}s")
         print(f"   📨 Messages received: {self.stats['messages_received']}")
         print(f"   ✅ Messages parsed: {self.stats['messages_parsed']}")
@@ -492,7 +541,7 @@ class SimpleFirewallConsumer:
 
     def stop(self):
         """Parar el consumer"""
-        print(f"\n🛑 Stopping Simple Firewall Consumer...")
+        print(f"\n🛑 Stopping Simple Firewall Consumer V3.1...")
         self.running = False
 
         # Mostrar estadísticas finales
@@ -519,23 +568,26 @@ def signal_handler(sig, frame):
 
 
 def main():
-    """Función principal"""
+    """Función principal - PUERTOS HARDCODEADOS CORREGIDOS PARA HERRAMIENTA AUXILIAR"""
     # Setup signal handling
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    print("🔥 Simple Firewall Consumer")
-    print("✅ Drains messages from scheduler-firewall.py")
-    print("🔍 Debug protobuf FirewallCommand parsing")
-    print("📊 Shows detailed message analysis")
+    print("🔥 Simple Firewall Consumer V3.1 - PUERTOS CORREGIDOS")
+    print("✅ Drains messages from scheduler-firewall.py on port 5582")
+    print("✅ Sends responses to scheduler-firewall.py on port 5581")
+    print("🔍 Debug protobuf V3.1 FirewallCommand parsing")
+    print("📊 Shows detailed message analysis with native node_id/timestamp")
 
-    # Parse arguments
-    consumer_port = 5580  # Puerto donde scheduler envía comandos
-    response_port = 5581  # Puerto donde scheduler escucha respuestas
+    # 🔧 PUERTOS HARDCODEADOS CORREGIDOS PARA HERRAMIENTAS AUXILIARES
+    consumer_port = 5582  # 🔧 CORREGIDO: 5580 → 5582 (donde scheduler PUSH envía)
+    response_port = 5581  # ✅ CORRECTO: Puerto donde scheduler PULL escucha
 
+    # Permitir override por argumentos para flexibilidad
     if len(sys.argv) > 1:
         try:
             consumer_port = int(sys.argv[1])
+            print(f"🔧 Consumer port overridden to: {consumer_port}")
         except ValueError:
             print(f"❌ Invalid port: {sys.argv[1]}")
             sys.exit(1)
@@ -543,14 +595,19 @@ def main():
     if len(sys.argv) > 2:
         try:
             response_port = int(sys.argv[2])
+            print(f"🔧 Response port overridden to: {response_port}")
         except ValueError:
             print(f"❌ Invalid response port: {sys.argv[2]}")
             sys.exit(1)
 
-    print(f"\n🔧 Configuration:")
-    print(f"   📥 Consumer port (BIND): {consumer_port}")
-    print(f"   📤 Response port (CONNECT): {response_port}")
-    print(f"   🔄 Protobuf available: {PROTOBUF_AVAILABLE}")
+    print(f"\n🔧 Configuration CORREGIDA:")
+    print(f"   📥 Consumer port (BIND): {consumer_port} - 🔧 CORREGIDO para recibir de scheduler")
+    print(f"   📤 Response port (CONNECT): {response_port} - ✅ CORRECTO para responder a scheduler")
+    print(f"   🔄 Protobuf V3.1 available: {PROTOBUF_AVAILABLE}")
+    print(f"\n🎯 EXPECTED FLOW:")
+    print(f"   ml_detector:5580(PUB) → scheduler:5580(SUB)")
+    print(f"   scheduler:5582(PUSH) → consumer:5582(PULL) ← THIS TOOL")
+    print(f"   consumer:5581(PUSH) → scheduler:5581(PULL) ← THIS TOOL")
 
     try:
         # Crear y iniciar consumer
