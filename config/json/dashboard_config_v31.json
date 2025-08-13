@@ -1,0 +1,432 @@
+{
+  "node_id": "dashboard_main_v31_001",
+  "component": {
+    "name": "security_dashboard_v31",
+    "version": "3.1.0-protobuf-exclusive",
+    "mode": "distributed_orchestrator_v31",
+    "role": "dashboard_coordinator_fleet",
+    "description": "SCADA Dashboard V3.1 EXCLUSIVE - Fleet Management + NetworkSecurityEvent Support"
+  },
+
+  "_comment_v31": "🚀 CONFIGURACIÓN V3.1 EXCLUSIVA - NO COMPATIBILITY MODE",
+  "_protobuf_v31": {
+    "version": "3.1.0",
+    "import_strategy": "TODO_O_NADA",
+    "required_modules": [
+      "network_security_clean_v31_pb2",
+      "firewall_commands_v31_pb2"
+    ],
+    "compatibility_mode": false,
+    "native_v31_fields": true
+  },
+
+  "network": {
+    "_comment_ml_detector": "🔄 CRÍTICO: SUB al ML_detector V3.1 puerto 5580",
+    "ml_events_input": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "SUB",
+      "topic_filter": "",
+      "high_water_mark": 2000,
+      "expected_publishers": 1,
+      "description": "SUB a ML_detector V3.1 NetworkSecurityEvent en puerto 5580",
+      "_change_log": "PULL:5570 → SUB:5580 para V3.1 compatibility"
+    },
+
+    "_comment_fleet": "🔥 FLEET MANAGEMENT: Múltiples firewall agents desde JSON",
+    "firewall_agents_fleet": {
+      "fleet_config_source": "firewall_rules.json",
+      "auto_discovery": true,
+      "load_from_agents_fleet_section": true,
+      "nuclear_broadcast_enabled": true,
+      "coordination_pattern": "PUB_SUB_ASYNC"
+    },
+
+    "_comment_admin": "🌐 Admin interface sin cambios",
+    "admin_interface": {
+      "address": "0.0.0.0",
+      "port": 8080,
+      "websocket_enabled": false,
+      "_future": "WebSocket bridge para V3.2"
+    }
+  },
+
+  "zmq": {
+    "_comment_v31": "⚙️ ZMQ optimizado para V3.1 + fleet management",
+    "context_io_threads": 2,
+    "max_sockets": 64,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": true,
+
+    "_comment_buffers": "📦 Buffers aumentados para NetworkSecurityEvent (más grande que V3.0)",
+    "linger_ms": 0,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 1000,
+    "max_message_size": 100000,
+    "recv_buffer_size": 131072,
+    "send_buffer_size": 131072,
+
+    "_ml_detector_sub": {
+      "rcvhwm": 2000,
+      "subscribe_all_topics": true,
+      "conflate": false,
+      "_comment": "SUB settings específicos para ML_detector V3.1"
+    },
+
+    "_fleet_management": {
+      "max_agents": 10,
+      "agent_timeout_ms": 5000,
+      "broadcast_hwm": 1000,
+      "_comment": "Settings para fleet de firewall agents"
+    }
+  },
+
+  "processing": {
+    "_comment_v31": "🧵 Threads optimizados para V3.1 + fleet",
+    "threads": {
+      "ml_events_consumers": 1,
+      "firewall_fleet_managers": 1,
+      "firewall_response_aggregators": 1,
+      "_comment": "Reducido a 1 thread cada uno para evitar race conditions V3.1"
+    },
+
+    "internal_queues": {
+      "ml_events_queue_size": 1000,
+      "firewall_commands_queue_size": 500,
+      "firewall_responses_queue_size": 500,
+      "fleet_broadcast_queue_size": 200
+    },
+
+    "_v31_processing": {
+      "parse_network_security_event": true,
+      "extract_83_ml_features": true,
+      "process_dual_geolocation": true,
+      "track_tricapa_analysis": true,
+      "enable_pipeline_tracking": true
+    },
+
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0
+    },
+
+    "_comment_data": "📊 Sin límites - todos los eventos se procesan",
+    "event_buffer_size": "unlimited",
+    "max_events_per_update": "unlimited",
+    "event_retention_hours": 24,
+    "enable_event_filtering": false,
+    "risk_score_threshold": 0.0
+  },
+
+  "_comment_fleet_integration": "🔥 INTEGRACIÓN COMPLETA CON FLEET DE FIREWALL AGENTS",
+  "firewall_integration": {
+    "enabled": true,
+    "version": "3.1.0",
+    "fleet_config_source": "firewall_rules.json",
+
+    "fleet_management": {
+      "auto_discovery": true,
+      "nuclear_broadcast_enabled": true,
+      "async_communication": true,
+      "fire_and_forget": true,
+      "fleet_health_monitoring": true
+    },
+
+    "agent_communication": {
+      "pattern": "PUB_SUB_ASYNC",
+      "dual_channel_support": true,
+      "scheduler_coordination": false,
+      "_comment": "Dashboard usa PUB/SUB, scheduler usa PUSH/PULL"
+    },
+
+    "command_execution": {
+      "default_timeout": 30,
+      "retry_attempts": 0,
+      "auto_reload_rules": true,
+      "test_commands_enabled": true,
+      "safety_mode": "ULTRA_SECURE_V31"
+    },
+
+    "nuclear_options": {
+      "enabled": true,
+      "confirmation_required": true,
+      "double_confirmation_for_critical": true,
+      "audit_all_nuclear_commands": true
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 15,
+    "detailed_metrics": true,
+    "health_check_interval": 30,
+    "component_timeout": 60,
+    "alert_on_component_failure": true,
+    "heartbeat_enabled": true,
+
+    "_v31_monitoring": {
+      "track_protobuf_v31_parsing": true,
+      "track_dual_geolocation": true,
+      "track_tricapa_ml_analysis": true,
+      "track_fleet_operations": true,
+      "track_nuclear_broadcasts": true
+    },
+
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 100.0,
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 512,
+      "max_cpu_usage_percent": 60.0,
+
+      "_fleet_alerts": {
+        "max_agent_failures": 2,
+        "max_fleet_response_timeout": 5000,
+        "fleet_health_check_interval": 30,
+        "nuclear_command_audit_required": true
+      }
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [v31:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "path": "logs/dashboard_v31.log",
+        "level": "INFO",
+        "max_size": "100MB",
+        "backup_count": 5,
+        "rotation": "time"
+      },
+      "_v31_logging": {
+        "protobuf_parsing_log": "logs/protobuf_v31_parsing.log",
+        "fleet_operations_log": "logs/fleet_operations_v31.log",
+        "nuclear_commands_log": "logs/nuclear_commands_v31.log"
+      }
+    }
+  },
+
+  "security": {
+    "_comment": "🔒 V3.1 Security sin cifrado (por ahora)",
+    "encryption": {
+      "enabled": false,
+      "_future": "Tokens distribuidos con ETCD en V3.2"
+    },
+
+    "compression": {
+      "enabled": false,
+      "_future": "Compresión optimizada para V3.2"
+    },
+
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 100000,
+      "validate_protobuf_v31_schema": true,
+      "validate_network_security_event": true,
+      "sanitize_inputs": true,
+      "validate_fleet_commands": true
+    },
+
+    "_v31_security": {
+      "validate_dual_coordinates": true,
+      "validate_tricapa_scores": true,
+      "validate_pipeline_tracking": true,
+      "audit_fleet_operations": true
+    },
+
+    "cors_enabled": true,
+    "csrf_protection": false
+  },
+
+  "web_interface": {
+    "enabled": true,
+    "static_files_path": "templates",
+    "templates_path": "templates",
+    "cache_control": "no-cache",
+    "host": "0.0.0.0",
+    "port": 8080,
+    "debug": false,
+
+    "_v31_features": {
+      "dual_geolocation_support": true,
+      "tricapa_ml_visualization": true,
+      "fleet_management_ui": true,
+      "nuclear_broadcast_ui": true,
+      "pipeline_tracking_ui": true
+    },
+
+    "map_settings": {
+      "enabled": true,
+      "default_zoom": 6,
+      "center_lat": 40.4168,
+      "center_lon": -3.7038,
+      "tile_server": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "© OpenStreetMap contributors",
+      "marker_clustering": true,
+      "auto_fit_bounds": true,
+      "_v31_map": {
+        "dual_coordinates_support": true,
+        "missile_trajectory_animation": true,
+        "fleet_status_overlay": true
+      }
+    },
+
+    "api_endpoints": {
+      "metrics": "/api/metrics",
+      "fleet_status": "/api/fleet-status",
+      "nuclear_broadcast": "/api/nuclear-broadcast",
+      "agent_health": "/api/agent-health",
+      "execute_firewall_action": "/api/execute-firewall-action",
+      "map_data": "/api/map-data",
+      "live_events": "/api/live-events",
+      "_v31_endpoints": {
+        "tricapa_analysis": "/api/tricapa-analysis",
+        "pipeline_metrics": "/api/pipeline-metrics",
+        "dual_geolocation": "/api/dual-geolocation"
+      }
+    }
+  },
+
+  "_comment_performance": "⚡ Performance V3.1 optimizado",
+  "performance": {
+    "enable_caching": false,
+    "cache_ttl": 0,
+    "compress_responses": false,
+    "max_workers": 4,
+    "_v31_optimizations": {
+      "zero_copy_protobuf": true,
+      "async_fleet_operations": true,
+      "memory_efficient_parsing": true
+    }
+  },
+
+  "metrics": {
+    "enable_collection": true,
+    "update_interval": 2,
+    "retention_hours": 48,
+    "export_prometheus": false,
+    "_v31_metrics": {
+      "protobuf_parsing_metrics": true,
+      "fleet_operation_metrics": true,
+      "dual_geolocation_metrics": true,
+      "tricapa_analysis_metrics": true
+    }
+  },
+
+  "_comment_ui_features": "🎨 UI Features V3.1",
+  "features": {
+    "draggable_modals": true,
+    "google_maps_integration": true,
+    "real_time_updates": true,
+    "event_geolocation": true,
+    "firewall_actions": true,
+    "debug_mode": true,
+    "_v31_features": {
+      "dual_geolocation_display": true,
+      "tricapa_ml_visualization": true,
+      "fleet_nuclear_broadcast": true,
+      "pipeline_tracking_display": true,
+      "missile_trajectory_animation": true
+    }
+  },
+
+  "ui_settings": {
+    "theme": "dark_terminal_v31",
+    "auto_refresh": true,
+    "refresh_interval": 2000,
+    "max_events_display": "unlimited",
+    "show_debug_log": true,
+    "enable_notifications": true,
+    "_v31_ui": {
+      "show_dual_coordinates": true,
+      "show_tricapa_scores": true,
+      "show_fleet_status": true,
+      "enable_nuclear_controls": true
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-v31-cluster",
+    "component_role": "dashboard_coordinator_fleet_v31",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+
+    "_v31_distributed": {
+      "protobuf_v31_native": true,
+      "fleet_coordination": true,
+      "pipeline_tracking": true,
+      "multi_agent_support": true
+    },
+
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10,
+      "_v31_tracking": {
+        "track_tricapa_stages": true,
+        "track_dual_enrichment": true,
+        "track_fleet_operations": true
+      }
+    }
+  },
+
+  "_v31_enhancements": {
+    "description": "V3.1 EXCLUSIVE enhancements - NO backward compatibility",
+
+    "protobuf_v31_exclusive": {
+      "network_security_event_support": true,
+      "83_plus_ml_features": true,
+      "dual_geolocation_native": true,
+      "tricapa_analysis_native": true,
+      "pipeline_tracking_native": true,
+      "fleet_management_native": true
+    },
+
+    "architectural_improvements": {
+      "sub_socket_to_ml_detector": true,
+      "fleet_management_from_json": true,
+      "nuclear_broadcast_capability": true,
+      "async_fire_and_forget": true,
+      "zero_limits_event_processing": true
+    },
+
+    "compatibility": {
+      "dashboard_js_v3_ready": true,
+      "frontend_dual_coordinates": true,
+      "frontend_fleet_controls": true,
+      "frontend_nuclear_options": true
+    }
+  },
+
+  "_deployment_notes": {
+    "version": "3.1.0-EXCLUSIVE",
+    "requires": [
+      "network_security_clean_v31_pb2.py",
+      "firewall_commands_v31_pb2.py",
+      "firewall_rules.json with agents_fleet section",
+      "ML_detector V3.1 running on port 5580 PUB"
+    ],
+    "breaking_changes": [
+      "No V3.0 compatibility",
+      "PULL→SUB socket change",
+      "New fleet management requirements",
+      "NetworkSecurityEvent parsing only"
+    ],
+    "next_steps": [
+      "Test SUB connection to ML_detector:5580",
+      "Implement fleet loading from JSON",
+      "Add NetworkSecurityEvent parser",
+      "Test nuclear broadcast functionality"
+    ]
+  }
+}
