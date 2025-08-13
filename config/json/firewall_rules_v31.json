@@ -1,344 +1,148 @@
 {
   "firewall_rules": {
-    "version": "3.1.0-ULTRA-SECURE-DUAL",
-    "last_updated": "2025-08-12T15:30:00Z",
-    "description": "ULTRA-SECURE firewall rules V3.1 - Dual communication with human control",
-    "author": "upgraded-happiness architecture - security hardened V3.1",
-
-    "_security_notice": "🔒 TODAS las reglas están configuradas para máxima seguridad V3.1 con comunicación dual",
-
-    "_risk_scoring_config": {
-      "risk_scale": "0.0 to 1.0 (float) or 0 to 100 (integer)",
-      "score_interpretation": {
-        "0.0-0.2": "Muy bajo riesgo - tráfico normal",
-        "0.2-0.4": "Riesgo bajo - actividad sospechosa menor",
-        "0.4-0.6": "Riesgo medio - posible amenaza",
-        "0.6-0.8": "Riesgo alto - amenaza probable",
-        "0.8-1.0": "Riesgo crítico - ataque confirmado"
-      },
-      "no_hardcoding_policy": "🔒 NINGÚN score debe estar hardcodeado en componentes - JSON manda siempre"
-    },
+    "version": "1.0.0-RELEASE",
+    "last_updated": "2025-08-13T16:30:00Z",
+    "description": "RELEASE-1.0.0 - Single source of truth firewall configuration",
 
     "rules": [
       {
         "rule_id": "rule_001_very_low_risk",
-        "risk_range": [0.0, 0.2],
-        "risk_range_alt": [0, 20],
+        "risk_range": [0, 19],
         "action": "LIST_RULES",
         "description": "Riesgo muy bajo: Solo listar reglas activas para verificación",
         "params": {
           "timeout": 5,
-          "log_level": "debug",
-          "alert_threshold": false
+          "log_level": "debug"
         },
-        "priority": "VERY_LOW",
+        "priority": "LOW",
         "dry_run": true,
-        "enabled": true,
-        "safety_override": "none",
-        "_v31_fields": {
-          "track_origin": true,
-          "dual_response": true,
-          "human_oversight": true,
-          "show_translated_command": false
-        }
+        "enabled": true
       },
-
       {
         "rule_id": "rule_002_low_risk",
-        "risk_range": [0.2, 0.4],
-        "risk_range_alt": [20, 40],
+        "risk_range": [20, 39],
         "action": "MONITOR",
         "description": "Riesgo bajo: Monitoreo básico de IP sospechosa",
         "params": {
           "duration": 300,
-          "log_level": "info",
-          "alert_threshold": false,
-          "max_duration": 600
+          "log_level": "info"
         },
         "priority": "LOW",
         "dry_run": true,
-        "enabled": true,
-        "safety_override": "force_monitor_only",
-        "_v31_fields": {
-          "track_origin": true,
-          "dual_response": true,
-          "human_oversight": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# MONITOR: iptables -I INPUT -s {target_ip} -m comment --comment 'MONITOR-{command_id}' -j LOG --log-prefix 'FIREWALL_MONITOR: '",
-            "darwin_pfctl": "# MONITOR: echo 'pass log inet from {target_ip} to any' | pfctl -f -",
-            "windows_netsh": "# MONITOR: netsh advfirewall firewall add rule name='MONITOR-{command_id}' dir=in action=allow remoteip={target_ip} enable=yes"
-          }
-        }
+        "enabled": true
       },
-
       {
         "rule_id": "rule_003_medium_risk",
-        "risk_range": [0.4, 0.6],
-        "risk_range_alt": [40, 60],
+        "risk_range": [40, 59],
         "action": "MONITOR",
         "description": "Riesgo medio: Monitoreo intensivo con alertas",
         "params": {
           "duration": 600,
           "log_level": "warning",
-          "alert_threshold": true,
-          "max_duration": 1800,
           "enhanced_monitoring": true
         },
         "priority": "MEDIUM",
         "dry_run": true,
-        "enabled": true,
-        "safety_override": "enhanced_monitor",
-        "_v31_fields": {
-          "track_origin": true,
-          "dual_response": true,
-          "human_oversight": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# ENHANCED_MONITOR: iptables -I INPUT -s {target_ip} -m comment --comment 'ENHANCED_MONITOR-{command_id}' -j LOG --log-prefix 'FIREWALL_ALERT: ' && iptables -I INPUT -s {target_ip} -m limit --limit 10/min -j ACCEPT",
-            "darwin_pfctl": "# ENHANCED_MONITOR: echo 'pass log (all) inet from {target_ip} to any' | pfctl -f -",
-            "windows_netsh": "# ENHANCED_MONITOR: netsh advfirewall firewall add rule name='ENHANCED_MONITOR-{command_id}' dir=in action=allow remoteip={target_ip} enable=yes && netsh advfirewall set currentprofile logging allowedconnections enable"
-          }
-        }
+        "enabled": true
       },
-
       {
         "rule_id": "rule_004_high_risk",
-        "risk_range": [0.6, 0.8],
-        "risk_range_alt": [60, 80],
+        "risk_range": [60, 79],
         "action": "RATE_LIMIT",
         "description": "Riesgo alto: Rate limiting para reducir capacidad de ataque",
         "params": {
           "requests_per_minute": 10,
           "duration": 1800,
-          "log_level": "warning",
-          "alert_threshold": true,
-          "max_duration": 3600,
           "burst_capacity": 5
         },
         "priority": "HIGH",
         "dry_run": true,
         "enabled": false,
-        "disabled_reason": "DEVELOPMENT MODE: Rate limiting disabled for safety",
-        "safety_override": "development_mode_disabled",
-        "_v31_fields": {
-          "track_origin": true,
-          "dual_response": true,
-          "human_oversight": true,
-          "requires_human_approval": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# RATE_LIMIT: iptables -I INPUT -s {target_ip} -m comment --comment 'RATE_LIMIT-{command_id}' -m limit --limit {requests_per_minute}/min --limit-burst {burst_capacity} -j ACCEPT && iptables -I INPUT -s {target_ip} -j DROP",
-            "darwin_pfctl": "# RATE_LIMIT: echo 'pass in inet from {target_ip} to any keep state (max 10, source-track rule, max-src-states {requests_per_minute})' | pfctl -f -",
-            "windows_netsh": "# RATE_LIMIT: netsh advfirewall firewall add rule name='RATE_LIMIT-{command_id}' dir=in action=allow remoteip={target_ip} enable=yes protocol=TCP localport=any"
-          }
-        }
+        "disabled_reason": "DEVELOPMENT MODE: Rate limiting disabled for safety"
       },
-
       {
         "rule_id": "rule_005_critical_risk",
-        "risk_range": [0.8, 1.0],
-        "risk_range_alt": [80, 100],
+        "risk_range": [80, 100],
         "action": "BLOCK_IP",
         "description": "Riesgo crítico: Bloqueo inmediato de IP maliciosa",
         "params": {
           "duration": 3600,
-          "permanent": false,
-          "log_level": "error",
-          "alert_threshold": true,
-          "max_duration": 86400,
           "immediate_action": true
         },
         "priority": "CRITICAL",
         "dry_run": true,
         "enabled": false,
-        "disabled_reason": "DEVELOPMENT MODE: IP blocking disabled for safety",
-        "safety_override": "development_mode_disabled",
-        "_v31_fields": {
-          "track_origin": true,
-          "dual_response": true,
-          "human_oversight": true,
-          "requires_human_approval": true,
-          "requires_confirmation": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# BLOCK_IP: iptables -I INPUT -s {target_ip} -m comment --comment 'BLOCK_IP-{command_id}' -j DROP && iptables -I FORWARD -s {target_ip} -j DROP",
-            "darwin_pfctl": "# BLOCK_IP: echo 'block drop in inet from {target_ip} to any' | pfctl -f -",
-            "windows_netsh": "# BLOCK_IP: netsh advfirewall firewall add rule name='BLOCK_IP-{command_id}' dir=in action=block remoteip={target_ip} enable=yes"
-          }
-        }
+        "disabled_reason": "DEVELOPMENT MODE: IP blocking disabled for safety"
       }
     ],
 
     "manual_actions": {
-      "_comment": "🎛️ ACCIONES MANUALES - Ejecutadas desde dashboard con control humano",
-
       "LIST_RULES": {
         "description": "Listar reglas activas - SEGURO V3.1",
-        "risk_score_threshold": 0.0,
-        "params": {
-          "timeout": 10,
-          "include_expired": false,
-          "show_origin": true,
-          "show_translations": true
-        },
-        "requires_confirmation": false,
         "safety_level": "SAFE",
         "enabled": true,
-        "_v31_enhancements": {
-          "show_rule_origin": true,
-          "include_scheduler_rules": true,
-          "include_dashboard_rules": true,
-          "show_translated_command": false,
-          "command_translation": {
-            "linux_iptables": "# LIST_RULES: iptables -L INPUT -n --line-numbers | grep 'FIREWALL_'",
-            "darwin_pfctl": "# LIST_RULES: pfctl -s rules | grep -E '(MONITOR|RATE_LIMIT|BLOCK_IP)'",
-            "windows_netsh": "# LIST_RULES: netsh advfirewall firewall show rule name=all | findstr /C:'FIREWALL_'"
-          }
-        }
+        "requires_confirmation": false
       },
-
       "MONITOR": {
         "description": "Monitorear IP - SEGURO V3.1",
-        "risk_score_threshold": 0.2,
-        "params": {
-          "duration": 300,
-          "max_duration": 1800,
-          "log_level": "info",
-          "enhanced": false
-        },
-        "requires_confirmation": false,
         "safety_level": "SAFE",
         "enabled": true,
-        "_v31_enhancements": {
-          "origin_tracking": true,
-          "dual_response": true,
-          "protobuf_v31_fields": ["node_id", "timestamp"],
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# MANUAL_MONITOR: iptables -I INPUT -s {target_ip} -m comment --comment 'MANUAL_MONITOR-{command_id}' -j LOG --log-prefix 'MANUAL_FIREWALL_MONITOR: '",
-            "darwin_pfctl": "# MANUAL_MONITOR: echo 'pass log inet from {target_ip} to any label \"MANUAL_MONITOR-{command_id}\"' | pfctl -f -",
-            "windows_netsh": "# MANUAL_MONITOR: netsh advfirewall firewall add rule name='MANUAL_MONITOR-{command_id}' dir=in action=allow remoteip={target_ip} enable=yes"
-          }
-        }
+        "requires_confirmation": false
       },
-
       "RATE_LIMIT": {
         "description": "Rate limiting - PELIGROSO - Solo con aprobación humana",
-        "risk_score_threshold": 0.6,
-        "params": {
-          "requests_per_minute": 5,
-          "duration": 1800,
-          "max_duration": 7200,
-          "burst_capacity": 3,
-          "log_level": "warning"
-        },
-        "requires_confirmation": true,
         "safety_level": "DANGEROUS",
         "enabled": false,
-        "disabled_reason": "DEVELOPMENT MODE: Rate limiting disabled for safety - enable in production",
-        "_v31_safety": {
-          "requires_human_override": true,
-          "scheduler_cannot_execute": true,
-          "only_dashboard_with_confirmation": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# MANUAL_RATE_LIMIT: iptables -I INPUT -s {target_ip} -m comment --comment 'MANUAL_RATE_LIMIT-{command_id}' -m limit --limit {requests_per_minute}/min --limit-burst {burst_capacity} -j ACCEPT && iptables -I INPUT -s {target_ip} -m comment --comment 'MANUAL_RATE_LIMIT_DROP-{command_id}' -j LOG --log-prefix 'RATE_LIMITED: ' && iptables -I INPUT -s {target_ip} -j DROP",
-            "darwin_pfctl": "# MANUAL_RATE_LIMIT: echo 'pass in log inet from {target_ip} to any keep state (max {burst_capacity}, source-track rule, max-src-states {requests_per_minute}) label \"MANUAL_RATE_LIMIT-{command_id}\"' | pfctl -f -",
-            "windows_netsh": "# MANUAL_RATE_LIMIT: netsh advfirewall firewall add rule name='MANUAL_RATE_LIMIT-{command_id}' dir=in action=allow remoteip={target_ip} enable=yes protocol=any"
-          }
-        }
-      },
-
-      "BLOCK_IP": {
-        "description": "Bloquear IP - MUY PELIGROSO - Solo emergencias con confirmación múltiple",
-        "risk_score_threshold": 0.8,
-        "params": {
-          "duration": 3600,
-          "max_duration": 86400,
-          "permanent": false,
-          "log_level": "error",
-          "emergency_mode": false
-        },
         "requires_confirmation": true,
-        "requires_double_confirmation": true,
+        "disabled_reason": "DEVELOPMENT MODE: Rate limiting disabled for safety"
+      },
+      "BLOCK_IP": {
+        "description": "Bloquear IP - MUY PELIGROSO - Solo emergencias",
         "safety_level": "CRITICAL",
         "enabled": false,
-        "disabled_reason": "DEVELOPMENT MODE: IP blocking disabled for safety - enable only in production emergencies",
-        "_v31_safety": {
-          "requires_human_override": true,
-          "scheduler_cannot_execute": true,
-          "only_dashboard_with_confirmation": true,
-          "requires_manager_approval": true,
-          "creates_audit_log": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# MANUAL_BLOCK_IP: iptables -I INPUT -s {target_ip} -m comment --comment 'MANUAL_BLOCK_IP-{command_id}' -j LOG --log-prefix 'BLOCKED_IP: ' && iptables -I INPUT -s {target_ip} -m comment --comment 'MANUAL_BLOCK_IP-{command_id}' -j DROP && iptables -I FORWARD -s {target_ip} -m comment --comment 'MANUAL_BLOCK_IP_FWD-{command_id}' -j DROP",
-            "darwin_pfctl": "# MANUAL_BLOCK_IP: echo 'block drop in log inet from {target_ip} to any label \"MANUAL_BLOCK_IP-{command_id}\"' | pfctl -f -",
-            "windows_netsh": "# MANUAL_BLOCK_IP: netsh advfirewall firewall add rule name='MANUAL_BLOCK_IP-{command_id}' dir=in action=block remoteip={target_ip} enable=yes && netsh advfirewall firewall add rule name='MANUAL_BLOCK_IP_OUT-{command_id}' dir=out action=block remoteip={target_ip} enable=yes"
-          }
-        }
-      },
-
-      "EMERGENCY_UNBLOCK": {
-        "description": "Desbloquear IP en emergencia - Para corregir errores de bloqueo",
-        "risk_score_threshold": 0.0,
-        "params": {
-          "target_rule_id": "required",
-          "reason": "required",
-          "immediate": true
-        },
         "requires_confirmation": true,
+        "requires_double_confirmation": true,
+        "disabled_reason": "DEVELOPMENT MODE: IP blocking disabled for safety"
+      },
+      "EMERGENCY_UNBLOCK": {
+        "description": "Desbloquear IP en emergencia - Para corregir errores",
         "safety_level": "EMERGENCY_RECOVERY",
         "enabled": true,
-        "_v31_emergency": {
-          "human_override_capability": true,
-          "bypasses_normal_restrictions": true,
-          "creates_audit_log": true,
-          "show_translated_command": true,
-          "command_translation": {
-            "linux_iptables": "# EMERGENCY_UNBLOCK: iptables -D INPUT -s {target_ip} -m comment --comment '{target_rule_id}' -j DROP 2>/dev/null || echo 'Rule not found'",
-            "darwin_pfctl": "# EMERGENCY_UNBLOCK: pfctl -s rules | grep '{target_rule_id}' | sed 's/^/no /' | pfctl -f -",
-            "windows_netsh": "# EMERGENCY_UNBLOCK: netsh advfirewall firewall delete rule name='{target_rule_id}'"
-          }
-        }
+        "requires_confirmation": true
       }
     },
 
-    "_dual_communication_agents": {
-      "_comment": "🔄 MÚLTIPLES AGENTES - Dashboard gestiona toda la flota",
-
+    "agents_fleet": {
       "simple_firewall_agent_001": {
         "node_id": "simple_firewall_agent_001",
         "version": "3.1.0",
         "location": "zona_dmz_001",
+        "status": "active",
 
-        "scheduler_endpoint": {
-          "commands_input": "tcp://localhost:5582",
-          "responses_output": "tcp://localhost:5581",
-          "pattern": "PUSH/PULL",
-          "description": "Automated AI scheduler communication"
+        "network_endpoints": {
+          "scheduler_communication": {
+            "commands_input": "tcp://localhost:5582",
+            "responses_output": "tcp://localhost:5581",
+            "pattern": "PUSH/PULL"
+          },
+          "dashboard_communication": {
+            "commands_input": "tcp://localhost:5580",
+            "responses_output": "tcp://localhost:5584",
+            "pattern": "PUB/SUB"
+          }
         },
-        "dashboard_endpoint": {
-          "commands_input": "tcp://localhost:5580",
-          "responses_output": "tcp://localhost:5584",
-          "pattern": "PUB/SUB",
-          "description": "Human dashboard communication with oversight"
+
+        "capabilities": {
+          "allowed_actions": ["MONITOR", "LIST_RULES"],
+          "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+          "max_concurrent_rules": 10,
+          "default_rule_duration": 60
         },
 
-        "capabilities": ["MONITOR", "LIST_RULES"],
-        "blocked_capabilities": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
-        "max_rules": 10,
-        "default_rule_duration": 60,
-        "safety_mode": "ULTRA_SECURE_V31",
-        "auto_force_dry_run": true,
-
-        "_v31_capabilities": {
-          "dual_communication": true,
-          "origin_tracking": true,
-          "independent_responses": true,
-          "human_oversight": true,
-          "protobuf_v31_native": true
+        "security_profile": {
+          "safety_mode": "ULTRA_SECURE_V31",
+          "auto_force_dry_run": true,
+          "environment_detection": true
         }
       },
 
@@ -346,33 +150,32 @@
         "node_id": "simple_firewall_agent_002",
         "version": "3.1.0",
         "location": "zona_lan_002",
+        "status": "active",
 
-        "scheduler_endpoint": {
-          "commands_input": "tcp://localhost:5592",
-          "responses_output": "tcp://localhost:5591",
-          "pattern": "PUSH/PULL",
-          "description": "Automated AI scheduler communication"
+        "network_endpoints": {
+          "scheduler_communication": {
+            "commands_input": "tcp://localhost:5592",
+            "responses_output": "tcp://localhost:5591",
+            "pattern": "PUSH/PULL"
+          },
+          "dashboard_communication": {
+            "commands_input": "tcp://localhost:5590",
+            "responses_output": "tcp://localhost:5594",
+            "pattern": "PUB/SUB"
+          }
         },
-        "dashboard_endpoint": {
-          "commands_input": "tcp://localhost:5590",
-          "responses_output": "tcp://localhost:5594",
-          "pattern": "PUB/SUB",
-          "description": "Human dashboard communication with oversight"
+
+        "capabilities": {
+          "allowed_actions": ["MONITOR", "LIST_RULES"],
+          "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+          "max_concurrent_rules": 15,
+          "default_rule_duration": 60
         },
 
-        "capabilities": ["MONITOR", "LIST_RULES"],
-        "blocked_capabilities": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
-        "max_rules": 15,
-        "default_rule_duration": 60,
-        "safety_mode": "ULTRA_SECURE_V31",
-        "auto_force_dry_run": true,
-
-        "_v31_capabilities": {
-          "dual_communication": true,
-          "origin_tracking": true,
-          "independent_responses": true,
-          "human_oversight": true,
-          "protobuf_v31_native": true
+        "security_profile": {
+          "safety_mode": "ULTRA_SECURE_V31",
+          "auto_force_dry_run": true,
+          "environment_detection": true
         }
       },
 
@@ -380,323 +183,49 @@
         "node_id": "simple_firewall_agent_003",
         "version": "3.1.0",
         "location": "zona_wan_003",
+        "status": "active",
 
-        "scheduler_endpoint": {
-          "commands_input": "tcp://localhost:5602",
-          "responses_output": "tcp://localhost:5601",
-          "pattern": "PUSH/PULL",
-          "description": "Automated AI scheduler communication"
-        },
-        "dashboard_endpoint": {
-          "commands_input": "tcp://localhost:5600",
-          "responses_output": "tcp://localhost:5604",
-          "pattern": "PUB/SUB",
-          "description": "Human dashboard communication with oversight"
-        },
-
-        "capabilities": ["MONITOR", "LIST_RULES"],
-        "blocked_capabilities": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
-        "max_rules": 20,
-        "default_rule_duration": 60,
-        "safety_mode": "ULTRA_SECURE_V31",
-        "auto_force_dry_run": true,
-
-        "_v31_capabilities": {
-          "dual_communication": true,
-          "origin_tracking": true,
-          "independent_responses": true,
-          "human_oversight": true,
-          "protobuf_v31_native": true
-        }
-      },
-
-      "_template_for_additional_agents": {
-        "simple_firewall_agent_00x": {
-          "node_id": "simple_firewall_agent_00x",
-          "version": "3.1.0",
-          "location": "zona_custom_00x",
-
-          "scheduler_endpoint": {
-            "commands_input": "tcp://localhost:56X2",
-            "responses_output": "tcp://localhost:56X1",
-            "pattern": "PUSH/PULL",
-            "description": "Automated AI scheduler communication"
+        "network_endpoints": {
+          "scheduler_communication": {
+            "commands_input": "tcp://localhost:5602",
+            "responses_output": "tcp://localhost:5601",
+            "pattern": "PUSH/PULL"
           },
-          "dashboard_endpoint": {
-            "commands_input": "tcp://localhost:56X0",
-            "responses_output": "tcp://localhost:56X4",
-            "pattern": "PUB/SUB",
-            "description": "Human dashboard communication with oversight"
-          },
+          "dashboard_communication": {
+            "commands_input": "tcp://localhost:5600",
+            "responses_output": "tcp://localhost:5604",
+            "pattern": "PUB/SUB"
+          }
+        },
 
-          "_comment": "🔧 PATRÓN DE PUERTOS: 56X0/56X1/56X2/56X4 donde X = número de agente"
+        "capabilities": {
+          "allowed_actions": ["MONITOR", "LIST_RULES"],
+          "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+          "max_concurrent_rules": 20,
+          "default_rule_duration": 60
+        },
+
+        "security_profile": {
+          "safety_mode": "ULTRA_SECURE_V31",
+          "auto_force_dry_run": true,
+          "environment_detection": true
         }
-      }
-    },
-
-    "firewall_agents": {
-      "_comment_legacy": "Legacy format maintained for compatibility",
-      "simple_firewall_agent_001": {
-        "node_id": "simple_firewall_agent_001",
-        "endpoint": "tcp://localhost:5580",
-        "capabilities": ["MONITOR", "LIST_RULES"],
-        "blocked_capabilities": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
-        "max_rules": 10,
-        "default_rule_duration": 60,
-        "safety_mode": "ULTRA_SECURE",
-        "auto_force_dry_run": true
       }
     },
 
     "global_settings": {
-      "max_concurrent_actions": 2,
-      "_comment_concurrent": "Increased for dual communication",
-      "action_timeout_seconds": 10,
-      "retry_attempts": 1,
-      "log_all_actions": true,
-      "require_confirmation_above_risk": 0.6,
-      "_comment_risk_threshold": "🔒 CONFIGURABLE: Confirmación requerida para risk >= 0.6",
-      "force_dry_run_global": true,
-      "max_rule_duration_global": 300,
-      "safety_mode": "ULTRA_SECURE_V31",
-
-      "auto_safety_overrides": {
-        "detect_root_user": true,
-        "detect_sudo_context": true,
-        "detect_container": true,
-        "force_safe_defaults": true
+      "security": {
+        "force_dry_run_global": true,
+        "max_rule_duration_global": 300,
+        "require_confirmation_above_risk": 0.6,
+        "development_mode": true
       },
 
-      "_dry_run_and_translation_config": {
-        "development_mode": true,
-        "_comment": "🔒 DESARROLLO: Nunca ejecutar comandos reales en desarrollo",
-        "show_translated_commands": true,
-        "log_translated_commands": true,
-        "validate_command_syntax": false,
-        "command_translation_format": {
-          "include_placeholders": true,
-          "placeholder_format": "{variable_name}",
-          "include_comments": true,
-          "comment_prefix": "#",
-          "show_multiple_platforms": true
-        },
-        "production_mode_settings": {
-          "_comment": "🏭 PRODUCCIÓN: Configuración para cuando se habilite ejecución real",
-          "require_explicit_enable": true,
-          "require_manager_approval": true,
-          "create_backup_before_changes": true,
-          "max_changes_per_hour": 10,
-          "emergency_rollback_available": true
-        }
-      },
-
-      "_risk_score_configuration": {
-        "_comment": "🎯 CONFIGURACIÓN DE SCORES - JSON manda, NO hardcoding",
-        "score_format": "float_0_to_1",
-        "alternative_format": "integer_0_to_100",
-        "automatic_action_thresholds": {
-          "list_rules_max": 0.2,
-          "monitor_min": 0.2,
-          "monitor_max": 0.6,
-          "rate_limit_min": 0.6,
-          "rate_limit_max": 0.8,
-          "block_ip_min": 0.8,
-          "block_ip_max": 1.0
-        },
-        "manual_action_thresholds": {
-          "list_rules_always": true,
-          "monitor_always": true,
-          "rate_limit_min_score": 0.6,
-          "block_ip_min_score": 0.8,
-          "emergency_unblock_always": true
-        },
-        "no_hardcoding_policy": "🚫 PROHIBIDO hardcodear scores en componentes",
-        "validation_rules": {
-          "min_score": 0.0,
-          "max_score": 1.0,
-          "precision": 2,
-          "required_fields": ["risk_range", "action", "enabled"]
-        }
-      },
-
-      "_v31_global_settings": {
-        "dual_communication_enabled": true,
+      "coordination": {
+        "scheduler_max_risk_auto": 0.6,
         "human_oversight_required": true,
-        "independent_response_channels": true,
-        "command_origin_tracking": true,
-        "protobuf_v31_validation": true,
-        "scheduler_dashboard_coordination": {
-          "allow_scheduler_auto_actions": true,
-          "require_dashboard_visibility": true,
-          "human_can_override_scheduler": true,
-          "audit_all_actions": true,
-          "scheduler_max_risk_auto": 0.6,
-          "_comment": "🔒 Scheduler solo puede actuar automáticamente hasta risk 0.6"
-        }
+        "audit_all_actions": true
       }
-    },
-
-    "_human_control_policy": {
-      "oversight_level": "FULL_VISIBILITY",
-      "scheduler_actions": {
-        "visible_to_dashboard": true,
-        "can_be_overridden": true,
-        "require_human_approval": false,
-        "log_all_decisions": true
-      },
-      "dashboard_actions": {
-        "priority_over_scheduler": true,
-        "immediate_execution": true,
-        "full_audit_trail": true,
-        "safety_validation_required": true
-      },
-      "emergency_procedures": {
-        "human_can_stop_all": true,
-        "panic_mode_available": true,
-        "force_all_dry_run": true,
-        "disable_scheduler_temporarily": true
-      }
-    },
-
-    "_security_guarantees_v31": {
-      "never_executes_real_commands": "All actions are dry_run with command translation only",
-      "no_dangerous_commands_in_dev": "RATE_LIMIT and BLOCK_IP disabled in development mode",
-      "automatic_safety": "Detects dangerous conditions and becomes more secure",
-      "comprehensive_logging": "All commands logged for security audit with origin tracking and translated commands",
-      "fail_safe_design": "When in doubt, chooses the most secure option",
-      "dual_communication_safety": "Independent channels prevent single point of failure",
-      "human_oversight_guaranteed": "Dashboard receives all scheduler actions for review",
-      "command_traceability": "Every action traced to scheduler or dashboard origin",
-      "protobuf_v31_native": "Native node_id and timestamp for full audit capability",
-      "independent_response_validation": "Each communication channel validated independently",
-
-      "_new_v31_guarantees": {
-        "risk_score_driven": "All actions determined by configurable risk scores in JSON",
-        "no_hardcoded_values": "Zero hardcoded thresholds - JSON configuration controls everything",
-        "command_translation_visible": "See exactly what firewall command would execute in dry_run",
-        "platform_aware_commands": "Correct command syntax for Linux/macOS/Windows",
-        "graduated_response": "Escalating actions based on risk: LIST → MONITOR → RATE_LIMIT → BLOCK",
-        "human_approval_gates": "High-risk actions require human confirmation",
-        "emergency_recovery": "Human can always unblock/override any automated decision",
-        "development_safety": "Dangerous actions disabled by default in development",
-        "audit_trail_complete": "Every decision logged with risk score, translated command, and outcome"
-      }
-    },
-
-    "_port_allocation_v31": {
-      "scheduler_communication": {
-        "commands": "5582 (scheduler PUSH → agent PULL)",
-        "responses": "5581 (agent PUSH → scheduler PULL)",
-        "pattern": "Traditional PUSH/PULL for reliability"
-      },
-      "dashboard_communication": {
-        "commands": "5580 (dashboard PUB → agent SUB)",
-        "responses": "5584 (agent PUB → dashboard SUB)",
-        "pattern": "Scalable PUB/SUB for human interface"
-      },
-      "benefits": {
-        "independent_channels": "No interference between scheduler and dashboard",
-        "human_override_capability": "Dashboard can always see and control",
-        "audit_trail_complete": "All actions tracked to origin",
-        "scalability": "Multiple dashboards can subscribe if needed"
-      }
-    },
-
-    "_json_usage_clarification": {
-      "_comment": "🔄 ARCHIVO UNIFICADO - Usado por múltiples componentes",
-
-      "used_by_simple_firewall_agent": {
-        "description": "El agente firewall lee este JSON para configurar sus reglas y endpoints",
-        "reads_sections": [
-          "rules",
-          "manual_actions",
-          "global_settings",
-          "firewall_agents[node_id_específico]",
-          "_dual_communication_agents[node_id_específico]"
-        ],
-        "ignores_sections": [
-          "_dual_communication_agents (otros agentes)",
-          "_dashboard_specific_config",
-          "_agent_fleet_management"
-        ],
-        "behavior": "Solo lee su propia configuración basada en su node_id"
-      },
-
-      "used_by_dashboard_v31": {
-        "description": "El dashboard lee este JSON para gestionar TODOS los agentes firewall",
-        "reads_sections": [
-          "rules",
-          "manual_actions",
-          "global_settings",
-          "_dual_communication_agents (TODOS)",
-          "_dashboard_specific_config",
-          "_agent_fleet_management"
-        ],
-        "behavior": "Lee configuración de TODA la flota de agentes para gestión centralizada"
-      },
-
-      "shared_configuration": {
-        "rules": "Mismas reglas aplicadas a todos los agentes",
-        "manual_actions": "Mismas acciones disponibles para todos",
-        "global_settings": "Configuración global común",
-        "safety_guarantees": "Mismas garantías de seguridad para todos"
-      },
-
-      "agent_specific_configuration": {
-        "endpoints": "Cada agente tiene sus propios puertos únicos",
-        "capabilities": "Pueden variar según zona/función del agente",
-        "max_rules": "Límites específicos por agente",
-        "location": "Información de zona/ubicación del agente"
-      }
-    },
-
-    "_port_allocation_pattern": {
-      "description": "🔢 PATRÓN DE PUERTOS para múltiples agentes",
-      "pattern_explanation": "Cada agente usa 4 puertos con patrón 5XY0/5XY1/5XY2/5XY4",
-
-      "agent_001": {
-        "base": "558X",
-        "dashboard_commands": "5580 (dashboard PUB → agent SUB)",
-        "scheduler_responses": "5581 (agent PUSH → scheduler PULL)",
-        "scheduler_commands": "5582 (scheduler PUSH → agent PULL)",
-        "dashboard_responses": "5584 (agent PUB → dashboard SUB)"
-      },
-
-      "agent_002": {
-        "base": "559X",
-        "dashboard_commands": "5590",
-        "scheduler_responses": "5591",
-        "scheduler_commands": "5592",
-        "dashboard_responses": "5594"
-      },
-
-      "agent_003": {
-        "base": "560X",
-        "dashboard_commands": "5600",
-        "scheduler_responses": "5601",
-        "scheduler_commands": "5602",
-        "dashboard_responses": "5604"
-      },
-
-      "scaling_info": {
-        "max_agents_supported": "Hasta agent_099 (puertos 5990-5994)",
-        "port_conflicts": "Verificar que no colisionen con otros servicios",
-        "future_expansion": "Para >100 agentes, usar rango de puertos diferente"
-      }
-    },
-      "from_version": "3.0.0",
-      "to_version": "3.1.0",
-      "protobuf_migration": "TODO_O_NADA strategy implemented",
-      "communication_upgrade": "Single channel → Dual channel",
-      "backward_compatibility": "Legacy firewall_agents section maintained",
-      "human_safety_enhancement": "Independent oversight channel added",
-      "required_components": [
-        "simple_firewall_agent_v31.py",
-        "simple_firewall_agent_v31_config.json",
-        "firewall_rules_dashboard_v31.json",
-        "protocols/v3.1/firewall_commands_v31_pb2.py",
-        "protocols/v3.1/network_security_clean_v31_pb2.py"
-      ]
     }
   }
 }
