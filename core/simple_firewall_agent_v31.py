@@ -525,7 +525,7 @@ class SecurityMonitor:
 
 
 class FirewallRulesSync:
-    """Sincronización con reglas JSON del dashboard - ULTRA SECURE VERSION"""
+    """Sincronización con reglas JSON - RELEASE-1.0.0 Single Source of Truth"""
 
     def __init__(self, rules_file: str, node_id: str, logger, security_monitor: SecurityMonitor):
         self.rules_file = rules_file
@@ -534,10 +534,11 @@ class FirewallRulesSync:
         self.security_monitor = security_monitor
         self.available_actions = []
         self.capabilities = []
+        self.blocked_capabilities = []
         self.global_settings = {}
         self.manual_actions = {}
         self.risk_rules = []
-        self.agent_config = {}
+        self.agent_config = {}  # Mi configuración específica desde agents_fleet
         self.last_loaded = None
 
         # Para tracking de cambios
@@ -545,144 +546,222 @@ class FirewallRulesSync:
         self.file_size = 0
         self.load_count = 0
 
-        # Cargar reglas iniciales
+        # Cargar reglas iniciales - TODO O NADA
         self.load_rules()
 
-    def reload_if_changed(self) -> bool:
-        """Recargar reglas solo si el archivo ha cambiado"""
+    def load_rules(self):
+        """Cargar reglas - RELEASE-1.0.0 agents_fleet EXCLUSIVO"""
         try:
-            # Verificar si el archivo existe
             if not Path(self.rules_file).exists():
-                self.logger.warning(f"⚠️ Archivo de reglas no existe: {self.rules_file}")
-                return False
+                raise FileNotFoundError(f"❌ CRITICAL: Rules file not found: {self.rules_file}")
 
-            # Obtener información del archivo
-            file_stat = os.stat(self.rules_file)
-            current_modified_time = file_stat.st_mtime
-            current_file_size = file_stat.st_size
+            with open(self.rules_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
 
-            # Verificar si hay cambios
-            if (current_modified_time != self.last_modified_time or
-                    current_file_size != self.file_size):
+            firewall_config = data.get('firewall_rules', {})
+            if not firewall_config:
+                raise ValueError("❌ CRITICAL: 'firewall_rules' section not found in JSON")
 
-                self.logger.info(f"🔄 Cambios detectados en {self.rules_file}, recargando...")
-                self.logger.debug(f"   Modificado: {self.last_modified_time} → {current_modified_time}")
-                self.logger.debug(f"   Tamaño: {self.file_size} → {current_file_size}")
+            # 🎯 SINGLE SOURCE: agents_fleet EXCLUSIVO
+            agents_fleet = firewall_config.get('agents_fleet', {})
+            if not agents_fleet:
+                raise ValueError(
+                    f"❌ CRITICAL RELEASE-1.0.0: 'agents_fleet' section not found in JSON\n"
+                    f"🔧 REQUIRED: JSON must contain 'firewall_rules.agents_fleet' section"
+                )
 
-                # Recargar reglas
-                self.load_rules()
+            # ✅ BUSCAR MI CONFIGURACIÓN ESPECÍFICA - TODO O NADA
+            if self.node_id not in agents_fleet:
+                available_agents = list(agents_fleet.keys())
+                raise ValueError(
+                    f"❌ CRITICAL TODO O NADA: Agent '{self.node_id}' not found in agents_fleet\n"
+                    f"📋 Available agents: {available_agents}\n"
+                    f"🔧 REQUIRED: Agent '{self.node_id}' must exist in agents_fleet"
+                )
 
-                # Actualizar tracking
-                self.last_modified_time = current_modified_time
-                self.file_size = current_file_size
-                self.load_count += 1
+            # ✅ EXTRAER MI CONFIGURACIÓN
+            my_config = agents_fleet[self.node_id]
 
-                self.logger.info(f"✅ Reglas recargadas exitosamente (recarga #{self.load_count})")
-                return True
-            else:
-                self.logger.debug(f"📋 Sin cambios en {self.rules_file}")
-                return False
+            # VALIDAR ESTRUCTURA OBLIGATORIA
+            required_sections = ['network_endpoints', 'capabilities', 'security_profile']
+            for section in required_sections:
+                if section not in my_config:
+                    raise ValueError(f"❌ CRITICAL: Agent {self.node_id} missing '{section}' section")
 
-        except Exception as e:
-            self.logger.error(f"❌ Error verificando cambios en reglas: {e}")
-            return False
+            # VALIDAR NETWORK ENDPOINTS
+            network_endpoints = my_config['network_endpoints']
+            required_endpoints = ['scheduler_communication', 'dashboard_communication']
+            for endpoint in required_endpoints:
+                if endpoint not in network_endpoints:
+                    raise ValueError(f"❌ CRITICAL: Agent {self.node_id} missing '{endpoint}' endpoint")
 
-    def force_reload(self) -> bool:
-        """🔄 Forzar recarga de reglas sin verificar cambios"""
-        try:
-            self.logger.info(f"🔄 Forzando recarga de reglas: {self.rules_file}")
-            self.load_rules()
+            # VALIDAR CAPABILITIES
+            capabilities = my_config['capabilities']
+            if 'allowed_actions' not in capabilities:
+                raise ValueError(f"❌ CRITICAL: Agent {self.node_id} missing 'allowed_actions'")
 
-            # Actualizar tracking
+            # ✅ GUARDAR MI CONFIGURACIÓN
+            self.agent_config = my_config
+
+            # ✅ EXTRAER CAPABILITIES ESPECÍFICAS PARA MÍ
+            my_allowed = capabilities.get('allowed_actions', [])
+            my_blocked = capabilities.get('blocked_actions', [])
+
+            self.logger.info(f"🎯 Agent {self.node_id} loaded from agents_fleet")
+            self.logger.info(f"📍 Location: {my_config.get('location', 'unknown')}")
+            self.logger.info(f"🎮 Allowed actions: {my_allowed}")
+            self.logger.info(f"🚫 Blocked actions: {my_blocked}")
+
+            # ✅ EXTRAER REGLAS GLOBALES
+            self.risk_rules = firewall_config.get('rules', [])
+            if not self.risk_rules:
+                raise ValueError("❌ CRITICAL: No 'rules' found in JSON")
+
+            # ✅ EXTRAER ACCIONES MANUALES
+            self.manual_actions = firewall_config.get('manual_actions', {})
+            if not self.manual_actions:
+                raise ValueError("❌ CRITICAL: No 'manual_actions' found in JSON")
+
+            # 🔒 FILTRAR ACCIONES SEGURAS PARA MÍ
+            safe_actions = []
+            for action, config in self.manual_actions.items():
+                # Verificar si está bloqueada para mí
+                if action in my_blocked:
+                    self.logger.warning(f"🚫 Action {action} blocked for me")
+                    continue
+
+                # Verificar si está permitida para mí
+                if action not in my_allowed:
+                    self.logger.warning(f"🚫 Action {action} not in my capabilities")
+                    continue
+
+                # Verificar safety level
+                if config.get('safety_level') == 'SAFE' and config.get('enabled', True):
+                    safe_actions.append(action)
+                else:
+                    disabled_reason = config.get('disabled_reason', 'safety or enabled=false')
+                    self.logger.warning(f"🚫 Action {action} disabled: {disabled_reason}")
+
+            self.available_actions = safe_actions
+            self.capabilities = safe_actions
+            self.blocked_capabilities = my_blocked
+
+            # ✅ CONFIGURACIÓN GLOBAL
+            self.global_settings = firewall_config.get('global_settings', {})
+
+            if self.global_settings.get('security', {}).get('force_dry_run_global', False):
+                self.logger.info("🔒 Global dry_run forced by configuration")
+
+            self.last_loaded = datetime.now()
+
+            # ACTUALIZAR TRACKING
             if Path(self.rules_file).exists():
                 file_stat = os.stat(self.rules_file)
                 self.last_modified_time = file_stat.st_mtime
                 self.file_size = file_stat.st_size
 
-            self.load_count += 1
-            self.logger.info(f"✅ Reglas forzadamente recargadas (recarga #{self.load_count})")
-            return True
+            self.logger.info(f"✅ Agent {self.node_id} RELEASE-1.0.0 loaded successfully")
+            self.logger.info(f"📋 {len(self.risk_rules)} rules, {len(self.capabilities)} capabilities available")
+
         except Exception as e:
-            self.logger.error(f"❌ Error forzando recarga de reglas: {e}")
+            self.logger.error(f"❌ CRITICAL ERROR loading rules for agent {self.node_id}: {e}")
+            raise e
+
+    def get_my_scheduler_endpoint(self) -> Dict:
+        """Obtener MI endpoint del scheduler - GARANTIZADO"""
+        if not self.agent_config:
+            raise ValueError(f"❌ CRITICAL: No agent config loaded for {self.node_id}")
+
+        network_endpoints = self.agent_config.get('network_endpoints', {})
+        scheduler_comm = network_endpoints.get('scheduler_communication', {})
+
+        if not scheduler_comm:
+            raise ValueError(f"❌ CRITICAL: No scheduler_communication for {self.node_id}")
+
+        return scheduler_comm
+
+    def get_my_dashboard_endpoint(self) -> Dict:
+        """Obtener MI endpoint del dashboard - GARANTIZADO"""
+        if not self.agent_config:
+            raise ValueError(f"❌ CRITICAL: No agent config loaded for {self.node_id}")
+
+        network_endpoints = self.agent_config.get('network_endpoints', {})
+        dashboard_comm = network_endpoints.get('dashboard_communication', {})
+
+        if not dashboard_comm:
+            raise ValueError(f"❌ CRITICAL: No dashboard_communication for {self.node_id}")
+
+        return dashboard_comm
+
+    def get_my_capabilities(self) -> Dict:
+        """Obtener MIS capabilities - GARANTIZADO"""
+        if not self.agent_config:
+            raise ValueError(f"❌ CRITICAL: No agent config loaded for {self.node_id}")
+
+        return self.agent_config.get('capabilities', {})
+
+    def get_my_security_profile(self) -> Dict:
+        """Obtener MI perfil de seguridad - GARANTIZADO"""
+        if not self.agent_config:
+            raise ValueError(f"❌ CRITICAL: No agent config loaded for {self.node_id}")
+
+        return self.agent_config.get('security_profile', {})
+
+    def is_action_allowed_for_me(self, action: str) -> Tuple[bool, str]:
+        """Verificar si una acción está permitida para MÍ específicamente"""
+        # Verificar si está bloqueada para mí
+        if action in self.blocked_capabilities:
+            return False, f"Action {action} is blocked for agent {self.node_id}"
+
+        # Verificar si está en mis capacidades
+        if action not in self.capabilities:
+            return False, f"Action {action} not in agent {self.node_id} capabilities"
+
+        return True, "Action allowed for this agent"
+
+    def reload_if_changed(self) -> bool:
+        """Recargar reglas si archivo cambió - MANTIENE HOT RELOAD"""
+        try:
+            if not Path(self.rules_file).exists():
+                self.logger.warning(f"⚠️ Rules file missing: {self.rules_file}")
+                return False
+
+            file_stat = os.stat(self.rules_file)
+            current_modified_time = file_stat.st_mtime
+            current_file_size = file_stat.st_size
+
+            if (current_modified_time != self.last_modified_time or
+                    current_file_size != self.file_size):
+
+                self.logger.info(f"🔄 Changes detected, reloading agent {self.node_id} config...")
+
+                # Recargar reglas (incluye mi configuración específica)
+                self.load_rules()
+
+                self.load_count += 1
+                self.logger.info(f"✅ Agent {self.node_id} config reloaded (reload #{self.load_count})")
+                return True
+            else:
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ Error checking changes for agent {self.node_id}: {e}")
             return False
 
     def get_reload_stats(self) -> Dict[str, Any]:
         """📊 Obtener estadísticas de recarga"""
         return {
             "rules_file": self.rules_file,
+            "node_id": self.node_id,
             "last_loaded": self.last_loaded.isoformat() if self.last_loaded else None,
-            "last_modified_time": self.last_modified_time,
-            "file_size": self.file_size,
             "load_count": self.load_count,
-            "available_actions_count": len(self.available_actions),
             "capabilities_count": len(self.capabilities),
-            "risk_rules_count": len(self.risk_rules)
+            "blocked_capabilities_count": len(self.blocked_capabilities),
+            "risk_rules_count": len(self.risk_rules),
+            "agent_location": self.agent_config.get('location', 'unknown'),
+            "agent_version": self.agent_config.get('version', 'unknown'),
+            "agent_status": self.agent_config.get('status', 'unknown')
         }
-
-    def load_rules(self):
-        """Cargar reglas con validación de seguridad"""
-        try:
-            if not Path(self.rules_file).exists():
-                raise FileNotFoundError(f"❌ CRITICAL: Archivo de reglas no encontrado: {self.rules_file}")
-
-            with open(self.rules_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            firewall_config = data.get('firewall_rules', {})
-
-            if not firewall_config:
-                raise ValueError("❌ CRITICAL: Sección 'firewall_rules' no encontrada en JSON")
-
-            # Extraer reglas por risk_score
-            self.risk_rules = firewall_config.get('rules', [])
-
-            # Extraer acciones manuales disponibles
-            self.manual_actions = firewall_config.get('manual_actions', {})
-
-            # 🔒 FILTRAR SOLO ACCIONES SEGURAS
-            safe_actions = []
-            for action, config in self.manual_actions.items():
-                if config.get('safety_level') == 'SAFE' and config.get('enabled', True):
-                    safe_actions.append(action)
-                else:
-                    self.logger.warning(f"🚫 Action {action} disabled due to safety level")
-
-            self.available_actions = safe_actions
-
-            # Extraer configuración específica de este agente
-            firewall_agents = firewall_config.get('firewall_agents', {})
-            self.agent_config = firewall_agents.get(self.node_id, {})
-
-            if not self.agent_config:
-                self.logger.warning(f"⚠️ No se encontró configuración específica para {self.node_id}")
-                self.capabilities = self.available_actions
-            else:
-                # 🔒 USAR SOLO CAPACIDADES SEGURAS
-                agent_capabilities = self.agent_config.get('capabilities', [])
-                self.capabilities = [cap for cap in agent_capabilities if cap in safe_actions]
-
-            # Configuración global con overrides de seguridad
-            self.global_settings = firewall_config.get('global_settings', {})
-
-            # 🔒 FORZAR CONFIGURACIÓN SEGURA
-            if self.global_settings.get('force_dry_run_global', False):
-                self.logger.info("🔒 Global dry_run forced by configuration")
-
-            self.last_loaded = datetime.now()
-
-            # ACTUALIZAR TRACKING DE CAMBIOS
-            if Path(self.rules_file).exists():
-                file_stat = os.stat(self.rules_file)
-                self.last_modified_time = file_stat.st_mtime
-                self.file_size = file_stat.st_size
-
-            self.logger.info(f"✅ Reglas de firewall sincronizadas: {len(self.risk_rules)} reglas de riesgo")
-            self.logger.info(f"📋 Acciones manuales SEGURAS: {', '.join(self.available_actions)}")
-            self.logger.info(f"🎯 Capacidades del agente FILTRADAS: {', '.join(self.capabilities)}")
-
-        except Exception as e:
-            self.logger.error(f"❌ CRITICAL ERROR cargando reglas: {e}")
-            raise e
 
 
 class UltraSecureFirewallManager:
@@ -1007,87 +1086,179 @@ class UltraSecureFirewallAgentV31:
         self.logger.propagate = False
 
     def _setup_zmq_sockets(self):
-        """🚀 NEW: Setup DUAL ZMQ sockets - Scheduler + Dashboard"""
-        network_config = self.config.get("network", {})
+        """🚀 Setup ZMQ sockets - RELEASE-1.0.0 Fleet-First approach"""
+        self.logger.info("🔧 Setting up ZMQ sockets from agents_fleet configuration...")
 
-        # 🔥 SCHEDULER SOCKETS (PUSH/PULL pattern - compatibilidad con scheduler_firewall.py)
-        if "scheduler_commands" in network_config:
-            cmd_config = network_config["scheduler_commands"]
-            self.scheduler_commands_socket = self.zmq_context.socket(zmq.PULL)
+        try:
+            # 🎯 PRIORIDAD 1: Usar configuración del fleet
+            try:
+                scheduler_endpoint = self.rules_sync.get_my_scheduler_endpoint()
+                dashboard_endpoint = self.rules_sync.get_my_dashboard_endpoint()
 
-            # Configure socket
-            if "high_water_mark" in cmd_config:
-                self.scheduler_commands_socket.set_hwm(cmd_config["high_water_mark"])
+                self.logger.info(f"✅ Using fleet configuration for ZMQ setup")
+                self._setup_scheduler_sockets_from_fleet(scheduler_endpoint)
+                self._setup_dashboard_sockets_from_fleet(dashboard_endpoint)
 
-            cmd_address = f"tcp://{cmd_config['address']}:{cmd_config['port']}"
-            cmd_mode = cmd_config.get('mode', 'connect').lower()
+            except Exception as fleet_error:
+                self.logger.error(f"❌ CRITICAL: Failed to get fleet endpoints: {fleet_error}")
 
-            if cmd_mode == 'bind':
-                self.scheduler_commands_socket.bind(cmd_address)
-                self.logger.info(f"🔒 Scheduler Commands BIND en: {cmd_address}")
-            else:
-                self.scheduler_commands_socket.connect(cmd_address)
-                self.logger.info(f"🔒 Scheduler Commands CONNECT a: {cmd_address}")
+                # 🔄 FALLBACK: Usar configuración local (para desarrollo)
+                self.logger.warning("🔄 Falling back to local network configuration...")
+                network_config = self.config.get("network", {})
 
-        if "scheduler_responses" in network_config:
-            resp_config = network_config["scheduler_responses"]
-            self.scheduler_responses_socket = self.zmq_context.socket(zmq.PUSH)
+                if not network_config:
+                    raise RuntimeError(
+                        f"❌ CRITICAL RELEASE-1.0.0: No ZMQ configuration available\n"
+                        f"🔧 REQUIRED: Either fleet endpoints OR local network config\n"
+                        f"📋 Fleet error: {fleet_error}"
+                    )
 
-            # Configure socket
-            if "high_water_mark" in resp_config:
-                self.scheduler_responses_socket.set_hwm(resp_config["high_water_mark"])
+                self._setup_scheduler_sockets_from_local(network_config)
+                self._setup_dashboard_sockets_from_local(network_config)
 
-            resp_address = f"tcp://{resp_config['address']}:{resp_config['port']}"
-            resp_mode = resp_config.get('mode', 'connect').lower()
+            self.logger.info("✅ ZMQ sockets setup complete")
 
-            if resp_mode == 'bind':
-                self.scheduler_responses_socket.bind(resp_address)
-                self.logger.info(f"🔒 Scheduler Responses BIND en: {resp_address}")
-            else:
-                self.scheduler_responses_socket.connect(resp_address)
-                self.logger.info(f"🔒 Scheduler Responses CONNECT a: {resp_address}")
+        except Exception as e:
+            self.logger.error(f"❌ Error setting up ZMQ sockets: {e}")
+            raise RuntimeError(f"ZMQ socket setup failed: {e}")
 
-        # 🚀 DASHBOARD SOCKETS (PUB/SUB pattern - nueva funcionalidad)
+    def _setup_dashboard_sockets_from_local(self, network_config: Dict):
+        """Setup dashboard sockets desde configuración local (fallback)"""
+        self.logger.warning("⚠️ Using LOCAL config for dashboard sockets (fallback)")
+
+        # Existing local logic...
         if "dashboard_commands" in network_config:
             cmd_config = network_config["dashboard_commands"]
             self.dashboard_commands_socket = self.zmq_context.socket(zmq.SUB)
-
-            # Subscribe to all messages (topic filtering can be added later)
             self.dashboard_commands_socket.setsockopt(zmq.SUBSCRIBE, b"")
-
-            # Configure socket
-            if "high_water_mark" in cmd_config:
-                self.dashboard_commands_socket.set_hwm(cmd_config["high_water_mark"])
 
             cmd_address = f"tcp://{cmd_config['address']}:{cmd_config['port']}"
             cmd_mode = cmd_config.get('mode', 'connect').lower()
 
             if cmd_mode == 'bind':
                 self.dashboard_commands_socket.bind(cmd_address)
-                self.logger.info(f"🔒 Dashboard Commands SUB BIND en: {cmd_address}")
+                self.logger.info(f"🔒 Dashboard Commands SUB BIND (local): {cmd_address}")
             else:
                 self.dashboard_commands_socket.connect(cmd_address)
-                self.logger.info(f"🔒 Dashboard Commands SUB CONNECT a: {cmd_address}")
+                self.logger.info(f"🔒 Dashboard Commands SUB CONNECT (local): {cmd_address}")
 
         if "dashboard_responses" in network_config:
             resp_config = network_config["dashboard_responses"]
             self.dashboard_responses_socket = self.zmq_context.socket(zmq.PUB)
-
-            # Configure socket
-            if "high_water_mark" in resp_config:
-                self.dashboard_responses_socket.set_hwm(resp_config["high_water_mark"])
 
             resp_address = f"tcp://{resp_config['address']}:{resp_config['port']}"
             resp_mode = resp_config.get('mode', 'bind').lower()
 
             if resp_mode == 'bind':
                 self.dashboard_responses_socket.bind(resp_address)
-                self.logger.info(f"🔒 Dashboard Responses PUB BIND en: {resp_address}")
+                self.logger.info(f"🔒 Dashboard Responses PUB BIND (local): {resp_address}")
             else:
                 self.dashboard_responses_socket.connect(resp_address)
-                self.logger.info(f"🔒 Dashboard Responses PUB CONNECT a: {resp_address}")
+                self.logger.info(f"🔒 Dashboard Responses PUB CONNECT (local): {resp_address}")
 
-        self.logger.info("🔒 DUAL Communication setup complete")
+    def _setup_scheduler_sockets_from_local(self, network_config: Dict):
+        """Setup scheduler sockets desde configuración local (fallback)"""
+        self.logger.warning("⚠️ Using LOCAL config for scheduler sockets (fallback)")
+
+        # Existing local logic...
+        if "scheduler_commands" in network_config:
+            cmd_config = network_config["scheduler_commands"]
+            self.scheduler_commands_socket = self.zmq_context.socket(zmq.PULL)
+
+            cmd_address = f"tcp://{cmd_config['address']}:{cmd_config['port']}"
+            cmd_mode = cmd_config.get('mode', 'bind').lower()
+
+            if cmd_mode == 'bind':
+                self.scheduler_commands_socket.bind(cmd_address)
+                self.logger.info(f"🔒 Scheduler Commands BIND (local): {cmd_address}")
+            else:
+                self.scheduler_commands_socket.connect(cmd_address)
+                self.logger.info(f"🔒 Scheduler Commands CONNECT (local): {cmd_address}")
+
+        if "scheduler_responses" in network_config:
+            resp_config = network_config["scheduler_responses"]
+            self.scheduler_responses_socket = self.zmq_context.socket(zmq.PUSH)
+
+            resp_address = f"tcp://{resp_config['address']}:{resp_config['port']}"
+            resp_mode = resp_config.get('mode', 'connect').lower()
+
+            if resp_mode == 'bind':
+                self.scheduler_responses_socket.bind(resp_address)
+                self.logger.info(f"🔒 Scheduler Responses BIND (local): {resp_address}")
+            else:
+                self.scheduler_responses_socket.connect(resp_address)
+                self.logger.info(f"🔒 Scheduler Responses CONNECT (local): {resp_address}")
+
+    def _setup_scheduler_sockets_from_fleet(self, scheduler_endpoint: Dict):
+        """Setup scheduler sockets desde fleet configuration"""
+        self.logger.info("🔥 Setting up SCHEDULER sockets from fleet...")
+
+        # SCHEDULER COMMANDS (PULL from scheduler)
+        commands_input = scheduler_endpoint.get('commands_input')
+        if not commands_input:
+            raise ValueError("❌ CRITICAL: Missing scheduler commands_input endpoint")
+
+        self.scheduler_commands_socket = self.zmq_context.socket(zmq.PULL)
+
+        # Parse endpoint
+        if commands_input.startswith('tcp://'):
+            address_port = commands_input.replace('tcp://', '')
+            if ':' in address_port:
+                address, port = address_port.split(':')
+                port = int(port)
+            else:
+                raise ValueError(f"❌ Invalid scheduler endpoint format: {commands_input}")
+        else:
+            raise ValueError(f"❌ Only tcp:// endpoints supported: {commands_input}")
+
+        # Configure socket
+        self.scheduler_commands_socket.set_hwm(500)  # Default HWM
+
+        # BIND (agent binds, scheduler connects)
+        self.scheduler_commands_socket.bind(commands_input)
+        self.logger.info(f"🔒 Scheduler Commands BIND on: {commands_input}")
+
+        # SCHEDULER RESPONSES (PUSH to scheduler)
+        responses_output = scheduler_endpoint.get('responses_output')
+        if not responses_output:
+            raise ValueError("❌ CRITICAL: Missing scheduler responses_output endpoint")
+
+        self.scheduler_responses_socket = self.zmq_context.socket(zmq.PUSH)
+        self.scheduler_responses_socket.set_hwm(200)
+
+        # CONNECT (agent connects to scheduler)
+        self.scheduler_responses_socket.connect(responses_output)
+        self.logger.info(f"🔒 Scheduler Responses CONNECT to: {responses_output}")
+
+    def _setup_dashboard_sockets_from_fleet(self, dashboard_endpoint: Dict):
+        """Setup dashboard sockets desde fleet configuration"""
+        self.logger.info("🚀 Setting up DASHBOARD sockets from fleet...")
+
+        # DASHBOARD COMMANDS (SUB from dashboard)
+        commands_input = dashboard_endpoint.get('commands_input')
+        if not commands_input:
+            raise ValueError("❌ CRITICAL: Missing dashboard commands_input endpoint")
+
+        self.dashboard_commands_socket = self.zmq_context.socket(zmq.SUB)
+        self.dashboard_commands_socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all
+        self.dashboard_commands_socket.set_hwm(500)
+
+        # CONNECT (agent connects to dashboard)
+        self.dashboard_commands_socket.connect(commands_input)
+        self.logger.info(f"🔒 Dashboard Commands SUB CONNECT to: {commands_input}")
+
+        # DASHBOARD RESPONSES (PUB to dashboard)
+        responses_output = dashboard_endpoint.get('responses_output')
+        if not responses_output:
+            raise ValueError("❌ CRITICAL: Missing dashboard responses_output endpoint")
+
+        self.dashboard_responses_socket = self.zmq_context.socket(zmq.PUB)
+        self.dashboard_responses_socket.set_hwm(200)
+
+        # BIND (agent binds, dashboard connects)
+        self.dashboard_responses_socket.bind(responses_output)
+        self.logger.info(f"🔒 Dashboard Responses PUB BIND on: {responses_output}")
+
 
     def _scheduler_commands_consumer(self):
         """🔥 NEW: Consumer thread para comandos del SCHEDULER con validación ultra-segura V3.1"""

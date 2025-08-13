@@ -248,59 +248,116 @@ class FirewallSchedulerRulesEngine:
         self.load_rules()
 
     def load_rules(self, force_reload: bool = False):
-        """Cargar reglas desde JSON - Scheduler version"""
+        """Cargar reglas desde JSON - RELEASE-1.0.0 SINGLE SOURCE EXCLUSIVO"""
         try:
-            # Verificar si necesita recarga
-            file_mtime = datetime.fromtimestamp(os.path.getmtime(self.rules_file))
-            if not force_reload and self.last_loaded and file_mtime <= self.last_loaded:
-                self.logger.debug("📋 Scheduler rules already up to date")
-                return
+            if not Path(self.rules_file).exists():
+                raise FirewallSchedulerRulesError(f"❌ CRITICAL: Rules file not found: {self.rules_file}")
 
             with open(self.rules_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             firewall_config = data.get('firewall_rules', {})
-
             if not firewall_config:
-                raise FirewallSchedulerRulesError("❌ 'firewall_rules' section not found in JSON")
+                raise FirewallSchedulerRulesError("❌ CRITICAL: 'firewall_rules' section not found in JSON")
 
-            # Cargar reglas principales
+            # ✅ CARGAR REGLAS PRINCIPALES
             self.rules = firewall_config.get('rules', [])
+            if not self.rules:
+                raise FirewallSchedulerRulesError("❌ CRITICAL: No 'rules' found in JSON")
 
             # Filtrar solo reglas enabled
             self.rules = [rule for rule in self.rules if rule.get('enabled', True)]
 
-            # Cargar acciones manuales
+            # ✅ CARGAR ACCIONES MANUALES
             self.manual_actions = firewall_config.get('manual_actions', {})
+            if not self.manual_actions:
+                raise FirewallSchedulerRulesError("❌ CRITICAL: No 'manual_actions' found in JSON")
 
-            # Cargar agentes firewall
-            self.firewall_agents = firewall_config.get('firewall_agents', {})
+            # 🎯 SINGLE SOURCE OF TRUTH: agents_fleet EXCLUSIVO
+            agents_fleet = firewall_config.get('agents_fleet', {})
+            if not agents_fleet:
+                raise FirewallSchedulerRulesError(
+                    "❌ CRITICAL RELEASE-1.0.0: 'agents_fleet' section not found in JSON\n"
+                    "🔧 REQUIRED: JSON must contain 'firewall_rules.agents_fleet' with agent configurations\n"
+                    "📋 JSON structure must be: firewall_rules.agents_fleet.{node_id}.network_endpoints"
+                )
 
-            # Cargar configuración global
+            # ✅ PROCESAR AGENTS FLEET
+            self.firewall_agents = {}
+            for agent_id, agent_config in agents_fleet.items():
+
+                # VALIDAR ESTRUCTURA OBLIGATORIA
+                if not isinstance(agent_config, dict):
+                    raise FirewallSchedulerRulesError(f"❌ CRITICAL: Agent {agent_id} config is not dict")
+
+                network_endpoints = agent_config.get('network_endpoints', {})
+                if not network_endpoints:
+                    raise FirewallSchedulerRulesError(f"❌ CRITICAL: Agent {agent_id} missing 'network_endpoints'")
+
+                scheduler_comm = network_endpoints.get('scheduler_communication', {})
+                if not scheduler_comm:
+                    raise FirewallSchedulerRulesError(f"❌ CRITICAL: Agent {agent_id} missing 'scheduler_communication'")
+
+                capabilities = agent_config.get('capabilities', {})
+                if not capabilities:
+                    raise FirewallSchedulerRulesError(f"❌ CRITICAL: Agent {agent_id} missing 'capabilities'")
+
+                # CONVERTIR A FORMATO SCHEDULER
+                self.firewall_agents[agent_id] = {
+                    'node_id': agent_id,
+                    'endpoint': scheduler_comm.get('commands_input'),
+                    'capabilities': capabilities.get('allowed_actions', []),
+                    'blocked_capabilities': capabilities.get('blocked_actions', []),
+                    'max_rules': capabilities.get('max_concurrent_rules', 10),
+                    'default_rule_duration': capabilities.get('default_rule_duration', 60),
+                    'safety_mode': agent_config.get('security_profile', {}).get('safety_mode', 'ULTRA_SECURE_V31'),
+                    'location': agent_config.get('location', 'unknown'),
+                    'version': agent_config.get('version', '3.1.0'),
+                    'status': agent_config.get('status', 'active')
+                }
+
+                # VALIDAR CAMPOS CRÍTICOS
+                if not self.firewall_agents[agent_id]['endpoint']:
+                    raise FirewallSchedulerRulesError(f"❌ CRITICAL: Agent {agent_id} missing commands_input endpoint")
+
+                if not self.firewall_agents[agent_id]['capabilities']:
+                    raise FirewallSchedulerRulesError(f"❌ CRITICAL: Agent {agent_id} has no allowed_actions")
+
+            # VALIDAR QUE TENEMOS AGENTES
+            if not self.firewall_agents:
+                raise FirewallSchedulerRulesError(
+                    "❌ CRITICAL RELEASE-1.0.0: No agents loaded from agents_fleet\n"
+                    "🔧 REQUIRED: JSON must contain at least one agent in agents_fleet"
+                )
+
+            # ✅ CONFIGURACIÓN GLOBAL
             self.global_settings = firewall_config.get('global_settings', {})
 
             self.last_loaded = datetime.now()
 
-            # Actualizar tracking de cambios
+            # ACTUALIZAR TRACKING
             if Path(self.rules_file).exists():
                 file_stat = os.stat(self.rules_file)
                 self.last_modified_time = file_stat.st_mtime
                 self.file_size = file_stat.st_size
 
-            self.load_count += 1
-
-            self.logger.info(
-                f"✅ Scheduler firewall rules loaded: {len(self.rules)} rules, {len(self.firewall_agents)} agents"
-            )
-            self.logger.info(f"📋 Rules version: {firewall_config.get('version', 'unknown')}")
+            # LOG ÉXITO
+            self.logger.info(f"✅ RELEASE-1.0.0 LOADED: {len(self.rules)} rules, {len(self.firewall_agents)} agents")
+            self.logger.info(f"🎯 Agents fleet:")
+            for agent_id, agent_info in self.firewall_agents.items():
+                endpoint = agent_info['endpoint']
+                location = agent_info['location']
+                status = agent_info['status']
+                capabilities = len(agent_info['capabilities'])
+                self.logger.info(f"   🤖 {agent_id}: {endpoint} ({location}, {status}, {capabilities} capabilities)")
 
             # Validar configuración
             self._validate_rules_configuration()
 
         except json.JSONDecodeError as e:
-            raise FirewallSchedulerRulesError(f"❌ JSON parse error: {e}")
+            raise FirewallSchedulerRulesError(f"❌ JSON PARSE ERROR: {e}")
         except Exception as e:
-            raise FirewallSchedulerRulesError(f"❌ Error loading scheduler rules: {e}")
+            raise FirewallSchedulerRulesError(f"❌ SCHEDULER LOAD ERROR: {e}")
 
     def _validate_rules_configuration(self):
         """Validar configuración de reglas cargadas"""
@@ -414,15 +471,44 @@ class FirewallSchedulerRulesEngine:
         """Obtener información de acción desde manual_actions"""
         return self.manual_actions.get(action)
 
-    def get_default_firewall_agent(self) -> Optional[Dict]:
-        """Obtener primer agente disponible como default"""
-        if self.firewall_agents:
-            return list(self.firewall_agents.values())[0]
-        return None
+    def get_default_firewall_agent(self) -> Dict:
+        """Obtener primer agente activo - RELEASE-1.0.0 GARANTIZADO"""
+        if not self.firewall_agents:
+            raise FirewallSchedulerRulesError("❌ CRITICAL: No firewall agents available")
 
-    def get_firewall_agent_by_node_id(self, node_id: str) -> Optional[Dict]:
-        """Obtener información de agente por node_id"""
-        return self.firewall_agents.get(node_id)
+        # Buscar primer agente activo
+        for agent_id, agent_dict in self.firewall_agents.items():
+            if agent_dict['status'] == 'active':
+                self.logger.debug(f"🎯 Selected default agent: {agent_id}")
+                return agent_dict
+
+        # Si ninguno activo, ERROR TOTAL
+        available_statuses = {aid: ainfo['status'] for aid, ainfo in self.firewall_agents.items()}
+        raise FirewallSchedulerRulesError(
+            f"❌ CRITICAL: No active agents found\n"
+            f"📋 Agent statuses: {available_statuses}\n"
+            f"🔧 REQUIRED: At least one agent must have status='active'"
+        )
+
+    def get_firewall_agent_by_node_id(self, node_id: str) -> Dict:
+        """Obtener agente por node_id - RELEASE-1.0.0 GARANTIZADO"""
+        if node_id not in self.firewall_agents:
+            available_agents = list(self.firewall_agents.keys())
+            raise FirewallSchedulerRulesError(
+                f"❌ CRITICAL: Agent {node_id} not found\n"
+                f"📋 Available agents: {available_agents}\n"
+                f"🔧 REQUIRED: node_id must exist in agents_fleet"
+            )
+
+        agent_dict = self.firewall_agents[node_id]
+
+        if agent_dict['status'] != 'active':
+            raise FirewallSchedulerRulesError(
+                f"❌ CRITICAL: Agent {node_id} is not active (status: {agent_dict['status']})\n"
+                f"🔧 REQUIRED: Agent status must be 'active'"
+            )
+
+        return agent_dict
 
     def reload_if_changed(self) -> bool:
         """Recargar reglas si el archivo cambió"""
@@ -981,6 +1067,10 @@ class FirewallScheduler:
     def _parse_ml_event(self, message_bytes: bytes, worker_id: int) -> Optional[Dict]:
         """Parser para eventos del ML Detector V3.1.2 - Compatible con protobuf y JSON"""
         try:
+            # 🔍 DEBUG: Log lo que llega
+            self.logger.info(f"🔍 DEBUG Worker {worker_id} - Received {len(message_bytes)} bytes")
+            self.logger.info(f"🔍 DEBUG Worker {worker_id} - First 100 bytes: {message_bytes[:100]}")
+
             # Intentar primero protobuf V3.1.2
             if PROTOBUF_AVAILABLE and NetworkEventProto:
                 try:
@@ -989,24 +1079,43 @@ class FirewallScheduler:
 
                     # Convertir protobuf a dict
                     event_data = self._convert_v3_protobuf_to_dict(event, worker_id)
-                    self.logger.debug(f"🎯 Worker {worker_id} - Protobuf V3.1.2 parsed successfully")
+
+                    # 🔍 DEBUG: Log resultado de conversión
+                    self.logger.info(
+                        f"🔍 DEBUG Worker {worker_id} - Protobuf parsed, event_data type: {type(event_data)}")
+                    self.logger.info(
+                        f"🔍 DEBUG Worker {worker_id} - event_data keys: {list(event_data.keys()) if isinstance(event_data, dict) else 'NOT_DICT'}")
+
                     return event_data
 
                 except Exception as pb_error:
-                    self.logger.debug(f"🔄 Worker {worker_id} - Protobuf parse failed, trying JSON: {pb_error}")
+                    self.logger.warning(f"🔄 Worker {worker_id} - Protobuf parse failed: {pb_error}")
 
             # Fallback a JSON
             try:
                 message_text = message_bytes.decode('utf-8')
+                self.logger.info(f"🔍 DEBUG Worker {worker_id} - Trying JSON, text: {message_text[:200]}...")
+
                 event_data = json.loads(message_text)
-                self.logger.debug(f"🔄 Worker {worker_id} - JSON parsed successfully")
+
+                # 🔍 DEBUG: Log resultado JSON
+                self.logger.info(f"🔍 DEBUG Worker {worker_id} - JSON parsed, event_data type: {type(event_data)}")
+                self.logger.info(
+                    f"🔍 DEBUG Worker {worker_id} - event_data keys: {list(event_data.keys()) if isinstance(event_data, dict) else 'NOT_DICT'}")
+
                 return event_data
+
             except Exception as json_error:
-                self.logger.debug(f"🔄 Worker {worker_id} - JSON parse failed: {json_error}")
+                self.logger.warning(f"🔄 Worker {worker_id} - JSON parse failed: {json_error}")
 
             # Ultimo recurso: crear evento básico
             self.logger.warning(f"⚠️ Worker {worker_id} - Using fallback event creation")
-            return self._create_fallback_event(message_bytes, worker_id)
+            fallback_event = self._create_fallback_event(message_bytes, worker_id)
+
+            # 🔍 DEBUG: Log fallback
+            self.logger.info(f"🔍 DEBUG Worker {worker_id} - Fallback event type: {type(fallback_event)}")
+
+            return fallback_event
 
         except Exception as e:
             self.logger.error(f"❌ Worker {worker_id} - Error parsing ML event: {e}")
@@ -1147,6 +1256,16 @@ class FirewallScheduler:
     def _make_firewall_decision(self, event_data: Dict, worker_id: int) -> Optional[FirewallDecision]:
         """Tomar decisión de firewall basada en reglas JSON - CORE LOGIC"""
         try:
+            # 🔍 DEBUG: Log lo que llega a decision
+            self.logger.info(f"🔍 DEBUG Worker {worker_id} - _make_firewall_decision received type: {type(event_data)}")
+
+            if not isinstance(event_data, dict):
+                self.logger.error(
+                    f"❌ Worker {worker_id} - event_data is not dict! Type: {type(event_data)}, Value: {str(event_data)[:200]}")
+                return None
+
+            self.logger.info(f"🔍 DEBUG Worker {worker_id} - event_data keys: {list(event_data.keys())}")
+
             # Extraer información crítica del evento
             source_ip = event_data.get('source_ip', '127.0.0.1')
             target_ip = event_data.get('target_ip', '127.0.0.1')
@@ -1194,8 +1313,11 @@ class FirewallScheduler:
 
             return decision
 
+
         except Exception as e:
             self.logger.error(f"❌ Worker {worker_id} - Error making firewall decision: {e}")
+            import traceback
+            self.logger.error(f"❌ Worker {worker_id} - Traceback: {traceback.format_exc()}")
             return None
 
     def _create_firewall_command(self, decision: FirewallDecision, worker_id: int) -> bool:
