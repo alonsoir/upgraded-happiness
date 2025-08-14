@@ -1,0 +1,159 @@
+{
+  "_comment_hw_profile": "🚀 CONFIGURACIÓN PARA HARDWARE POTENTE - ARSENAL COMPLETO",
+  "_comment_usage": "Para usar: cambiar enabled:false -> enabled:true en todos los modelos",
+
+  "component": {
+    "name": "lightweight_ml_detector_tricapa_v31",
+    "version": "3.1.2-full-arsenal",
+    "mode": "tricapa_full_power"
+  },
+  "node_id": "ml_detector_tricapa_v31_001",
+  "version": "3.1.2",
+  "component_type": "ml_detector_tricapa_v31",
+
+  "network": {
+    "input_socket": {
+      "address": "localhost",
+      "port": 5560,
+      "mode": "connect",
+      "socket_type": "PULL"
+    },
+    "output_socket": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "bind",
+      "socket_type": "PUSH"
+    }
+  },
+
+  "zmq": {
+    "_comment_powerful": "🔥 CONFIGURACIÓN PARA HW POTENTE",
+    "rcvhwm": 1000,
+    "sndhwm": 1000,
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 250,
+    "recv_buffer_size": 262144,
+    "send_buffer_size": 262144,
+    "linger_ms": 0,
+    "max_message_size": 50000
+  },
+
+  "processing": {
+    "_comment_powerful": "🧵 CONFIGURACIÓN PARA HW POTENTE: Más workers",
+    "threads": 6,
+    "protobuf_queue_size": 500,
+    "internal_queue_size": 400,
+    "queue_timeout_seconds": 1.0
+  },
+
+  "ml": {
+    "enabled": true,
+    "thresholds": {
+      "level1_attack_threshold": 0.65,
+      "level2_ddos_threshold": 0.70,
+      "level2_ransomware_threshold": 0.75,
+      "level3_anomaly_threshold": 0.80
+    },
+
+    "_comment_models_powerful": "🧠 ARSENAL COMPLETO PARA HW POTENTE - TODOS HABILITADOS",
+
+    "models": {
+      "_comment_level1": "🥇 NIVEL 1: Siempre activo",
+      "level1_attack_detector": {
+        "enabled": true,
+        "model_file": "rf_production_sniffer_compatible.joblib",
+        "scaler_file": "rf_production_sniffer_compatible_scaler.joblib",
+        "features_count": 23,
+        "requires_scaling": true,
+        "model_location": "production"
+      },
+
+      "_comment_level2_ddos": "🔥 NIVEL 2 DDOS: ARSENAL COMPLETO RF + LGB",
+      "ddos_rf": {
+        "enabled": true,
+        "model_file": "ddos_random_forest.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ddos"
+      },
+      "ddos_lgb": {
+        "enabled": true,
+        "_comment_powerful": "✅ HABILITADO: LightGBM disponible en HW potente",
+        "model_file": "ddos_lightgbm.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ddos"
+      },
+
+      "_comment_level2_ransomware": "🦠 NIVEL 2 RANSOMWARE: ARSENAL COMPLETO RF + LGB",
+      "ransomware_rf": {
+        "enabled": true,
+        "model_file": "ransomware_random_forest.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ransomware"
+      },
+      "ransomware_lgb": {
+        "enabled": true,
+        "_comment_powerful": "✅ HABILITADO: LightGBM disponible en HW potente",
+        "model_file": "ransomware_lightgbm.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ransomware"
+      },
+
+      "_comment_level3": "🔍 NIVEL 3: ARSENAL COMPLETO Internal + Web",
+      "internal_detector": {
+        "enabled": true,
+        "model_file": "internal_normal_detector.joblib",
+        "features_count": 4,
+        "requires_scaling": false,
+        "model_location": "tricapa_or_production",
+        "traffic_type": "internal"
+      },
+      "web_detector": {
+        "enabled": true,
+        "_comment_powerful": "✅ HABILITADO: Web detector disponible en HW potente",
+        "model_file": "web_normal_detector.joblib",
+        "features_count": 4,
+        "requires_scaling": false,
+        "model_location": "tricapa_or_production",
+        "traffic_type": "web"
+      }
+    },
+
+    "_comment_summary_powerful": "RESUMEN HW POTENTE: 7/7 modelos habilitados - ARSENAL COMPLETO"
+  },
+
+  "tricapa": {
+    "enabled": true,
+    "version": "3.1.2-full-arsenal",
+    "architecture": {
+      "level1_name": "General Attack Detection",
+      "level2_name": "Specialized Threat Classification - ARSENAL COMPLETO",
+      "level3_name": "Normality Validation - ARSENAL COMPLETO"
+    }
+  },
+
+  "logging": {
+    "level": "INFO"
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 30
+  },
+
+  "_config_metadata": {
+    "config_version": "3.1.2-hw-powerful",
+    "created_for": "HW Potente - Servidor/Workstation",
+    "models_enabled_count": 7,
+    "models_disabled_count": 0,
+    "description": "Config para HW potente: TODOS los modelos habilitados",
+    "hw_profile": "HIGH_MEMORY_HIGH_CPU",
+    "migration_from": "hw-current config - cambiar enabled:false -> enabled:true"
+  }
+}

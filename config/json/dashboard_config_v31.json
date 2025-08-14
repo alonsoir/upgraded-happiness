@@ -1,0 +1,443 @@
+{
+  "node_id": "dashboard_main_v31_001",
+  "component": {
+    "name": "security_dashboard_v31",
+    "version": "3.1.0-FLEET-MANAGEMENT",
+    "mode": "distributed_orchestrator_v31",
+    "role": "dashboard_fleet_coordinator",
+    "description": "SCADA Dashboard V3.1 with Fleet Management + Protobuf V3.1 + Dual Communication"
+  },
+
+  "network": {
+    "_comment_v31_changes": "🚀 V3.1 CRITICAL CHANGES: SUB from ML_detector + Fleet Management",
+
+    "ml_events_input": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "connect",
+      "socket_type": "SUB",
+      "_comment_critical": "🔄 CRITICAL CHANGE: PULL→SUB, port 5570→5580 to connect to ML_detector V3.1 PUB",
+      "topic_filter": "",
+      "high_water_mark": 2000,
+      "expected_publishers": 1,
+      "description": "Subscribe to ML_detector V3.1 events (NetworkSecurityEvent protobuf)"
+    },
+
+    "_comment_fleet": "🔥 FLEET MANAGEMENT: Multiple firewall agents with dual communication",
+    "firewall_agents_fleet": {
+      "enabled": true,
+      "fleet_source": "firewall_rules.json",
+      "fleet_section": "firewall_rules.agents_fleet",
+      "nuclear_broadcast_enabled": true,
+      "require_confirmation_nuclear": true,
+
+      "agents": {
+        "simple_firewall_agent_001": {
+          "dashboard_commands": {
+            "address": "localhost",
+            "port": 5580,
+            "mode": "bind",
+            "socket_type": "PUB",
+            "description": "Send commands to agent 001 (dashboard channel)"
+          },
+          "dashboard_responses": {
+            "address": "localhost",
+            "port": 5584,
+            "mode": "connect",
+            "socket_type": "SUB",
+            "topic_filter": "",
+            "description": "Receive responses from agent 001 (dashboard channel)"
+          }
+        },
+        "simple_firewall_agent_002": {
+          "dashboard_commands": {
+            "address": "localhost",
+            "port": 5590,
+            "mode": "bind",
+            "socket_type": "PUB",
+            "description": "Send commands to agent 002 (dashboard channel)"
+          },
+          "dashboard_responses": {
+            "address": "localhost",
+            "port": 5594,
+            "mode": "connect",
+            "socket_type": "SUB",
+            "topic_filter": "",
+            "description": "Receive responses from agent 002 (dashboard channel)"
+          }
+        },
+        "simple_firewall_agent_003": {
+          "dashboard_commands": {
+            "address": "localhost",
+            "port": 5600,
+            "mode": "bind",
+            "socket_type": "PUB",
+            "description": "Send commands to agent 003 (dashboard channel)"
+          },
+          "dashboard_responses": {
+            "address": "localhost",
+            "port": 5604,
+            "mode": "connect",
+            "socket_type": "SUB",
+            "topic_filter": "",
+            "description": "Receive responses from agent 003 (dashboard channel)"
+          }
+        }
+      }
+    },
+
+    "admin_interface": {
+      "address": "0.0.0.0",
+      "port": 8080
+    }
+  },
+
+  "zmq": {
+    "_comment_v31": "🔧 ZMQ optimized for V3.1 with SUB/PUB patterns",
+    "context_io_threads": 2,
+    "max_sockets": 64,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": false,
+
+    "_comment_sub_optimizations": "🎯 SUB socket optimizations for ML_detector V3.1",
+    "sub_socket_optimizations": {
+      "rcvhwm": 2000,
+      "recv_timeout_ms": 1000,
+      "recv_buffer_size": 131072,
+      "conflate": false,
+      "tcp_keepalive": true
+    },
+
+    "_comment_pub_optimizations": "🔥 PUB socket optimizations for firewall fleet",
+    "pub_socket_optimizations": {
+      "sndhwm": 1000,
+      "send_timeout_ms": 500,
+      "send_buffer_size": 65536,
+      "immediate": false,
+      "tcp_keepalive": true
+    },
+
+    "_comment_disabled_v31": "❌ DISABLED FOR V3.1: No encryption/compression",
+    "linger_ms": 0,
+    "max_message_size": 100000
+  },
+
+  "processing": {
+    "_comment_threads_v31": "🧵 V3.1 THREADS: Optimized for SUB pattern + Fleet management",
+    "threads": {
+      "ml_events_subscribers": 1,
+      "_comment_ml": "Single SUB thread for ML_detector V3.1",
+
+      "firewall_fleet_managers": 2,
+      "_comment_fleet": "Fleet management threads for multiple agents",
+
+      "firewall_response_consumers": 3,
+      "_comment_responses": "One per agent for response handling"
+    },
+
+    "_comment_queues_v31": "📋 V3.1 QUEUES: Sized for V3.1 message volume",
+    "internal_queues": {
+      "ml_events_queue_size": 1000,
+      "firewall_commands_queue_size": 500,
+      "firewall_responses_queue_size": 500,
+      "fleet_broadcast_queue_size": 200
+    },
+
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0
+    },
+
+    "_comment_v31_processing": "📊 V3.1 PROCESSING: NetworkSecurityEvent handling",
+    "v31_message_processing": {
+      "parse_network_features": true,
+      "parse_geo_enrichment": true,
+      "parse_ml_analysis": true,
+      "parse_pipeline_tracking": true,
+      "max_protobuf_size": 100000,
+      "validate_v31_schema": true
+    },
+
+    "event_buffer_size": 2000,
+    "max_events_per_update": 100,
+    "event_retention_hours": 24,
+    "enable_event_filtering": true,
+    "risk_score_threshold": 0.1
+  },
+
+  "_comment_fleet_integration": "🚀 V3.1 FLEET INTEGRATION",
+  "firewall_integration": {
+    "enabled": true,
+    "version": "3.1.0",
+    "fleet_config_source": "firewall_rules.json",
+    "fleet_discovery": "automatic",
+    "nuclear_broadcast_enabled": true,
+    "require_double_confirmation_nuclear": true,
+
+    "fleet_coordination": {
+      "health_monitoring": "per_agent",
+      "auto_failover": false,
+      "load_balancing": "round_robin",
+      "response_aggregation": true
+    },
+
+    "command_routing": {
+      "single_agent": "targeted",
+      "nuclear_broadcast": "all_agents_parallel",
+      "async_responses": true,
+      "response_timeout": 30
+    },
+
+    "agent_discovery": {
+      "auto_discover_from_json": true,
+      "health_check_interval": 60,
+      "reconnect_attempts": 3,
+      "mark_dead_after_minutes": 5
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 15,
+    "_comment_faster": "Faster monitoring for V3.1 high throughput",
+    "detailed_metrics": true,
+    "health_check_interval": 30,
+    "component_timeout": 60,
+    "alert_on_component_failure": true,
+    "heartbeat_enabled": true,
+
+    "_comment_v31_monitoring": "🔍 V3.1 SPECIFIC MONITORING",
+    "v31_metrics": {
+      "track_protobuf_v31_messages": true,
+      "track_ml_detector_v31_connection": true,
+      "track_fleet_health": true,
+      "track_nuclear_broadcasts": true,
+      "track_dual_communication": true
+    },
+
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 100.0,
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 1024,
+      "max_cpu_usage_percent": 60.0,
+
+      "_comment_fleet_alerts": "🚨 Fleet-specific alerts",
+      "max_agent_failures": 1,
+      "max_fleet_response_timeout": 5000,
+      "fleet_health_check_interval": 30,
+      "nuclear_broadcast_max_failures": 0
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [v31_dashboard:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "path": "logs/dashboard_v31.log",
+        "level": "INFO",
+        "max_size": "100MB",
+        "backup_count": 5,
+        "rotation": "time"
+      },
+      "_comment_v31_logging": "🔍 V3.1 specific logging",
+      "v31_events_log": {
+        "enabled": true,
+        "path": "logs/dashboard_v31_events.jsonl",
+        "log_all_v31_events": true,
+        "log_fleet_operations": true,
+        "log_nuclear_broadcasts": true
+      }
+    }
+  },
+
+  "security": {
+    "_comment_v31_security": "🔒 V3.1 SECURITY: No encryption for now, validation only",
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 100000,
+      "validate_message_integrity": true,
+      "sanitize_inputs": true,
+      "validate_v31_protobuf_schema": true,
+      "reject_malformed_v31_events": true
+    },
+
+    "fleet_security": {
+      "validate_agent_identity": true,
+      "require_agent_authentication": false,
+      "log_all_fleet_operations": true,
+      "nuclear_broadcast_confirmation": true
+    },
+
+    "_comment_disabled_v31": "❌ DISABLED FOR V3.1 DEVELOPMENT",
+    "enable_authentication": false,
+    "enable_encryption": false,
+    "enable_compression": false,
+    "session_timeout": 3600,
+    "cors_enabled": true,
+    "csrf_protection": false
+  },
+
+  "web_interface": {
+    "enabled": true,
+    "static_files_path": "templates",
+    "templates_path": "templates",
+    "cache_control": "no-cache",
+    "host": "0.0.0.0",
+    "port": 8080,
+    "debug": false,
+
+    "_comment_v31_ui": "🎨 V3.1 UI FEATURES",
+    "v31_features": {
+      "show_dual_coordinates": true,
+      "show_fleet_status": true,
+      "enable_nuclear_broadcast": true,
+      "show_ml_analysis_v31": true,
+      "show_pipeline_tracking": true
+    },
+
+    "map_settings": {
+      "enabled": true,
+      "default_zoom": 6,
+      "center_lat": 40.4168,
+      "center_lon": -3.7038,
+      "tile_server": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "© OpenStreetMap contributors",
+      "marker_clustering": true,
+      "auto_fit_bounds": true,
+      "show_dual_markers": true,
+      "show_missile_trajectories": true
+    },
+
+    "api_endpoints": {
+      "metrics": "/api/metrics",
+      "test_firewall": "/api/test-firewall",
+      "firewall_agent_info": "/api/firewall-agent-info",
+      "execute_firewall_action": "/api/execute-firewall-action",
+      "nuclear_broadcast": "/api/nuclear-broadcast",
+      "fleet_status": "/api/fleet-status",
+      "v31_events": "/api/v31-events"
+    }
+  },
+
+  "_comment_v31_protobuf": "📦 V3.1 PROTOBUF CONFIGURATION",
+  "protobuf_v31": {
+    "version": "3.1.0",
+    "import_strategy": "TODO_O_NADA",
+    "required_modules": [
+      "network_security_clean_v31_pb2",
+      "firewall_commands_v31_pb2"
+    ],
+    "compatibility_mode": false,
+    "validate_schema_version": true,
+    "handle_backward_compatibility": false,
+
+    "message_types": {
+      "ml_events": "NetworkSecurityEvent",
+      "firewall_commands": "FirewallCommand",
+      "firewall_responses": "FirewallResponse"
+    },
+
+    "parsing_config": {
+      "strict_mode": true,
+      "log_parsing_errors": true,
+      "drop_invalid_messages": true,
+      "max_parse_attempts": 3
+    }
+  },
+
+  "_comment_performance": "⚡ V3.1 PERFORMANCE OPTIMIZATIONS",
+  "performance": {
+    "enable_caching": true,
+    "cache_ttl": 300,
+    "compress_responses": false,
+    "max_workers": 4,
+
+    "v31_optimizations": {
+      "parallel_fleet_operations": true,
+      "async_response_processing": true,
+      "batch_event_processing": false,
+      "event_streaming": true
+    }
+  },
+
+  "metrics": {
+    "enable_collection": true,
+    "update_interval": 2,
+    "retention_hours": 48,
+    "export_prometheus": false,
+
+    "v31_metrics": {
+      "track_protobuf_v31_volume": true,
+      "track_fleet_operations": true,
+      "track_nuclear_broadcasts": true,
+      "track_ml_detector_v31_latency": true
+    }
+  },
+
+  "_comment_distributed": "🌐 V3.1 DISTRIBUTED CONFIGURATION",
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "dashboard_fleet_coordinator_v31",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+
+    "v31_distributed": {
+      "fleet_coordination": true,
+      "ml_detector_v31_integration": true,
+      "dual_communication_support": true,
+      "nuclear_broadcast_capability": true
+    },
+
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10,
+      "track_v31_processing_stages": true
+    }
+  },
+
+  "_config_metadata": {
+    "config_version": "3.1.0-FLEET-MANAGEMENT",
+    "created_for": "Dashboard V3.1 with Fleet Management",
+    "optimization_level": "HIGH_PERFORMANCE_V31",
+    "socket_patterns": "SUB/PUB",
+    "fleet_support": "FULL_DUAL_COMMUNICATION",
+    "encryption_level": "DISABLED_FOR_DEVELOPMENT",
+    "compatibility": "V3.1_EXCLUSIVE",
+    "description": "Dashboard V3.1 con fleet management, dual communication y protobuf V3.1 exclusivo"
+  },
+
+  "_v31_migration_notes": {
+    "from_version": "2.5.0",
+    "critical_changes": [
+      "ml_events_input: PULL→SUB, port 5570→5580",
+      "Added fleet management for multiple firewall agents",
+      "V3.1 protobuf exclusive (no backward compatibility)",
+      "Dual communication support (dashboard + scheduler channels)",
+      "Nuclear broadcast capability for emergency scenarios"
+    ],
+    "breaking_changes": [
+      "No compatibility with V2.x protobuf messages",
+      "Fleet configuration required",
+      "New socket patterns (SUB/PUB instead of PULL/PUSH)"
+    ],
+    "new_features": [
+      "NetworkSecurityEvent V3.1 parsing",
+      "Dual coordinate support",
+      "ML Analysis tricapa integration",
+      "Pipeline tracking",
+      "Fleet health monitoring",
+      "Nuclear broadcast operations"
+    ]
+  }
+}

@@ -3962,7 +3962,8 @@ console.log('📡 V3.1: Puerto 5580 SUB para ML_detector');
 console.log('🤖 V3.1: Campos ensemble_confidence, pipeline_latency, capturing_node_id');
 console.log('🔧 V3.1: Tricapa ML analysis scores');
 console.log('🔥 V3.1: Fleet management refinado');
-console.log('🚀 V3.1: Compatible con backend dashboard_v31.py');font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+console.log('🚀 V3.1: Compatible con backend dashboard_v31.py');
+        const content = `<div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
                 <!-- Header específico del target_ip V3.1 -->
                 <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #CC0000;">
                     <h3 style="color: #CC0000; margin: 0;">🎯 Información del Atacante V3.1</h3>
