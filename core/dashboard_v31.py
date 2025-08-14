@@ -723,9 +723,6 @@ class SecurityDashboardV31:
                 'ml_models_scores': {},
 
                 # Legacy compatibility
-                'latitude': None,
-                'longitude': None,
-                'location': 'Unknown',
                 'port': 0
             }
 
@@ -740,12 +737,6 @@ class SecurityDashboardV31:
                     parsed_event['source_city'] = geo.source_ip_geo.city_name
                     parsed_event['source_country'] = geo.source_ip_geo.country_name
                     parsed_event['source_ip_enriched'] = True
-
-                    # Legacy compatibility
-                    if not parsed_event['latitude']:
-                        parsed_event['latitude'] = geo.source_ip_geo.latitude
-                        parsed_event['longitude'] = geo.source_ip_geo.longitude
-                        parsed_event['location'] = f"{geo.source_ip_geo.city_name}, {geo.source_ip_geo.country_name}"
 
                 # Target IP geo
                 if geo.HasField('destination_ip_geo'):
@@ -1099,8 +1090,8 @@ class SecurityDashboardV31:
                             'source_ip': event.source_ip,
                             'target_ip': event.target_ip,
                             'risk_score': event.risk_score,
-                            'latitude': event.source_latitude or event.latitude,
-                            'longitude': event.source_longitude or event.longitude,
+                            'latitude': event.source_latitude or 0.0,
+                            'longitude': event.source_longitude or 0.0,
                             'source_latitude': event.source_latitude,
                             'source_longitude': event.source_longitude,
                             'target_latitude': event.target_latitude,
@@ -1174,6 +1165,7 @@ class SecurityDashboardV31:
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html; charset=utf-8')
                     self.send_header('Cache-Control', 'no-cache')
+                    self.send_header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;")
                     self.end_headers()
                     self.wfile.write(html_content.encode('utf-8'))
 
