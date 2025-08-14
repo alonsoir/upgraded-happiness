@@ -1,0 +1,277 @@
+{
+  "_comment_header": "🚀 EVOLUTIONARY SNIFFER v3.1 CONFIG - TODO O NADA",
+  "_philosophy": "Sin compatibilidad hacia atrás - Solo v3.1 - Time windows configurables",
+
+  "component": {
+    "name": "evolutionary_sniffer",
+    "version": "3.1.0",
+    "mode": "distributed_advanced",
+    "description": "Evolutionary Sniffer with 83+ ML features, configurable time windows, and protobuf v3.1 clean"
+  },
+
+  "node_id": "evolutionary_sniffer_v31_001",
+  "version": "3.1.0",
+  "cluster_name": "upgraded-happiness-cluster",
+
+  "_comment_network": "🔌 NETWORK - Configuración ZeroMQ v3.1",
+  "network": {
+    "output_socket": {
+      "address": "localhost",
+      "port": 5570,
+      "mode": "bind",
+      "socket_type": "PUSH",
+      "description": "Envía eventos NetworkSecurityEvent v3.1 al próximo componente del pipeline",
+      "high_water_mark": 2000,
+      "expected_subscribers": 1
+    }
+  },
+
+  "zmq": {
+    "sndhwm": 2000,
+    "linger_ms": 1000,
+    "send_timeout_ms": 100,
+    "_comment": "Configuración ZMQ optimizada para protobuf v3.1 - Sin timeout largo"
+  },
+
+  "_comment_time_windows": "⏰ TIME WINDOWS - Configuración por modelo ML",
+  "time_windows": {
+    "ddos_detection": {
+      "window_size_seconds": 10.0,
+      "slide_interval_seconds": 2.0,
+      "max_flows_per_window": 1000,
+      "features_required": [
+        "flow_duration", "total_forward_packets", "total_backward_packets",
+        "total_forward_bytes", "total_backward_bytes", "forward_packet_length_max",
+        "forward_packet_length_min", "forward_packet_length_mean", "forward_packet_length_std",
+        "backward_packet_length_max", "backward_packet_length_min", "backward_packet_length_mean",
+        "backward_packet_length_std", "flow_bytes_per_second", "flow_packets_per_second",
+        "forward_packets_per_second", "backward_packets_per_second", "download_upload_ratio",
+        "average_packet_size", "average_forward_segment_size", "average_backward_segment_size"
+      ],
+      "model_types": ["ddos_83"],
+      "description": "Ventana optimizada para detección DDOS con 83 features completas"
+    },
+
+    "general_attack_detection": {
+      "window_size_seconds": 30.0,
+      "slide_interval_seconds": 5.0,
+      "max_flows_per_window": 500,
+      "features_required": [
+        "flow_duration", "total_forward_packets", "total_backward_packets",
+        "total_forward_bytes", "total_backward_bytes", "flow_bytes_per_second",
+        "forward_packet_length_mean", "backward_packet_length_mean",
+        "flow_inter_arrival_time_mean", "flow_inter_arrival_time_std",
+        "forward_psh_flags", "backward_psh_flags", "forward_urg_flags", "backward_urg_flags",
+        "packet_length_mean", "packet_length_std", "packet_length_variance",
+        "fin_flag_count", "syn_flag_count", "rst_flag_count", "psh_flag_count", "ack_flag_count", "urg_flag_count"
+      ],
+      "model_types": ["rf_23"],
+      "description": "Ventana para detección general con Random Forest de 23 features"
+    },
+
+    "internal_traffic_analysis": {
+      "window_size_seconds": 60.0,
+      "slide_interval_seconds": 15.0,
+      "max_flows_per_window": 200,
+      "features_required": [
+        "flow_duration", "total_forward_packets", "total_backward_packets", "total_forward_bytes"
+      ],
+      "model_types": ["internal_4"],
+      "description": "Ventana para análisis de tráfico interno con 4-5 features clave"
+    },
+
+    "ransomware_detection": {
+      "window_size_seconds": 15.0,
+      "slide_interval_seconds": 3.0,
+      "max_flows_per_window": 800,
+      "features_required": [
+        "flow_duration", "total_forward_packets", "total_backward_packets",
+        "total_forward_bytes", "total_backward_bytes", "tcp_flags", "inter_arrival_times"
+      ],
+      "model_types": ["ddos_83"],
+      "description": "Ventana específica para detección de ransomware"
+    },
+
+    "zero_day_detection": {
+      "window_size_seconds": 120.0,
+      "slide_interval_seconds": 30.0,
+      "max_flows_per_window": 2000,
+      "features_required": ["all_available"],
+      "model_types": ["ddos_83", "rf_23"],
+      "description": "Ventana extendida para detección de zero-day attacks - Futuro"
+    }
+  },
+
+  "_comment_capture": "🎯 CAPTURE - Configuración de captura de paquetes",
+  "capture": {
+    "mode": "real",
+    "interface": "any",
+    "promiscuous_mode": true,
+    "filter_expression": "",
+    "buffer_size": 65536,
+    "min_packet_size": 20,
+    "max_packet_size": 65536,
+    "excluded_ports": [22],
+    "included_protocols": ["tcp", "udp", "icmp"],
+    "filter_rules": [],
+    "_comment": "Solo excluimos SSH para reducir ruido, pero procesamos HTTP/HTTPS para ML"
+  },
+
+  "_comment_processing": "⚙️ PROCESSING - Hilos y colas para v3.1",
+  "processing": {
+    "internal_queue_size": 2000,
+    "processing_threads": 3,
+    "window_processing_threads": 2,
+    "queue_timeout_seconds": 1.0,
+    "max_packets_per_second": 2000,
+    "batch_size": 1,
+    "feature_extraction": {
+      "enabled": true,
+      "extract_all_features": true,
+      "cache_flow_states": true,
+      "flow_timeout_seconds": 300,
+      "max_concurrent_flows": 10000
+    },
+    "_comment": "3 threads para packets + 2 para windows = mejor balanceado para v3.1"
+  },
+
+  "_comment_features": "🧠 FEATURES - Configuración de extracción ML",
+  "features": {
+    "extraction_enabled": true,
+    "ddos_features_count": 83,
+    "rf_features_count": 23,
+    "internal_features_count": 4,
+    "custom_features_enabled": true,
+    "statistical_features_enabled": true,
+    "tcp_flags_analysis": true,
+    "inter_arrival_time_analysis": true,
+    "bulk_transfer_analysis": true,
+    "_comment": "Configuración completa para extracción de todas las features ML necesarias"
+  },
+
+  "_comment_logging": "📝 LOGGING - v3.1 con file + console",
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)-25s - %(levelname)-8s - [node_id:{node_id}] [pid:{pid}] [v3.1] - %(message)s",
+    "file": "logs/evolutionary_sniffer_v31.log",
+    "max_file_size_mb": 200,
+    "backup_count": 10,
+    "include_performance_logs": true,
+    "include_feature_logs": false,
+    "include_window_logs": true,
+    "_comment": "File logging + console con logs específicos v3.1"
+  },
+
+  "_comment_monitoring": "📊 MONITORING - Métricas v3.1 específicas",
+  "monitoring": {
+    "stats_interval_seconds": 30,
+    "performance_tracking": true,
+    "system_metrics": true,
+    "feature_extraction_metrics": true,
+    "time_window_metrics": true,
+    "flow_tracking_metrics": true,
+    "alerts": {
+      "max_drop_rate_percent": 5.0,
+      "max_queue_usage_percent": 85.0,
+      "max_memory_usage_mb": 1024,
+      "max_cpu_usage_percent": 75.0,
+      "max_processing_latency_ms": 100.0,
+      "min_feature_extraction_rate": 10.0,
+      "max_window_processing_delay_seconds": 5.0,
+      "_comment": "Alertas específicas para capacidades v3.1"
+    },
+    "health_check": {
+      "enabled": true,
+      "interval_seconds": 60,
+      "check_packet_capture": true,
+      "check_feature_extraction": true,
+      "check_time_windows": true,
+      "check_protobuf_serialization": true,
+      "_comment": "Health checks para todos los componentes v3.1"
+    }
+  },
+
+  "_comment_distributed": "🌐 DISTRIBUTED - Configuración cluster v3.1",
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster",
+    "node_role": "packet_sniffer",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "heartbeat_interval_seconds": 30,
+    "pipeline_position": 1,
+    "next_components": ["geoip_enricher", "ml_detector"],
+    "node_registration": {
+      "enabled": false,
+      "etcd_endpoints": [],
+      "registration_ttl_seconds": 60,
+      "_comment": "etcd registration preparado para futuro k3s deployment"
+    },
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 10,
+      "include_timestamps": true,
+      "include_process_ids": true
+    }
+  },
+
+  "_comment_protobuf": "📦 PROTOBUF - Configuración v3.1 LIMPIA",
+  "protobuf": {
+    "schema_version": "v3.1.0",
+    "compression": false,
+    "validate_before_send": true,
+    "error_handling": "log_and_drop",
+    "serialization_timeout_ms": 50,
+    "max_event_size_bytes": 100000,
+    "_comment": "SOLO v3.1 - Sin compatibilidad hacia atrás"
+  },
+
+  "_comment_performance": "⚡ PERFORMANCE - Optimizaciones v3.1",
+  "performance": {
+    "enable_flow_caching": true,
+    "flow_cache_size": 50000,
+    "enable_feature_caching": true,
+    "feature_cache_ttl_seconds": 60,
+    "enable_batch_processing": false,
+    "memory_optimization": true,
+    "cpu_optimization": true,
+    "disk_io_optimization": true,
+    "_comment": "Optimizaciones específicas para el procesamiento intensivo v3.1"
+  },
+
+  "_comment_security": "🔐 SECURITY - Configuración de seguridad",
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_packet_size_bytes": 65536,
+      "validate_ip_addresses": true,
+      "validate_ports": true,
+      "sanitize_inputs": true
+    },
+    "privacy": {
+      "anonymize_ips": false,
+      "hash_sensitive_data": false,
+      "_comment": "Privacidad desactivada para ML training - activar en producción"
+    }
+  },
+
+  "_comment_experimental": "🧪 EXPERIMENTAL - Características futuras",
+  "experimental": {
+    "enable_zero_day_detection": true,
+    "enable_advanced_features": true,
+    "enable_ai_feature_selection": false,
+    "enable_dynamic_time_windows": false,
+    "enable_distributed_feature_extraction": false,
+    "_comment": "Características experimentales para futuras versiones"
+  },
+
+  "_comment_compatibility": "🚫 NO COMPATIBILITY - v3.1 ONLY",
+  "compatibility": {
+    "legacy_support": false,
+    "backward_compatibility": false,
+    "forward_compatibility": true,
+    "migration_mode": false,
+    "_comment": "TODO O NADA - Solo v3.1 - Sin legacyware"
+  }
+}

@@ -3599,3 +3599,1088 @@ body {
     color: rgba(0, 255, 136, 0.3);
     font-weight: bold;
 }
+
+/* ============================================================================
+   🚀 ACTUALIZACIONES CSS V3.1 - COMPLEMENTO AL CSS EXISTENTE
+   + VENTANAS FLOTANTES INDEPENDIENTES
+   + ANÁLISIS AVANZADO ML TRICAPA
+   + ESTADÍSTICAS EN TIEMPO REAL
+   + CAMPOS V3.1: ensemble_confidence, pipeline_latency, capturing_node_id
+   ============================================================================ */
+
+/* ============================================================================
+   🪟 SISTEMA DE VENTANAS FLOTANTES INDEPENDIENTES V3.1
+   ============================================================================ */
+
+.floating-window-v31 {
+    position: fixed;
+    background: rgba(10, 10, 10, 0.98);
+    border: 2px solid #00ff88;
+    border-radius: 8px;
+    z-index: 10500;
+    font-family: 'Consolas', monospace;
+    box-shadow:
+        0 10px 30px rgba(0, 255, 136, 0.4),
+        0 0 0 1px rgba(0, 255, 136, 0.1);
+    backdrop-filter: blur(10px);
+    min-width: 300px;
+    max-width: 600px;
+    animation: floatingWindowAppear 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    resize: both;
+    overflow: hidden;
+}
+
+@keyframes floatingWindowAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-20px);
+        box-shadow: 0 0 0 rgba(0, 255, 136, 0);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+        box-shadow:
+            0 10px 30px rgba(0, 255, 136, 0.4),
+            0 0 0 1px rgba(0, 255, 136, 0.1);
+    }
+}
+
+.floating-window-header {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.15), rgba(0, 255, 136, 0.05));
+    border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+    padding: 12px 16px;
+    cursor: move;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.floating-window-header:hover {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.08));
+}
+
+.floating-window-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.6s ease;
+}
+
+.floating-window-header:hover::before {
+    left: 100%;
+}
+
+.floating-window-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.floating-window-controls button {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    font-family: inherit;
+    transition: all 0.3s ease;
+    min-width: 24px;
+    text-align: center;
+}
+
+.floating-window-controls button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.1);
+}
+
+.floating-window-controls button:first-child {
+    color: #ffaa00;
+    border-color: rgba(255, 170, 0, 0.3);
+}
+
+.floating-window-controls button:first-child:hover {
+    background: rgba(255, 170, 0, 0.15);
+    border-color: #ffaa00;
+}
+
+.floating-window-controls button:last-child {
+    color: #ff4444;
+    border-color: rgba(255, 68, 68, 0.3);
+}
+
+.floating-window-controls button:last-child:hover {
+    background: rgba(255, 68, 68, 0.15);
+    border-color: #ff4444;
+}
+
+.floating-window-content {
+    padding: 16px;
+    overflow-y: auto;
+    max-height: 500px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 255, 136, 0.6) rgba(0, 0, 0, 0.3);
+}
+
+.floating-window-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.floating-window-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+
+.floating-window-content::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #00ff88, #00aaff);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 255, 136, 0.4);
+}
+
+.floating-window-content::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #00ffaa, #0088ff);
+    box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+}
+
+/* Estados de ventana flotante */
+.floating-window-v31.minimized .floating-window-content {
+    display: none;
+}
+
+.floating-window-v31.minimized {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: 50px !important;
+    resize: none;
+}
+
+/* ============================================================================
+   🔬 ESTILOS PARA ANÁLISIS AVANZADO V3.1
+   ============================================================================ */
+
+.analysis-v31-container {
+    background: linear-gradient(135deg, rgba(0, 170, 255, 0.05), rgba(0, 0, 0, 0.9));
+    border: 1px solid rgba(0, 170, 255, 0.3);
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.analysis-v31-header {
+    background: rgba(0, 170, 255, 0.1);
+    border-bottom: 1px solid rgba(0, 170, 255, 0.3);
+    padding: 12px 16px;
+    color: #00aaff;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.analysis-v31-header::before {
+    content: '🔬';
+    font-size: 16px;
+    animation: analysisIconSpin 4s linear infinite;
+}
+
+@keyframes analysisIconSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.analysis-section {
+    margin-bottom: 16px;
+    padding: 12px;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.analysis-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, currentColor, transparent);
+    opacity: 0.3;
+}
+
+.analysis-section.pipeline-metrics {
+    background: rgba(0, 170, 255, 0.08);
+    border-left: 4px solid #00aaff;
+}
+
+.analysis-section.geo-analysis {
+    background: rgba(0, 255, 136, 0.08);
+    border-left: 4px solid #00ff88;
+}
+
+.analysis-section.ml-detailed {
+    background: rgba(255, 170, 0, 0.08);
+    border-left: 4px solid #ffaa00;
+}
+
+.analysis-section.recommendations {
+    background: rgba(255, 68, 68, 0.08);
+    border-left: 4px solid #ff4444;
+}
+
+.analysis-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.analysis-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.analysis-metric {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 8px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.analysis-metric:hover {
+    border-color: rgba(0, 255, 136, 0.3);
+    background: rgba(0, 255, 136, 0.05);
+    transform: translateY(-1px);
+}
+
+.analysis-metric-label {
+    font-size: 9px;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.analysis-metric-value {
+    font-size: 12px;
+    font-weight: bold;
+    color: #00ff88;
+    text-shadow: 0 0 3px currentColor;
+}
+
+/* ============================================================================
+   📊 ESTILOS PARA ESTADÍSTICAS EN TIEMPO REAL V3.1
+   ============================================================================ */
+
+.stats-v31-container {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.05), rgba(0, 0, 0, 0.9));
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.stats-v31-header {
+    background: rgba(0, 255, 136, 0.1);
+    border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+    padding: 12px 16px;
+    color: #00ff88;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stats-v31-header::before {
+    content: '📊';
+    font-size: 16px;
+    animation: statsIconPulse 2s infinite;
+}
+
+@keyframes statsIconPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+.stats-grid-v31 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stat-card-v31 {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.stat-card-v31:hover {
+    border-color: rgba(0, 255, 136, 0.4);
+    background: rgba(0, 255, 136, 0.05);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 255, 136, 0.2);
+}
+
+.stat-card-v31::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00ff88, transparent);
+    animation: statCardSweep 3s infinite;
+}
+
+@keyframes statCardSweep {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.stat-value-v31 {
+    font-size: 20px;
+    font-weight: bold;
+    color: #00ff88;
+    text-shadow: 0 0 8px #00ff88;
+    display: block;
+    margin-bottom: 4px;
+    animation: statValueGlow 2s infinite alternate;
+}
+
+@keyframes statValueGlow {
+    from { text-shadow: 0 0 8px #00ff88; }
+    to { text-shadow: 0 0 16px #00ff88, 0 0 24px #00ff88; }
+}
+
+.stat-label-v31 {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.stat-value-v31.high-risk {
+    color: #ff4444;
+    text-shadow: 0 0 8px #ff4444;
+}
+
+@keyframes statValueGlowRed {
+    from { text-shadow: 0 0 8px #ff4444; }
+    to { text-shadow: 0 0 16px #ff4444, 0 0 24px #ff4444; }
+}
+
+.stat-card-v31.high-risk .stat-value-v31 {
+    animation: statValueGlowRed 2s infinite alternate;
+}
+
+/* Secciones de información en estadísticas */
+.stats-section-v31 {
+    margin-bottom: 16px;
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 4px solid;
+}
+
+.stats-section-v31.firewall-section {
+    background: rgba(0, 170, 255, 0.05);
+    border-left-color: #00aaff;
+}
+
+.stats-section-v31.ml-section {
+    background: rgba(255, 170, 0, 0.05);
+    border-left-color: #ffaa00;
+}
+
+.stats-section-v31.config-section {
+    background: rgba(0, 102, 204, 0.05);
+    border-left-color: #0066cc;
+}
+
+.stats-section-v31 h4 {
+    margin: 0 0 8px 0;
+    font-size: 11px;
+    font-weight: bold;
+    color: currentColor;
+}
+
+.stats-info-line {
+    font-size: 10px;
+    color: #ccc;
+    line-height: 1.5;
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.stats-info-line strong {
+    color: #fff;
+}
+
+.component-status-indicator {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.component-status-indicator.active {
+    background: rgba(0, 255, 0, 0.2);
+    color: #00ff00;
+    border: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.component-status-indicator.inactive {
+    background: rgba(255, 68, 68, 0.2);
+    color: #ff4444;
+    border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+/* ============================================================================
+   ℹ️ ESTILOS PARA INFORMACIÓN DEL SISTEMA V3.1
+   ============================================================================ */
+
+.system-info-v31-container {
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.03), rgba(0, 0, 0, 0.95));
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.system-info-v31-header {
+    background: rgba(0, 255, 136, 0.08);
+    border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+    padding: 12px 16px;
+    color: #00ff88;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.system-info-v31-header::before {
+    content: 'ℹ️';
+    font-size: 16px;
+}
+
+.system-section-v31 {
+    margin-bottom: 12px;
+    padding: 10px;
+    border-radius: 4px;
+    border-left: 3px solid;
+}
+
+.system-section-v31.dashboard-section {
+    background: rgba(0, 170, 255, 0.05);
+    border-left-color: #00aaff;
+}
+
+.system-section-v31.features-section {
+    background: rgba(255, 170, 0, 0.05);
+    border-left-color: #ffaa00;
+}
+
+.system-section-v31.status-section {
+    background: rgba(255, 68, 68, 0.05);
+    border-left-color: #ff4444;
+}
+
+.system-section-v31 h4 {
+    margin: 0 0 6px 0;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.feature-list-v31 {
+    font-size: 9px;
+    color: #ccc;
+    line-height: 1.4;
+}
+
+.feature-list-v31 div {
+    margin-bottom: 1px;
+    padding-left: 8px;
+}
+
+.system-buttons-v31 {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.system-btn-v31 {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid;
+    color: inherit;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 9px;
+    font-family: inherit;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.system-btn-v31::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.3s ease;
+}
+
+.system-btn-v31:hover::before {
+    left: 100%;
+}
+
+.system-btn-v31:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.system-btn-v31.export-btn {
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+.system-btn-v31.export-btn:hover {
+    background: rgba(0, 255, 136, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 255, 136, 0.2);
+}
+
+.system-btn-v31.refresh-btn {
+    border-color: #00aaff;
+    color: #00aaff;
+}
+
+.system-btn-v31.refresh-btn:hover {
+    background: rgba(0, 170, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 170, 255, 0.2);
+}
+
+/* ============================================================================
+   🎯 NUEVOS CAMPOS V3.1: ensemble_confidence, pipeline_latency, capturing_node_id
+   ============================================================================ */
+
+.v31-field {
+    position: relative;
+    display: inline-block;
+}
+
+.v31-field::after {
+    content: 'V3.1';
+    position: absolute;
+    top: -8px;
+    right: -15px;
+    font-size: 6px;
+    color: rgba(0, 255, 136, 0.6);
+    background: rgba(0, 255, 136, 0.1);
+    padding: 1px 3px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.ensemble-confidence {
+    color: #00aaff;
+    font-weight: bold;
+    text-shadow: 0 0 3px #00aaff;
+}
+
+.pipeline-latency {
+    color: #0088ff;
+    font-weight: bold;
+    text-shadow: 0 0 3px #0088ff;
+}
+
+.capturing-node-id {
+    color: #ffaa00;
+    font-weight: bold;
+    text-shadow: 0 0 3px #ffaa00;
+}
+
+.tricapa-scores {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin: 8px 0;
+}
+
+.tricapa-score {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 6px 8px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.tricapa-score:hover {
+    border-color: rgba(0, 255, 136, 0.3);
+    background: rgba(0, 255, 136, 0.05);
+}
+
+.tricapa-score.isolation-forest {
+    border-left: 3px solid #ff6b6b;
+}
+
+.tricapa-score.one-class-svm {
+    border-left: 3px solid #ffa500;
+}
+
+.tricapa-score.local-outlier-factor {
+    border-left: 3px solid #00ff88;
+}
+
+.tricapa-score-label {
+    font-size: 8px;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.tricapa-score-value {
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.tricapa-score.isolation-forest .tricapa-score-value {
+    color: #ff6b6b;
+    text-shadow: 0 0 3px #ff6b6b;
+}
+
+.tricapa-score.one-class-svm .tricapa-score-value {
+    color: #ffa500;
+    text-shadow: 0 0 3px #ffa500;
+}
+
+.tricapa-score.local-outlier-factor .tricapa-score-value {
+    color: #00ff88;
+    text-shadow: 0 0 3px #00ff88;
+}
+
+/* ============================================================================
+   ⚡ BOTONES DE ACCIÓN RÁPIDA V3.1
+   ============================================================================ */
+
+.quick-action-btn {
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid currentColor;
+    color: inherit;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 8px;
+    font-family: inherit;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+}
+
+.quick-action-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.3s ease;
+}
+
+.quick-action-btn:hover::before {
+    left: 100%;
+}
+
+.quick-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.quick-action-btn:active {
+    transform: scale(0.98);
+}
+
+.quick-action-btn.block-btn {
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.quick-action-btn.block-btn:hover {
+    background: rgba(255, 68, 68, 0.1);
+    box-shadow: 0 2px 8px rgba(255, 68, 68, 0.3);
+}
+
+.quick-action-btn.target-btn {
+    border-color: #cc0000;
+    color: #cc0000;
+}
+
+.quick-action-btn.target-btn:hover {
+    background: rgba(204, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(204, 0, 0, 0.3);
+}
+
+.quick-action-btn.source-btn {
+    border-color: #0066cc;
+    color: #0066cc;
+}
+
+.quick-action-btn.source-btn:hover {
+    background: rgba(0, 102, 204, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 102, 204, 0.3);
+}
+
+/* ============================================================================
+   📱 RESPONSIVE DESIGN PARA NUEVAS FUNCIONALIDADES V3.1
+   ============================================================================ */
+
+@media (max-width: 1200px) {
+    .floating-window-v31 {
+        min-width: 280px;
+        max-width: 500px;
+    }
+
+    .stats-grid-v31 {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .analysis-metric-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .tricapa-scores {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
+}
+
+@media (max-width: 900px) {
+    .floating-window-v31 {
+        min-width: 250px;
+        max-width: 350px;
+        max-height: 400px;
+    }
+
+    .floating-window-content {
+        max-height: 300px;
+        padding: 12px;
+    }
+
+    .analysis-metric-grid {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .system-buttons-v31 {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .quick-action-btn {
+        font-size: 7px;
+        padding: 2px 4px;
+    }
+}
+
+@media (max-width: 768px) {
+    .floating-window-v31 {
+        min-width: 200px;
+        max-width: 280px;
+        max-height: 300px;
+    }
+
+    .floating-window-header {
+        padding: 8px 12px;
+    }
+
+    .floating-window-content {
+        padding: 8px;
+        max-height: 200px;
+    }
+
+    .stat-value-v31 {
+        font-size: 16px;
+    }
+
+    .stat-label-v31 {
+        font-size: 9px;
+    }
+
+    .analysis-section, .stats-section-v31, .system-section-v31 {
+        padding: 8px;
+        margin-bottom: 8px;
+    }
+
+    .floating-window-controls button {
+        font-size: 8px;
+        padding: 3px 6px;
+        min-width: 20px;
+    }
+}
+
+/* ============================================================================
+   🎨 EFECTOS ESPECIALES ADICIONALES V3.1
+   ============================================================================ */
+
+/* Efecto de escaneo para análisis ML */
+.ml-scanning-effect {
+    position: relative;
+    overflow: hidden;
+}
+
+.ml-scanning-effect::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00aaff, transparent);
+    animation: mlScanLine 2s infinite;
+}
+
+@keyframes mlScanLine {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Animación de latido para pipeline latency */
+.pipeline-heartbeat {
+    animation: pipelineHeartbeat 1.5s infinite;
+}
+
+@keyframes pipelineHeartbeat {
+    0%, 100% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+    50% {
+        transform: scale(1.05);
+        filter: brightness(1.2);
+    }
+}
+
+/* Efecto de ondas para capturing node */
+.node-wave-effect {
+    position: relative;
+}
+
+.node-wave-effect::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: nodeWaveExpand 2s infinite;
+    opacity: 0;
+}
+
+@keyframes nodeWaveExpand {
+    0% {
+        width: 0;
+        height: 0;
+        opacity: 0.8;
+    }
+    100% {
+        width: 40px;
+        height: 40px;
+        opacity: 0;
+    }
+}
+
+/* Gradient animado para ensemble confidence */
+.ensemble-gradient {
+    background: linear-gradient(45deg, #00aaff, #0088ff, #0066cc);
+    background-size: 200% 200%;
+    animation: ensembleGradientShift 3s ease infinite;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+@keyframes ensembleGradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+/* ============================================================================
+   🔧 UTILIDADES V3.1
+   ============================================================================ */
+
+.v31-badge {
+    background: linear-gradient(45deg, #00ff88, #00aaff);
+    color: #000;
+    padding: 1px 4px;
+    border-radius: 6px;
+    font-size: 7px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 4px;
+    box-shadow: 0 1px 3px rgba(0, 255, 136, 0.3);
+    animation: v31BadgeGlow 2s infinite alternate;
+}
+
+@keyframes v31BadgeGlow {
+    from { box-shadow: 0 1px 3px rgba(0, 255, 136, 0.3); }
+    to { box-shadow: 0 1px 6px rgba(0, 255, 136, 0.6), 0 0 8px rgba(0, 255, 136, 0.2); }
+}
+
+.enhanced-v31 {
+    position: relative;
+}
+
+.enhanced-v31::before {
+    content: '✨';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    font-size: 8px;
+    opacity: 0.6;
+    animation: enhancedSparkle 2s infinite;
+}
+
+@keyframes enhancedSparkle {
+    0%, 100% {
+        opacity: 0.6;
+        transform: scale(1) rotate(0deg);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.2) rotate(180deg);
+    }
+}
+
+.realtime-indicator-v31 {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00ff88;
+    box-shadow: 0 0 6px #00ff88;
+    animation: realtimePulse 1s infinite;
+    margin-left: 4px;
+}
+
+@keyframes realtimePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+}
+
+/* Indicador de actividad tricapa */
+.tricapa-activity {
+    background: linear-gradient(90deg, #ff6b6b, #ffa500, #00ff88);
+    background-size: 200% 100%;
+    height: 2px;
+    width: 100%;
+    animation: tricapaActivityFlow 2s infinite;
+    border-radius: 1px;
+    margin: 4px 0;
+}
+
+@keyframes tricapaActivityFlow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* ============================================================================
+   🚀 OPTIMIZACIONES DE RENDIMIENTO V3.1
+   ============================================================================ */
+
+/* Optimización para dispositivos de baja potencia */
+@media (prefers-reduced-motion: reduce) {
+    .floating-window-v31,
+    .ml-scanning-effect::before,
+    .pipeline-heartbeat,
+    .node-wave-effect::after,
+    .ensemble-gradient,
+    .v31-badge,
+    .enhanced-v31::before,
+    .realtime-indicator-v31,
+    .tricapa-activity {
+        animation: none !important;
+    }
+
+    .stat-value-v31 {
+        animation: none !important;
+        text-shadow: 0 0 8px currentColor !important;
+    }
+}
+
+/* Optimización para pantallas táctiles */
+@media (pointer: coarse) {
+    .quick-action-btn {
+        min-height: 28px;
+        min-width: 40px;
+        font-size: 9px;
+    }
+
+    .floating-window-controls button {
+        min-height: 28px;
+        min-width: 28px;
+        font-size: 10px;
+    }
+
+    .system-btn-v31 {
+        padding: 8px 16px;
+        font-size: 10px;
+    }
+}
+
+/* ============================================================================
+   ✨ FINALIZACIÓN V3.1
+   ============================================================================ */
+
+.v31-complete-marker {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: linear-gradient(45deg, #00ff88, #00aaff);
+    color: #000;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 8px;
+    font-weight: bold;
+    opacity: 0.7;
+    z-index: 999999;
+    pointer-events: none;
+}
+
+.v31-complete-marker::before {
+    content: '🚀 V3.1 Enhanced';
+}

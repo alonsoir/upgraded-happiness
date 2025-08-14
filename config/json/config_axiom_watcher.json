@@ -1,0 +1,13 @@
+{
+  "axioms_dir": "./axioms",
+  "processed_dir": "./axioms/processed",
+  "poll_interval_seconds": 10,
+  "min_axioms_for_retrain": 5,
+  "confidence_threshold": 0.7,
+  "log_file": "./logs/axiom_trainer_watcher.log",
+  "rules": {
+    "model_types_to_monitor": ["DDOS", "RANSOMWARE", "GENERAL"],
+    "minimum_confidence": 0.6,
+    "require_retrain_flag": true
+  }
+}

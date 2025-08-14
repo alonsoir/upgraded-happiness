@@ -1,0 +1,213 @@
+{
+  "node_id": "scheduler_firewall_001",
+  "component": {
+    "name": "scheduler_firewall",
+    "version": "1.0.0",
+    "mode": "distributed_decision_engine",
+    "role": "firewall_scheduler_nogui",
+    "description": "JSON-controlled Firewall Decision Engine - No GUI"
+  },
+  "_comment_architecture": "🎯 ARQUITECTURA CORREGIDA: ml_detector:5580(PUB) → scheduler:5580(SUB) → consumer:5582(PUSH) ← → scheduler:5581(PULL)",
+  "network": {
+    "ml_events_input": {
+      "address": "localhost",
+      "port": 5580,
+      "_comment_fix": "🔧 CORREGIDO: 5582 → 5580 para recibir de ml_detector PUB",
+      "mode": "connect",
+      "socket_type": "SUB",
+      "high_water_mark": 500,
+      "expected_publishers": 1,
+      "description": "Receives events from ML Detector V3.1.2 tricapa (4 models)"
+    },
+    "firewall_commands_output": {
+      "address": "localhost",
+      "port": 5582,
+      "_comment_fix": "🔧 MANTENER: Puerto 5582 para enviar comandos al consumer",
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "high_water_mark": 200,
+      "expected_subscribers": 1,
+      "description": "Sends commands to scheduler-simple-consumer"
+    },
+    "firewall_responses_input": {
+      "address": "localhost",
+      "port": 5581,
+      "_comment": "✅ CORRECTO: Recibe respuestas del consumer",
+      "mode": "bind",
+      "socket_type": "PULL",
+      "high_water_mark": 200,
+      "expected_publishers": 1,
+      "description": "Receives responses from scheduler-simple-consumer"
+    }
+  },
+  "_port_flow_corrected": {
+    "step_1": "ml_detector:5580(PUB) → scheduler:5580(SUB)",
+    "step_2": "scheduler:5582(PUSH) → consumer:5582(PULL)",
+    "step_3": "consumer:5581(PUSH) → scheduler:5581(PULL)",
+    "status": "✅ ALL PORTS ALIGNED"
+  },
+  "zmq": {
+    "_comment_conservative": "🔒 CONFIGURACIÓN ULTRA CONSERVADORA basada en ml_detector con 4 modelos",
+    "context_io_threads": 1,
+    "max_sockets": 16,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": false,
+    "linger_ms": 0,
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 250,
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 131072,
+    "max_message_size": 50000,
+    "scheduler_optimizations": {
+      "_comment": "🎯 OPTIMIZACIONES ESPECÍFICAS DEL SCHEDULER",
+      "conflate": false,
+      "recovery_ivl": 10000,
+      "sndbuf": 131072,
+      "rcvbuf": 65536
+    }
+  },
+  "processing": {
+    "_comment_threads": "🧵 ULTRA CONSERVADOR: 1 thread por función",
+    "threads": {
+      "ml_events_consumers": 1,
+      "firewall_command_producers": 1,
+      "firewall_response_consumers": 1
+    },
+    "internal_queues": {
+      "ml_events_queue_size": 200,
+      "firewall_commands_queue_size": 1000,
+      "firewall_responses_queue_size": 100
+    },
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0
+    },
+    "decision_engine": {
+      "max_decisions_per_second": 50,
+      "decision_timeout_ms": 100,
+      "batch_processing": false,
+      "cache_decisions": false
+    },
+    "backpressure": {
+      "enabled": true,
+      "max_retries": 2,
+      "retry_delays_ms": [
+        1,
+        5
+      ],
+      "drop_threshold_percent": 10.0,
+      "activation_threshold": 15,
+      "queue_full_strategy": "drop_oldest"
+    }
+  },
+  "monitoring": {
+    "stats_interval_seconds": 60,
+    "detailed_metrics": true,
+    "health_check_interval": 120,
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 100.0,
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 256,
+      "max_cpu_usage_percent": 40.0,
+      "max_decision_latency_ms": 50.0,
+      "min_decisions_per_minute": 1,
+      "max_consecutive_errors": 5
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [scheduler:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "path": "logs/scheduler_firewall.log",
+        "level": "INFO",
+        "max_size": "50MB",
+        "backup_count": 5,
+        "rotation": "size"
+      },
+      "decision_log": {
+        "enabled": true,
+        "path": "logs/scheduler_decisions.log",
+        "level": "INFO",
+        "log_all_decisions": true,
+        "log_rule_applications": true,
+        "include_event_context": true
+      }
+    }
+  },
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 50000,
+      "validate_risk_scores": true,
+      "risk_score_min": 0.0,
+      "risk_score_max": 1.0,
+      "validate_ip_addresses": true,
+      "require_valid_ipv4": true
+    },
+    "decision_safety": {
+      "enabled": true,
+      "require_firewall_agent_validation": true,
+      "max_block_decisions_per_minute": 10,
+      "force_dry_run_above_rate": 20
+    }
+  },
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "firewall_decision_engine_scheduler",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 6
+    },
+    "scheduler_specific": {
+      "track_decision_latency": true,
+      "track_rule_applications": true,
+      "track_firewall_responses": true,
+      "enable_decision_analytics": true
+    }
+  },
+  "decision_engine": {
+    "rules_file_check_interval": 30,
+    "default_risk_threshold": 0.5,
+    "emergency_mode_threshold": 0.95,
+    "decision_cache": {
+      "enabled": false
+    },
+    "fallback_behavior": {
+      "enabled": true,
+      "default_action": "MONITOR",
+      "default_duration": 300,
+      "default_priority": "MEDIUM",
+      "force_dry_run": true
+    }
+  },
+  "debug": {
+    "enabled": false,
+    "log_all_events": false,
+    "log_decision_details": false,
+    "log_protobuf_parsing": false,
+    "performance_profiling": false
+  },
+  "_config_metadata": {
+    "config_version": "1.0.0-ports-corrected",
+    "created_for": "HW Actual - Puertos corregidos para flujo completo",
+    "optimization_level": "CONSERVATIVE_SCHEDULER",
+    "port_changes": "ml_events_input: 5582→5580, firewall_commands_output: mantener 5582",
+    "socket_pattern": "SUB/PUSH/PULL",
+    "firewall_integration": "Ultra-secure JSON-controlled",
+    "performance_target": "STABLE_DECISION_ENGINE_WITH_CORRECTED_PORTS"
+  }
+}
