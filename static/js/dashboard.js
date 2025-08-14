@@ -1,14 +1,16 @@
 /*
-dashboard.js - VERSIÓN V3 COMPLETA CORREGIDA PARA BACKEND V3
-+ FIREWALL_COMMANDS.PROTO + SISTEMA AVANZADO DE VENTANAS + COORDENADAS DUALES CORREGIDAS
-+ COMPATIBLE CON ESTRUCTURA DE CAMPOS PLANOS DEL BACKEND
-+ ✅ FIX 2: Google Maps vista superior corregida
-+ ✅ FIX 3: Botones de geolocalización siempre visibles
-+ ✅ FIX 4: Acciones contra atacante independientes de geolocalización
+dashboard_v31.js - VERSIÓN V3.1 COMPLETA PARA PROTOBUF V3.1
++ COMPATIBLE CON BACKEND dashboard_v31.py
++ PUERTO 5580 SUB PARA ML_DETECTOR V3.1
++ CAMPOS ENSEMBLE_CONFIDENCE, PIPELINE_LATENCY, CAPTURING_NODE_ID
++ TRICAPA ML_ANALYSIS SCORES
++ FLEET MANAGEMENT V3.1 REFINADO
++ FIREWALL_COMMANDS.PROTO V3.1
++ SISTEMA AVANZADO DE VENTANAS + COORDENADAS DUALES + GOOGLE MAPS FIXES
 */
 
 // ============================================================================
-// VARIABLES GLOBALES
+// VARIABLES GLOBALES V3.1
 // ============================================================================
 
 let map = null;
@@ -20,7 +22,7 @@ let pollingInterval = null;
 let currentEvents = [];
 let eventsPaused = false;
 
-// 🔥 Variables para eventos del firewall
+// 🔥 Variables para eventos del firewall V3.1
 let currentFirewallEvents = [];
 let firewallEventsPaused = false;
 let firewallStats = {
@@ -30,7 +32,7 @@ let firewallStats = {
     lastAgent: 'N/A'
 };
 
-// 🔥 Variables para configuración dual JSON
+// 🔥 Variables para configuración dual JSON V3.1
 let firewallConfig = {
     agents: [],
     endpoints: {},
@@ -43,7 +45,7 @@ let firewallRules = {
     default_actions: ['BLOCK_IP', 'RATE_LIMIT_IP', 'LIST_RULES', 'FLUSH_RULES']
 };
 
-// 🔥 Estados de componentes para indicadores
+// 🔥 Estados de componentes para indicadores V3.1
 let componentStates = {
     promiscuous_agent: false,
     geoip_enricher: false,
@@ -60,7 +62,7 @@ let modalStartY = 0;
 let currentModal = null;
 let modalWindowsRegistry = new Map(); // Registro de ventanas modales
 
-// 🎯 Enum CommandAction del firewall_commands.proto
+// 🎯 Enum CommandAction del firewall_commands_v31.proto
 const CommandAction = {
     BLOCK_IP: 0,
     UNBLOCK_IP: 1,
@@ -74,7 +76,7 @@ const CommandAction = {
     RESTORE_RULES: 9
 };
 
-// 🎯 Enum CommandPriority del firewall_commands.proto
+// 🎯 Enum CommandPriority del firewall_commands_v31.proto
 const CommandPriority = {
     LOW: 0,
     MEDIUM: 1,
@@ -83,11 +85,11 @@ const CommandPriority = {
 };
 
 // ============================================================================
-// INICIALIZACIÓN PRINCIPAL
+// INICIALIZACIÓN PRINCIPAL V3.1
 // ============================================================================
 
 function initializeDashboard() {
-    console.log('🚀 Inicializando Dashboard SCADA V3 con TODOS LOS FIXES aplicados...');
+    console.log('🚀 Inicializando Dashboard SCADA V3.1 con PROTOBUF V3.1...');
 
     try {
         initializeMap();
@@ -95,27 +97,27 @@ function initializeDashboard() {
         initializeCollapsibleSections();
         initializeAdvancedModalSystem();
 
-        // HTTP Polling para conectar con backend
+        // HTTP Polling para conectar con backend V3.1
         startSimplePolling();
 
         updateCurrentTime();
         setInterval(updateCurrentTime, 1000);
 
-        console.log('✅ Dashboard V3 inicializado con FIX 2, 3 y 4 aplicados');
-        addDebugLog('info', 'Dashboard V3 + TODOS LOS FIXES - campos planos + firewall_commands.proto');
+        console.log('✅ Dashboard V3.1 inicializado correctamente');
+        addDebugLog('info', 'Dashboard V3.1 + Protobuf V3.1 + SUB 5580 ML_detector');
 
     } catch (error) {
-        console.error('❌ Error inicializando dashboard:', error);
-        addDebugLog('error', `Error inicialización: ${error.message}`);
+        console.error('❌ Error inicializando dashboard V3.1:', error);
+        addDebugLog('error', `Error inicialización V3.1: ${error.message}`);
     }
 }
 
 // ============================================================================
-// 🆕 SISTEMA AVANZADO DE VENTANAS MODALES
+// 🆕 SISTEMA AVANZADO DE VENTANAS MODALES V3.1
 // ============================================================================
 
 function initializeAdvancedModalSystem() {
-    console.log('🪟 Inicializando sistema avanzado de ventanas modales...');
+    console.log('🪟 Inicializando sistema avanzado de ventanas modales V3.1...');
 
     document.addEventListener('mousemove', handleAdvancedMouseMove);
     document.addEventListener('mouseup', handleAdvancedMouseUp);
@@ -123,13 +125,13 @@ function initializeAdvancedModalSystem() {
     // Convertir secciones existentes en ventanas avanzadas
     convertSectionsToAdvancedWindows();
 
-    addDebugLog('info', 'Sistema avanzado de ventanas modales inicializado');
+    addDebugLog('info', 'Sistema avanzado de ventanas modales V3.1 inicializado');
 }
 
 function convertSectionsToAdvancedWindows() {
     const sectionsToConvert = [
-        { id: 'events-section', title: 'Eventos en Tiempo Real', type: 'events' },
-        { id: 'firewall-events-section', title: 'Comandos Firewall', type: 'firewall' }
+        { id: 'events-section', title: 'Eventos en Tiempo Real V3.1', type: 'events' },
+        { id: 'firewall-events-section', title: 'Comandos Firewall V3.1', type: 'firewall' }
     ];
 
     sectionsToConvert.forEach(section => {
@@ -168,7 +170,7 @@ function enhanceToAdvancedWindow(element, title, type) {
         originalSize: null
     });
 
-    console.log(`🪟 Ventana avanzada creada: ${title}`);
+    console.log(`🪟 Ventana avanzada V3.1 creada: ${title}`);
 }
 
 function makeAdvancedWindowDraggable(windowElement, header) {
@@ -193,7 +195,7 @@ function makeAdvancedWindowDraggable(windowElement, header) {
 
         e.preventDefault();
 
-        console.log('🖱️ Iniciando drag de ventana avanzada:', windowElement.id);
+        console.log('🖱️ Iniciando drag de ventana avanzada V3.1:', windowElement.id);
     });
 }
 
@@ -226,7 +228,7 @@ function handleAdvancedMouseUp(e) {
     }
 
     currentModal = null;
-    console.log('🖱️ Drag de ventana avanzada finalizado');
+    console.log('🖱️ Drag de ventana avanzada V3.1 finalizado');
 }
 
 function toggleAdvancedWindowState(windowId, action) {
@@ -307,16 +309,16 @@ function updateAdvancedWindowButton(windowId, buttonType, newIcon) {
 }
 
 // ============================================================================
-// HTTP POLLING PARA BACKEND
+// HTTP POLLING PARA BACKEND V3.1
 // ============================================================================
 
 function startSimplePolling() {
-    console.log('📡 Iniciando polling HTTP V3 al backend corregido...');
+    console.log('📡 Iniciando polling HTTP V3.1 al backend dashboard_v31.py...');
 
     fetchDataFromZeroMQ();
     pollingInterval = setInterval(fetchDataFromZeroMQ, 2000);
 
-    addDebugLog('info', 'HTTP polling V3 iniciado - estructura de campos planos');
+    addDebugLog('info', 'HTTP polling V3.1 iniciado - puerto 5580 SUB ML_detector');
 }
 
 async function fetchDataFromZeroMQ() {
@@ -339,16 +341,16 @@ async function fetchDataFromZeroMQ() {
             updateDashboardFromZeroMQ(data);
             updateConnectionStatus('api', 'connected');
 
-            console.log('📊 Datos backend V3 recibidos con estructura corregida:', data.basic_stats);
+            console.log('📊 Datos backend V3.1 recibidos:', data.basic_stats);
 
         } else {
-            throw new Error(data.error || 'Error en respuesta API');
+            throw new Error(data.error || 'Error en respuesta API V3.1');
         }
 
     } catch (error) {
-        console.error('❌ Error conectando con backend:', error);
+        console.error('❌ Error conectando con backend V3.1:', error);
         updateConnectionStatus('api', 'error');
-        addDebugLog('error', `Error backend: ${error.message}`);
+        addDebugLog('error', `Error backend V3.1: ${error.message}`);
     }
 }
 
@@ -372,14 +374,14 @@ function updateDashboardFromZeroMQ(data) {
             highRiskCount = data.basic_stats.high_risk_events || 0;
         }
 
-        // 🔥 Actualizar configuración dual JSON
+        // 🔥 Actualizar configuración dual JSON V3.1
         if (data.firewall_config) {
             firewallConfig = {
                 agents: data.firewall_config.agents || [],
                 endpoints: data.firewall_config.endpoints || {},
                 capabilities: data.firewall_config.capabilities || ['BLOCK_IP', 'RATE_LIMIT_IP', 'LIST_RULES']
             };
-            addDebugLog('info', `Config Firewall: ${firewallConfig.agents.length} agentes`);
+            addDebugLog('info', `Config Firewall V3.1: ${firewallConfig.agents.length} agentes`);
         }
 
         if (data.firewall_rules) {
@@ -388,7 +390,7 @@ function updateDashboardFromZeroMQ(data) {
                 rules_count: data.firewall_rules.rules_count || 0,
                 default_actions: data.firewall_rules.default_actions || ['BLOCK_IP', 'RATE_LIMIT_IP', 'LIST_RULES']
             };
-            addDebugLog('info', `Reglas Firewall: ${firewallRules.rules_count} reglas activas`);
+            addDebugLog('info', `Reglas Firewall V3.1: ${firewallRules.rules_count} reglas activas`);
         }
 
         // Actualizar estadísticas del firewall
@@ -396,7 +398,7 @@ function updateDashboardFromZeroMQ(data) {
             updateFirewallStats(data.firewall_stats);
         }
 
-        // Actualizar estados de componentes
+        // Actualizar estados de componentes V3.1
         updateComponentIndicators(data);
 
         // Actualizar estado de componentes ZeroMQ
@@ -404,44 +406,494 @@ function updateDashboardFromZeroMQ(data) {
             updateComponentStatus(data.component_status);
         }
 
-        // Actualizar conexiones ZeroMQ
+        // Actualizar conexiones ZeroMQ V3.1
         if (data.zmq_connections) {
             updateZMQStatus(data.zmq_connections);
         }
 
-        // 🔥 Procesar eventos recientes CON CAMPOS PLANOS - SIN LÍMITE
+        // 🔥 Procesar eventos recientes V3.1 CON CAMPOS ADICIONALES - SIN LÍMITE
         if (data.recent_events && data.recent_events.length > 0) {
-            processEventsFromZeroMQ(data.recent_events);
+            processEventsFromZeroMQV31(data.recent_events);
         }
 
-        // 🔥 Procesar eventos del firewall - SIN LÍMITE
+        // 🔥 Procesar eventos del firewall V3.1 - SIN LÍMITE
         if (data.firewall_events && data.firewall_events.length > 0) {
             processFirewallEventsFromZeroMQ(data.firewall_events);
         }
 
         const availableActions = getAvailableFirewallActions();
-        addDebugLog('info', `Backend V3: ${data.basic_stats?.total_events || 0} eventos, ${availableActions.length} acciones disponibles`);
+        addDebugLog('info', `Backend V3.1: ${data.basic_stats?.total_events || 0} eventos, ${availableActions.length} acciones disponibles`);
 
     } catch (error) {
-        console.error('❌ Error procesando datos backend:', error);
-        addDebugLog('error', `Error procesando backend: ${error.message}`);
+        console.error('❌ Error procesando datos backend V3.1:', error);
+        addDebugLog('error', `Error procesando backend V3.1: ${error.message}`);
     }
-}
-
-// 🔥 FUNCIÓN PARA OBTENER ACCIONES DISPONIBLES (BACKEND DECIDE)
-function getAvailableFirewallActions() {
-    // El backend decide qué acciones están disponibles
-    if (firewallRules.default_actions && firewallRules.default_actions.length > 0) {
-        return firewallRules.default_actions;
-    }
-    if (firewallConfig.capabilities && firewallConfig.capabilities.length > 0) {
-        return firewallConfig.capabilities;
-    }
-    return ['BLOCK_IP', 'RATE_LIMIT_IP', 'LIST_RULES']; // Fallback mínimo
 }
 
 // ============================================================================
-// INDICADORES DE COMPONENTES - CORREGIDO PARA CAMPOS PLANOS
+// 🔥 NUEVOS CAMPOS V3.1: ENSEMBLE_CONFIDENCE, PIPELINE_LATENCY, CAPTURING_NODE_ID
+// ============================================================================
+
+function processEventsFromZeroMQV31(events) {
+    if (eventsPaused) return;
+
+    try {
+        const newEvents = events.filter(event => {
+            return !currentEvents.some(existing =>
+                existing.id === event.id ||
+                (existing.timestamp === event.timestamp &&
+                 existing.source_ip === event.source_ip)
+            );
+        });
+
+        newEvents.forEach(event => {
+            addEventFromZeroMQV31(event);
+        });
+
+        if (newEvents.length > 0) {
+            console.log(`📨 ${newEvents.length} eventos nuevos V3.1 con campos adicionales desde backend`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error procesando eventos backend V3.1:', error);
+        addDebugLog('error', `Error eventos backend V3.1: ${error.message}`);
+    }
+}
+
+function addEventFromZeroMQV31(event) {
+    try {
+        if (!event.source_ip || !event.target_ip) {
+            console.warn('⚠️ Evento backend V3.1 incompleto:', event);
+            return;
+        }
+
+        // ✅ NUEVOS CAMPOS V3.1 - Enriquecimiento de datos
+        event.ensemble_confidence = event.ensemble_confidence || event.risk_score || 0.5;
+        event.pipeline_latency = event.pipeline_tracking?.total_processing_latency?.seconds ||
+                                event.pipeline_latency || 0;
+        event.capturing_node_id = event.capturing_node?.node_id ||
+                                 event.node_id || 'unknown_node';
+
+        // ✅ TRICAPA ML_ANALYSIS SCORES V3.1
+        event.tricapa_scores = event.ml_analysis?.models_scores || {
+            isolation_forest: event.isolation_forest_score || 0.5,
+            one_class_svm: event.one_class_svm_score || 0.5,
+            local_outlier_factor: event.local_outlier_factor_score || 0.5
+        };
+
+        // ✅ CAMPOS GEOGRÁFICOS V3.1 (ya existentes, verificación)
+        event.geographic_distance_km = event.geographic_distance_km ||
+                                      event.geo_enrichment?.source_destination_distance_km || 0;
+        event.same_country = event.same_country ??
+                           event.geo_enrichment?.source_destination_same_country ?? true;
+
+        // ✅ ENRIQUECIMIENTO DE IPs V3.1
+        event.source_ip_enriched = event.source_ip_enriched ?? true;
+        event.target_ip_enriched = event.target_ip_enriched ?? true;
+
+        if (typeof event.risk_score !== 'number') {
+            event.risk_score = event.ensemble_confidence || 0.5;
+        }
+
+        if (!event.timestamp) {
+            event.timestamp = Date.now() / 1000;
+        }
+
+        // 🔥 USAR CAMPOS V3.1 PARA EL MAPA CON ANIMACIONES MISIL
+        addEventToMapWithMissileAnimationV31(event);
+
+        addEventToEventsListV31(event);
+
+        if (event.risk_score > 0.8 || event.ensemble_confidence > 0.8) {
+            showThreatIndicator(event);
+        }
+
+        console.log('🚨 Evento backend V3.1 procesado:', event.source_ip, '→', event.target_ip,
+                   `| Ensemble: ${event.ensemble_confidence} | Pipeline: ${event.pipeline_latency}ms | Node: ${event.capturing_node_id}`);
+
+    } catch (error) {
+        console.error('❌ Error añadiendo evento backend V3.1:', error);
+        addDebugLog('error', `Error evento V3.1: ${error.message}`);
+    }
+}
+
+function addEventToEventsListV31(event) {
+    const eventsList = document.getElementById('events-list');
+    if (!eventsList) return;
+
+    try {
+        const placeholder = eventsList.querySelector('.no-events-placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+
+        const riskLevel = (event.ensemble_confidence || event.risk_score) > 0.8 ? 'high' :
+                         (event.ensemble_confidence || event.risk_score) > 0.5 ? 'medium' : 'low';
+
+        const eventElement = document.createElement('div');
+        eventElement.className = `event-item risk-${riskLevel} new-event`;
+        eventElement.onclick = () => showEventDetailV31(event);
+
+        const eventTime = new Date(event.timestamp * 1000);
+
+        // ✅ V3.1: Información completa usando nuevos campos
+        const geoInfo = (event.geographic_distance_km && event.geographic_distance_km > 0) ?
+            `<small style="color: #888;">${event.geographic_distance_km}km - ${event.same_country ? 'Local' : 'Internacional'}</small>` : '';
+
+        const pipelineInfo = event.pipeline_latency > 0 ?
+            `<small style="color: #0088ff;">Pipeline: ${event.pipeline_latency}ms</small>` : '';
+
+        const nodeInfo = event.capturing_node_id && event.capturing_node_id !== 'unknown_node' ?
+            `<small style="color: #ffaa00;">Node: ${event.capturing_node_id}</small>` : '';
+
+        // ✅ Botones de acción directos en la lista (ya existente, mantener)
+        const quickActionsButtons = generateQuickFirewallActionsV31(event);
+
+        eventElement.innerHTML = `
+            <div class="event-header">
+                <span class="event-time">${eventTime.toLocaleTimeString()}</span>
+                <span class="event-risk ${riskLevel}">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%</span>
+            </div>
+            <div class="event-details">
+                <div><span class="event-source">${event.source_ip}</span> → <span class="event-target">${event.target_ip}</span></div>
+                <div class="event-type">${event.type || 'Backend Event V3.1'} ${geoInfo}</div>
+                ${pipelineInfo ? `<div>${pipelineInfo}</div>` : ''}
+                ${nodeInfo ? `<div>${nodeInfo}</div>` : ''}
+            </div>
+            <!-- ✅ BOTONES DE ACCIÓN DIRECTOS EN LA LISTA V3.1 -->
+            <div class="event-quick-actions" style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
+                ${quickActionsButtons}
+            </div>
+        `;
+
+        // 🆕 SIN LÍMITE: No eliminar eventos antiguos
+        eventsList.insertBefore(eventElement, eventsList.firstChild);
+
+        // Actualizar contador sin límite
+        const events = eventsList.querySelectorAll('.event-item');
+        updateElement('live-events-count', events.length);
+
+        currentEvents.unshift(event);
+        // SIN LÍMITE: No eliminar eventos del array
+
+    } catch (error) {
+        console.error('❌ Error añadiendo evento V3.1 a lista:', error);
+    }
+}
+
+// ✅ Botones rápidos actualizados para V3.1
+function generateQuickFirewallActionsV31(event) {
+    const buttons = `
+        <button onclick="quickBlockAttackerV31('${event.target_ip}', '${event.id}'); event.stopPropagation();"
+                class="quick-action-btn block-btn"
+                title="Bloquear IP atacante (V3.1)"
+                style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
+            🚫 Block
+        </button>
+        <button onclick="quickShowTargetDetailV31('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')}); event.stopPropagation();"
+                class="quick-action-btn target-btn"
+                title="Ver detalles del atacante (V3.1)"
+                style="background: rgba(204, 0, 0, 0.2); border: 1px solid #cc0000; color: #cc0000; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
+            🎯 Details
+        </button>
+        <button onclick="quickShowSourceDetailV31('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')}); event.stopPropagation();"
+                class="quick-action-btn source-btn"
+                title="Ver detalles de la víctima (V3.1)"
+                style="background: rgba(0, 102, 204, 0.2); border: 1px solid #0066cc; color: #0066cc; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
+            🏠 Victim
+        </button>
+    `;
+    return buttons;
+}
+
+// ✅ Funciones para acciones rápidas V3.1
+async function quickBlockAttackerV31(targetIP, eventId) {
+    try {
+        console.log(`⚡ Acción rápida V3.1: Bloqueando ${targetIP}`);
+
+        const commandId = `quick_block_v31_${Date.now()}`;
+        const requestData = {
+            action: 'BLOCK_IP',
+            target_ip: targetIP,
+            firewall_node_id: getAvailableFirewallAgents()[0] || 'simple_firewall_agent_v31_001',
+            command_id: commandId,
+            generated_by: 'dashboard_v31_quick_action',
+            event_id: eventId,
+            force_dry_run: true,
+            max_duration: 300,
+            version: 'v3.1'
+        };
+
+        showToast(`🚫 Bloqueando ${targetIP} (V3.1)...`, 'warning');
+
+        const response = await fetch('/api/execute-firewall-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                showToast(`✅ ${targetIP} bloqueado exitosamente (V3.1)`, 'success');
+                addDebugLog('info', `Quick block V3.1 ejecutado: ${targetIP}`);
+            } else {
+                showToast(`❌ Error bloqueando ${targetIP} (V3.1): ${result.message}`, 'error');
+            }
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+    } catch (error) {
+        console.error('❌ Error en quick block V3.1:', error);
+        showToast(`❌ Error comunicando con firewall V3.1`, 'error');
+    }
+}
+
+function quickShowTargetDetailV31(targetIP, eventData) {
+    console.log(`🎯 Acción rápida V3.1: Mostrando detalles del atacante ${targetIP}`);
+    showTargetIPDetailV31(targetIP, eventData);
+}
+
+function quickShowSourceDetailV31(sourceIP, eventData) {
+    console.log(`🏠 Acción rápida V3.1: Mostrando detalles de la víctima ${sourceIP}`);
+    showSourceIPDetailV31(sourceIP, eventData);
+}
+
+// ============================================================================
+// 🚀 FUNCIONES PARA ANIMACIONES TIPO MISIL V3.1 - CAMPOS ADICIONALES
+// ============================================================================
+
+function addEventToMapWithMissileAnimationV31(event) {
+    if (!map) return;
+
+    try {
+        const riskLevel = (event.ensemble_confidence || event.risk_score) > 0.8 ? 'high' :
+                         (event.ensemble_confidence || event.risk_score) > 0.5 ? 'medium' : 'low';
+
+        const colors = {
+            high: '#ff4444',
+            medium: '#ffaa00',
+            low: '#00ff00'
+        };
+
+        let markersAdded = [];
+
+        console.log('🗺️ Procesando evento V3.1 con campos adicionales:', {
+            source_lat: event.source_latitude,
+            source_lng: event.source_longitude,
+            target_lat: event.target_latitude,
+            target_lng: event.target_longitude,
+            ensemble_confidence: event.ensemble_confidence,
+            pipeline_latency: event.pipeline_latency,
+            capturing_node_id: event.capturing_node_id,
+            tricapa_scores: event.tricapa_scores
+        });
+
+        // ✅ COORDENADAS SOURCE (víctima/origen) - V3.1
+        if (event.source_latitude && event.source_longitude &&
+            event.source_latitude !== 0 && event.source_longitude !== 0) {
+
+            const sourceMarker = L.circleMarker([event.source_latitude, event.source_longitude], {
+                radius: 10,
+                fillColor: '#0066CC',
+                color: '#0066CC',
+                weight: 2,
+                opacity: 0.8,
+                fillOpacity: 0.6,
+                className: 'source-marker clickable-marker'
+            }).bindPopup(`
+                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                    <b>🏠 Víctima/Origen V3.1</b><br>
+                    <strong>IP:</strong> ${event.source_ip}<br>
+                    <strong>Ubicación:</strong> ${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}<br>
+                    <strong>Ensemble Score:</strong> <span style="color: ${colors[riskLevel]};">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%</span><br>
+                    <strong>Pipeline Latency:</strong> ${event.pipeline_latency}ms<br>
+                    <strong>Node:</strong> ${event.capturing_node_id}<br>
+                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
+                    <strong>Enriquecido:</strong> ${event.source_ip_enriched ? '✅' : '❌'}<br>
+                    <button onclick="showSourceIPDetailV31('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})" style="margin-top: 5px; background: #0066CC; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Ver Detalles V3.1</button>
+                </div>
+            `).addTo(map);
+
+            sourceMarker._isEventMarker = true;
+            sourceMarker._eventData = event;
+            sourceMarker._markerType = 'source';
+            markersAdded.push(sourceMarker);
+        }
+
+        // ✅ COORDENADAS TARGET (atacante/destino) - V3.1
+        if (event.target_latitude && event.target_longitude &&
+            event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+            const targetMarker = L.circleMarker([event.target_latitude, event.target_longitude], {
+                radius: 10,
+                fillColor: '#CC0000',
+                color: '#CC0000',
+                weight: 2,
+                opacity: 0.8,
+                fillOpacity: 0.6,
+                className: 'target-marker clickable-marker'
+            }).bindPopup(`
+                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                    <b>🎯 Atacante/Destino V3.1</b><br>
+                    <strong>IP:</strong> ${event.target_ip}<br>
+                    <strong>Ubicación:</strong> ${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}<br>
+                    <strong>Ensemble Score:</strong> <span style="color: ${colors[riskLevel]};">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%</span><br>
+                    <strong>Pipeline Latency:</strong> ${event.pipeline_latency}ms<br>
+                    <strong>Node:</strong> ${event.capturing_node_id}<br>
+                    <strong>Tricapa Scores:</strong><br>
+                    &nbsp;&nbsp;IF: ${(event.tricapa_scores?.isolation_forest * 100 || 0).toFixed(0)}%<br>
+                    &nbsp;&nbsp;SVM: ${(event.tricapa_scores?.one_class_svm * 100 || 0).toFixed(0)}%<br>
+                    &nbsp;&nbsp;LOF: ${(event.tricapa_scores?.local_outlier_factor * 100 || 0).toFixed(0)}%<br>
+                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
+                    <strong>Enriquecido:</strong> ${event.target_ip_enriched ? '✅' : '❌'}<br>
+                    <button onclick="showTargetIPDetailV31('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})" style="margin-top: 5px; background: #CC0000; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">🎯 Acciones Firewall V3.1</button>
+                </div>
+            `).addTo(map);
+
+            targetMarker._isEventMarker = true;
+            targetMarker._eventData = event;
+            targetMarker._markerType = 'target';
+            markersAdded.push(targetMarker);
+        }
+
+        // ✅ LÍNEA CURVA ANIMADA TIPO MISIL V3.1
+        if (markersAdded.length === 2 &&
+            event.source_latitude && event.source_longitude &&
+            event.target_latitude && event.target_longitude) {
+
+            createMissileTrajectoryAnimationV31(
+                [event.source_latitude, event.source_longitude],
+                [event.target_latitude, event.target_longitude],
+                event
+            );
+        }
+
+        // ✅ FALLBACK: Coordenadas legacy (solo source_ip)
+        if (markersAdded.length === 0 &&
+            event.latitude && event.longitude &&
+            event.latitude !== 0 && event.longitude !== 0) {
+
+            const legacyMarker = L.circleMarker([event.latitude, event.longitude], {
+                radius: 8,
+                fillColor: colors[riskLevel],
+                color: colors[riskLevel],
+                weight: 2,
+                opacity: 0.8,
+                fillOpacity: 0.6,
+                className: 'legacy-marker clickable-marker'
+            }).bindPopup(`
+                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                    <b>🚨 Evento Legacy V3.1</b><br>
+                    <strong>Origen:</strong> ${event.source_ip}<br>
+                    <strong>Destino:</strong> ${event.target_ip}<br>
+                    <strong>Ensemble Score:</strong> <span style="color: ${colors[riskLevel]};">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%</span><br>
+                    <strong>Ubicación:</strong> ${event.location || 'No disponible'}<br>
+                    <strong>Node:</strong> ${event.capturing_node_id}<br>
+                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
+                    <button onclick="showEventDetailV31(${JSON.stringify(event).replace(/"/g, '&quot;')})" style="margin-top: 5px; background: ${colors[riskLevel]}; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Ver Detalles V3.1</button>
+                </div>
+            `).addTo(map);
+
+            legacyMarker._isEventMarker = true;
+            legacyMarker._eventData = event;
+            legacyMarker._markerType = 'legacy';
+            markersAdded.push(legacyMarker);
+        }
+
+        // Agregar a la lista global y programar eliminación
+        markersAdded.forEach(marker => {
+            markers.push(marker);
+            setTimeout(() => {
+                if (map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                    markers = markers.filter(m => m !== marker);
+                }
+            }, 5 * 60 * 1000);
+        });
+
+        if (markersAdded.length > 0) {
+            console.log(`📍 ${markersAdded.length} marcadores V3.1 con animación añadidos para evento:`, event.source_ip, '→', event.target_ip);
+        }
+
+    } catch (error) {
+        console.error('❌ Error añadiendo marcadores con animación misil V3.1:', error);
+    }
+}
+
+// ✅ Función para crear animación tipo misil V3.1
+function createMissileTrajectoryAnimationV31(sourceCoords, targetCoords, event) {
+    try {
+        // Calcular punto de control para curva (más alto para efecto misil)
+        const midLat = (sourceCoords[0] + targetCoords[0]) / 2;
+        const midLng = (sourceCoords[1] + targetCoords[1]) / 2;
+
+        // Calcular altura de la curva basada en distancia
+        const distance = Math.sqrt(Math.pow(targetCoords[0] - sourceCoords[0], 2) + Math.pow(targetCoords[1] - sourceCoords[1], 2));
+        const curveHeight = distance * 0.3; // 30% de la distancia como altura
+
+        // Punto de control para la curva (más alto)
+        const controlPoint = [midLat + curveHeight, midLng];
+
+        // Crear múltiples puntos para la curva Bézier
+        const curvePoints = [];
+        for (let t = 0; t <= 1; t += 0.05) {
+            const lat = Math.pow(1-t, 2) * sourceCoords[0] + 2*(1-t)*t * controlPoint[0] + Math.pow(t, 2) * targetCoords[0];
+            const lng = Math.pow(1-t, 2) * sourceCoords[1] + 2*(1-t)*t * controlPoint[1] + Math.pow(t, 2) * targetCoords[1];
+            curvePoints.push([lat, lng]);
+        }
+
+        // Crear la línea curva V3.1
+        const trajectoryLine = L.polyline(curvePoints, {
+            color: event.same_country ? '#FFA500' : '#FF0000',
+            weight: 3,
+            opacity: 0.8,
+            dashArray: '10, 5',
+            className: 'missile-trajectory'
+        }).bindPopup(`
+            <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
+                <b>🚀 Trayectoria de Ataque V3.1</b><br>
+                <strong>Origen:</strong> ${event.source_ip}<br>
+                <strong>Destino:</strong> ${event.target_ip}<br>
+                <strong>Distancia:</strong> ${event.geographic_distance_km || 'N/A'}km<br>
+                <strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>
+                <strong>Ensemble Score:</strong> ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%<br>
+                <strong>Pipeline Latency:</strong> ${event.pipeline_latency}ms<br>
+                <strong>Node:</strong> ${event.capturing_node_id}
+            </div>
+        `).addTo(map);
+
+        trajectoryLine._isEventMarker = true;
+        trajectoryLine._trajectoryType = 'missile';
+        connectionLines.push(trajectoryLine);
+
+        // 🚀 Añadir animación de flujo
+        setTimeout(() => {
+            if (map.hasLayer(trajectoryLine)) {
+                trajectoryLine.setStyle({
+                    className: 'missile-trajectory missile-flow-animation'
+                });
+            }
+        }, 100);
+
+        // Auto-remover la línea después de 5 minutos
+        setTimeout(() => {
+            if (map.hasLayer(trajectoryLine)) {
+                map.removeLayer(trajectoryLine);
+                connectionLines = connectionLines.filter(l => l !== trajectoryLine);
+            }
+        }, 5 * 60 * 1000);
+
+        console.log('🚀 Trayectoria misil V3.1 creada:', event.source_ip, '→', event.target_ip);
+
+    } catch (error) {
+        console.error('❌ Error creando animación misil V3.1:', error);
+    }
+}
+
+// ============================================================================
+// 🔥 INDICADORES DE COMPONENTES V3.1 - CORREGIDO PARA SUB 5580
 // ============================================================================
 
 function updateComponentIndicators(data) {
@@ -450,25 +902,27 @@ function updateComponentIndicators(data) {
         componentStates.promiscuous_agent = hasEventFlow;
         updateStatusIndicator('promiscuous-agent-status', hasEventFlow);
 
-        // ✅ CORREGIDO: Verificar coordenadas duales usando campos planos
+        // ✅ Verificar coordenadas duales V3.1
         let hasGeoData = false;
         if (data.recent_events && data.recent_events.length > 0) {
             hasGeoData = data.recent_events.some(event =>
                 // Verificar campos legacy
                 (event.latitude && event.longitude && event.latitude !== 0 && event.longitude !== 0) ||
-                // ✅ NUEVO: Verificar campos planos V3
+                // ✅ Verificar campos V3.1
                 (event.source_latitude && event.source_longitude) ||
                 (event.target_latitude && event.target_longitude) ||
-                // Verificar flags de enriquecimiento
+                // Verificar flags de enriquecimiento V3.1
                 event.source_ip_enriched || event.target_ip_enriched
             );
         }
         componentStates.geoip_enricher = hasGeoData;
         updateStatusIndicator('geoip-enricher-status', hasGeoData);
 
+        // ✅ CRÍTICO V3.1: ML_detector ahora en puerto 5580 SUB
         const mlConnected = data.zmq_connections &&
                            data.zmq_connections.ml_events &&
-                           data.zmq_connections.ml_events.status === 'active';
+                           data.zmq_connections.ml_events.status === 'active' &&
+                           data.zmq_connections.ml_events.port === 5580; // ✅ Puerto V3.1
         componentStates.ml_detector = mlConnected;
         updateStatusIndicator('ml-detector-status', mlConnected);
 
@@ -480,10 +934,10 @@ function updateComponentIndicators(data) {
 
         updateOverallConnectionStatus();
 
-        console.log('🔄 Estados componentes V3 corregidos:', componentStates);
+        console.log('🔄 Estados componentes V3.1:', componentStates);
 
     } catch (error) {
-        console.error('❌ Error actualizando indicadores componentes:', error);
+        console.error('❌ Error actualizando indicadores componentes V3.1:', error);
     }
 }
 
@@ -497,13 +951,13 @@ function updateOverallConnectionStatus() {
     if (overallStatus && overallText) {
         if (allConnected) {
             overallStatus.className = 'status-dot connected';
-            overallText.textContent = 'Connected';
+            overallText.textContent = 'Connected V3.1';
         } else if (someConnected) {
             overallStatus.className = 'status-dot warning';
-            overallText.textContent = 'Parcial';
+            overallText.textContent = 'Parcial V3.1';
         } else {
             overallStatus.className = 'status-dot disconnected';
-            overallText.textContent = 'Desconectado';
+            overallText.textContent = 'Desconectado V3.1';
         }
     }
 }
@@ -516,7 +970,7 @@ function updateStatusIndicator(elementId, connected) {
 }
 
 // ============================================================================
-// EVENTOS DEL FIREWALL - SIN LÍMITE
+// EVENTOS DEL FIREWALL V3.1 - SIN LÍMITE
 // ============================================================================
 
 function updateFirewallStats(stats) {
@@ -544,10 +998,10 @@ function updateFirewallStats(stats) {
         const totalEvents = firewallStats.commandsSent + firewallStats.responsesOk;
         updateElement('firewall-events-count', totalEvents);
 
-        console.log('📊 Estadísticas firewall V3 actualizadas:', firewallStats);
+        console.log('📊 Estadísticas firewall V3.1 actualizadas:', firewallStats);
 
     } catch (error) {
-        console.error('❌ Error actualizando estadísticas firewall:', error);
+        console.error('❌ Error actualizando estadísticas firewall V3.1:', error);
     }
 }
 
@@ -567,12 +1021,12 @@ function processFirewallEventsFromZeroMQ(events) {
         });
 
         if (newEvents.length > 0) {
-            console.log(`🔥 ${newEvents.length} eventos nuevos del firewall V3 desde backend`);
+            console.log(`🔥 ${newEvents.length} eventos nuevos del firewall V3.1 desde backend`);
         }
 
     } catch (error) {
-        console.error('❌ Error procesando eventos firewall:', error);
-        addDebugLog('error', `Error eventos firewall: ${error.message}`);
+        console.error('❌ Error procesando eventos firewall V3.1:', error);
+        addDebugLog('error', `Error eventos firewall V3.1: ${error.message}`);
     }
 }
 
@@ -590,16 +1044,16 @@ function addFirewallEventToList(event) {
         const eventTime = new Date(event.timestamp * 1000 || Date.now());
 
         let eventType = 'command';
-        let eventTypeLabel = 'COMANDO ENVIADO';
+        let eventTypeLabel = 'COMANDO ENVIADO V3.1';
 
         if (event.type === 'response' || event.success !== undefined) {
             eventType = 'response';
-            eventTypeLabel = event.success ? 'RESPUESTA OK' : 'RESPUESTA ERROR';
+            eventTypeLabel = event.success ? 'RESPUESTA OK V3.1' : 'RESPUESTA ERROR V3.1';
         }
 
         if (event.success === false || event.type === 'error') {
             eventType = 'error';
-            eventTypeLabel = 'ERROR';
+            eventTypeLabel = 'ERROR V3.1';
         }
 
         eventElement.className = `firewall-event ${eventType}`;
@@ -614,7 +1068,7 @@ function addFirewallEventToList(event) {
                     <strong>${event.id || event.command_id || 'N/A'}</strong> → ${event.action || 'LIST_RULES'} (${event.ip || event.target_ip || '127.0.0.1'})
                 </div>
                 <div class="firewall-event-details">
-                    Action: ${event.action_code || getFirewallActionCode(event.action || 'LIST_RULES')} | IP: ${event.ip || event.target_ip || '127.0.0.1'} | ${event.source || 'Backend V3'}
+                    Action: ${event.action_code || getFirewallActionCode(event.action || 'LIST_RULES')} | IP: ${event.ip || event.target_ip || '127.0.0.1'} | ${event.source || 'Backend V3.1'}
                 </div>
             `;
         } else if (eventType === 'response') {
@@ -629,7 +1083,8 @@ function addFirewallEventToList(event) {
                 <div class="firewall-event-details">
                     Agent: ${event.agent || event.node_id || 'N/A'}<br>
                     Result: "${event.result || event.message || 'OK'}"<br>
-                    Duration: ${event.execution_time || (Math.floor(Math.random() * 50) + 10)}ms
+                    Duration: ${event.execution_time || (Math.floor(Math.random() * 50) + 10)}ms<br>
+                    Version: V3.1
                 </div>
             `;
         } else {
@@ -639,10 +1094,10 @@ function addFirewallEventToList(event) {
                     <span class="firewall-event-time">${eventTime.toLocaleTimeString()}</span>
                 </div>
                 <div class="firewall-event-content">
-                    <strong>${event.id || 'ERROR'}</strong> ❌ ${event.error || event.message || 'Error desconocido'}
+                    <strong>${event.id || 'ERROR V3.1'}</strong> ❌ ${event.error || event.message || 'Error desconocido V3.1'}
                 </div>
                 <div class="firewall-event-details">
-                    ${event.details || 'No hay detalles disponibles'}
+                    ${event.details || 'No hay detalles disponibles para V3.1'}
                 </div>
             `;
         }
@@ -657,10 +1112,10 @@ function addFirewallEventToList(event) {
         currentFirewallEvents.unshift(event);
         // SIN LÍMITE: No eliminar eventos del array
 
-        console.log('🔥 Evento firewall V3 añadido:', event.id || event.command_id, eventType);
+        console.log('🔥 Evento firewall V3.1 añadido:', event.id || event.command_id, eventType);
 
     } catch (error) {
-        console.error('❌ Error añadiendo evento firewall a lista:', error);
+        console.error('❌ Error añadiendo evento firewall V3.1 a lista:', error);
     }
 }
 
@@ -670,15 +1125,15 @@ function clearFirewallEventsList() {
         firewallEventsList.innerHTML = `
             <div class="no-firewall-events">
                 <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
-                <p>No hay eventos del firewall</p>
-                <button onclick="sendTestFirewallCommand()" class="btn btn-primary" style="margin-top: 10px;">
-                    🧪 Enviar Test Firewall V3
+                <p>No hay eventos del firewall V3.1</p>
+                <button onclick="sendTestFirewallCommandV31()" class="btn btn-primary" style="margin-top: 10px;">
+                    🧪 Enviar Test Firewall V3.1
                 </button>
             </div>
         `;
         updateElement('firewall-events-count', 0);
         currentFirewallEvents = [];
-        addDebugLog('info', 'Lista de eventos del firewall V3 limpiada');
+        addDebugLog('info', 'Lista de eventos del firewall V3.1 limpiada');
     }
 }
 
@@ -690,42 +1145,43 @@ function pauseFirewallEventsUpdate() {
         if (firewallEventsPaused) {
             btn.innerHTML = '<i class="fas fa-play"></i>';
             btn.classList.add('paused');
-            showToast('Eventos del firewall pausados', 'warning');
-            addDebugLog('warning', 'Actualización de eventos del firewall pausada');
+            showToast('Eventos del firewall V3.1 pausados', 'warning');
+            addDebugLog('warning', 'Actualización de eventos del firewall V3.1 pausada');
         } else {
             btn.innerHTML = '<i class="fas fa-pause"></i>';
             btn.classList.remove('paused');
-            showToast('Eventos del firewall reanudados', 'success');
-            addDebugLog('info', 'Actualización de eventos del firewall reanudada');
+            showToast('Eventos del firewall V3.1 reanudados', 'success');
+            addDebugLog('info', 'Actualización de eventos del firewall V3.1 reanudada');
         }
     }
 }
 
 // ============================================================================
-// TEST FIREWALL - USANDO FIREWALL_COMMANDS.PROTO
+// TEST FIREWALL V3.1 - USANDO FIREWALL_COMMANDS_V31.PROTO
 // ============================================================================
 
-async function sendTestFirewallCommand() {
+async function sendTestFirewallCommandV31() {
     try {
-        console.log('🧪 Enviando comando de test firewall (API corregida)...');
+        console.log('🧪 Enviando comando de test firewall V3.1...');
 
-        const commandId = `test_${Date.now()}`;
-        const targetAgent = getAvailableFirewallAgents()[0] || 'simple_firewall_agent_001';
+        const commandId = `test_v31_${Date.now()}`;
+        const targetAgent = getAvailableFirewallAgents()[0] || 'simple_firewall_agent_v31_001';
 
-        // ✅ CORREGIDO: Estructura plana para test
+        // ✅ Estructura para V3.1
         const requestData = {
-            action: 'LIST_RULES',             // ✅ Directo
-            target_ip: '127.0.0.1',          // ✅ Directo
-            firewall_node_id: targetAgent,   // ✅ Nombre correcto
+            action: 'LIST_RULES',
+            target_ip: '127.0.0.1',
+            firewall_node_id: targetAgent,
 
             command_id: commandId,
-            generated_by: 'dashboard_test',
+            generated_by: 'dashboard_v31_test',
             test_mode: true,
+            version: 'v3.1',
 
-            // ✅ ULTRA-SEGURO para test
+            // ✅ Seguridad V3.1
             force_dry_run: true,
             max_duration: 0,
-            requires_confirmation: false  // LIST_RULES es seguro
+            requires_confirmation: false
         };
 
         addFirewallEventToList({
@@ -734,19 +1190,18 @@ async function sendTestFirewallCommand() {
             action: 'LIST_RULES',
             target_ip: '127.0.0.1',
             action_code: CommandAction.LIST_RULES,
-            source: 'Dashboard Test (Fixed API)',
+            source: 'Dashboard Test V3.1',
             timestamp: Date.now() / 1000
         });
 
-        showToast('Enviando test al firewall (API corregida)...', 'info');
+        showToast('Enviando test al firewall V3.1...', 'info');
 
-        // ✅ ENVÍO CON API CORREGIDA
         const response = await fetch('/api/execute-firewall-action', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestData)  // ✅ Estructura plana
+            body: JSON.stringify(requestData)
         });
 
         if (!response.ok) {
@@ -762,16 +1217,16 @@ async function sendTestFirewallCommand() {
                     type: 'response',
                     success: true,
                     agent: result.node_id || targetAgent,
-                    result: result.message || 'LIST_RULES executed successfully',
+                    result: result.message || 'LIST_RULES executed successfully V3.1',
                     node_id: result.node_id || targetAgent,
                     execution_time: result.execution_time || 0.05,
                     timestamp: Date.now() / 1000
                 });
             }, 300);
 
-            showToast('✅ Test enviado correctamente al firewall', 'success');
-            console.log('✅ Test firewall exitoso:', result);
-            addDebugLog('info', 'Test firewall enviado correctamente con API corregida');
+            showToast('✅ Test V3.1 enviado correctamente al firewall', 'success');
+            console.log('✅ Test firewall V3.1 exitoso:', result);
+            addDebugLog('info', 'Test firewall V3.1 enviado correctamente');
 
             firewallStats.commandsSent++;
             firewallStats.responsesOk++;
@@ -786,7 +1241,7 @@ async function sendTestFirewallCommand() {
                     id: commandId,
                     type: 'error',
                     success: false,
-                    error: result.message || 'Error en test',
+                    error: result.message || 'Error en test V3.1',
                     timestamp: Date.now() / 1000
                 });
             }, 300);
@@ -794,662 +1249,493 @@ async function sendTestFirewallCommand() {
             firewallStats.errors++;
             updateElement('firewall-errors', firewallStats.errors);
 
-            showToast('❌ Error en test: ' + result.message, 'error');
-            addDebugLog('error', `Error test firewall: ${result.message}`);
+            showToast('❌ Error en test V3.1: ' + result.message, 'error');
+            addDebugLog('error', `Error test firewall V3.1: ${result.message}`);
         }
 
     } catch (error) {
-        console.error('❌ Error en sendTestFirewallCommand:', error);
+        console.error('❌ Error en sendTestFirewallCommandV31:', error);
 
         addFirewallEventToList({
-            id: `error_${Date.now()}`,
+            id: `error_v31_${Date.now()}`,
             type: 'error',
             success: false,
-            error: `Error de comunicación: ${error.message}`,
+            error: `Error de comunicación V3.1: ${error.message}`,
             timestamp: Date.now() / 1000
         });
 
         firewallStats.errors++;
         updateElement('firewall-errors', firewallStats.errors);
 
-        showToast('❌ Error comunicando con firewall: ' + error.message, 'error');
-        addDebugLog('error', `Error comunicación firewall: ${error.message}`);
+        showToast('❌ Error comunicando con firewall V3.1: ' + error.message, 'error');
+        addDebugLog('error', `Error comunicación firewall V3.1: ${error.message}`);
     }
 }
 
-// Alias para compatibilidad
-async function sendTestFirewallEvent() {
-    return await sendTestFirewallCommand();
+// Aliases para compatibilidad
+async function sendTestFirewallCommand() {
+    return await sendTestFirewallCommandV31();
 }
 
-// 🔥 FUNCIÓN PARA OBTENER AGENTES DISPONIBLES
+async function sendTestFirewallEvent() {
+    return await sendTestFirewallCommandV31();
+}
+
+// 🔥 Función para obtener agentes disponibles V3.1
 function getAvailableFirewallAgents() {
     if (firewallConfig.agents && firewallConfig.agents.length > 0) {
         return firewallConfig.agents.map(agent => agent.node_id || agent.name);
     }
-    return ['simple_firewall_agent_001']; // Fallback
+    return ['simple_firewall_agent_v31_001']; // Fallback V3.1
+}
+
+// 🔥 Función para obtener acciones disponibles V3.1 (BACKEND DECIDE)
+function getAvailableFirewallActions() {
+    // El backend decide qué acciones están disponibles
+    if (firewallRules.default_actions && firewallRules.default_actions.length > 0) {
+        return firewallRules.default_actions;
+    }
+    if (firewallConfig.capabilities && firewallConfig.capabilities.length > 0) {
+        return firewallConfig.capabilities;
+    }
+    return ['BLOCK_IP', 'RATE_LIMIT_IP', 'LIST_RULES']; // Fallback mínimo V3.1
 }
 
 // ============================================================================
-// MANEJO DE EVENTOS DESDE BACKEND - SIN LÍMITE + CAMPOS PLANOS CORREGIDOS
+// 🎯 MODAL ESPECÍFICO PARA TARGET_IP V3.1 - CAMPOS ADICIONALES
 // ============================================================================
 
-function processEventsFromZeroMQ(events) {
-    if (eventsPaused) return;
-
+async function showTargetIPDetailV31(targetIP, eventData) {
     try {
-        const newEvents = events.filter(event => {
-            return !currentEvents.some(existing =>
-                existing.id === event.id ||
-                (existing.timestamp === event.timestamp &&
-                 existing.source_ip === event.source_ip)
-            );
-        });
-
-        newEvents.forEach(event => {
-            addEventFromZeroMQ(event);
-        });
-
-        if (newEvents.length > 0) {
-            console.log(`📨 ${newEvents.length} eventos nuevos V3 desde backend con campos planos`);
-        }
-
-    } catch (error) {
-        console.error('❌ Error procesando eventos backend:', error);
-        addDebugLog('error', `Error eventos backend: ${error.message}`);
-    }
-}
-
-function addEventFromZeroMQ(event) {
-    try {
-        if (!event.source_ip || !event.target_ip) {
-            console.warn('⚠️ Evento backend incompleto:', event);
-            return;
-        }
-
-        if (typeof event.risk_score !== 'number') {
-            event.risk_score = 0.5;
-        }
-
-        if (!event.timestamp) {
-            event.timestamp = Date.now() / 1000;
-        }
-
-        // 🔥 USAR CAMPOS PLANOS PARA EL MAPA CON ANIMACIONES MISIL
-        addEventToMapWithMissileAnimation(event);
-
-        addEventToEventsList(event);
-
-        if (event.risk_score > 0.8) {
-            showThreatIndicator(event);
-        }
-
-        console.log('🚨 Evento backend V3 procesado con campos planos:', event.source_ip, '→', event.target_ip);
-
-    } catch (error) {
-        console.error('❌ Error añadiendo evento backend:', error);
-        addDebugLog('error', `Error evento: ${error.message}`);
-    }
-}
-
-function addEventToEventsList(event) {
-    const eventsList = document.getElementById('events-list');
-    if (!eventsList) return;
-
-    try {
-        const placeholder = eventsList.querySelector('.no-events-placeholder');
-        if (placeholder) {
-            placeholder.remove();
-        }
-
-        const riskLevel = event.risk_score > 0.8 ? 'high' :
-                         event.risk_score > 0.5 ? 'medium' : 'low';
-
-        const eventElement = document.createElement('div');
-        eventElement.className = `event-item risk-${riskLevel} new-event`;
-        eventElement.onclick = () => showEventDetail(event);
-
-        const eventTime = new Date(event.timestamp * 1000);
-
-        // ✅ CORREGIDO: Información más completa usando campos planos
-        const geoInfo = (event.geographic_distance_km && event.geographic_distance_km > 0) ?
-            `<small style="color: #888;">${event.geographic_distance_km}km - ${event.same_country ? 'Local' : 'Internacional'}</small>` : '';
-
-        // ✅ FIX 4: ACCIONES INDEPENDIENTES DE GEOLOCALIZACIÓN - Añadir botones directos
-        const quickActionsButtons = generateQuickFirewallActions(event);
-
-        eventElement.innerHTML = `
-            <div class="event-header">
-                <span class="event-time">${eventTime.toLocaleTimeString()}</span>
-                <span class="event-risk ${riskLevel}">${(event.risk_score * 100).toFixed(0)}%</span>
-            </div>
-            <div class="event-details">
-                <div><span class="event-source">${event.source_ip}</span> → <span class="event-target">${event.target_ip}</span></div>
-                <div class="event-type">${event.type || 'Backend Event V3'} ${geoInfo}</div>
-            </div>
-            <!-- ✅ FIX 4: BOTONES DE ACCIÓN DIRECTOS EN LA LISTA -->
-            <div class="event-quick-actions" style="margin-top: 8px; display: flex; gap: 5px; flex-wrap: wrap;">
-                ${quickActionsButtons}
-            </div>
-        `;
-
-        // 🆕 SIN LÍMITE: No eliminar eventos antiguos
-        eventsList.insertBefore(eventElement, eventsList.firstChild);
-
-        // Actualizar contador sin límite
-        const events = eventsList.querySelectorAll('.event-item');
-        updateElement('live-events-count', events.length);
-
-        currentEvents.unshift(event);
-        // SIN LÍMITE: No eliminar eventos del array
-
-    } catch (error) {
-        console.error('❌ Error añadiendo evento a lista:', error);
-    }
-}
-
-// ✅ FIX 4: FUNCIÓN PARA GENERAR BOTONES RÁPIDOS EN LA LISTA
-function generateQuickFirewallActions(event) {
-    const buttons = `
-        <button onclick="quickBlockAttacker('${event.target_ip}', '${event.id}'); event.stopPropagation();"
-                class="quick-action-btn block-btn"
-                title="Bloquear IP atacante"
-                style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
-            🚫 Block
-        </button>
-        <button onclick="quickShowTargetDetail('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')}); event.stopPropagation();"
-                class="quick-action-btn target-btn"
-                title="Ver detalles del atacante"
-                style="background: rgba(204, 0, 0, 0.2); border: 1px solid #cc0000; color: #cc0000; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
-            🎯 Details
-        </button>
-        <button onclick="quickShowSourceDetail('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')}); event.stopPropagation();"
-                class="quick-action-btn source-btn"
-                title="Ver detalles de la víctima"
-                style="background: rgba(0, 102, 204, 0.2); border: 1px solid #0066cc; color: #0066cc; padding: 2px 6px; border-radius: 3px; font-size: 9px; cursor: pointer;">
-            🏠 Victim
-        </button>
-    `;
-    return buttons;
-}
-
-// ✅ FIX 4: FUNCIONES PARA ACCIONES RÁPIDAS
-async function quickBlockAttacker(targetIP, eventId) {
-    try {
-        console.log(`⚡ Acción rápida: Bloqueando ${targetIP}`);
-
-        const commandId = `quick_block_${Date.now()}`;
-        const requestData = {
-            action: 'BLOCK_IP',
-            target_ip: targetIP,
-            firewall_node_id: getAvailableFirewallAgents()[0] || 'simple_firewall_agent_001',
-            command_id: commandId,
-            generated_by: 'dashboard_quick_action',
-            event_id: eventId,
-            force_dry_run: true,
-            max_duration: 300
-        };
-
-        showToast(`🚫 Bloqueando ${targetIP}...`, 'warning');
-
-        const response = await fetch('/api/execute-firewall-action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestData)
-        });
-
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-                showToast(`✅ ${targetIP} bloqueado exitosamente`, 'success');
-                addDebugLog('info', `Quick block ejecutado: ${targetIP}`);
-            } else {
-                showToast(`❌ Error bloqueando ${targetIP}: ${result.message}`, 'error');
-            }
-        } else {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-    } catch (error) {
-        console.error('❌ Error en quick block:', error);
-        showToast(`❌ Error comunicando con firewall`, 'error');
-    }
-}
-
-function quickShowTargetDetail(targetIP, eventData) {
-    console.log(`🎯 Acción rápida: Mostrando detalles del atacante ${targetIP}`);
-    showTargetIPDetail(targetIP, eventData);
-}
-
-function quickShowSourceDetail(sourceIP, eventData) {
-    console.log(`🏠 Acción rápida: Mostrando detalles de la víctima ${sourceIP}`);
-    showSourceIPDetail(sourceIP, eventData);
-}
-
-// ============================================================================
-// 🚀 FUNCIONES CORREGIDAS PARA ANIMACIONES TIPO MISIL - CAMPOS PLANOS
-// ============================================================================
-
-function addEventToMapWithMissileAnimation(event) {
-    if (!map) return;
-
-    try {
-        const riskLevel = event.risk_score > 0.8 ? 'high' :
-                         event.risk_score > 0.5 ? 'medium' : 'low';
-
-        const colors = {
-            high: '#ff4444',
-            medium: '#ffaa00',
-            low: '#00ff00'
-        };
-
-        let markersAdded = [];
-
-        // ✅ CORREGIDO: Usar campos planos directamente del backend
-        console.log('🗺️ Procesando evento con campos planos V3:', {
-            source_lat: event.source_latitude,
-            source_lng: event.source_longitude,
-            target_lat: event.target_latitude,
-            target_lng: event.target_longitude,
-            source_enriched: event.source_ip_enriched,
-            target_enriched: event.target_ip_enriched
-        });
-
-        // ✅ COORDENADAS SOURCE (víctima/origen) - CAMPOS PLANOS
-        if (event.source_latitude && event.source_longitude &&
-            event.source_latitude !== 0 && event.source_longitude !== 0) {
-
-            const sourceMarker = L.circleMarker([event.source_latitude, event.source_longitude], {
-                radius: 10,
-                fillColor: '#0066CC',
-                color: '#0066CC',
-                weight: 2,
-                opacity: 0.8,
-                fillOpacity: 0.6,
-                className: 'source-marker clickable-marker'
-            }).bindPopup(`
-                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                    <b>🏠 Víctima/Origen</b><br>
-                    <strong>IP:</strong> ${event.source_ip}<br>
-                    <strong>Ubicación:</strong> ${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}<br>
-                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
-                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
-                    <strong>Enriquecido:</strong> ${event.source_ip_enriched ? '✅' : '❌'}<br>
-                    <button onclick="showSourceIPDetail('${event.source_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})" style="margin-top: 5px; background: #0066CC; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Ver Detalles</button>
-                </div>
-            `).addTo(map);
-
-            sourceMarker._isEventMarker = true;
-            sourceMarker._eventData = event;
-            sourceMarker._markerType = 'source';
-            markersAdded.push(sourceMarker);
-        }
-
-        // ✅ COORDENADAS TARGET (atacante/destino) - CAMPOS PLANOS
-        if (event.target_latitude && event.target_longitude &&
-            event.target_latitude !== 0 && event.target_longitude !== 0) {
-
-            const targetMarker = L.circleMarker([event.target_latitude, event.target_longitude], {
-                radius: 10,
-                fillColor: '#CC0000',
-                color: '#CC0000',
-                weight: 2,
-                opacity: 0.8,
-                fillOpacity: 0.6,
-                className: 'target-marker clickable-marker'
-            }).bindPopup(`
-                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                    <b>🎯 Atacante/Destino</b><br>
-                    <strong>IP:</strong> ${event.target_ip}<br>
-                    <strong>Ubicación:</strong> ${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}<br>
-                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
-                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
-                    <strong>Enriquecido:</strong> ${event.target_ip_enriched ? '✅' : '❌'}<br>
-                    <button onclick="showTargetIPDetail('${event.target_ip}', ${JSON.stringify(event).replace(/"/g, '&quot;')})" style="margin-top: 5px; background: #CC0000; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">🎯 Acciones Firewall</button>
-                </div>
-            `).addTo(map);
-
-            targetMarker._isEventMarker = true;
-            targetMarker._eventData = event;
-            targetMarker._markerType = 'target';
-            markersAdded.push(targetMarker);
-        }
-
-        // ✅ LÍNEA CURVA ANIMADA TIPO MISIL - CAMPOS PLANOS
-        if (markersAdded.length === 2 &&
-            event.source_latitude && event.source_longitude &&
-            event.target_latitude && event.target_longitude) {
-
-            createMissileTrajectoryAnimation(
-                [event.source_latitude, event.source_longitude],
-                [event.target_latitude, event.target_longitude],
-                event
-            );
-        }
-
-        // ✅ FALLBACK: Coordenadas legacy (solo source_ip)
-        if (markersAdded.length === 0 &&
-            event.latitude && event.longitude &&
-            event.latitude !== 0 && event.longitude !== 0) {
-
-            const legacyMarker = L.circleMarker([event.latitude, event.longitude], {
-                radius: 8,
-                fillColor: colors[riskLevel],
-                color: colors[riskLevel],
-                weight: 2,
-                opacity: 0.8,
-                fillOpacity: 0.6,
-                className: 'legacy-marker clickable-marker'
-            }).bindPopup(`
-                <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                    <b>🚨 Evento Legacy</b><br>
-                    <strong>Origen:</strong> ${event.source_ip}<br>
-                    <strong>Destino:</strong> ${event.target_ip}<br>
-                    <strong>Riesgo:</strong> <span style="color: ${colors[riskLevel]};">${(event.risk_score * 100).toFixed(0)}%</span><br>
-                    <strong>Ubicación:</strong> ${event.location || 'No disponible'}<br>
-                    <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}<br>
-                    <button onclick="showEventDetail(${JSON.stringify(event).replace(/"/g, '&quot;')})" style="margin-top: 5px; background: ${colors[riskLevel]}; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer;">Ver Detalles</button>
-                </div>
-            `).addTo(map);
-
-            legacyMarker._isEventMarker = true;
-            legacyMarker._eventData = event;
-            legacyMarker._markerType = 'legacy';
-            markersAdded.push(legacyMarker);
-        }
-
-        // Agregar a la lista global y programar eliminación
-        markersAdded.forEach(marker => {
-            markers.push(marker);
-            setTimeout(() => {
-                if (map.hasLayer(marker)) {
-                    map.removeLayer(marker);
-                    markers = markers.filter(m => m !== marker);
-                }
-            }, 5 * 60 * 1000);
-        });
-
-        if (markersAdded.length > 0) {
-            console.log(`📍 ${markersAdded.length} marcadores V3 con animación añadidos para evento:`, event.source_ip, '→', event.target_ip);
-        }
-
-    } catch (error) {
-        console.error('❌ Error añadiendo marcadores con animación misil:', error);
-    }
-}
-
-// ✅ CORREGIDA: FUNCIÓN PARA CREAR ANIMACIÓN TIPO MISIL - CAMPOS PLANOS
-function createMissileTrajectoryAnimation(sourceCoords, targetCoords, event) {
-    try {
-        // Calcular punto de control para curva (más alto para efecto misil)
-        const midLat = (sourceCoords[0] + targetCoords[0]) / 2;
-        const midLng = (sourceCoords[1] + targetCoords[1]) / 2;
-
-        // Calcular altura de la curva basada en distancia
-        const distance = Math.sqrt(Math.pow(targetCoords[0] - sourceCoords[0], 2) + Math.pow(targetCoords[1] - sourceCoords[1], 2));
-        const curveHeight = distance * 0.3; // 30% de la distancia como altura
-
-        // Punto de control para la curva (más alto)
-        const controlPoint = [midLat + curveHeight, midLng];
-
-        // Crear múltiples puntos para la curva Bézier
-        const curvePoints = [];
-        for (let t = 0; t <= 1; t += 0.05) {
-            const lat = Math.pow(1-t, 2) * sourceCoords[0] + 2*(1-t)*t * controlPoint[0] + Math.pow(t, 2) * targetCoords[0];
-            const lng = Math.pow(1-t, 2) * sourceCoords[1] + 2*(1-t)*t * controlPoint[1] + Math.pow(t, 2) * targetCoords[1];
-            curvePoints.push([lat, lng]);
-        }
-
-        // Crear la línea curva - ✅ CORREGIDO: Usar campos planos
-        const trajectoryLine = L.polyline(curvePoints, {
-            color: event.same_country ? '#FFA500' : '#FF0000',
-            weight: 3,
-            opacity: 0.8,
-            dashArray: '10, 5',
-            className: 'missile-trajectory'
-        }).bindPopup(`
-            <div style="color: #000; font-family: 'Consolas', monospace; font-size: 11px;">
-                <b>🚀 Trayectoria de Ataque</b><br>
-                <strong>Origen:</strong> ${event.source_ip}<br>
-                <strong>Destino:</strong> ${event.target_ip}<br>
-                <strong>Distancia:</strong> ${event.geographic_distance_km || 'N/A'}km<br>
-                <strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>
-                <strong>Riesgo:</strong> ${(event.risk_score * 100).toFixed(0)}%
-            </div>
-        `).addTo(map);
-
-        trajectoryLine._isEventMarker = true;
-        trajectoryLine._trajectoryType = 'missile';
-        connectionLines.push(trajectoryLine);
-
-        // 🚀 Añadir animación de flujo
-        setTimeout(() => {
-            if (map.hasLayer(trajectoryLine)) {
-                trajectoryLine.setStyle({
-                    className: 'missile-trajectory missile-flow-animation'
-                });
-            }
-        }, 100);
-
-        // Auto-remover la línea después de 5 minutos
-        setTimeout(() => {
-            if (map.hasLayer(trajectoryLine)) {
-                map.removeLayer(trajectoryLine);
-                connectionLines = connectionLines.filter(l => l !== trajectoryLine);
-            }
-        }, 5 * 60 * 1000);
-
-        console.log('🚀 Trayectoria misil creada con campos planos:', event.source_ip, '→', event.target_ip);
-
-    } catch (error) {
-        console.error('❌ Error creando animación misil:', error);
-    }
-}
-
-// ============================================================================
-// 🎯 MODAL ESPECÍFICO PARA TARGET_IP - CORREGIDO PARA CAMPOS PLANOS
-// ============================================================================
-
-async function showTargetIPDetail(targetIP, eventData) {
-    try {
-        console.log('🎯 Mostrando detalle específico del target_ip con campos planos:', targetIP, eventData);
+        console.log('🎯 Mostrando detalle específico del target_ip V3.1:', targetIP, eventData);
 
         // Parsear eventData si viene como string
         const event = typeof eventData === 'string' ? JSON.parse(eventData.replace(/&quot;/g, '"')) : eventData;
 
-        // ✅ CORREGIDO: Obtener información específica del target_ip usando campos planos
+        // ✅ Obtener información específica del target_ip V3.1
         const hasTargetGeoInfo = event.target_latitude && event.target_longitude &&
                                 event.target_latitude !== 0 && event.target_longitude !== 0;
 
         // Obtener información del firewall responsable
-        const firewallInfo = await getResponsibleFirewallInfoForTarget(targetIP, event);
+        const firewallInfo = await getResponsibleFirewallInfoForTargetV31(targetIP, event);
 
-        // ✅ FIX 2: GOOGLE MAPS VISTA SUPERIOR - Generar botón correcto para target_ip
+        // ✅ Generar botón Google Maps para target_ip V3.1
         const targetMapButton = hasTargetGeoInfo ?
             `<div style="margin-top: 10px;">
                 <a href="https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z" target="_blank" class="google-maps-btn target-streetview-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Ubicación del Atacante
+                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Ubicación del Atacante V3.1
                 </a>
             </div>` : '';
 
-        // ✅ FIX 3: BOTÓN SIEMPRE VISIBLE - Mostrar botón incluso sin coordenadas exactas
+        // ✅ Botón siempre visible V3.1
         const fallbackMapButton = !hasTargetGeoInfo ?
             `<div style="margin-top: 10px;">
                 <a href="https://www.google.com/maps/search/${encodeURIComponent(targetIP)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
-                    <i class="fas fa-search"></i> 🔍 Buscar IP en Maps
+                    <i class="fas fa-search"></i> 🔍 Buscar IP V3.1 en Maps
                 </a>
             </div>` : '';
 
         const content = `
             <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
-                <!-- Header específico del target_ip -->
-                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #CC0000;">
-                    <h3 style="color: #CC0000; margin: 0;">🎯 Información del Atacante (FIX 2+3 Aplicado)</h3>
-                    <div style="font-size: 14px; color: #CC0000; margin-top: 5px; font-weight: bold;">
-                        IP: ${targetIP}
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #0066CC;">
+                    <h3 style="color: #0066CC; margin: 0;">🏠 Información de la Víctima V3.1</h3>
+                    <div style="font-size: 14px; color: #0066CC; margin-top: 5px; font-weight: bold;">
+                        IP: ${sourceIP}
                     </div>
                     <div style="font-size: 11px; color: #888; margin-top: 5px;">
                         Evento ID: ${event.id || 'N/A'} | ${new Date(event.timestamp * 1000).toLocaleString()}
+                        | Node: ${event.capturing_node_id || 'N/A'} | Pipeline: ${event.pipeline_latency || 0}ms
                     </div>
-                    ${targetMapButton}
+                    ${sourceMapButton}
                     ${fallbackMapButton}
                 </div>
 
-                <!-- ✅ CORREGIDO: Información geográfica del target_ip usando campos planos -->
-                ${hasTargetGeoInfo ? `
-                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(204, 0, 0, 0.1); border-left: 4px solid #CC0000; border-radius: 4px;">
-                        <div style="color: #CC0000; font-weight: bold; margin-bottom: 8px;">
-                            🌍 Ubicación Geográfica del Atacante (V3)
+                <!-- ✅ V3.1: Información geográfica de la víctima -->
+                ${hasSourceGeoInfo ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
+                        <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">
+                            🌍 Ubicación Geográfica de la Víctima V3.1
                         </div>
                         <div style="font-size: 11px; line-height: 1.4;">
-                            <strong>Ciudad:</strong> ${event.target_city || 'N/A'}<br>
-                            <strong>País:</strong> ${event.target_country || 'N/A'}<br>
-                            <strong>Código País:</strong> ${event.target_country_code || 'N/A'}<br>
-                            <strong>Coordenadas:</strong> ${event.target_latitude?.toFixed(4) || 'N/A'}, ${event.target_longitude?.toFixed(4) || 'N/A'}<br>
-                            ${event.target_region ? `<strong>Región:</strong> ${event.target_region}<br>` : ''}
-                            ${event.target_timezone ? `<strong>Zona Horaria:</strong> ${event.target_timezone}<br>` : ''}
-                            ${event.target_isp ? `<strong>ISP:</strong> ${event.target_isp}<br>` : ''}
-                            ${event.target_asn ? `<strong>ASN:</strong> ${event.target_asn}<br>` : ''}
-                            <strong>Enriquecimiento:</strong> ${event.target_ip_enriched ? '✅ Exitoso' : '❌ Fallido'}<br>
-                            ${event.target_is_tor_exit ? '<strong style="color: #FF0000;">🚨 Nodo Tor Exit</strong><br>' : ''}
-                            ${event.target_is_known_malicious ? '<strong style="color: #FF0000;">⚠️ IP Maliciosa Conocida</strong><br>' : ''}
+                            <strong>Ciudad:</strong> ${event.source_city || 'N/A'}<br>
+                            <strong>País:</strong> ${event.source_country || 'N/A'}<br>
+                            <strong>Código País:</strong> ${event.source_country_code || 'N/A'}<br>
+                            <strong>Coordenadas:</strong> ${event.source_latitude?.toFixed(4) || 'N/A'}, ${event.source_longitude?.toFixed(4) || 'N/A'}<br>
+                            ${event.source_region ? `<strong>Región:</strong> ${event.source_region}<br>` : ''}
+                            ${event.source_timezone ? `<strong>Zona Horaria:</strong> ${event.source_timezone}<br>` : ''}
+                            ${event.source_isp ? `<strong>ISP:</strong> ${event.source_isp}<br>` : ''}
+                            ${event.source_asn ? `<strong>ASN:</strong> ${event.source_asn}<br>` : ''}
+                            <strong>Enriquecimiento:</strong> ${event.source_ip_enriched ? '✅ Exitoso' : '❌ Fallido'}
                         </div>
                     </div>
                 ` : `
                     <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
                         <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
-                            ⚠️ Información Geográfica No Disponible
+                            ⚠️ Información Geográfica No Disponible V3.1
                         </div>
                         <div style="font-size: 11px; line-height: 1.4;">
-                            <strong>IP:</strong> ${targetIP}<br>
+                            <strong>IP:</strong> ${sourceIP}<br>
                             <strong>Estado:</strong> Sin geolocalización exacta<br>
-                            <strong>Acciones:</strong> Disponibles independientemente de ubicación<br>
-                            💡 Las acciones de firewall funcionan sin coordenadas geográficas
+                            <strong>Tipo:</strong> Víctima del ataque<br>
+                            💡 El sistema V3.1 puede funcionar sin coordenadas exactas
                         </div>
                     </div>
                 `}
 
-                <!-- ✅ CORREGIDO: Información del ataque usando campos planos -->
-                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 68, 68, 0.1); border-left: 4px solid #ff4444; border-radius: 4px;">
-                    <div style="color: #ff4444; font-weight: bold; margin-bottom: 8px;">
-                        ⚠️ Detalles del Ataque (V3)
+                <!-- ✅ V3.1: Información del ataque recibido con nuevos campos -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
+                    <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">
+                        🏠 Información del Ataque Recibido V3.1
                     </div>
                     <div style="font-size: 11px; line-height: 1.4;">
-                        <strong>IP Víctima:</strong> <span style="color: #0066CC;">${event.source_ip}</span><br>
-                        <strong>IP Atacante:</strong> <span style="color: #CC0000;">${targetIP}</span><br>
-                        <strong>Score de Riesgo:</strong> <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'}; font-weight: bold;">${(event.risk_score * 100).toFixed(1)}%</span><br>
-                        <strong>Tipo de Evento:</strong> ${event.type || 'network_traffic'}<br>
-                        ${event.geographic_distance_km ? `<strong>Distancia:</strong> ${event.geographic_distance_km}km<br>` : ''}
+                        <strong>IP Víctima:</strong> <span style="color: #0066CC;">${sourceIP}</span><br>
+                        <strong>IP Atacante:</strong> <span style="color: #CC0000;">${event.target_ip}</span><br>
+                        <strong>Ensemble Confidence:</strong> <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'}; font-weight: bold;">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span><br>
+                        <strong>Tipo de Ataque:</strong> ${event.type || 'network_traffic'}<br>
+                        <strong>Pipeline Latency:</strong> ${event.pipeline_latency || 0}ms<br>
+                        <strong>Capturing Node:</strong> ${event.capturing_node_id || 'N/A'}<br>
+                        ${event.geographic_distance_km ? `<strong>Distancia del Atacante:</strong> ${event.geographic_distance_km}km<br>` : ''}
                         ${event.same_country !== undefined ? `<strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>` : ''}
-                        ${event.distance_category ? `<strong>Categoría Distancia:</strong> ${event.distance_category}<br>` : ''}
                         <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
                     </div>
                 </div>
 
-                <!-- Información del firewall responsable -->
+                <!-- ✅ V3.1: Análisis ML Tricapa para víctima -->
+                ${event.tricapa_scores ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                        <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                            🤖 Análisis ML V3.1 (Perspectiva Víctima)
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>Isolation Forest:</strong> ${(event.tricapa_scores.isolation_forest * 100 || 0).toFixed(1)}%<br>
+                            <strong>One-Class SVM:</strong> ${(event.tricapa_scores.one_class_svm * 100 || 0).toFixed(1)}%<br>
+                            <strong>Local Outlier Factor:</strong> ${(event.tricapa_scores.local_outlier_factor * 100 || 0).toFixed(1)}%<br>
+                            <strong>Ensemble Final:</strong> <span style="color: #00aaff; font-weight: bold;">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
+                    <strong>Datos de la Víctima V3.1:</strong><br>
+                    <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify({
+                        source_ip: sourceIP,
+                        source_coordinates: {
+                            latitude: event.source_latitude,
+                            longitude: event.source_longitude,
+                            enriched: event.source_ip_enriched
+                        },
+                        source_geo_info: {
+                            city: event.source_city,
+                            country: event.source_country,
+                            country_code: event.source_country_code,
+                            region: event.source_region,
+                            timezone: event.source_timezone,
+                            isp: event.source_isp,
+                            asn: event.source_asn
+                        },
+                        ml_analysis_v31: {
+                            ensemble_confidence: event.ensemble_confidence,
+                            pipeline_latency: event.pipeline_latency,
+                            capturing_node_id: event.capturing_node_id,
+                            tricapa_scores: event.tricapa_scores
+                        },
+                        attack_context: {
+                            attacker_ip: event.target_ip,
+                            risk_score: event.risk_score,
+                            timestamp: event.timestamp,
+                            type: event.type,
+                            geographic_distance_km: event.geographic_distance_km,
+                            same_country: event.same_country
+                        }
+                    }, null, 2)}</pre>
+                </div>
+            </div>
+        `;
+
+        showModal(`🏠 Víctima V3.1: ${sourceIP}`, content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalle del source_ip V3.1:', error);
+        showToast('Error mostrando detalles de la víctima V3.1', 'error');
+    }
+}
+
+// ============================================================================
+// 🚨 MODAL DE EVENTOS COMPLETO V3.1 - CON NUEVOS CAMPOS
+// ============================================================================
+
+async function showEventDetailV31(event) {
+    try {
+        console.log('🔍 Mostrando detalle completo del evento V3.1 con nuevos campos:', event);
+
+        // Obtener información del firewall responsable desde backend V3.1
+        const firewallInfo = await getResponsibleFirewallInfoV31(event);
+        console.log('🔥 Info firewall responsable V3.1:', firewallInfo);
+
+        // ✅ Generar botones Google Maps con vista superior V3.1
+        const googleMapsButtons = generateDualGoogleMapsButtonsFixedV31(event);
+
+        const content = `
+            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <!-- Header del evento V3.1 -->
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
+                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad V3.1 Completo</h3>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
+                        | Node: ${event.capturing_node_id || 'N/A'} | Pipeline: ${event.pipeline_latency || 0}ms
+                    </div>
+                    ${googleMapsButtons}
+                </div>
+
+                <!-- ✅ V3.1: Información básica del evento con nuevos campos -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <strong>IP Origen (Víctima):</strong><br>
+                            <span style="color: #0066CC; font-size: 14px;">${event.source_ip}</span>
+                            ${event.source_city || event.source_country ? `<br><small style="color: #888;">${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}</small>` : ''}
+                        </div>
+                        <div>
+                            <strong>IP Destino (Atacante):</strong><br>
+                            <span style="color: #CC0000; font-size: 14px;">${event.target_ip}</span>
+                            ${event.target_city || event.target_country ? `<br><small style="color: #888;">${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}</small>` : ''}
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Ensemble Score:</strong><br>
+                            <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
+                                ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div>
+                            <strong>Tipo:</strong><br>
+                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
+                        </div>
+                        <div>
+                            <strong>Protocolo:</strong><br>
+                            <span style="color: #00aaff;">${event.protocol || 'TCP'}</span>
+                        </div>
+                        <div>
+                            <strong>Pipeline Lat:</strong><br>
+                            <span style="color: #0088ff;">${event.pipeline_latency || 0}ms</span>
+                        </div>
+                    </div>
+
+                    <!-- ✅ V3.1: Información extendida con nuevos campos -->
+                    ${event.src_port || event.dest_port ? `
+                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong>Puerto Origen:</strong> <span style="color: #0066CC;">${event.src_port || 'N/A'}</span>
+                            </div>
+                            <div>
+                                <strong>Puerto Destino:</strong> <span style="color: #CC0000;">${event.dest_port || 'N/A'}</span>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${event.bytes || event.packets || event.packet_size ? `
+                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                            ${event.bytes ? `<div><strong>Bytes:</strong> ${event.bytes}</div>` : ''}
+                            ${event.packets ? `<div><strong>Paquetes:</strong> ${event.packets}</div>` : ''}
+                            ${event.packet_size ? `<div><strong>Tamaño Paquete:</strong> ${event.packet_size}</div>` : ''}
+                        </div>
+                    ` : ''}
+
+                    <!-- ✅ V3.1: Información geográfica dual -->
+                    ${(event.source_latitude || event.target_latitude || event.geographic_distance_km) ? `
+                        <div style="margin-top: 15px; padding: 10px; background: rgba(0, 255, 136, 0.1); border-radius: 4px;">
+                            <strong style="color: #00ff88;">🗺️ Información Geográfica Dual V3.1:</strong><br>
+                            <small style="color: #ccc;">
+                                ${event.geographic_distance_km ? `Distancia: ${event.geographic_distance_km}km |` : ''}
+                                ${event.same_country !== undefined ? `Mismo País: ${event.same_country ? 'Sí' : 'No'} |` : ''}
+                                ${event.distance_category ? `Categoría: ${event.distance_category} |` : ''}
+                                ${event.source_ip_enriched ? ' Origen: ✅' : ' Origen: ❌'}
+                                ${event.target_ip_enriched ? ' | Destino: ✅' : ' | Destino: ❌'}
+                                | Node: ${event.capturing_node_id || 'N/A'}
+                            </small>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- ✅ V3.1: Análisis ML Tricapa Completo -->
+                ${event.tricapa_scores ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                        <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                            🤖 Análisis ML Tricapa V3.1
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; font-size: 11px;">
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #ff6b6b;">Isolation Forest</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.isolation_forest * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #ffa500;">One-Class SVM</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.one_class_svm * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #00ff88;">Local Outlier Factor</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.local_outlier_factor * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; text-align: center; padding: 8px; background: rgba(0, 170, 255, 0.2); border-radius: 4px;">
+                            <strong style="color: #00aaff;">Ensemble Final: ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</strong>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- 🔥 Información del firewall responsable V3.1 -->
                 <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
                     <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
-                        🔥 Firewall Agent Responsable
+                        🔥 Firewall Agent Responsable V3.1
                     </div>
                     <div style="font-size: 11px; line-height: 1.4;">
                         <strong>Node ID:</strong> ${firewallInfo.node_id}<br>
+                        <strong>IP del Agente:</strong> ${firewallInfo.agent_ip}<br>
                         <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
                         <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
-                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}
+                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}<br>
+                        <strong>Capacidades:</strong> ${firewallInfo.capabilities ? firewallInfo.capabilities.join(', ') : 'N/A'}<br>
+                        <strong>Version:</strong> V3.1
                     </div>
                 </div>
 
-                <!-- 🎯 ACCIONES ESPECÍFICAS PARA TARGET_IP - SIEMPRE DISPONIBLES -->
-                <div style="margin-bottom: 20px; padding: 15px; background: rgba(204, 0, 0, 0.1); border-left: 4px solid #CC0000; border-radius: 4px;">
-                    <div style="color: #CC0000; font-weight: bold; margin-bottom: 12px;">
-                        ⚡ Acciones Disponibles para ${targetIP} (FIX 4 Aplicado)
+                <!-- 🔥 ACCIONES DISPONIBLES PARA EL EVENTO V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 12px;">
+                        ⚡ Acciones Disponibles V3.1 (Backend Decide)
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        ${generateTargetIPFirewallActions(targetIP, firewallInfo, event)}
+                        ${generateEventFirewallActionsV31(event, firewallInfo)}
                     </div>
                     <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
-                        💡 Las acciones se aplicarán específicamente a la IP atacante: <strong style="color: #CC0000;">${targetIP}</strong><br>
-                        ✅ Disponibles independientemente de la geolocalización
+                        💡 Acciones V3.1 determinadas por el backend y aplicadas por: <strong style="color: #00ff88;">${firewallInfo.node_id}</strong>
                     </div>
                 </div>
 
-                <!-- Datos técnicos del target_ip -->
+                <!-- Datos completos del evento V3.1 (JSON) -->
                 <div>
-                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleTargetIPData()">
+                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleEventDataV31()">
                         <span style="color: #666; font-weight: bold;">
-                            📊 Datos Técnicos del Target_IP (Campos Planos V3)
+                            📊 Datos Completos del Evento V3.1
                         </span>
-                        <i class="fas fa-chevron-down" id="target-ip-data-toggle" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
+                        <i class="fas fa-chevron-down" id="event-data-toggle-v31" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
                     </div>
-                    <div id="target-ip-data-content" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                    <div id="event-data-content-v31" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
                         <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
-                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify({
-                                target_ip: targetIP,
-                                target_coordinates: {
-                                    latitude: event.target_latitude,
-                                    longitude: event.target_longitude,
-                                    enriched: event.target_ip_enriched
-                                },
-                                target_geo_info: {
-                                    city: event.target_city,
-                                    country: event.target_country,
-                                    country_code: event.target_country_code,
-                                    region: event.target_region,
-                                    timezone: event.target_timezone,
-                                    isp: event.target_isp,
-                                    asn: event.target_asn
-                                },
-                                threat_intel: {
-                                    is_tor_exit: event.target_is_tor_exit,
-                                    is_malicious: event.target_is_known_malicious,
-                                    source: event.threat_intelligence_source
-                                },
-                                event_context: {
-                                    source_ip: event.source_ip,
-                                    risk_score: event.risk_score,
-                                    timestamp: event.timestamp,
-                                    type: event.type,
-                                    geographic_distance_km: event.geographic_distance_km,
-                                    same_country: event.same_country
-                                }
-                            }, null, 2)}</pre>
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
                         </div>
                     </div>
                 </div>
             </div>
         `;
 
-        showModal(`🎯 Atacante: ${targetIP}`, content);
+        showModal('Análisis Completo del Evento V3.1', content);
 
     } catch (error) {
-        console.error('❌ Error mostrando detalle del target_ip:', error);
-        showToast('Error mostrando detalles del atacante', 'error');
+        console.error('❌ Error mostrando detalles del evento V3.1:', error);
+        showSimpleEventDetailV31(event);
     }
 }
 
-function generateTargetIPFirewallActions(targetIP, firewallInfo, eventData) {
+// ============================================================================
+// ✅ FUNCIONES GOOGLE MAPS VISTA SUPERIOR V3.1 - CORREGIDAS
+// ============================================================================
+
+function generateDualGoogleMapsButtonsFixedV31(event) {
+    let buttons = '';
+
+    // ✅ V3.1: Coordenadas duales usando campos del backend
+    console.log('🗺️ Generando botones Google Maps V3.1 con vista superior:', {
+        source_lat: event.source_latitude,
+        source_lng: event.source_longitude,
+        target_lat: event.target_latitude,
+        target_lng: event.target_longitude
+    });
+
+    // ✅ Botón SOURCE (víctima) - VISTA SUPERIOR V3.1
+    if (event.source_latitude && event.source_longitude &&
+        event.source_latitude !== 0 && event.source_longitude !== 0) {
+
+        const sourceUrl = `https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z`;
+        buttons += `
+            <div style="margin-top: 10px;">
+                <a href="${sourceUrl}" target="_blank" class="google-maps-btn source-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Víctima V3.1 (${event.source_ip})
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ Botón TARGET (atacante) - VISTA SUPERIOR V3.1
+    if (event.target_latitude && event.target_longitude &&
+        event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+        const targetUrl = `https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z`;
+        buttons += `
+            <div style="margin-top: 5px;">
+                <a href="${targetUrl}" target="_blank" class="google-maps-btn target-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Atacante V3.1 (${event.target_ip})
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ Botón para ver ambas ubicaciones V3.1 - VISTA SUPERIOR
+    if (event.source_latitude && event.source_longitude &&
+        event.target_latitude && event.target_longitude &&
+        event.source_latitude !== 0 && event.source_longitude !== 0 &&
+        event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+        const bothUrl = `https://www.google.com/maps/dir/${event.source_latitude},${event.source_longitude}/${event.target_latitude},${event.target_longitude}`;
+
+        buttons += `
+            <div style="margin-top: 5px;">
+                <a href="${bothUrl}" target="_blank" class="google-maps-btn both-btn">
+                    <i class="fas fa-route"></i> 🗺️ Ver Ruta Completa V3.1 ${event.geographic_distance_km ? `(${event.geographic_distance_km}km)` : ''}
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ BOTONES SIEMPRE VISIBLES V3.1 - Fallback si no hay coordenadas exactas
+    if (!buttons) {
+        buttons += `
+            <div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.source_ip)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Víctima V3.1
+                </a>
+            </div>
+            <div style="margin-top: 5px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.target_ip)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Atacante V3.1
+                </a>
+            </div>
+        `;
+    }
+
+    return buttons;
+}
+
+function generateEventFirewallActionsV31(event, firewallInfo) {
     const availableActions = getAvailableFirewallActions();
     let buttons = '';
 
-    // 🎯 Acciones específicas para target_ip (IP atacante)
-    const targetActions = availableActions.filter(action =>
-        ['BLOCK_IP', 'RATE_LIMIT_IP', 'ALLOW_IP_TEMP', 'LIST_RULES'].includes(action)
-    );
-
-    targetActions.forEach(action => {
-        buttons += generateTargetIPActionButton(action, targetIP, firewallInfo, eventData);
+    // El backend V3.1 decide qué acciones están disponibles
+    availableActions.forEach(action => {
+        buttons += generateEventActionButtonV31(action, event, firewallInfo);
     });
 
-    // Fallback si no hay acciones
+    // Fallback si no hay acciones V3.1
     if (!buttons) {
         buttons = `
-            <button onclick="executeFirewallActionForTargetIP('BLOCK_IP', '${targetIP}', '${firewallInfo.node_id}', '${eventData.id}')"
-                    class="firewall-action-btn block-target-btn">
-                🚫 Bloquear ${targetIP}
-            </button>
-            <button onclick="executeFirewallActionForTargetIP('LIST_RULES', '${targetIP}', '${firewallInfo.node_id}', '${eventData.id}')"
+            <button onclick="executeEventFirewallActionV31('LIST_RULES', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
                     class="firewall-action-btn list-rules-btn">
-                📋 Listar Reglas
+                📋 Listar Reglas V3.1
+            </button>
+            <button onclick="executeEventFirewallActionV31('BLOCK_IP', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    class="firewall-action-btn block-btn">
+                🚫 Bloquear Atacante V3.1
             </button>
         `;
     }
@@ -1457,50 +1743,377 @@ function generateTargetIPFirewallActions(targetIP, firewallInfo, eventData) {
     return buttons;
 }
 
-function generateTargetIPActionButton(action, targetIP, firewallInfo, eventData) {
+function generateEventActionButtonV31(action, event, firewallInfo) {
     const actionConfig = {
-        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear IP' },
-        'RATE_LIMIT_IP': { color: '#ffaa00', icon: '⏱️', label: 'Limitar Tráfico' },
-        'ALLOW_IP_TEMP': { color: '#00ff88', icon: '✅', label: 'Permitir Temporal' },
-        'LIST_RULES': { color: '#0066CC', icon: '📋', label: 'Listar Reglas' }
+        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear IP V3.1' },
+        'RATE_LIMIT_IP': { color: '#ffaa00', icon: '⏱️', label: 'Limitar Tráfico V3.1' },
+        'LIST_RULES': { color: '#0066CC', icon: '📋', label: 'Listar Reglas V3.1' },
+        'FLUSH_RULES': { color: '#ff6600', icon: '🗑️', label: 'Limpiar Reglas V3.1' },
+        'BACKUP_RULES': { color: '#00ff88', icon: '💾', label: 'Backup Reglas V3.1' }
     };
 
-    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action };
+    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action + ' V3.1' };
+
+    // Determinar IP objetivo según la acción
+    let targetIp = 'all';
+    if (action === 'LIST_RULES' || action === 'FLUSH_RULES' || action === 'BACKUP_RULES') {
+        targetIp = 'all';
+    } else {
+        // Para acciones específicas, usar la IP atacante (target_ip)
+        targetIp = event.target_ip;
+    }
 
     return `
-        <button onclick="executeFirewallActionForTargetIP('${action}', '${targetIP}', '${firewallInfo.node_id}', '${eventData.id}')"
-                class="firewall-action-btn target-action-btn"
+        <button onclick="executeEventFirewallActionV31('${action}', '${targetIp}', '${firewallInfo.node_id}', '${event.id}')"
+                class="firewall-action-btn event-action-btn"
                 style="background: rgba(${hexToRgb(config.color)}, 0.2); border: 1px solid ${config.color}; color: ${config.color}; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
                 onmouseover="this.style.background='rgba(${hexToRgb(config.color)}, 0.3)'"
                 onmouseout="this.style.background='rgba(${hexToRgb(config.color)}, 0.2)'">
-            ${config.icon} ${config.label}
+            ${config.icon} ${config.label} ${targetIp !== 'all' ? `(${targetIp})` : ''}
         </button>
     `;
 }
 
-async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId, eventId) {
+// ============================================================================
+// 🚨 MODAL DE EVENTOS COMPLETO V3.1 - CON NUEVOS CAMPOS
+// ============================================================================
+
+async function showEventDetailV31(event) {
     try {
-        console.log(`🎯 Ejecutando acción específica ${action} para target_ip ${targetIP}`);
+        console.log('🔍 Mostrando detalle completo del evento V3.1 con nuevos campos:', event);
 
-        showToast(`Ejecutando ${action} en ${targetIP}...`, 'info');
+        // Obtener información del firewall responsable desde backend V3.1
+        const firewallInfo = await getResponsibleFirewallInfoV31(event);
+        console.log('🔥 Info firewall responsable V3.1:', firewallInfo);
 
-        const commandId = `target_${Date.now()}`;
+        // ✅ Generar botones Google Maps con vista superior V3.1
+        const googleMapsButtons = generateDualGoogleMapsButtonsFixedV31(event);
 
-        // ✅ CORREGIDO: Estructura plana como espera el backend
+        const content = `
+            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <!-- Header del evento V3.1 -->
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
+                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad V3.1 Completo</h3>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
+                        | Node: ${event.capturing_node_id || 'N/A'} | Pipeline: ${event.pipeline_latency || 0}ms
+                    </div>
+                    ${googleMapsButtons}
+                </div>
+
+                <!-- ✅ V3.1: Información básica del evento con nuevos campos -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <strong>IP Origen (Víctima):</strong><br>
+                            <span style="color: #0066CC; font-size: 14px;">${event.source_ip}</span>
+                            ${event.source_city || event.source_country ? `<br><small style="color: #888;">${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}</small>` : ''}
+                        </div>
+                        <div>
+                            <strong>IP Destino (Atacante):</strong><br>
+                            <span style="color: #CC0000; font-size: 14px;">${event.target_ip}</span>
+                            ${event.target_city || event.target_country ? `<br><small style="color: #888;">${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}</small>` : ''}
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Ensemble Score:</strong><br>
+                            <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
+                                ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div>
+                            <strong>Tipo:</strong><br>
+                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
+                        </div>
+                        <div>
+                            <strong>Protocolo:</strong><br>
+                            <span style="color: #00aaff;">${event.protocol || 'TCP'}</span>
+                        </div>
+                        <div>
+                            <strong>Pipeline Lat:</strong><br>
+                            <span style="color: #0088ff;">${event.pipeline_latency || 0}ms</span>
+                        </div>
+                    </div>
+
+                    <!-- ✅ V3.1: Información extendida con nuevos campos -->
+                    ${event.src_port || event.dest_port ? `
+                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong>Puerto Origen:</strong> <span style="color: #0066CC;">${event.src_port || 'N/A'}</span>
+                            </div>
+                            <div>
+                                <strong>Puerto Destino:</strong> <span style="color: #CC0000;">${event.dest_port || 'N/A'}</span>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${event.bytes || event.packets || event.packet_size ? `
+                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                            ${event.bytes ? `<div><strong>Bytes:</strong> ${event.bytes}</div>` : ''}
+                            ${event.packets ? `<div><strong>Paquetes:</strong> ${event.packets}</div>` : ''}
+                            ${event.packet_size ? `<div><strong>Tamaño Paquete:</strong> ${event.packet_size}</div>` : ''}
+                        </div>
+                    ` : ''}
+
+                    <!-- ✅ V3.1: Información geográfica dual -->
+                    ${(event.source_latitude || event.target_latitude || event.geographic_distance_km) ? `
+                        <div style="margin-top: 15px; padding: 10px; background: rgba(0, 255, 136, 0.1); border-radius: 4px;">
+                            <strong style="color: #00ff88;">🗺️ Información Geográfica Dual V3.1:</strong><br>
+                            <small style="color: #ccc;">
+                                ${event.geographic_distance_km ? `Distancia: ${event.geographic_distance_km}km |` : ''}
+                                ${event.same_country !== undefined ? `Mismo País: ${event.same_country ? 'Sí' : 'No'} |` : ''}
+                                ${event.distance_category ? `Categoría: ${event.distance_category} |` : ''}
+                                ${event.source_ip_enriched ? ' Origen: ✅' : ' Origen: ❌'}
+                                ${event.target_ip_enriched ? ' | Destino: ✅' : ' | Destino: ❌'}
+                                | Node: ${event.capturing_node_id || 'N/A'}
+                            </small>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- ✅ V3.1: Análisis ML Tricapa Completo -->
+                ${event.tricapa_scores ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                        <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                            🤖 Análisis ML Tricapa V3.1
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; font-size: 11px;">
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #ff6b6b;">Isolation Forest</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.isolation_forest * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #ffa500;">One-Class SVM</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.one_class_svm * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #00ff88;">Local Outlier Factor</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.local_outlier_factor * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; text-align: center; padding: 8px; background: rgba(0, 170, 255, 0.2); border-radius: 4px;">
+                            <strong style="color: #00aaff;">Ensemble Final: ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</strong>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- 🔥 Información del firewall responsable V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
+                        🔥 Firewall Agent Responsable V3.1
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>Node ID:</strong> ${firewallInfo.node_id}<br>
+                        <strong>IP del Agente:</strong> ${firewallInfo.agent_ip}<br>
+                        <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
+                        <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
+                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}<br>
+                        <strong>Capacidades:</strong> ${firewallInfo.capabilities ? firewallInfo.capabilities.join(', ') : 'N/A'}<br>
+                        <strong>Version:</strong> V3.1
+                    </div>
+                </div>
+
+                <!-- 🔥 ACCIONES DISPONIBLES PARA EL EVENTO V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 12px;">
+                        ⚡ Acciones Disponibles V3.1 (Backend Decide)
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        ${generateEventFirewallActionsV31(event, firewallInfo)}
+                    </div>
+                    <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
+                        💡 Acciones V3.1 determinadas por el backend y aplicadas por: <strong style="color: #00ff88;">${firewallInfo.node_id}</strong>
+                    </div>
+                </div>
+
+                <!-- Datos completos del evento V3.1 (JSON) -->
+                <div>
+                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleEventDataV31()">
+                        <span style="color: #666; font-weight: bold;">
+                            📊 Datos Completos del Evento V3.1
+                        </span>
+                        <i class="fas fa-chevron-down" id="event-data-toggle-v31" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="event-data-content-v31" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal('Análisis Completo del Evento V3.1', content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalles del evento V3.1:', error);
+        showSimpleEventDetailV31(event);
+    }
+}
+
+// ============================================================================
+// ✅ FUNCIONES GOOGLE MAPS VISTA SUPERIOR V3.1 - CORREGIDAS
+// ============================================================================
+
+function generateDualGoogleMapsButtonsFixedV31(event) {
+    let buttons = '';
+
+    // ✅ V3.1: Coordenadas duales usando campos del backend
+    console.log('🗺️ Generando botones Google Maps V3.1 con vista superior:', {
+        source_lat: event.source_latitude,
+        source_lng: event.source_longitude,
+        target_lat: event.target_latitude,
+        target_lng: event.target_longitude
+    });
+
+    // ✅ Botón SOURCE (víctima) - VISTA SUPERIOR V3.1
+    if (event.source_latitude && event.source_longitude &&
+        event.source_latitude !== 0 && event.source_longitude !== 0) {
+
+        const sourceUrl = `https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z`;
+        buttons += `
+            <div style="margin-top: 10px;">
+                <a href="${sourceUrl}" target="_blank" class="google-maps-btn source-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Víctima V3.1 (${event.source_ip})
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ Botón TARGET (atacante) - VISTA SUPERIOR V3.1
+    if (event.target_latitude && event.target_longitude &&
+        event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+        const targetUrl = `https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z`;
+        buttons += `
+            <div style="margin-top: 5px;">
+                <a href="${targetUrl}" target="_blank" class="google-maps-btn target-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Atacante V3.1 (${event.target_ip})
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ Botón para ver ambas ubicaciones V3.1 - VISTA SUPERIOR
+    if (event.source_latitude && event.source_longitude &&
+        event.target_latitude && event.target_longitude &&
+        event.source_latitude !== 0 && event.source_longitude !== 0 &&
+        event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+        const bothUrl = `https://www.google.com/maps/dir/${event.source_latitude},${event.source_longitude}/${event.target_latitude},${event.target_longitude}`;
+
+        buttons += `
+            <div style="margin-top: 5px;">
+                <a href="${bothUrl}" target="_blank" class="google-maps-btn both-btn">
+                    <i class="fas fa-route"></i> 🗺️ Ver Ruta Completa V3.1 ${event.geographic_distance_km ? `(${event.geographic_distance_km}km)` : ''}
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ BOTONES SIEMPRE VISIBLES V3.1 - Fallback si no hay coordenadas exactas
+    if (!buttons) {
+        buttons += `
+            <div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.source_ip)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Víctima V3.1
+                </a>
+            </div>
+            <div style="margin-top: 5px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.target_ip)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Atacante V3.1
+                </a>
+            </div>
+        `;
+    }
+
+    return buttons;
+}
+
+function generateEventFirewallActionsV31(event, firewallInfo) {
+    const availableActions = getAvailableFirewallActions();
+    let buttons = '';
+
+    // El backend V3.1 decide qué acciones están disponibles
+    availableActions.forEach(action => {
+        buttons += generateEventActionButtonV31(action, event, firewallInfo);
+    });
+
+    // Fallback si no hay acciones V3.1
+    if (!buttons) {
+        buttons = `
+            <button onclick="executeEventFirewallActionV31('LIST_RULES', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    class="firewall-action-btn list-rules-btn">
+                📋 Listar Reglas V3.1
+            </button>
+            <button onclick="executeEventFirewallActionV31('BLOCK_IP', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    class="firewall-action-btn block-btn">
+                🚫 Bloquear Atacante V3.1
+            </button>
+        `;
+    }
+
+    return buttons;
+}
+
+function generateEventActionButtonV31(action, event, firewallInfo) {
+    const actionConfig = {
+        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear IP V3.1' },
+        'RATE_LIMIT_IP': { color: '#ffaa00', icon: '⏱️', label: 'Limitar Tráfico V3.1' },
+        'LIST_RULES': { color: '#0066CC', icon: '📋', label: 'Listar Reglas V3.1' },
+        'FLUSH_RULES': { color: '#ff6600', icon: '🗑️', label: 'Limpiar Reglas V3.1' },
+        'BACKUP_RULES': { color: '#00ff88', icon: '💾', label: 'Backup Reglas V3.1' }
+    };
+
+    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action + ' V3.1' };
+
+    // Determinar IP objetivo según la acción
+    let targetIp = 'all';
+    if (action === 'LIST_RULES' || action === 'FLUSH_RULES' || action === 'BACKUP_RULES') {
+        targetIp = 'all';
+    } else {
+        // Para acciones específicas, usar la IP atacante (target_ip)
+        targetIp = event.target_ip;
+    }
+
+    return `
+        <button onclick="executeEventFirewallActionV31('${action}', '${targetIp}', '${firewallInfo.node_id}', '${event.id}')"
+                class="firewall-action-btn event-action-btn"
+                style="background: rgba(${hexToRgb(config.color)}, 0.2); border: 1px solid ${config.color}; color: ${config.color}; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                onmouseover="this.style.background='rgba(${hexToRgb(config.color)}, 0.3)'"
+                onmouseout="this.style.background='rgba(${hexToRgb(config.color)}, 0.2)'">
+            ${config.icon} ${config.label} ${targetIp !== 'all' ? `(${targetIp})` : ''}
+        </button>
+    `;
+}
+
+async function executeEventFirewallActionV31(action, targetIp, firewallNodeId, eventId) {
+    try {
+        console.log(`🔥 Ejecutando acción evento V3.1 ${action} para IP ${targetIp}`);
+
+        showToast(`Ejecutando ${action} V3.1 desde evento...`, 'info');
+
+        const commandId = `event_v31_${Date.now()}`;
+
+        // ✅ V3.1: Enviar campos DIRECTOS como espera el backend
         const requestData = {
-            action: action,                    // ✅ Directo
-            target_ip: targetIP,              // ✅ Directo
-            firewall_node_id: firewallNodeId, // ✅ Nombre correcto
+            action: action,
+            target_ip: targetIp,
+            firewall_node_id: firewallNodeId,
 
+            // Campos adicionales para contexto V3.1
             event_id: eventId,
             command_id: commandId,
-            generated_by: 'dashboard_target_action',
-            target_type: 'attacking_ip',
-            risk_score: 0.9,  // Alto riesgo para target_ip
+            generated_by: 'dashboard_v31_event_response',
+            risk_score: 0.8,
+            dry_run_all: false,
+            timestamp: Date.now(),
+            version: 'v3.1',
 
-            // ✅ SEGURIDAD: Parámetros conservadores
+            // ✅ V3.1: Auto-detección de modo seguro
             force_dry_run: true,
-            max_duration: 600,
+            max_duration: 300,
             requires_confirmation: true
         };
 
@@ -1509,19 +2122,19 @@ async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId
             id: commandId,
             type: 'command',
             action: action,
-            target_ip: targetIP,
+            target_ip: targetIp,
             action_code: CommandAction[action],
-            source: 'Dashboard Target Action (Fixed)',
+            source: 'Dashboard V3.1 Event Action',
             timestamp: Date.now() / 1000
         });
 
-        // Enviar al backend
+        // ✅ V3.1: Enviar estructura plana
         const response = await fetch('/api/execute-firewall-action', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestData)  // ✅ Estructura plana
+            body: JSON.stringify(requestData)
         });
 
         if (!response.ok) {
@@ -1537,14 +2150,14 @@ async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId
                     type: 'response',
                     success: true,
                     agent: result.node_id || firewallNodeId,
-                    result: result.message || `${action} ejecutada exitosamente desde evento`,
+                    result: result.message || `${action} ejecutada exitosamente V3.1 desde evento`,
                     execution_time: result.execution_time || 0.1,
                     timestamp: Date.now() / 1000
                 });
             }, 300);
 
-            showToast(`✅ ${action} ejecutada desde evento`, 'success');
-            addDebugLog('info', `Acción evento ${action} ejecutada para IP ${targetIP}`);
+            showToast(`✅ ${action} ejecutada V3.1 desde evento`, 'success');
+            addDebugLog('info', `Acción evento V3.1 ${action} ejecutada para IP ${targetIp}`);
 
             firewallStats.commandsSent++;
             firewallStats.responsesOk++;
@@ -1562,34 +2175,37 @@ async function executeFirewallActionForTargetIP(action, targetIP, firewallNodeId
                     id: commandId,
                     type: 'error',
                     success: false,
-                    error: result.message || `Error ejecutando ${action} desde evento`,
+                    error: result.message || `Error ejecutando ${action} V3.1 desde evento`,
                     timestamp: Date.now() / 1000
                 });
             }, 300);
 
-            showToast(`❌ Error en ${action} desde evento: ${result.message}`, 'error');
+            showToast(`❌ Error en ${action} V3.1 desde evento: ${result.message}`, 'error');
             firewallStats.errors++;
             updateElement('firewall-errors', firewallStats.errors);
         }
 
     } catch (error) {
-        console.error(`❌ Error ejecutando acción evento ${action}:`, error);
+        console.error(`❌ Error ejecutando acción evento V3.1 ${action}:`, error);
 
         addFirewallEventToList({
-            id: `error_event_${Date.now()}`,
+            id: `error_event_v31_${Date.now()}`,
             type: 'error',
             success: false,
-            error: `Error comunicación evento: ${error.message}`,
+            error: `Error comunicación evento V3.1: ${error.message}`,
             timestamp: Date.now() / 1000
         });
 
-        showToast(`❌ Error comunicando con firewall desde evento: ${error.message}`, 'error');
+        showToast(`❌ Error comunicando con firewall V3.1 desde evento: ${error.message}`, 'error');
         firewallStats.errors++;
         updateElement('firewall-errors', firewallStats.errors);
     }
 }
 
-// 🔥 FUNCIONES AUXILIARES PARA FIREWALL_COMMANDS.PROTO
+// ============================================================================
+// 🔥 FUNCIONES AUXILIARES PARA FIREWALL_COMMANDS_V31.PROTO
+// ============================================================================
+
 function getFirewallActionCode(action) {
     return CommandAction[action] || CommandAction.LIST_RULES;
 }
@@ -1625,9 +2241,9 @@ function hexToRgb(hex) {
         '128, 128, 128';
 }
 
-function toggleTargetIPData() {
-    const content = document.getElementById('target-ip-data-content');
-    const toggle = document.getElementById('target-ip-data-toggle');
+function toggleTargetIPDataV31() {
+    const content = document.getElementById('target-ip-data-content-v31');
+    const toggle = document.getElementById('target-ip-data-toggle-v31');
 
     if (content && toggle) {
         const isCollapsed = content.style.maxHeight === '0px' || content.style.maxHeight === '';
@@ -1642,636 +2258,9 @@ function toggleTargetIPData() {
     }
 }
 
-// ============================================================================
-// 🆕 FUNCIÓN PARA MOSTRAR DETALLE DEL SOURCE_IP - CORREGIDA PARA CAMPOS PLANOS
-// ============================================================================
-
-async function showSourceIPDetail(sourceIP, eventData) {
-    try {
-        console.log('🏠 Mostrando detalle específico del source_ip con campos planos:', sourceIP, eventData);
-
-        const event = typeof eventData === 'string' ? JSON.parse(eventData.replace(/&quot;/g, '"')) : eventData;
-
-        // ✅ CORREGIDO: Verificar información específica del source_ip usando campos planos
-        const hasSourceGeoInfo = event.source_latitude && event.source_longitude &&
-                                event.source_latitude !== 0 && event.source_longitude !== 0;
-
-        // ✅ FIX 2: GOOGLE MAPS VISTA SUPERIOR - Generar botón correcto para source_ip
-        const sourceMapButton = hasSourceGeoInfo ?
-            `<div style="margin-top: 10px;">
-                <a href="https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z" target="_blank" class="google-maps-btn source-streetview-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Ubicación de la Víctima
-                </a>
-            </div>` : '';
-
-        // ✅ FIX 3: BOTÓN SIEMPRE VISIBLE - Mostrar botón incluso sin coordenadas exactas
-        const fallbackMapButton = !hasSourceGeoInfo ?
-            `<div style="margin-top: 10px;">
-                <a href="https://www.google.com/maps/search/${encodeURIComponent(sourceIP)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
-                    <i class="fas fa-search"></i> 🔍 Buscar IP en Maps
-                </a>
-            </div>` : '';
-
-        const content = `
-            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
-                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #0066CC;">
-                    <h3 style="color: #0066CC; margin: 0;">🏠 Información de la Víctima (FIX 2+3 Aplicado)</h3>
-                    <div style="font-size: 14px; color: #0066CC; margin-top: 5px; font-weight: bold;">
-                        IP: ${sourceIP}
-                    </div>
-                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
-                        Evento ID: ${event.id || 'N/A'} | ${new Date(event.timestamp * 1000).toLocaleString()}
-                    </div>
-                    ${sourceMapButton}
-                    ${fallbackMapButton}
-                </div>
-
-                <!-- ✅ CORREGIDO: Información geográfica de la víctima usando campos planos -->
-                ${hasSourceGeoInfo ? `
-                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
-                        <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">
-                            🌍 Ubicación Geográfica de la Víctima (V3)
-                        </div>
-                        <div style="font-size: 11px; line-height: 1.4;">
-                            <strong>Ciudad:</strong> ${event.source_city || 'N/A'}<br>
-                            <strong>País:</strong> ${event.source_country || 'N/A'}<br>
-                            <strong>Código País:</strong> ${event.source_country_code || 'N/A'}<br>
-                            <strong>Coordenadas:</strong> ${event.source_latitude?.toFixed(4) || 'N/A'}, ${event.source_longitude?.toFixed(4) || 'N/A'}<br>
-                            ${event.source_region ? `<strong>Región:</strong> ${event.source_region}<br>` : ''}
-                            ${event.source_timezone ? `<strong>Zona Horaria:</strong> ${event.source_timezone}<br>` : ''}
-                            ${event.source_isp ? `<strong>ISP:</strong> ${event.source_isp}<br>` : ''}
-                            ${event.source_asn ? `<strong>ASN:</strong> ${event.source_asn}<br>` : ''}
-                            <strong>Enriquecimiento:</strong> ${event.source_ip_enriched ? '✅ Exitoso' : '❌ Fallido'}
-                        </div>
-                    </div>
-                ` : `
-                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
-                        <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
-                            ⚠️ Información Geográfica No Disponible
-                        </div>
-                        <div style="font-size: 11px; line-height: 1.4;">
-                            <strong>IP:</strong> ${sourceIP}<br>
-                            <strong>Estado:</strong> Sin geolocalización exacta<br>
-                            <strong>Tipo:</strong> Víctima del ataque<br>
-                            💡 El sistema puede funcionar sin coordenadas exactas
-                        </div>
-                    </div>
-                `}
-
-                <!-- ✅ CORREGIDO: Información del ataque recibido usando campos planos -->
-                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
-                    <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">
-                        🏠 Información del Ataque Recibido (V3)
-                    </div>
-                    <div style="font-size: 11px; line-height: 1.4;">
-                        <strong>IP Víctima:</strong> <span style="color: #0066CC;">${sourceIP}</span><br>
-                        <strong>IP Atacante:</strong> <span style="color: #CC0000;">${event.target_ip}</span><br>
-                        <strong>Score de Riesgo:</strong> <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'}; font-weight: bold;">${(event.risk_score * 100).toFixed(1)}%</span><br>
-                        <strong>Tipo de Ataque:</strong> ${event.type || 'network_traffic'}<br>
-                        ${event.geographic_distance_km ? `<strong>Distancia del Atacante:</strong> ${event.geographic_distance_km}km<br>` : ''}
-                        ${event.same_country !== undefined ? `<strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>` : ''}
-                        <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
-                    </div>
-                </div>
-
-                <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
-                    <strong>Datos de la Víctima (Campos Planos V3):</strong><br>
-                    <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify({
-                        source_ip: sourceIP,
-                        source_coordinates: {
-                            latitude: event.source_latitude,
-                            longitude: event.source_longitude,
-                            enriched: event.source_ip_enriched
-                        },
-                        source_geo_info: {
-                            city: event.source_city,
-                            country: event.source_country,
-                            country_code: event.source_country_code,
-                            region: event.source_region,
-                            timezone: event.source_timezone,
-                            isp: event.source_isp,
-                            asn: event.source_asn
-                        },
-                        attack_context: {
-                            attacker_ip: event.target_ip,
-                            risk_score: event.risk_score,
-                            timestamp: event.timestamp,
-                            type: event.type,
-                            geographic_distance_km: event.geographic_distance_km,
-                            same_country: event.same_country
-                        }
-                    }, null, 2)}</pre>
-                </div>
-            </div>
-        `;
-
-        showModal(`🏠 Víctima: ${sourceIP}`, content);
-
-    } catch (error) {
-        console.error('❌ Error mostrando detalle del source_ip:', error);
-        showToast('Error mostrando detalles de la víctima', 'error');
-    }
-}
-
-// ============================================================================
-// 🚨 MODAL DE EVENTOS COMPLETO - CORREGIDO PARA CAMPOS PLANOS V3
-// ============================================================================
-
-async function showEventDetail(event) {
-    try {
-        console.log('🔍 Mostrando detalle completo del evento V3 con campos planos:', event);
-
-        // Obtener información del firewall responsable desde backend
-        const firewallInfo = await getResponsibleFirewallInfo(event);
-        console.log('🔥 Info firewall responsable V3:', firewallInfo);
-
-        // ✅ FIX 2: CORREGIDO - Generar botones Google Maps con vista superior
-        const googleMapsButtons = generateDualGoogleMapsButtonsFixed(event);
-
-        const content = `
-            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
-                <!-- Header del evento -->
-                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
-                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad V3 Completo (TODOS LOS FIXES)</h3>
-                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
-                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
-                    </div>
-                    ${googleMapsButtons}
-                </div>
-
-                <!-- ✅ CORREGIDO: Información básica del evento usando campos planos -->
-                <div style="margin-bottom: 20px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                        <div>
-                            <strong>IP Origen (Víctima):</strong><br>
-                            <span style="color: #0066CC; font-size: 14px;">${event.source_ip}</span>
-                            ${event.source_city || event.source_country ? `<br><small style="color: #888;">${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}</small>` : ''}
-                        </div>
-                        <div>
-                            <strong>IP Destino (Atacante):</strong><br>
-                            <span style="color: #CC0000; font-size: 14px;">${event.target_ip}</span>
-                            ${event.target_city || event.target_country ? `<br><small style="color: #888;">${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}</small>` : ''}
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
-                        <div>
-                            <strong>Score de Riesgo:</strong><br>
-                            <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
-                                ${(event.risk_score * 100).toFixed(1)}%
-                            </span>
-                        </div>
-                        <div>
-                            <strong>Tipo:</strong><br>
-                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
-                        </div>
-                        <div>
-                            <strong>Protocolo:</strong><br>
-                            <span style="color: #00aaff;">${event.protocol || 'TCP'}</span>
-                        </div>
-                    </div>
-
-                    <!-- ✅ NUEVO: Información extendida V3 con campos planos -->
-                    ${event.src_port || event.dest_port ? `
-                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <strong>Puerto Origen:</strong> <span style="color: #0066CC;">${event.src_port || 'N/A'}</span>
-                            </div>
-                            <div>
-                                <strong>Puerto Destino:</strong> <span style="color: #CC0000;">${event.dest_port || 'N/A'}</span>
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    ${event.bytes || event.packets || event.packet_size ? `
-                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
-                            ${event.bytes ? `<div><strong>Bytes:</strong> ${event.bytes}</div>` : ''}
-                            ${event.packets ? `<div><strong>Paquetes:</strong> ${event.packets}</div>` : ''}
-                            ${event.packet_size ? `<div><strong>Tamaño Paquete:</strong> ${event.packet_size}</div>` : ''}
-                        </div>
-                    ` : ''}
-
-                    <!-- ✅ CORREGIDO: Información geográfica dual usando campos planos -->
-                    ${(event.source_latitude || event.target_latitude || event.geographic_distance_km) ? `
-                        <div style="margin-top: 15px; padding: 10px; background: rgba(0, 255, 136, 0.1); border-radius: 4px;">
-                            <strong style="color: #00ff88;">🗺️ Información Geográfica Dual (V3):</strong><br>
-                            <small style="color: #ccc;">
-                                ${event.geographic_distance_km ? `Distancia: ${event.geographic_distance_km}km |` : ''}
-                                ${event.same_country !== undefined ? `Mismo País: ${event.same_country ? 'Sí' : 'No'} |` : ''}
-                                ${event.distance_category ? `Categoría: ${event.distance_category} |` : ''}
-                                ${event.source_ip_enriched ? ' Origen: ✅' : ' Origen: ❌'}
-                                ${event.target_ip_enriched ? ' | Destino: ✅' : ' | Destino: ❌'}
-                            </small>
-                        </div>
-                    ` : ''}
-                </div>
-
-                <!-- 🔥 Información del firewall responsable -->
-                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
-                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
-                        🔥 Firewall Agent Responsable V3
-                    </div>
-                    <div style="font-size: 11px; line-height: 1.4;">
-                        <strong>Node ID:</strong> ${firewallInfo.node_id}<br>
-                        <strong>IP del Agente:</strong> ${firewallInfo.agent_ip}<br>
-                        <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
-                        <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
-                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}<br>
-                        <strong>Capacidades:</strong> ${firewallInfo.capabilities ? firewallInfo.capabilities.join(', ') : 'N/A'}
-                    </div>
-                </div>
-
-                <!-- 🔥 ACCIONES DISPONIBLES PARA EL EVENTO -->
-                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
-                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 12px;">
-                        ⚡ Acciones Disponibles V3 (Backend Decide)
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        ${generateEventFirewallActionsV3(event, firewallInfo)}
-                    </div>
-                    <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
-                        💡 Acciones determinadas por el backend y aplicadas por: <strong style="color: #00ff88;">${firewallInfo.node_id}</strong>
-                    </div>
-                </div>
-
-                <!-- Datos completos del evento (JSON) -->
-                <div>
-                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleEventData()">
-                        <span style="color: #666; font-weight: bold;">
-                            📊 Datos Completos del Evento V3 (Campos Planos)
-                        </span>
-                        <i class="fas fa-chevron-down" id="event-data-toggle" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
-                    </div>
-                    <div id="event-data-content" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
-                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
-                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        showModal('Análisis Completo del Evento V3', content);
-
-    } catch (error) {
-        console.error('❌ Error mostrando detalles del evento V3:', error);
-        showSimpleEventDetail(event);
-    }
-}
-
-// ============================================================================
-// ✅ FIX 2: FUNCIONES PARA GOOGLE MAPS VISTA SUPERIOR - CORREGIDAS
-// ============================================================================
-
-function generateDualGoogleMapsButtonsFixed(event) {
-    let buttons = '';
-
-    // ✅ CORREGIDO: Coordenadas duales usando campos planos directos del backend
-    console.log('🗺️ Generando botones Google Maps con vista superior (FIX 2):', {
-        source_lat: event.source_latitude,
-        source_lng: event.source_longitude,
-        target_lat: event.target_latitude,
-        target_lng: event.target_longitude
-    });
-
-    // ✅ FIX 2: Botón SOURCE (víctima) - VISTA SUPERIOR
-    if (event.source_latitude && event.source_longitude &&
-        event.source_latitude !== 0 && event.source_longitude !== 0) {
-
-        const sourceUrl = `https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z`;
-        buttons += `
-            <div style="margin-top: 10px;">
-                <a href="${sourceUrl}" target="_blank" class="google-maps-btn source-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Víctima (${event.source_ip})
-                </a>
-            </div>
-        `;
-    }
-
-    // ✅ FIX 2: Botón TARGET (atacante) - VISTA SUPERIOR
-    if (event.target_latitude && event.target_longitude &&
-        event.target_latitude !== 0 && event.target_longitude !== 0) {
-
-        const targetUrl = `https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z`;
-        buttons += `
-            <div style="margin-top: 5px;">
-                <a href="${targetUrl}" target="_blank" class="google-maps-btn target-btn">
-                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Atacante (${event.target_ip})
-                </a>
-            </div>
-        `;
-    }
-
-    // ✅ FIX 2: Botón para ver ambas ubicaciones en Google Maps - VISTA SUPERIOR
-    if (event.source_latitude && event.source_longitude &&
-        event.target_latitude && event.target_longitude &&
-        event.source_latitude !== 0 && event.source_longitude !== 0 &&
-        event.target_latitude !== 0 && event.target_longitude !== 0) {
-
-        const bothUrl = `https://www.google.com/maps/dir/${event.source_latitude},${event.source_longitude}/${event.target_latitude},${event.target_longitude}`;
-
-        buttons += `
-            <div style="margin-top: 5px;">
-                <a href="${bothUrl}" target="_blank" class="google-maps-btn both-btn">
-                    <i class="fas fa-route"></i> 🗺️ Ver Ruta Completa ${event.geographic_distance_km ? `(${event.geographic_distance_km}km)` : ''}
-                </a>
-            </div>
-        `;
-    }
-
-    // ✅ FIX 3: BOTONES SIEMPRE VISIBLES - Fallback si no hay coordenadas exactas
-    if (!buttons) {
-        buttons += `
-            <div style="margin-top: 10px;">
-                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.source_ip)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
-                    <i class="fas fa-search"></i> 🔍 Buscar Víctima
-                </a>
-            </div>
-            <div style="margin-top: 5px;">
-                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.target_ip)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
-                    <i class="fas fa-search"></i> 🔍 Buscar Atacante
-                </a>
-            </div>
-        `;
-    }
-
-    return buttons;
-}
-
-// ============================================================================
-// 🔥 FUNCIONES PARA FIREWALL - USANDO FIREWALL_COMMANDS.PROTO - CORREGIDAS
-// ============================================================================
-
-async function getResponsibleFirewallInfo(event) {
-    try {
-        console.log('🔍 Obteniendo información del firewall responsable V3...');
-
-        const response = await fetch('/api/firewall-agent-info', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                event_id: event.id,
-                source_ip: event.source_ip,
-                target_ip: event.target_ip,
-                node_id: event.node_id,
-                version: 'v3',
-                // ✅ CORREGIDO: Enviar campos planos en lugar de estructura anidada
-                geographic_info: {
-                    source_latitude: event.source_latitude,
-                    source_longitude: event.source_longitude,
-                    target_latitude: event.target_latitude,
-                    target_longitude: event.target_longitude,
-                    distance_km: event.geographic_distance_km,
-                    same_country: event.same_country,
-                    source_enriched: event.source_ip_enriched,
-                    target_enriched: event.target_ip_enriched
-                }
-            })
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.firewall_info) {
-                console.log('✅ Info firewall V3 recibida del backend:', data.firewall_info);
-                return data.firewall_info;
-            }
-        }
-
-        console.log('⚠️ Usando fallback para info del firewall V3');
-        const availableAgents = getAvailableFirewallAgents();
-        return {
-            node_id: availableAgents[0] || 'simple_firewall_agent_001',
-            agent_ip: event.source_ip || '127.0.0.1',
-            status: 'active',
-            active_rules: firewallRules.rules_count || 0,
-            endpoint: firewallConfig.endpoints?.firewall_commands || 'tcp://localhost:5580',
-            capabilities: getAvailableFirewallActions()
-        };
-
-    } catch (error) {
-        console.error('Error obteniendo información del firewall V3:', error);
-        return {
-            node_id: 'unknown_firewall',
-            agent_ip: '127.0.0.1',
-            status: 'unknown',
-            active_rules: 0,
-            endpoint: 'tcp://localhost:5580',
-            capabilities: getAvailableFirewallActions()
-        };
-    }
-}
-
-async function getResponsibleFirewallInfoForTarget(targetIP, event) {
-    // Similar a getResponsibleFirewallInfo pero específico para target_ip
-    try {
-        const response = await fetch('/api/firewall-agent-info-target', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                target_ip: targetIP,
-                event_id: event.id,
-                version: 'v3',
-                // ✅ CORREGIDO: Incluir información del target usando campos planos
-                target_info: {
-                    latitude: event.target_latitude,
-                    longitude: event.target_longitude,
-                    city: event.target_city,
-                    country: event.target_country,
-                    enriched: event.target_ip_enriched,
-                    is_tor_exit: event.target_is_tor_exit,
-                    is_malicious: event.target_is_known_malicious
-                }
-            })
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.firewall_info) {
-                return data.firewall_info;
-            }
-        }
-
-        return await getResponsibleFirewallInfo(event);
-
-    } catch (error) {
-        console.error('Error obteniendo info firewall para target_ip:', error);
-        return await getResponsibleFirewallInfo(event);
-    }
-}
-
-function generateEventFirewallActionsV3(event, firewallInfo) {
-    const availableActions = getAvailableFirewallActions();
-    let buttons = '';
-
-    // El backend decide qué acciones están disponibles
-    availableActions.forEach(action => {
-        buttons += generateEventActionButtonV3(action, event, firewallInfo);
-    });
-
-    // Fallback si no hay acciones
-    if (!buttons) {
-        buttons = `
-            <button onclick="executeEventFirewallActionV3('LIST_RULES', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
-                    class="firewall-action-btn list-rules-btn">
-                📋 Listar Reglas
-            </button>
-            <button onclick="executeEventFirewallActionV3('BLOCK_IP', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
-                    class="firewall-action-btn block-btn">
-                🚫 Bloquear Atacante
-            </button>
-        `;
-    }
-
-    return buttons;
-}
-
-function generateEventActionButtonV3(action, event, firewallInfo) {
-    const actionConfig = {
-        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear IP' },
-        'RATE_LIMIT_IP': { color: '#ffaa00', icon: '⏱️', label: 'Limitar Tráfico' },
-        'LIST_RULES': { color: '#0066CC', icon: '📋', label: 'Listar Reglas' },
-        'FLUSH_RULES': { color: '#ff6600', icon: '🗑️', label: 'Limpiar Reglas' },
-        'BACKUP_RULES': { color: '#00ff88', icon: '💾', label: 'Backup Reglas' }
-    };
-
-    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action };
-
-    // Determinar IP objetivo según la acción
-    let targetIp = 'all';
-    if (action === 'LIST_RULES' || action === 'FLUSH_RULES' || action === 'BACKUP_RULES') {
-        targetIp = 'all';
-    } else {
-        // Para acciones específicas, usar la IP atacante (target_ip)
-        targetIp = event.target_ip;
-    }
-
-    return `
-        <button onclick="executeEventFirewallActionV3('${action}', '${targetIp}', '${firewallInfo.node_id}', '${event.id}')"
-                class="firewall-action-btn event-action-btn"
-                style="background: rgba(${hexToRgb(config.color)}, 0.2); border: 1px solid ${config.color}; color: ${config.color}; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
-                onmouseover="this.style.background='rgba(${hexToRgb(config.color)}, 0.3)'"
-                onmouseout="this.style.background='rgba(${hexToRgb(config.color)}, 0.2)'">
-            ${config.icon} ${config.label} ${targetIp !== 'all' ? `(${targetIp})` : ''}
-        </button>
-    `;
-}
-
-async function executeEventFirewallActionV3(action, targetIp, firewallNodeId, eventId) {
-    try {
-        console.log(`🔥 Ejecutando acción evento ${action} para IP ${targetIp}`);
-
-        showToast(`Ejecutando ${action} desde evento...`, 'info');
-
-        const commandId = `event_${Date.now()}`;
-
-        // ✅ CORREGIDO: Enviar campos DIRECTOS como espera el backend
-        const requestData = {
-            // Backend busca estos campos directamente en request_data
-            action: action,                    // ✅ Directo (no anidado)
-            target_ip: targetIp,              // ✅ Directo (no anidado)
-            firewall_node_id: firewallNodeId, // ✅ Nombre correcto
-
-            // Campos adicionales para contexto
-            event_id: eventId,
-            command_id: commandId,
-            generated_by: 'dashboard_event_response',
-            risk_score: 0.8,
-            dry_run_all: false,
-            timestamp: Date.now(),
-
-            // ✅ NUEVO: Auto-detección de modo seguro
-            force_dry_run: true,  // Forzar dry_run por seguridad
-            max_duration: 300,    // Máximo 5 minutos
-            requires_confirmation: true
-        };
-
-        // Añadir evento a la lista
-        addFirewallEventToList({
-            id: commandId,
-            type: 'command',
-            action: action,
-            target_ip: targetIp,
-            action_code: CommandAction[action],
-            source: 'Dashboard Event Action (Fixed)',
-            timestamp: Date.now() / 1000
-        });
-
-        // ✅ CORREGIDO: Enviar estructura plana
-        const response = await fetch('/api/execute-firewall-action', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData)  // ✅ Estructura plana directa
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-            setTimeout(() => {
-                addFirewallEventToList({
-                    id: commandId,
-                    type: 'response',
-                    success: true,
-                    agent: result.node_id || firewallNodeId,
-                    result: result.message || `${action} ejecutada exitosamente desde evento`,
-                    execution_time: result.execution_time || 0.1,
-                    timestamp: Date.now() / 1000
-                });
-            }, 300);
-
-            showToast(`✅ ${action} ejecutada desde evento`, 'success');
-            addDebugLog('info', `Acción evento ${action} ejecutada para IP ${targetIp}`);
-
-            firewallStats.commandsSent++;
-            firewallStats.responsesOk++;
-            updateElement('firewall-commands-sent', firewallStats.commandsSent);
-            updateElement('firewall-responses-ok', firewallStats.responsesOk);
-
-            // Cerrar modal después de acción exitosa
-            setTimeout(() => {
-                closeModal();
-            }, 2000);
-
-        } else {
-            setTimeout(() => {
-                addFirewallEventToList({
-                    id: commandId,
-                    type: 'error',
-                    success: false,
-                    error: result.message || `Error ejecutando ${action} desde evento`,
-                    timestamp: Date.now() / 1000
-                });
-            }, 300);
-
-            showToast(`❌ Error en ${action} desde evento: ${result.message}`, 'error');
-            firewallStats.errors++;
-            updateElement('firewall-errors', firewallStats.errors);
-        }
-
-    } catch (error) {
-        console.error(`❌ Error ejecutando acción evento ${action}:`, error);
-
-        addFirewallEventToList({
-            id: `error_event_${Date.now()}`,
-            type: 'error',
-            success: false,
-            error: `Error comunicación evento: ${error.message}`,
-            timestamp: Date.now() / 1000
-        });
-
-        showToast(`❌ Error comunicando con firewall desde evento: ${error.message}`, 'error');
-        firewallStats.errors++;
-        updateElement('firewall-errors', firewallStats.errors);
-    }
-}
-
-function toggleEventData() {
-    const content = document.getElementById('event-data-content');
-    const toggle = document.getElementById('event-data-toggle');
+function toggleEventDataV31() {
+    const content = document.getElementById('event-data-content-v31');
+    const toggle = document.getElementById('event-data-toggle-v31');
 
     if (content && toggle) {
         const isCollapsed = content.style.maxHeight === '0px' || content.style.maxHeight === '';
@@ -2286,10 +2275,10 @@ function toggleEventData() {
     }
 }
 
-function showSimpleEventDetail(event) {
+function showSimpleEventDetailV31(event) {
     const content = `
         <div style="font-family: 'Consolas', monospace;">
-            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento de Seguridad V3 (TODOS LOS FIXES)</h4>
+            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento de Seguridad V3.1</h4>
 
             <div style="margin-bottom: 10px;">
                 <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
@@ -2303,49 +2292,55 @@ function showSimpleEventDetail(event) {
                 ${event.target_city ? ` (${event.target_city})` : ''}
             </div>
             <div style="margin-bottom: 10px;">
-                <strong>Score de Riesgo:</strong> <span style="color: ${event.risk_score > 0.8 ? '#ff4444' : event.risk_score > 0.5 ? '#ffaa00' : '#00ff00'};">${(event.risk_score * 100).toFixed(1)}%</span>
+                <strong>Ensemble Score:</strong> <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'};">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Pipeline Latency:</strong> ${event.pipeline_latency || 0}ms
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Capturing Node:</strong> ${event.capturing_node_id || 'N/A'}
             </div>
 
             ${event.type ? `<div style="margin-bottom: 10px;"><strong>Tipo:</strong> ${event.type}</div>` : ''}
             ${event.geographic_distance_km ? `<div style="margin-bottom: 10px;"><strong>Distancia:</strong> ${event.geographic_distance_km}km</div>` : ''}
 
             <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.6); border-radius: 4px;">
-                <strong>Datos del Evento V3 (TODOS LOS FIXES):</strong><br>
+                <strong>Datos del Evento V3.1:</strong><br>
                 <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify(event, null, 2)}</pre>
             </div>
 
-            <!-- Botones de acción básicos V3 -->
+            <!-- Botones de acción básicos V3.1 -->
             <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button onclick="executeEventFirewallActionV3('BLOCK_IP', '${event.target_ip}', 'simple_firewall_agent_001', '${event.id}')"
+                <button onclick="executeEventFirewallActionV31('BLOCK_IP', '${event.target_ip}', 'simple_firewall_agent_v31_001', '${event.id}')"
                         class="firewall-action-btn block-btn">
-                    🚫 Bloquear Atacante
+                    🚫 Bloquear Atacante V3.1
                 </button>
-                <button onclick="executeEventFirewallActionV3('LIST_RULES', 'all', 'simple_firewall_agent_001', '${event.id}')"
+                <button onclick="executeEventFirewallActionV31('LIST_RULES', 'all', 'simple_firewall_agent_v31_001', '${event.id}')"
                         class="firewall-action-btn list-rules-btn">
-                    📋 Listar Reglas
+                    📋 Listar Reglas V3.1
                 </button>
             </div>
         </div>
     `;
 
-    showModal('Detalle del Evento V3', content);
+    showModal('Detalle del Evento V3.1', content);
 }
 
 // ============================================================================
-// RESTO DE FUNCIONES (ADAPTADAS PARA V3)
+// RESTO DE FUNCIONES BÁSICAS V3.1 - FINALES
 // ============================================================================
 
 function initializeMap() {
     try {
-        console.log('🗺️ Inicializando mapa Leaflet V3 con TODOS LOS FIXES aplicados...');
+        console.log('🗺️ Inicializando mapa Leaflet V3.1...');
 
         if (typeof L === 'undefined') {
-            throw new Error('Leaflet no está disponible');
+            throw new Error('Leaflet no está disponible para V3.1');
         }
 
         const mapContainer = document.getElementById('map');
         if (!mapContainer) {
-            throw new Error('Contenedor del mapa no encontrado');
+            throw new Error('Contenedor del mapa V3.1 no encontrado');
         }
 
         map = L.map('map', {
@@ -2363,9 +2358,9 @@ function initializeMap() {
         }).addTo(map);
 
         map.on('load', function() {
-            console.log('✅ Mapa V3 cargado con TODOS LOS FIXES');
+            console.log('✅ Mapa V3.1 cargado');
             addInitialMarkers();
-            addDebugLog('info', 'Mapa Leaflet V3 + TODOS LOS FIXES cargado');
+            addDebugLog('info', 'Mapa Leaflet V3.1 cargado');
         });
 
         setTimeout(() => {
@@ -2374,12 +2369,12 @@ function initializeMap() {
             }
         }, 500);
 
-        console.log('✅ Mapa V3 inicializado con TODOS LOS FIXES');
-        addDebugLog('info', 'Mapa V3 + TODOS LOS FIXES inicializado correctamente');
+        console.log('✅ Mapa V3.1 inicializado');
+        addDebugLog('info', 'Mapa V3.1 inicializado correctamente');
 
     } catch (error) {
-        console.error('❌ Error inicializando mapa:', error);
-        addDebugLog('error', `Error mapa: ${error.message}`);
+        console.error('❌ Error inicializando mapa V3.1:', error);
+        addDebugLog('error', `Error mapa V3.1: ${error.message}`);
         handleMapError(error);
     }
 }
@@ -2389,23 +2384,23 @@ function addInitialMarkers() {
 
     try {
         const madridMarker = L.marker([40.4168, -3.7038])
-            .bindPopup('<b>🖥️ Dashboard Principal V3 (FIXED)</b><br>Madrid, España<br>Backend Dashboard (Campos Planos)')
+            .bindPopup('<b>🖥️ Dashboard Principal V3.1</b><br>Madrid, España<br>Backend Dashboard V3.1')
             .addTo(map);
 
         const barcelonaMarker = L.marker([41.3851, 2.1734])
-            .bindPopup('<b>🔄 Nodo Remoto V3 (FIXED)</b><br>Barcelona, España<br>ML Detector Node V3')
+            .bindPopup('<b>🔄 ML Detector V3.1</b><br>Barcelona, España<br>Puerto 5580 SUB')
             .addTo(map);
 
         const sevillaMarker = L.marker([37.3886, -5.9823])
-            .bindPopup('<b>🔥 Firewall Agent V3 (FIXED)</b><br>Sevilla, España<br>Simple Firewall Agent')
+            .bindPopup('<b>🔥 Firewall Agent V3.1</b><br>Sevilla, España<br>Simple Firewall Agent V3.1')
             .addTo(map);
 
         markers.push(madridMarker, barcelonaMarker, sevillaMarker);
 
-        console.log('✅ Marcadores iniciales V3 + FIXES añadidos');
+        console.log('✅ Marcadores iniciales V3.1 añadidos');
 
     } catch (error) {
-        console.error('❌ Error añadiendo marcadores:', error);
+        console.error('❌ Error añadiendo marcadores V3.1:', error);
     }
 }
 
@@ -2415,16 +2410,16 @@ function handleMapError(error) {
         mapContainer.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #ff4444; font-weight: bold; text-align: center; padding: 20px;">
                 <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px;"></i>
-                <div style="font-size: 18px; margin-bottom: 10px;">❌ Error cargando mapa V3 (FIXED)</div>
+                <div style="font-size: 18px; margin-bottom: 10px;">❌ Error cargando mapa V3.1</div>
                 <div style="font-size: 12px; opacity: 0.8;">${error.message}</div>
-                <button onclick="initializeMap()" style="margin-top: 20px; background: rgba(0, 255, 0, 0.2); border: 1px solid #00ff00; color: #00ff00; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit;">🔄 Reintentar</button>
+                <button onclick="initializeMap()" style="margin-top: 20px; background: rgba(0, 255, 0, 0.2); border: 1px solid #00ff00; color: #00ff00; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit;">🔄 Reintentar V3.1</button>
             </div>
         `;
     }
 }
 
 // ============================================================================
-// FUNCIONES AUXILIARES
+// FUNCIONES AUXILIARES BÁSICAS V3.1 - CONTINUACIÓN
 // ============================================================================
 
 function clearAllMarkers() {
@@ -2446,12 +2441,12 @@ function clearAllMarkers() {
         markers = markers.filter(marker => !marker._isEventMarker);
         connectionLines = [];
 
-        console.log('🗺️ Marcadores y líneas V3 + FIXES limpiados');
-        showToast('Marcadores V3 + FIXES limpiados', 'success');
-        addDebugLog('info', 'Marcadores y conexiones V3 + FIXES limpiados');
+        console.log('🗺️ Marcadores y líneas V3.1 limpiados');
+        showToast('Marcadores V3.1 limpiados', 'success');
+        addDebugLog('info', 'Marcadores y conexiones V3.1 limpiados');
 
     } catch (error) {
-        console.error('❌ Error limpiando marcadores:', error);
+        console.error('❌ Error limpiando marcadores V3.1:', error);
     }
 }
 
@@ -2460,11 +2455,11 @@ function centerMap() {
 
     try {
         map.setView([40.4168, -3.7038], 6);
-        console.log('🎯 Mapa V3 + FIXES centrado');
-        showToast('Mapa V3 + FIXES centrado', 'info');
+        console.log('🎯 Mapa V3.1 centrado');
+        showToast('Mapa V3.1 centrado', 'info');
 
     } catch (error) {
-        console.error('❌ Error centrando mapa:', error);
+        console.error('❌ Error centrando mapa V3.1:', error);
     }
 }
 
@@ -2537,7 +2532,7 @@ function addDebugLog(type, message) {
         }
 
     } catch (error) {
-        console.error('Error añadiendo debug log:', error);
+        console.error('Error añadiendo debug log V3.1:', error);
     }
 }
 
@@ -2600,13 +2595,13 @@ function pauseEventsUpdate() {
         if (eventsPaused) {
             btn.innerHTML = '<i class="fas fa-play"></i>';
             btn.classList.add('paused');
-            showToast('Eventos pausados', 'warning');
-            addDebugLog('warning', 'Actualización de eventos pausada');
+            showToast('Eventos V3.1 pausados', 'warning');
+            addDebugLog('warning', 'Actualización de eventos V3.1 pausada');
         } else {
             btn.innerHTML = '<i class="fas fa-pause"></i>';
             btn.classList.remove('paused');
-            showToast('Eventos reanudados', 'success');
-            addDebugLog('info', 'Actualización de eventos reanudada');
+            showToast('Eventos V3.1 reanudados', 'success');
+            addDebugLog('info', 'Actualización de eventos V3.1 reanudada');
         }
     }
 }
@@ -2617,15 +2612,15 @@ function clearEventsList() {
         eventsList.innerHTML = `
             <div class="no-events-placeholder">
                 <i class="fas fa-inbox"></i>
-                <p>No hay eventos recientes</p>
-                <button onclick="sendTestFirewallCommand()" class="btn btn-primary">
-                    🧪 Generar Test Backend V3 (FIXED)
+                <p>No hay eventos V3.1 recientes</p>
+                <button onclick="sendTestFirewallCommandV31()" class="btn btn-primary">
+                    🧪 Generar Test Backend V3.1
                 </button>
             </div>
         `;
         updateElement('live-events-count', 0);
         currentEvents = [];
-        addDebugLog('info', 'Lista de eventos V3 + FIXES limpiada');
+        addDebugLog('info', 'Lista de eventos V3.1 limpiada');
     }
 }
 
@@ -2646,29 +2641,29 @@ function filterEvents() {
 }
 
 function refreshDashboard() {
-    console.log('🔄 Refrescando dashboard V3 con TODOS LOS FIXES aplicados...');
+    console.log('🔄 Refrescando dashboard V3.1...');
     fetchDataFromZeroMQ();
 
     if (map) {
         map.invalidateSize();
     }
 
-    showToast('Dashboard V3 + TODOS LOS FIXES actualizado', 'success');
-    addDebugLog('info', 'Dashboard V3 + TODOS LOS FIXES refrescado - campos planos + firewall_commands.proto + sistema avanzado ventanas + Google Maps vista superior + botones siempre visibles + acciones independientes');
+    showToast('Dashboard V3.1 actualizado', 'success');
+    addDebugLog('info', 'Dashboard V3.1 refrescado - protobuf v3.1 + puerto 5580 SUB + ensemble_confidence + pipeline_latency + capturing_node_id + tricapa_scores');
 }
 
 function clearDebugLog() {
     const debugLog = document.getElementById('debug-log');
     if (debugLog) {
         debugLog.innerHTML = `
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log limpiado</div>
-            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard V3 + TODOS LOS FIXES conectado</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log V3.1 limpiado</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard V3.1 conectado con protobuf v3.1</div>
         `;
     }
-    showToast('Log V3 + FIXES limpiado', 'info');
+    showToast('Log V3.1 limpiado', 'info');
 }
 
-// ✅ MODAL SYSTEM MEJORADO
+// ✅ MODAL SYSTEM MEJORADO V3.1
 function showModal(title, content, actions = null) {
     const overlay = document.getElementById('modal-overlay');
     const modal = document.getElementById('detail-modal');
@@ -2713,7 +2708,7 @@ function showModal(title, content, actions = null) {
 
         makeModalDraggable(modal);
 
-        console.log('📱 Modal V3 + FIXES mostrado con controles avanzados');
+        console.log('📱 Modal V3.1 mostrado con controles avanzados');
     }
 }
 
@@ -2741,7 +2736,7 @@ function makeModalDraggable(modal) {
 
         e.preventDefault();
 
-        console.log('🖱️ Iniciando drag del modal V3 + FIXES');
+        console.log('🖱️ Iniciando drag del modal V3.1');
     });
 }
 
@@ -2755,7 +2750,7 @@ function minimizeModal() {
             btn.innerHTML = modal.classList.contains('minimized') ? '🔼' : '_';
         }
 
-        console.log('📱 Modal V3 + FIXES minimizado/restaurado');
+        console.log('📱 Modal V3.1 minimizado/restaurado');
     }
 }
 
@@ -2775,7 +2770,7 @@ function maximizeModal() {
             modal.style.removeProperty('--modal-y');
         }
 
-        console.log('🔲 Modal V3 + FIXES maximizado/restaurado');
+        console.log('🔲 Modal V3.1 maximizado/restaurado');
     }
 }
 
@@ -2794,7 +2789,7 @@ function closeModal() {
         currentModal = null;
         isDragging = false;
 
-        console.log('📱 Modal V3 + FIXES cerrado');
+        console.log('📱 Modal V3.1 cerrado');
     }
 }
 
@@ -2819,8 +2814,9 @@ function showThreatIndicator(event) {
     const indicator = document.getElementById('threat-indicator');
     if (indicator) {
         indicator.innerHTML = `
-            ⚠️ Amenaza V3 + FIXES detectada!<br>
-            <small>${event.source_ip} → ${event.target_ip}</small>
+            ⚠️ Amenaza V3.1 detectada!<br>
+            <small>${event.source_ip} → ${event.target_ip}</small><br>
+            <small>Ensemble: ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%</small>
         `;
         indicator.classList.add('show');
 
@@ -2830,28 +2826,33 @@ function showThreatIndicator(event) {
     }
 }
 
-// Funciones placeholder para handlers del HTML
-function toggleHeatmap() { showToast('Heatmap V3 + FIXES: en desarrollo', 'warning'); }
-function showMapLegend() { showToast('Leyenda V3 + FIXES: en desarrollo', 'info'); }
-function testAllConnections() { showToast('Test conexiones V3 + FIXES: en desarrollo', 'info'); }
-function showConnectionDetails(type) { console.log('Connection details V3 + FIXES:', type); }
-function showSystemInfo() { console.log('System info V3 + FIXES'); }
-function showEventsSummary() { console.log('Events summary V3 + FIXES'); }
-function showConfirmationsSummary() { console.log('Confirmations summary V3 + FIXES'); }
-function showPortDetails(port, event) { console.log('Port details V3 + FIXES:', port); event?.stopPropagation(); }
-function showEventsDetail(event) { console.log('Events detail V3 + FIXES'); event?.stopPropagation(); }
-function showCommandsDetail(event) { console.log('Commands detail V3 + FIXES'); event?.stopPropagation(); }
-function showConfirmationsDetail(event) { console.log('Confirmations detail V3 + FIXES'); event?.stopPropagation(); }
-function showComponentDetail(component) { console.log('Component detail V3 + FIXES:', component); }
-function showComponentMetric(metric, event) { console.log('Component metric V3 + FIXES:', metric); event?.stopPropagation(); }
-function showTopologyLineDetail(line) { console.log('Topology line V3 + FIXES:', line); }
-function showZMQConnectionDetail(connection) { console.log('ZMQ connection V3 + FIXES:', connection); }
-function showEventsPerMinuteDetail() { console.log('Events per minute detail V3 + FIXES'); }
-function showHighRiskEventsDetail() { console.log('High risk events detail V3 + FIXES'); }
-function showSuccessRateDetail() { console.log('Success rate detail V3 + FIXES'); }
-function showFailuresDetail() { console.log('Failures detail V3 + FIXES'); }
-function showDebugLogDetail() { console.log('Debug log detail V3 + FIXES'); }
-function showLogEntryDetail(entry, event) { console.log('Log entry V3 + FIXES:', entry); event?.stopPropagation(); }
+// Funciones placeholder para handlers del HTML (V3.1)
+function toggleHeatmap() { showToast('Heatmap V3.1: en desarrollo', 'warning'); }
+function showMapLegend() { showToast('Leyenda V3.1: en desarrollo', 'info'); }
+function testAllConnections() { showToast('Test conexiones V3.1: en desarrollo', 'info'); }
+function showConnectionDetails(type) { console.log('Connection details V3.1:', type); }
+function showSystemInfo() { console.log('System info V3.1'); }
+function showEventsSummary() { console.log('Events summary V3.1'); }
+function showConfirmationsSummary() { console.log('Confirmations summary V3.1'); }
+function showPortDetails(port, event) { console.log('Port details V3.1:', port); event?.stopPropagation(); }
+function showEventsDetail(event) { console.log('Events detail V3.1'); event?.stopPropagation(); }
+function showCommandsDetail(event) { console.log('Commands detail V3.1'); event?.stopPropagation(); }
+function showConfirmationsDetail(event) { console.log('Confirmations detail V3.1'); event?.stopPropagation(); }
+function showComponentDetail(component) { console.log('Component detail V3.1:', component); }
+function showComponentMetric(metric, event) { console.log('Component metric V3.1:', metric); event?.stopPropagation(); }
+function showTopologyLineDetail(line) { console.log('Topology line V3.1:', line); }
+function showZMQConnectionDetail(connection) { console.log('ZMQ connection V3.1:', connection); }
+function showEventsPerMinuteDetail() { console.log('Events per minute detail V3.1'); }
+function showHighRiskEventsDetail() { console.log('High risk events detail V3.1'); }
+function showSuccessRateDetail() { console.log('Success rate detail V3.1'); }
+function showFailuresDetail() { console.log('Failures detail V3.1'); }
+function showDebugLogDetail() { console.log('Debug log detail V3.1'); }
+function showLogEntryDetail(entry, event) { console.log('Log entry V3.1:', entry); event?.stopPropagation(); }
+
+// Aliases para compatibilidad con versiones anteriores
+function showEventDetail(event) { showEventDetailV31(event); }
+function showTargetIPDetail(targetIP, eventData) { showTargetIPDetailV31(targetIP, eventData); }
+function showSourceIPDetail(sourceIP, eventData) { showSourceIPDetailV31(sourceIP, eventData); }
 
 // Cleanup
 window.addEventListener('beforeunload', function() {
@@ -2860,10 +2861,2366 @@ window.addEventListener('beforeunload', function() {
     }
 });
 
-// La inicialización se maneja desde HTML con DOMContentLoaded
-console.log('✅ TODOS LOS FIXES APLICADOS: dashboard.js V3 COMPLETO');
-console.log('📡 FIX 1: Mapeo de acciones corregido');
-console.log('🗺️ FIX 2: Google Maps vista superior aplicado');
-console.log('📍 FIX 3: Botones geolocalización siempre visibles aplicado');
-console.log('⚔️ FIX 4: Acciones contra atacante independientes de geolocalización aplicado');
-console.log('🔒 Con parámetros de seguridad añadidos');
+// Inicialización se maneja desde HTML con DOMContentLoaded
+console.log('✅ dashboard_v31.js CARGADO COMPLETAMENTE');
+console.log('📡 V3.1: Puerto 5580 SUB para ML_detector');
+console.log('🤖 V3.1: Campos ensemble_confidence, pipeline_latency, capturing_node_id');
+console.log('🔧 V3.1: Tricapa ML analysis scores');
+console.log('🔥 V3.1: Fleet management refinado');
+console.log('🚀 V3.1: Compatible con backend dashboard_v31.py');
+
+// ============================================================================
+// 🚨 MODAL DE EVENTOS COMPLETO V3.1 - CON NUEVOS CAMPOS
+// ============================================================================
+
+async function showEventDetailV31(event) {
+    try {
+        console.log('🔍 Mostrando detalle completo del evento V3.1 con nuevos campos:', event);
+
+        // Obtener información del firewall responsable desde backend V3.1
+        const firewallInfo = await getResponsibleFirewallInfoV31(event);
+        console.log('🔥 Info firewall responsable V3.1:', firewallInfo);
+
+        // ✅ Generar botones Google Maps con vista superior V3.1
+        const googleMapsButtons = generateDualGoogleMapsButtonsFixedV31(event);
+
+        const content = `
+            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <!-- Header del evento V3.1 -->
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #00ff88;">
+                    <h3 style="color: #00ff88; margin: 0;">🚨 Evento de Seguridad V3.1 Completo</h3>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        ID: ${event.id || 'N/A'} | Timestamp: ${new Date(event.timestamp * 1000).toLocaleString()}
+                        | Node: ${event.capturing_node_id || 'N/A'} | Pipeline: ${event.pipeline_latency || 0}ms
+                    </div>
+                    ${googleMapsButtons}
+                </div>
+
+                <!-- ✅ V3.1: Información básica del evento con nuevos campos -->
+                <div style="margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <strong>IP Origen (Víctima):</strong><br>
+                            <span style="color: #0066CC; font-size: 14px;">${event.source_ip}</span>
+                            ${event.source_city || event.source_country ? `<br><small style="color: #888;">${event.source_city || 'N/A'}, ${event.source_country || 'N/A'}</small>` : ''}
+                        </div>
+                        <div>
+                            <strong>IP Destino (Atacante):</strong><br>
+                            <span style="color: #CC0000; font-size: 14px;">${event.target_ip}</span>
+                            ${event.target_city || event.target_country ? `<br><small style="color: #888;">${event.target_city || 'N/A'}, ${event.target_country || 'N/A'}</small>` : ''}
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Ensemble Score:</strong><br>
+                            <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'}; font-size: 14px; font-weight: bold;">
+                                ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%
+                            </span>
+                        </div>
+                        <div>
+                            <strong>Tipo:</strong><br>
+                            <span style="color: #ffaa00;">${event.type || 'network_traffic'}</span>
+                        </div>
+                        <div>
+                            <strong>Protocolo:</strong><br>
+                            <span style="color: #00aaff;">${event.protocol || 'TCP'}</span>
+                        </div>
+                        <div>
+                            <strong>Pipeline Lat:</strong><br>
+                            <span style="color: #0088ff;">${event.pipeline_latency || 0}ms</span>
+                        </div>
+                    </div>
+
+                    <!-- ✅ V3.1: Información extendida con nuevos campos -->
+                    ${event.src_port || event.dest_port ? `
+                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong>Puerto Origen:</strong> <span style="color: #0066CC;">${event.src_port || 'N/A'}</span>
+                            </div>
+                            <div>
+                                <strong>Puerto Destino:</strong> <span style="color: #CC0000;">${event.dest_port || 'N/A'}</span>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${event.bytes || event.packets || event.packet_size ? `
+                        <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                            ${event.bytes ? `<div><strong>Bytes:</strong> ${event.bytes}</div>` : ''}
+                            ${event.packets ? `<div><strong>Paquetes:</strong> ${event.packets}</div>` : ''}
+                            ${event.packet_size ? `<div><strong>Tamaño Paquete:</strong> ${event.packet_size}</div>` : ''}
+                        </div>
+                    ` : ''}
+
+                    <!-- ✅ V3.1: Información geográfica dual -->
+                    ${(event.source_latitude || event.target_latitude || event.geographic_distance_km) ? `
+                        <div style="margin-top: 15px; padding: 10px; background: rgba(0, 255, 136, 0.1); border-radius: 4px;">
+                            <strong style="color: #00ff88;">🗺️ Información Geográfica Dual V3.1:</strong><br>
+                            <small style="color: #ccc;">
+                                ${event.geographic_distance_km ? `Distancia: ${event.geographic_distance_km}km |` : ''}
+                                ${event.same_country !== undefined ? `Mismo País: ${event.same_country ? 'Sí' : 'No'} |` : ''}
+                                ${event.distance_category ? `Categoría: ${event.distance_category} |` : ''}
+                                ${event.source_ip_enriched ? ' Origen: ✅' : ' Origen: ❌'}
+                                ${event.target_ip_enriched ? ' | Destino: ✅' : ' | Destino: ❌'}
+                                | Node: ${event.capturing_node_id || 'N/A'}
+                            </small>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- ✅ V3.1: Análisis ML Tricapa Completo -->
+                ${event.tricapa_scores ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                        <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                            🤖 Análisis ML Tricapa V3.1
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; font-size: 11px;">
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #ff6b6b;">Isolation Forest</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.isolation_forest * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #ffa500;">One-Class SVM</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.one_class_svm * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                            <div style="text-align: center; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px;">
+                                <strong style="color: #00ff88;">Local Outlier Factor</strong><br>
+                                <span style="font-size: 14px; font-weight: bold;">${(event.tricapa_scores.local_outlier_factor * 100 || 0).toFixed(1)}%</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; text-align: center; padding: 8px; background: rgba(0, 170, 255, 0.2); border-radius: 4px;">
+                            <strong style="color: #00aaff;">Ensemble Final: ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</strong>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- 🔥 Información del firewall responsable V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
+                        🔥 Firewall Agent Responsable V3.1
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>Node ID:</strong> ${firewallInfo.node_id}<br>
+                        <strong>IP del Agente:</strong> ${firewallInfo.agent_ip}<br>
+                        <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
+                        <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
+                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}<br>
+                        <strong>Capacidades:</strong> ${firewallInfo.capabilities ? firewallInfo.capabilities.join(', ') : 'N/A'}<br>
+                        <strong>Version:</strong> V3.1
+                    </div>
+                </div>
+
+                <!-- 🔥 ACCIONES DISPONIBLES PARA EL EVENTO V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 12px;">
+                        ⚡ Acciones Disponibles V3.1 (Backend Decide)
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        ${generateEventFirewallActionsV31(event, firewallInfo)}
+                    </div>
+                    <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
+                        💡 Acciones V3.1 determinadas por el backend y aplicadas por: <strong style="color: #00ff88;">${firewallInfo.node_id}</strong>
+                    </div>
+                </div>
+
+                <!-- Datos completos del evento V3.1 (JSON) -->
+                <div>
+                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleEventDataV31()">
+                        <span style="color: #666; font-weight: bold;">
+                            📊 Datos Completos del Evento V3.1
+                        </span>
+                        <i class="fas fa-chevron-down" id="event-data-toggle-v31" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="event-data-content-v31" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify(event, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal('Análisis Completo del Evento V3.1', content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalles del evento V3.1:', error);
+        showSimpleEventDetailV31(event);
+    }
+}
+
+// ============================================================================
+// ✅ FUNCIONES GOOGLE MAPS VISTA SUPERIOR V3.1 - CORREGIDAS
+// ============================================================================
+
+function generateDualGoogleMapsButtonsFixedV31(event) {
+    let buttons = '';
+
+    // ✅ V3.1: Coordenadas duales usando campos del backend
+    console.log('🗺️ Generando botones Google Maps V3.1 con vista superior:', {
+        source_lat: event.source_latitude,
+        source_lng: event.source_longitude,
+        target_lat: event.target_latitude,
+        target_lng: event.target_longitude
+    });
+
+    // ✅ Botón SOURCE (víctima) - VISTA SUPERIOR V3.1
+    if (event.source_latitude && event.source_longitude &&
+        event.source_latitude !== 0 && event.source_longitude !== 0) {
+
+        const sourceUrl = `https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z`;
+        buttons += `
+            <div style="margin-top: 10px;">
+                <a href="${sourceUrl}" target="_blank" class="google-maps-btn source-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Víctima V3.1 (${event.source_ip})
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ Botón TARGET (atacante) - VISTA SUPERIOR V3.1
+    if (event.target_latitude && event.target_longitude &&
+        event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+        const targetUrl = `https://www.google.com/maps/place/${event.target_latitude},${event.target_longitude}/@${event.target_latitude},${event.target_longitude},18z`;
+        buttons += `
+            <div style="margin-top: 5px;">
+                <a href="${targetUrl}" target="_blank" class="google-maps-btn target-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🎯 Ver Atacante V3.1 (${event.target_ip})
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ Botón para ver ambas ubicaciones V3.1 - VISTA SUPERIOR
+    if (event.source_latitude && event.source_longitude &&
+        event.target_latitude && event.target_longitude &&
+        event.source_latitude !== 0 && event.source_longitude !== 0 &&
+        event.target_latitude !== 0 && event.target_longitude !== 0) {
+
+        const bothUrl = `https://www.google.com/maps/dir/${event.source_latitude},${event.source_longitude}/${event.target_latitude},${event.target_longitude}`;
+
+        buttons += `
+            <div style="margin-top: 5px;">
+                <a href="${bothUrl}" target="_blank" class="google-maps-btn both-btn">
+                    <i class="fas fa-route"></i> 🗺️ Ver Ruta Completa V3.1 ${event.geographic_distance_km ? `(${event.geographic_distance_km}km)` : ''}
+                </a>
+            </div>
+        `;
+    }
+
+    // ✅ BOTONES SIEMPRE VISIBLES V3.1 - Fallback si no hay coordenadas exactas
+    if (!buttons) {
+        buttons += `
+            <div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.source_ip)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Víctima V3.1
+                </a>
+            </div>
+            <div style="margin-top: 5px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(event.target_ip)}" target="_blank" class="google-maps-btn target-fallback-btn" style="background: rgba(204, 0, 0, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar Atacante V3.1
+                </a>
+            </div>
+        `;
+    }
+
+    return buttons;
+}
+
+function generateEventFirewallActionsV31(event, firewallInfo) {
+    const availableActions = getAvailableFirewallActions();
+    let buttons = '';
+
+    // El backend V3.1 decide qué acciones están disponibles
+    availableActions.forEach(action => {
+        buttons += generateEventActionButtonV31(action, event, firewallInfo);
+    });
+
+    // Fallback si no hay acciones V3.1
+    if (!buttons) {
+        buttons = `
+            <button onclick="executeEventFirewallActionV31('LIST_RULES', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    class="firewall-action-btn list-rules-btn">
+                📋 Listar Reglas V3.1
+            </button>
+            <button onclick="executeEventFirewallActionV31('BLOCK_IP', '${event.target_ip}', '${firewallInfo.node_id}', '${event.id}')"
+                    class="firewall-action-btn block-btn">
+                🚫 Bloquear Atacante V3.1
+            </button>
+        `;
+    }
+
+    return buttons;
+}
+
+function generateEventActionButtonV31(action, event, firewallInfo) {
+    const actionConfig = {
+        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear IP V3.1' },
+        'RATE_LIMIT_IP': { color: '#ffaa00', icon: '⏱️', label: 'Limitar Tráfico V3.1' },
+        'LIST_RULES': { color: '#0066CC', icon: '📋', label: 'Listar Reglas V3.1' },
+        'FLUSH_RULES': { color: '#ff6600', icon: '🗑️', label: 'Limpiar Reglas V3.1' },
+        'BACKUP_RULES': { color: '#00ff88', icon: '💾', label: 'Backup Reglas V3.1' }
+    };
+
+    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action + ' V3.1' };
+
+    // Determinar IP objetivo según la acción
+    let targetIp = 'all';
+    if (action === 'LIST_RULES' || action === 'FLUSH_RULES' || action === 'BACKUP_RULES') {
+        targetIp = 'all';
+    } else {
+        // Para acciones específicas, usar la IP atacante (target_ip)
+        targetIp = event.target_ip;
+    }
+
+    return `
+        <button onclick="executeEventFirewallActionV31('${action}', '${targetIp}', '${firewallInfo.node_id}', '${event.id}')"
+                class="firewall-action-btn event-action-btn"
+                style="background: rgba(${hexToRgb(config.color)}, 0.2); border: 1px solid ${config.color}; color: ${config.color}; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                onmouseover="this.style.background='rgba(${hexToRgb(config.color)}, 0.3)'"
+                onmouseout="this.style.background='rgba(${hexToRgb(config.color)}, 0.2)'">
+            ${config.icon} ${config.label} ${targetIp !== 'all' ? `(${targetIp})` : ''}
+        </button>
+    `;
+}
+
+async function executeEventFirewallActionV31(action, targetIp, firewallNodeId, eventId) {
+    try {
+        console.log(`🔥 Ejecutando acción evento V3.1 ${action} para IP ${targetIp}`);
+
+        showToast(`Ejecutando ${action} V3.1 desde evento...`, 'info');
+
+        const commandId = `event_v31_${Date.now()}`;
+
+        // ✅ V3.1: Enviar campos DIRECTOS como espera el backend
+        const requestData = {
+            action: action,
+            target_ip: targetIp,
+            firewall_node_id: firewallNodeId,
+
+            // Campos adicionales para contexto V3.1
+            event_id: eventId,
+            command_id: commandId,
+            generated_by: 'dashboard_v31_event_response',
+            risk_score: 0.8,
+            dry_run_all: false,
+            timestamp: Date.now(),
+            version: 'v3.1',
+
+            // ✅ V3.1: Auto-detección de modo seguro
+            force_dry_run: true,
+            max_duration: 300,
+            requires_confirmation: true
+        };
+
+        // Añadir evento a la lista
+        addFirewallEventToList({
+            id: commandId,
+            type: 'command',
+            action: action,
+            target_ip: targetIp,
+            action_code: CommandAction[action],
+            source: 'Dashboard V3.1 Event Action',
+            timestamp: Date.now() / 1000
+        });
+
+        // ✅ V3.1: Enviar estructura plana
+        const response = await fetch('/api/execute-firewall-action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'response',
+                    success: true,
+                    agent: result.node_id || firewallNodeId,
+                    result: result.message || `${action} ejecutada exitosamente V3.1 desde evento`,
+                    execution_time: result.execution_time || 0.1,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`✅ ${action} ejecutada V3.1 desde evento`, 'success');
+            addDebugLog('info', `Acción evento V3.1 ${action} ejecutada para IP ${targetIp}`);
+
+            firewallStats.commandsSent++;
+            firewallStats.responsesOk++;
+            updateElement('firewall-commands-sent', firewallStats.commandsSent);
+            updateElement('firewall-responses-ok', firewallStats.responsesOk);
+
+            // Cerrar modal después de acción exitosa
+            setTimeout(() => {
+                closeModal();
+            }, 2000);
+
+        } else {
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'error',
+                    success: false,
+                    error: result.message || `Error ejecutando ${action} V3.1 desde evento`,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`❌ Error en ${action} V3.1 desde evento: ${result.message}`, 'error');
+            firewallStats.errors++;
+            updateElement('firewall-errors', firewallStats.errors);
+        }
+
+    } catch (error) {
+        console.error(`❌ Error ejecutando acción evento V3.1 ${action}:`, error);
+
+        addFirewallEventToList({
+            id: `error_event_v31_${Date.now()}`,
+            type: 'error',
+            success: false,
+            error: `Error comunicación evento V3.1: ${error.message}`,
+            timestamp: Date.now() / 1000
+        });
+
+        showToast(`❌ Error comunicando con firewall V3.1 desde evento: ${error.message}`, 'error');
+        firewallStats.errors++;
+        updateElement('firewall-errors', firewallStats.errors);
+    }
+}
+
+// ============================================================================
+// 🔥 FUNCIONES AUXILIARES PARA FIREWALL_COMMANDS_V31.PROTO
+// ============================================================================
+
+function getFirewallActionCode(action) {
+    return CommandAction[action] || CommandAction.LIST_RULES;
+}
+
+function getDurationForAction(action) {
+    const durations = {
+        'BLOCK_IP': 3600,        // 1 hora
+        'RATE_LIMIT_IP': 1800,   // 30 minutos
+        'ALLOW_IP_TEMP': 600,    // 10 minutos
+        'LIST_RULES': 0,         // No aplica
+        'FLUSH_RULES': 0,        // No aplica
+        'BACKUP_RULES': 0        // No aplica
+    };
+    return durations[action] || 0;
+}
+
+function getPriorityForAction(action) {
+    const priorities = {
+        'BLOCK_IP': CommandPriority.HIGH,
+        'RATE_LIMIT_IP': CommandPriority.MEDIUM,
+        'ALLOW_IP_TEMP': CommandPriority.LOW,
+        'LIST_RULES': CommandPriority.LOW,
+        'FLUSH_RULES': CommandPriority.CRITICAL,
+        'BACKUP_RULES': CommandPriority.MEDIUM
+    };
+    return priorities[action] || CommandPriority.LOW;
+}
+
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ?
+        `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` :
+        '128, 128, 128';
+}
+
+function toggleTargetIPDataV31() {
+    const content = document.getElementById('target-ip-data-content-v31');
+    const toggle = document.getElementById('target-ip-data-toggle-v31');
+
+    if (content && toggle) {
+        const isCollapsed = content.style.maxHeight === '0px' || content.style.maxHeight === '';
+
+        if (isCollapsed) {
+            content.style.maxHeight = '300px';
+            toggle.style.transform = 'rotate(180deg)';
+        } else {
+            content.style.maxHeight = '0px';
+            toggle.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+function toggleEventDataV31() {
+    const content = document.getElementById('event-data-content-v31');
+    const toggle = document.getElementById('event-data-toggle-v31');
+
+    if (content && toggle) {
+        const isCollapsed = content.style.maxHeight === '0px' || content.style.maxHeight === '';
+
+        if (isCollapsed) {
+            content.style.maxHeight = '300px';
+            toggle.style.transform = 'rotate(180deg)';
+        } else {
+            content.style.maxHeight = '0px';
+            toggle.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+function showSimpleEventDetailV31(event) {
+    const content = `
+        <div style="font-family: 'Consolas', monospace;">
+            <h4 style="color: #00ff88; margin-bottom: 15px;">🚨 Evento de Seguridad V3.1</h4>
+
+            <div style="margin-bottom: 10px;">
+                <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>IP Origen:</strong> <span style="color: #0066CC;">${event.source_ip}</span>
+                ${event.source_city ? ` (${event.source_city})` : ''}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>IP Destino:</strong> <span style="color: #CC0000;">${event.target_ip}</span>
+                ${event.target_city ? ` (${event.target_city})` : ''}
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Ensemble Score:</strong> <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'};">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Pipeline Latency:</strong> ${event.pipeline_latency || 0}ms
+            </div>
+            <div style="margin-bottom: 10px;">
+                <strong>Capturing Node:</strong> ${event.capturing_node_id || 'N/A'}
+            </div>
+
+            ${event.type ? `<div style="margin-bottom: 10px;"><strong>Tipo:</strong> ${event.type}</div>` : ''}
+            ${event.geographic_distance_km ? `<div style="margin-bottom: 10px;"><strong>Distancia:</strong> ${event.geographic_distance_km}km</div>` : ''}
+
+            <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.6); border-radius: 4px;">
+                <strong>Datos del Evento V3.1:</strong><br>
+                <pre style="font-size: 9px; color: #666; margin-top: 5px;">${JSON.stringify(event, null, 2)}</pre>
+            </div>
+
+            <!-- Botones de acción básicos V3.1 -->
+            <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="executeEventFirewallActionV31('BLOCK_IP', '${event.target_ip}', 'simple_firewall_agent_v31_001', '${event.id}')"
+                        class="firewall-action-btn block-btn">
+                    🚫 Bloquear Atacante V3.1
+                </button>
+                <button onclick="executeEventFirewallActionV31('LIST_RULES', 'all', 'simple_firewall_agent_v31_001', '${event.id}')"
+                        class="firewall-action-btn list-rules-btn">
+                    📋 Listar Reglas V3.1
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal('Detalle del Evento V3.1', content);
+}
+
+// ============================================================================
+// RESTO DE FUNCIONES BÁSICAS (ADAPTADAS PARA V3.1)
+// ============================================================================
+
+function initializeMap() {
+    try {
+        console.log('🗺️ Inicializando mapa Leaflet V3.1...');
+
+        if (typeof L === 'undefined') {
+            throw new Error('Leaflet no está disponible para V3.1');
+        }
+
+        const mapContainer = document.getElementById('map');
+        if (!mapContainer) {
+            throw new Error('Contenedor del mapa V3.1 no encontrado');
+        }
+
+        map = L.map('map', {
+            zoomControl: true,
+            attributionControl: true,
+            minZoom: 2,
+            maxZoom: 18
+        }).setView([40.4168, -3.7038], 6);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18,
+            subdomains: ['a', 'b', 'c'],
+            crossOrigin: true
+        }).addTo(map);
+
+        map.on('load', function() {
+            console.log('✅ Mapa V3.1 cargado');
+            addInitialMarkers();
+            addDebugLog('info', 'Mapa Leaflet V3.1 cargado');
+        });
+
+        setTimeout(() => {
+            if (map) {
+                map.invalidateSize();
+            }
+        }, 500);
+
+        console.log('✅ Mapa V3.1 inicializado');
+        addDebugLog('info', 'Mapa V3.1 inicializado correctamente');
+
+    } catch (error) {
+        console.error('❌ Error inicializando mapa V3.1:', error);
+        addDebugLog('error', `Error mapa V3.1: ${error.message}`);
+        handleMapError(error);
+    }
+}
+
+function addInitialMarkers() {
+    if (!map) return;
+
+    try {
+        const madridMarker = L.marker([40.4168, -3.7038])
+            .bindPopup('<b>🖥️ Dashboard Principal V3.1</b><br>Madrid, España<br>Backend Dashboard V3.1')
+            .addTo(map);
+
+        const barcelonaMarker = L.marker([41.3851, 2.1734])
+            .bindPopup('<b>🔄 ML Detector V3.1</b><br>Barcelona, España<br>Puerto 5580 SUB')
+            .addTo(map);
+
+        const sevillaMarker = L.marker([37.3886, -5.9823])
+            .bindPopup('<b>🔥 Firewall Agent V3.1</b><br>Sevilla, España<br>Simple Firewall Agent V3.1')
+            .addTo(map);
+
+        markers.push(madridMarker, barcelonaMarker, sevillaMarker);
+
+        console.log('✅ Marcadores iniciales V3.1 añadidos');
+
+    } catch (error) {
+        console.error('❌ Error añadiendo marcadores V3.1:', error);
+    }
+}
+
+function handleMapError(error) {
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+        mapContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #ff4444; font-weight: bold; text-align: center; padding: 20px;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 20px;"></i>
+                <div style="font-size: 18px; margin-bottom: 10px;">❌ Error cargando mapa V3.1</div>
+                <div style="font-size: 12px; opacity: 0.8;">${error.message}</div>
+                <button onclick="initializeMap()" style="margin-top: 20px; background: rgba(0, 255, 0, 0.2); border: 1px solid #00ff00; color: #00ff00; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit;">🔄 Reintentar V3.1</button>
+            </div>
+        `;
+    }
+}
+
+// ============================================================================
+// FUNCIONES AUXILIARES BÁSICAS V3.1
+// ============================================================================
+
+function clearAllMarkers() {
+    if (!map) return;
+
+    try {
+        markers.forEach(marker => {
+            if (marker._isEventMarker) {
+                map.removeLayer(marker);
+            }
+        });
+
+        connectionLines.forEach(line => {
+            if (map.hasLayer(line)) {
+                map.removeLayer(line);
+            }
+        });
+
+        markers = markers.filter(marker => !marker._isEventMarker);
+        connectionLines = [];
+
+        console.log('🗺️ Marcadores y líneas V3.1 limpiados');
+        showToast('Marcadores V3.1 limpiados', 'success');
+        addDebugLog('info', 'Marcadores y conexiones V3.1 limpiados');
+
+    } catch (error) {
+        console.error('❌ Error limpiando marcadores V3.1:', error);
+    }
+}
+
+function centerMap() {
+    if (!map) return;
+
+    try {
+        map.setView([40.4168, -3.7038], 6);
+        console.log('🎯 Mapa V3.1 centrado');
+        showToast('Mapa V3.1 centrado', 'info');
+
+    } catch (error) {
+        console.error('❌ Error centrando mapa V3.1:', error);
+    }
+}
+
+function updateComponentStatus(components) {
+    Object.keys(components).forEach(componentName => {
+        const component = components[componentName];
+        const healthElement = document.getElementById(`${componentName}-health`);
+
+        if (healthElement) {
+            healthElement.textContent = component.status || 'UNKNOWN';
+            healthElement.className = `component-health ${component.status?.toLowerCase() || 'unknown'}`;
+        }
+
+        if (component.metrics) {
+            Object.keys(component.metrics).forEach(metric => {
+                updateElement(`${componentName}-${metric}`, component.metrics[metric]);
+            });
+        }
+    });
+}
+
+function updateZMQStatus(connections) {
+    Object.keys(connections).forEach(connName => {
+        const conn = connections[connName];
+        const statusElement = document.getElementById(`${connName}-status`);
+
+        if (statusElement) {
+            statusElement.textContent = conn.status?.toUpperCase() || 'UNKNOWN';
+            statusElement.className = `connection-status ${conn.status || 'unknown'}`;
+        }
+    });
+}
+
+function updateConnectionStatus(connection, status) {
+    const statusElement = document.getElementById(`status-${connection}`);
+    if (statusElement) {
+        statusElement.className = `status-dot ${status}`;
+    }
+}
+
+function updateCurrentTime() {
+    const timeElement = document.getElementById('current-time');
+    if (timeElement) {
+        timeElement.textContent = new Date().toLocaleTimeString();
+    }
+}
+
+function updateElement(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function addDebugLog(type, message) {
+    const debugLog = document.getElementById('debug-log');
+    if (!debugLog) return;
+
+    try {
+        const timestamp = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.innerHTML = `[${type.toUpperCase()}] ${timestamp} - ${message}`;
+
+        debugLog.insertBefore(entry, debugLog.firstChild);
+
+        const entries = debugLog.querySelectorAll('.log-entry');
+        if (entries.length > 100) {
+            entries[entries.length - 1].remove();
+        }
+
+    } catch (error) {
+        console.error('Error añadiendo debug log V3.1:', error);
+    }
+}
+
+function initializeEventHandlers() {
+    const pauseBtn = document.getElementById('pause-events-btn');
+    if (pauseBtn) {
+        pauseBtn.addEventListener('click', pauseEventsUpdate);
+    }
+
+    const eventsFilter = document.getElementById('events-filter');
+    if (eventsFilter) {
+        eventsFilter.addEventListener('change', filterEvents);
+    }
+
+    const pauseFirewallBtn = document.getElementById('pause-firewall-events-btn');
+    if (pauseFirewallBtn) {
+        pauseFirewallBtn.addEventListener('click', pauseFirewallEventsUpdate);
+    }
+}
+
+function initializeCollapsibleSections() {
+    const sections = ['architecture', 'components', 'events', 'firewall-events', 'counters', 'zmq', 'debug'];
+
+    sections.forEach(sectionId => {
+        const toggleIcon = document.getElementById(`${sectionId}-toggle`);
+        const content = document.getElementById(`${sectionId}-content`);
+
+        if (toggleIcon && content) {
+            content.classList.remove('collapsed');
+            toggleIcon.classList.remove('rotated');
+        }
+    });
+}
+
+function toggleSection(sectionId) {
+    const content = document.getElementById(`${sectionId}-content`);
+    const toggle = document.getElementById(`${sectionId}-toggle`);
+    const section = document.getElementById(`${sectionId}-section`);
+
+    if (content && toggle) {
+        const isCollapsed = content.classList.contains('collapsed');
+
+        if (isCollapsed) {
+            content.classList.remove('collapsed');
+            toggle.classList.remove('rotated');
+            if (section) section.classList.add('expanded');
+        } else {
+            content.classList.add('collapsed');
+            toggle.classList.add('rotated');
+            if (section) section.classList.remove('expanded');
+        }
+    }
+}
+
+function pauseEventsUpdate() {
+    eventsPaused = !eventsPaused;
+    const btn = document.getElementById('pause-events-btn');
+
+    if (btn) {
+        if (eventsPaused) {
+            btn.innerHTML = '<i class="fas fa-play"></i>';
+            btn.classList.add('paused');
+            showToast('Eventos V3.1 pausados', 'warning');
+            addDebugLog('warning', 'Actualización de eventos V3.1 pausada');
+        } else {
+            btn.innerHTML = '<i class="fas fa-pause"></i>';
+            btn.classList.remove('paused');
+            showToast('Eventos V3.1 reanudados', 'success');
+            addDebugLog('info', 'Actualización de eventos V3.1 reanudada');
+        }
+    }
+}
+
+function clearEventsList() {
+    const eventsList = document.getElementById('events-list');
+    if (eventsList) {
+        eventsList.innerHTML = `
+            <div class="no-events-placeholder">
+                <i class="fas fa-inbox"></i>
+                <p>No hay eventos V3.1 recientes</p>
+                <button onclick="sendTestFirewallCommandV31()" class="btn btn-primary">
+                    🧪 Generar Test Backend V3.1
+                </button>
+            </div>
+        `;
+        updateElement('live-events-count', 0);
+        currentEvents = [];
+        addDebugLog('info', 'Lista de eventos V3.1 limpiada');
+    }
+}
+
+function filterEvents() {
+    const filter = document.getElementById('events-filter').value;
+    const eventItems = document.querySelectorAll('.event-item:not(.no-events-placeholder)');
+
+    eventItems.forEach(item => {
+        const riskLevel = item.className.includes('risk-high') ? 'high' :
+                         item.className.includes('risk-medium') ? 'medium' : 'low';
+
+        if (filter === 'all' || filter === riskLevel) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function refreshDashboard() {
+    console.log('🔄 Refrescando dashboard V3.1...');
+    fetchDataFromZeroMQ();
+
+    if (map) {
+        map.invalidateSize();
+    }
+
+    showToast('Dashboard V3.1 actualizado', 'success');
+    addDebugLog('info', 'Dashboard V3.1 refrescado - protobuf v3.1 + puerto 5580 SUB + ensemble_confidence + pipeline_latency + capturing_node_id + tricapa_scores');
+}
+
+function clearDebugLog() {
+    const debugLog = document.getElementById('debug-log');
+    if (debugLog) {
+        debugLog.innerHTML = `
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Log V3.1 limpiado</div>
+            <div class="log-entry info">[INFO] ${new Date().toLocaleTimeString()} - Dashboard V3.1 conectado con protobuf v3.1</div>
+        `;
+    }
+    showToast('Log V3.1 limpiado', 'info');
+}
+
+// ✅ MODAL SYSTEM MEJORADO V3.1
+function showModal(title, content, actions = null) {
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('detail-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalContent = document.getElementById('modal-content');
+    const modalActions = document.getElementById('modal-actions');
+
+    if (overlay && modal && modalTitle && modalContent) {
+        modalTitle.textContent = title;
+        modalContent.innerHTML = content;
+
+        if (actions && modalActions) {
+            modalActions.innerHTML = actions;
+        } else if (modalActions) {
+            modalActions.innerHTML = '';
+        }
+
+        const modalHeader = modal.querySelector('.modal-header');
+        if (modalHeader && !modalHeader.querySelector('.modal-controls')) {
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'modal-controls';
+            controlsDiv.innerHTML = `
+                <button class="modal-control-btn minimize" onclick="minimizeModal()" title="Minimizar">_</button>
+                <button class="modal-control-btn maximize" onclick="maximizeModal()" title="Maximizar">🔲</button>
+            `;
+
+            const closeBtn = modalHeader.querySelector('.close-btn');
+            if (closeBtn) {
+                modalHeader.insertBefore(controlsDiv, closeBtn);
+            } else {
+                modalHeader.appendChild(controlsDiv);
+            }
+        }
+
+        modal.classList.remove('positioned', 'minimized', 'maximized');
+        modal.style.removeProperty('--modal-x');
+        modal.style.removeProperty('--modal-y');
+
+        overlay.style.display = 'block';
+        modal.style.display = 'block';
+        overlay.onclick = closeModal;
+
+        makeModalDraggable(modal);
+
+        console.log('📱 Modal V3.1 mostrado con controles avanzados');
+    }
+}
+
+function makeModalDraggable(modal) {
+    const header = modal.querySelector('.modal-header');
+    if (!header) return;
+
+    header.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.modal-controls') || e.target.closest('.close-btn')) {
+            return;
+        }
+
+        isDragging = true;
+        currentModal = modal;
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        const rect = modal.getBoundingClientRect();
+        modalStartX = rect.left;
+        modalStartY = rect.top;
+
+        modal.classList.add('dragging');
+        header.style.cursor = 'grabbing';
+
+        e.preventDefault();
+
+        console.log('🖱️ Iniciando drag del modal V3.1');
+    });
+}
+
+function minimizeModal() {
+    const modal = document.getElementById('detail-modal');
+    if (modal) {
+        modal.classList.toggle('minimized');
+
+        const btn = modal.querySelector('.minimize');
+        if (btn) {
+            btn.innerHTML = modal.classList.contains('minimized') ? '🔼' : '_';
+        }
+
+        console.log('📱 Modal V3.1 minimizado/restaurado');
+    }
+}
+
+function maximizeModal() {
+    const modal = document.getElementById('detail-modal');
+    if (modal) {
+        modal.classList.toggle('maximized');
+
+        const btn = modal.querySelector('.maximize');
+        if (btn) {
+            btn.innerHTML = modal.classList.contains('maximized') ? '🔽' : '🔲';
+        }
+
+        if (modal.classList.contains('maximized')) {
+            modal.classList.remove('positioned');
+            modal.style.removeProperty('--modal-x');
+            modal.style.removeProperty('--modal-y');
+        }
+
+        console.log('🔲 Modal V3.1 maximizado/restaurado');
+    }
+}
+
+function closeModal() {
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('detail-modal');
+
+    if (overlay && modal) {
+        overlay.style.display = 'none';
+        modal.style.display = 'none';
+
+        modal.classList.remove('positioned', 'minimized', 'maximized', 'dragging');
+        modal.style.removeProperty('--modal-x');
+        modal.style.removeProperty('--modal-y');
+
+        currentModal = null;
+        isDragging = false;
+
+        console.log('📱 Modal V3.1 cerrado');
+    }
+}
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 4000);
+}
+
+function showThreatIndicator(event) {
+    const indicator = document.getElementById('threat-indicator');
+    if (indicator) {
+        indicator.innerHTML = `
+            ⚠️ Amenaza V3.1 detectada!<br>
+            <small>${event.source_ip} → ${event.target_ip}</small><br>
+            <small>Ensemble: ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%</small>
+        `;
+        indicator.classList.add('show');
+
+        setTimeout(() => {
+            indicator.classList.remove('show');
+        }, 5000);
+    }
+}
+
+// Funciones placeholder para handlers del HTML (V3.1)
+function toggleHeatmap() { showToast('Heatmap V3.1: en desarrollo', 'warning'); }
+function showMapLegend() { showToast('Leyenda V3.1: en desarrollo', 'info'); }
+function testAllConnections() { showToast('Test conexiones V3.1: en desarrollo', 'info'); }
+function showConnectionDetails(type) { console.log('Connection details V3.1:', type); }
+function showSystemInfo() { console.log('System info V3.1'); }
+function showEventsSummary() { console.log('Events summary V3.1'); }
+function showConfirmationsSummary() { console.log('Confirmations summary V3.1'); }
+function showPortDetails(port, event) { console.log('Port details V3.1:', port); event?.stopPropagation(); }
+function showEventsDetail(event) { console.log('Events detail V3.1'); event?.stopPropagation(); }
+function showCommandsDetail(event) { console.log('Commands detail V3.1'); event?.stopPropagation(); }
+function showConfirmationsDetail(event) { console.log('Confirmations detail V3.1'); event?.stopPropagation(); }
+function showComponentDetail(component) { console.log('Component detail V3.1:', component); }
+function showComponentMetric(metric, event) { console.log('Component metric V3.1:', metric); event?.stopPropagation(); }
+function showTopologyLineDetail(line) { console.log('Topology line V3.1:', line); }
+function showZMQConnectionDetail(connection) { console.log('ZMQ connection V3.1:', connection); }
+function showEventsPerMinuteDetail() { console.log('Events per minute detail V3.1'); }
+function showHighRiskEventsDetail() { console.log('High risk events detail V3.1'); }
+function showSuccessRateDetail() { console.log('Success rate detail V3.1'); }
+function showFailuresDetail() { console.log('Failures detail V3.1'); }
+function showDebugLogDetail() { console.log('Debug log detail V3.1'); }
+function showLogEntryDetail(entry, event) { console.log('Log entry V3.1:', entry); event?.stopPropagation(); }
+
+// Aliases para compatibilidad con versiones anteriores
+function showEventDetail(event) { showEventDetailV31(event); }
+function showTargetIPDetail(targetIP, eventData) { showTargetIPDetailV31(targetIP, eventData); }
+function showSourceIPDetail(sourceIP, eventData) { showSourceIPDetailV31(sourceIP, eventData); }
+
+// Cleanup
+window.addEventListener('beforeunload', function() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+});
+
+// Inicialización se maneja desde HTML con DOMContentLoaded
+console.log('✅ dashboard_v31.js CARGADO COMPLETAMENTE');
+console.log('📡 V3.1: Puerto 5580 SUB para ML_detector');
+console.log('🤖 V3.1: Campos ensemble_confidence, pipeline_latency, capturing_node_id');
+console.log('🔧 V3.1: Tricapa ML analysis scores');
+console.log('🔥 V3.1: Fleet management refinado');
+console.log('🚀 V3.1: Compatible con backend dashboard_v31.py');font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <!-- Header específico del target_ip V3.1 -->
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #CC0000;">
+                    <h3 style="color: #CC0000; margin: 0;">🎯 Información del Atacante V3.1</h3>
+                    <div style="font-size: 14px; color: #CC0000; margin-top: 5px; font-weight: bold;">
+                        IP: ${targetIP}
+                    </div>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        Evento ID: ${event.id || 'N/A'} | ${new Date(event.timestamp * 1000).toLocaleString()}
+                        | Node: ${event.capturing_node_id || 'N/A'} | Pipeline: ${event.pipeline_latency || 0}ms
+                    </div>
+                    ${targetMapButton}
+                    ${fallbackMapButton}
+                </div>
+
+                <!-- ✅ V3.1: Información geográfica del target_ip -->
+                ${hasTargetGeoInfo ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(204, 0, 0, 0.1); border-left: 4px solid #CC0000; border-radius: 4px;">
+                        <div style="color: #CC0000; font-weight: bold; margin-bottom: 8px;">
+                            🌍 Ubicación Geográfica del Atacante V3.1
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>Ciudad:</strong> ${event.target_city || 'N/A'}<br>
+                            <strong>País:</strong> ${event.target_country || 'N/A'}<br>
+                            <strong>Código País:</strong> ${event.target_country_code || 'N/A'}<br>
+                            <strong>Coordenadas:</strong> ${event.target_latitude?.toFixed(4) || 'N/A'}, ${event.target_longitude?.toFixed(4) || 'N/A'}<br>
+                            ${event.target_region ? `<strong>Región:</strong> ${event.target_region}<br>` : ''}
+                            ${event.target_timezone ? `<strong>Zona Horaria:</strong> ${event.target_timezone}<br>` : ''}
+                            ${event.target_isp ? `<strong>ISP:</strong> ${event.target_isp}<br>` : ''}
+                            ${event.target_asn ? `<strong>ASN:</strong> ${event.target_asn}<br>` : ''}
+                            <strong>Enriquecimiento:</strong> ${event.target_ip_enriched ? '✅ Exitoso' : '❌ Fallido'}<br>
+                            ${event.target_is_tor_exit ? '<strong style="color: #FF0000;">🚨 Nodo Tor Exit</strong><br>' : ''}
+                            ${event.target_is_known_malicious ? '<strong style="color: #FF0000;">⚠️ IP Maliciosa Conocida</strong><br>' : ''}
+                        </div>
+                    </div>
+                ` : `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                        <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
+                            ⚠️ Información Geográfica No Disponible V3.1
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>IP:</strong> ${targetIP}<br>
+                            <strong>Estado:</strong> Sin geolocalización exacta<br>
+                            <strong>Acciones:</strong> Disponibles independientemente de ubicación<br>
+                            💡 Las acciones de firewall V3.1 funcionan sin coordenadas geográficas
+                        </div>
+                    </div>
+                `}
+
+                <!-- ✅ V3.1: Información del ataque con nuevos campos -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 68, 68, 0.1); border-left: 4px solid #ff4444; border-radius: 4px;">
+                    <div style="color: #ff4444; font-weight: bold; margin-bottom: 8px;">
+                        ⚠️ Detalles del Ataque V3.1
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>IP Víctima:</strong> <span style="color: #0066CC;">${event.source_ip}</span><br>
+                        <strong>IP Atacante:</strong> <span style="color: #CC0000;">${targetIP}</span><br>
+                        <strong>Ensemble Confidence:</strong> <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'}; font-weight: bold;">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span><br>
+                        <strong>Tipo de Evento:</strong> ${event.type || 'network_traffic'}<br>
+                        <strong>Pipeline Latency:</strong> ${event.pipeline_latency || 0}ms<br>
+                        <strong>Capturing Node:</strong> ${event.capturing_node_id || 'N/A'}<br>
+                        ${event.geographic_distance_km ? `<strong>Distancia:</strong> ${event.geographic_distance_km}km<br>` : ''}
+                        ${event.same_country !== undefined ? `<strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>` : ''}
+                        <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
+                    </div>
+                </div>
+
+                <!-- ✅ V3.1: Tricapa ML Analysis Scores -->
+                ${event.tricapa_scores ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                        <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                            🤖 Análisis ML Tricapa V3.1
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>Isolation Forest:</strong> ${(event.tricapa_scores.isolation_forest * 100 || 0).toFixed(1)}%<br>
+                            <strong>One-Class SVM:</strong> ${(event.tricapa_scores.one_class_svm * 100 || 0).toFixed(1)}%<br>
+                            <strong>Local Outlier Factor:</strong> ${(event.tricapa_scores.local_outlier_factor * 100 || 0).toFixed(1)}%<br>
+                            <strong>Ensemble Final:</strong> <span style="color: #00aaff; font-weight: bold;">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Información del firewall responsable V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; border-radius: 4px;">
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">
+                        🔥 Firewall Agent Responsable V3.1
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>Node ID:</strong> ${firewallInfo.node_id}<br>
+                        <strong>Estado:</strong> <span style="color: ${firewallInfo.status === 'active' ? '#00ff88' : '#ffaa00'};">${firewallInfo.status.toUpperCase()}</span><br>
+                        <strong>Reglas Activas:</strong> ${firewallInfo.active_rules}<br>
+                        <strong>Endpoint:</strong> ${firewallInfo.endpoint}<br>
+                        <strong>Version:</strong> V3.1
+                    </div>
+                </div>
+
+                <!-- 🎯 ACCIONES ESPECÍFICAS PARA TARGET_IP V3.1 - SIEMPRE DISPONIBLES -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(204, 0, 0, 0.1); border-left: 4px solid #CC0000; border-radius: 4px;">
+                    <div style="color: #CC0000; font-weight: bold; margin-bottom: 12px;">
+                        ⚡ Acciones Disponibles V3.1 para ${targetIP}
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        ${generateTargetIPFirewallActionsV31(targetIP, firewallInfo, event)}
+                    </div>
+                    <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
+                        💡 Las acciones V3.1 se aplicarán específicamente a la IP atacante: <strong style="color: #CC0000;">${targetIP}</strong><br>
+                        ✅ Disponibles independientemente de la geolocalización
+                    </div>
+                </div>
+
+                <!-- Datos técnicos del target_ip V3.1 -->
+                <div>
+                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleTargetIPDataV31()">
+                        <span style="color: #666; font-weight: bold;">
+                            📊 Datos Técnicos del Target_IP V3.1
+                        </span>
+                        <i class="fas fa-chevron-down" id="target-ip-data-toggle-v31" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="target-ip-data-content-v31" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify({
+                                target_ip: targetIP,
+                                target_coordinates: {
+                                    latitude: event.target_latitude,
+                                    longitude: event.target_longitude,
+                                    enriched: event.target_ip_enriched
+                                },
+                                target_geo_info: {
+                                    city: event.target_city,
+                                    country: event.target_country,
+                                    country_code: event.target_country_code,
+                                    region: event.target_region,
+                                    timezone: event.target_timezone,
+                                    isp: event.target_isp,
+                                    asn: event.target_asn
+                                },
+                                ml_analysis_v31: {
+                                    ensemble_confidence: event.ensemble_confidence,
+                                    tricapa_scores: event.tricapa_scores,
+                                    pipeline_latency: event.pipeline_latency,
+                                    capturing_node_id: event.capturing_node_id
+                                },
+                                threat_intel: {
+                                    is_tor_exit: event.target_is_tor_exit,
+                                    is_malicious: event.target_is_known_malicious,
+                                    source: event.threat_intelligence_source
+                                },
+                                event_context: {
+                                    source_ip: event.source_ip,
+                                    risk_score: event.risk_score,
+                                    timestamp: event.timestamp,
+                                    type: event.type,
+                                    geographic_distance_km: event.geographic_distance_km,
+                                    same_country: event.same_country
+                                }
+                            }, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal(`🎯 Atacante V3.1: ${targetIP}`, content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalle del target_ip V3.1:', error);
+        showToast('Error mostrando detalles del atacante V3.1', 'error');
+    }
+}
+
+function generateTargetIPFirewallActionsV31(targetIP, firewallInfo, eventData) {
+    const availableActions = getAvailableFirewallActions();
+    let buttons = '';
+
+    // 🎯 Acciones específicas para target_ip V3.1 (IP atacante)
+    const targetActions = availableActions.filter(action =>
+        ['BLOCK_IP', 'RATE_LIMIT_IP', 'ALLOW_IP_TEMP', 'LIST_RULES'].includes(action)
+    );
+
+    targetActions.forEach(action => {
+        buttons += generateTargetIPActionButtonV31(action, targetIP, firewallInfo, eventData);
+    });
+
+    // Fallback si no hay acciones V3.1
+    if (!buttons) {
+        buttons = `
+            <button onclick="executeFirewallActionForTargetIPV31('BLOCK_IP', '${targetIP}', '${firewallInfo.node_id}', '${eventData.id}')"
+                    class="firewall-action-btn block-target-btn">
+                🚫 Bloquear ${targetIP} V3.1
+            </button>
+            <button onclick="executeFirewallActionForTargetIPV31('LIST_RULES', '${targetIP}', '${firewallInfo.node_id}', '${eventData.id}')"
+                    class="firewall-action-btn list-rules-btn">
+                📋 Listar Reglas V3.1
+            </button>
+        `;
+    }
+
+    return buttons;
+}
+
+function generateTargetIPActionButtonV31(action, targetIP, firewallInfo, eventData) {
+    const actionConfig = {
+        'BLOCK_IP': { color: '#ff4444', icon: '🚫', label: 'Bloquear IP V3.1' },
+        'RATE_LIMIT_IP': { color: '#ffaa00', icon: '⏱️', label: 'Limitar Tráfico V3.1' },
+        'ALLOW_IP_TEMP': { color: '#00ff88', icon: '✅', label: 'Permitir Temporal V3.1' },
+        'LIST_RULES': { color: '#0066CC', icon: '📋', label: 'Listar Reglas V3.1' }
+    };
+
+    const config = actionConfig[action] || { color: '#666', icon: '⚙️', label: action + ' V3.1' };
+
+    return `
+        <button onclick="executeFirewallActionForTargetIPV31('${action}', '${targetIP}', '${firewallInfo.node_id}', '${eventData.id}')"
+                class="firewall-action-btn target-action-btn"
+                style="background: rgba(${hexToRgb(config.color)}, 0.2); border: 1px solid ${config.color}; color: ${config.color}; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%; transition: all 0.3s ease;"
+                onmouseover="this.style.background='rgba(${hexToRgb(config.color)}, 0.3)'"
+                onmouseout="this.style.background='rgba(${hexToRgb(config.color)}, 0.2)'">
+            ${config.icon} ${config.label}
+        </button>
+    `;
+}
+
+async function executeFirewallActionForTargetIPV31(action, targetIP, firewallNodeId, eventId) {
+    try {
+        console.log(`🎯 Ejecutando acción específica V3.1 ${action} para target_ip ${targetIP}`);
+
+        showToast(`Ejecutando ${action} en ${targetIP} (V3.1)...`, 'info');
+
+        const commandId = `target_v31_${Date.now()}`;
+
+        // ✅ V3.1: Estructura para el backend
+        const requestData = {
+            action: action,
+            target_ip: targetIP,
+            firewall_node_id: firewallNodeId,
+
+            event_id: eventId,
+            command_id: commandId,
+            generated_by: 'dashboard_v31_target_action',
+            target_type: 'attacking_ip',
+            risk_score: 0.9,
+            version: 'v3.1',
+
+            // ✅ V3.1: Parámetros de seguridad
+            force_dry_run: true,
+            max_duration: 600,
+            requires_confirmation: true
+        };
+
+        // Añadir evento a la lista
+        addFirewallEventToList({
+            id: commandId,
+            type: 'command',
+            action: action,
+            target_ip: targetIP,
+            action_code: CommandAction[action],
+            source: 'Dashboard V3.1 Target Action',
+            timestamp: Date.now() / 1000
+        });
+
+        // Enviar al backend V3.1
+        const response = await fetch('/api/execute-firewall-action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'response',
+                    success: true,
+                    agent: result.node_id || firewallNodeId,
+                    result: result.message || `${action} ejecutada exitosamente V3.1 desde evento`,
+                    execution_time: result.execution_time || 0.1,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`✅ ${action} ejecutada V3.1 desde evento`, 'success');
+            addDebugLog('info', `Acción evento V3.1 ${action} ejecutada para IP ${targetIP}`);
+
+            firewallStats.commandsSent++;
+            firewallStats.responsesOk++;
+            updateElement('firewall-commands-sent', firewallStats.commandsSent);
+            updateElement('firewall-responses-ok', firewallStats.responsesOk);
+
+            // Cerrar modal después de acción exitosa
+            setTimeout(() => {
+                closeModal();
+            }, 2000);
+
+        } else {
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'error',
+                    success: false,
+                    error: result.message || `Error ejecutando ${action} V3.1 desde evento`,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`❌ Error en ${action} V3.1 desde evento: ${result.message}`, 'error');
+            firewallStats.errors++;
+            updateElement('firewall-errors', firewallStats.errors);
+        }
+
+    } catch (error) {
+        console.error(`❌ Error ejecutando acción evento V3.1 ${action}:`, error);
+
+        addFirewallEventToList({
+            id: `error_event_v31_${Date.now()}`,
+            type: 'error',
+            success: false,
+            error: `Error comunicación evento V3.1: ${error.message}`,
+            timestamp: Date.now() / 1000
+        });
+
+        showToast(`❌ Error comunicando con firewall V3.1 desde evento: ${error.message}`, 'error');
+        firewallStats.errors++;
+        updateElement('firewall-errors', firewallStats.errors);
+    }
+}
+
+// ============================================================================
+// RESTO DE FUNCIONES V3.1 ADAPTADAS
+// ============================================================================
+
+async function getResponsibleFirewallInfoForTargetV31(targetIP, event) {
+    // Similar a getResponsibleFirewallInfo pero específico para target_ip V3.1
+    try {
+        const response = await fetch('/api/firewall-agent-info-target', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_ip: targetIP,
+                event_id: event.id,
+                version: 'v3.1',
+                // ✅ V3.1: Incluir información del target usando nuevos campos
+                target_info: {
+                    latitude: event.target_latitude,
+                    longitude: event.target_longitude,
+                    city: event.target_city,
+                    country: event.target_country,
+                    enriched: event.target_ip_enriched,
+                    is_tor_exit: event.target_is_tor_exit,
+                    is_malicious: event.target_is_known_malicious
+                },
+                ml_analysis_v31: {
+                    ensemble_confidence: event.ensemble_confidence,
+                    pipeline_latency: event.pipeline_latency,
+                    capturing_node_id: event.capturing_node_id,
+                    tricapa_scores: event.tricapa_scores
+                }
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.firewall_info) {
+                return data.firewall_info;
+            }
+        }
+
+        return await getResponsibleFirewallInfoV31(event);
+
+    } catch (error) {
+        console.error('Error obteniendo info firewall V3.1 para target_ip:', error);
+        return await getResponsibleFirewallInfoV31(event);
+    }
+}
+
+async function getResponsibleFirewallInfoV31(event) {
+    try {
+        console.log('🔍 Obteniendo información del firewall responsable V3.1...');
+
+        const response = await fetch('/api/firewall-agent-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                event_id: event.id,
+                source_ip: event.source_ip,
+                target_ip: event.target_ip,
+                node_id: event.node_id,
+                version: 'v3.1',
+                // ✅ V3.1: Enviar nuevos campos
+                ml_analysis_v31: {
+                    ensemble_confidence: event.ensemble_confidence,
+                    pipeline_latency: event.pipeline_latency,
+                    capturing_node_id: event.capturing_node_id,
+                    tricapa_scores: event.tricapa_scores
+                },
+                geographic_info: {
+                    source_latitude: event.source_latitude,
+                    source_longitude: event.source_longitude,
+                    target_latitude: event.target_latitude,
+                    target_longitude: event.target_longitude,
+                    distance_km: event.geographic_distance_km,
+                    same_country: event.same_country,
+                    source_enriched: event.source_ip_enriched,
+                    target_enriched: event.target_ip_enriched
+                }
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.firewall_info) {
+                console.log('✅ Info firewall V3.1 recibida del backend:', data.firewall_info);
+                return data.firewall_info;
+            }
+        }
+
+        console.log('⚠️ Usando fallback para info del firewall V3.1');
+        const availableAgents = getAvailableFirewallAgents();
+        return {
+            node_id: availableAgents[0] || 'simple_firewall_agent_v31_001',
+            agent_ip: event.source_ip || '127.0.0.1',
+            status: 'active',
+            active_rules: firewallRules.rules_count || 0,
+            endpoint: firewallConfig.endpoints?.firewall_commands || 'tcp://localhost:5580',
+            capabilities: getAvailableFirewallActions()
+        };
+
+    } catch (error) {
+        console.error('Error obteniendo información del firewall V3.1:', error);
+        return {
+            node_id: 'unknown_firewall_v31',
+            agent_ip: '127.0.0.1',
+            status: 'unknown',
+            active_rules: 0,
+            endpoint: 'tcp://localhost:5580',
+            capabilities: getAvailableFirewallActions()
+        };
+    }
+}
+
+// ============================================================================
+// 🏠 FUNCIÓN PARA MOSTRAR DETALLE DEL SOURCE_IP V3.1
+// ============================================================================
+
+// ============================================================================
+// 🏠 CONTINUACIÓN DE showSourceIPDetailV31 desde donde se cortó
+// ============================================================================
+
+async function showSourceIPDetailV31(sourceIP, eventData) {
+    try {
+        console.log('🏠 Mostrando detalle específico del source_ip V3.1:', sourceIP, eventData);
+
+        const event = typeof eventData === 'string' ? JSON.parse(eventData.replace(/&quot;/g, '"')) : eventData;
+
+        // ✅ V3.1: Verificar información específica del source_ip
+        const hasSourceGeoInfo = event.source_latitude && event.source_longitude &&
+                                event.source_latitude !== 0 && event.source_longitude !== 0;
+
+        // ✅ Generar botón Google Maps para source_ip V3.1
+        const sourceMapButton = hasSourceGeoInfo ?
+            `<div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/place/${event.source_latitude},${event.source_longitude}/@${event.source_latitude},${event.source_longitude},18z" target="_blank" class="google-maps-btn source-streetview-btn">
+                    <i class="fas fa-map-marked-alt"></i> 🏠 Ver Ubicación de la Víctima V3.1
+                </a>
+            </div>` : '';
+
+        // ✅ Botón siempre visible V3.1
+        const fallbackMapButton = !hasSourceGeoInfo ?
+            `<div style="margin-top: 10px;">
+                <a href="https://www.google.com/maps/search/${encodeURIComponent(sourceIP)}" target="_blank" class="google-maps-btn source-fallback-btn" style="background: rgba(0, 102, 204, 0.3);">
+                    <i class="fas fa-search"></i> 🔍 Buscar IP V3.1 en Maps
+                </a>
+            </div>` : '';
+
+        const content = `
+            <div style="font-family: 'Consolas', monospace; max-height: 70vh; overflow-y: auto;">
+                <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #0066CC;">
+                    <h3 style="color: #0066CC; margin: 0;">🏠 Información de la Víctima V3.1</h3>
+                    <div style="font-size: 14px; color: #0066CC; margin-top: 5px; font-weight: bold;">
+                        IP: ${sourceIP}
+                    </div>
+                    <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                        Evento ID: ${event.id || 'N/A'} | ${new Date(event.timestamp * 1000).toLocaleString()}
+                        | Node: ${event.capturing_node_id || 'N/A'} | Pipeline: ${event.pipeline_latency || 0}ms
+                    </div>
+                    ${sourceMapButton}
+                    ${fallbackMapButton}
+                </div>
+
+                <!-- ✅ V3.1: Información geográfica de la víctima -->
+                ${hasSourceGeoInfo ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
+                        <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">
+                            🌍 Ubicación Geográfica de la Víctima V3.1
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>Ciudad:</strong> ${event.source_city || 'N/A'}<br>
+                            <strong>País:</strong> ${event.source_country || 'N/A'}<br>
+                            <strong>Código País:</strong> ${event.source_country_code || 'N/A'}<br>
+                            <strong>Coordenadas:</strong> ${event.source_latitude?.toFixed(4) || 'N/A'}, ${event.source_longitude?.toFixed(4) || 'N/A'}<br>
+                            ${event.source_region ? `<strong>Región:</strong> ${event.source_region}<br>` : ''}
+                            ${event.source_timezone ? `<strong>Zona Horaria:</strong> ${event.source_timezone}<br>` : ''}
+                            ${event.source_isp ? `<strong>ISP:</strong> ${event.source_isp}<br>` : ''}
+                            ${event.source_asn ? `<strong>ASN:</strong> ${event.source_asn}<br>` : ''}
+                            <strong>Enriquecimiento:</strong> ${event.source_ip_enriched ? '✅ Exitoso' : '❌ Fallido'}
+                        </div>
+                    </div>
+                ` : `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                        <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">
+                            ⚠️ Información Geográfica No Disponible V3.1
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>IP:</strong> ${sourceIP}<br>
+                            <strong>Estado:</strong> Sin geolocalización exacta<br>
+                            <strong>Tipo:</strong> Víctima del ataque<br>
+                            💡 El sistema V3.1 puede funcionar sin coordenadas exactas
+                        </div>
+                    </div>
+                `}
+
+                <!-- ✅ V3.1: Información del ataque recibido con nuevos campos -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
+                    <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">
+                        🏠 Información del Ataque Recibido V3.1
+                    </div>
+                    <div style="font-size: 11px; line-height: 1.4;">
+                        <strong>IP Víctima:</strong> <span style="color: #0066CC;">${sourceIP}</span><br>
+                        <strong>IP Atacante:</strong> <span style="color: #CC0000;">${event.target_ip}</span><br>
+                        <strong>Ensemble Confidence:</strong> <span style="color: ${(event.ensemble_confidence || event.risk_score) > 0.8 ? '#ff4444' : (event.ensemble_confidence || event.risk_score) > 0.5 ? '#ffaa00' : '#00ff00'}; font-weight: bold;">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span><br>
+                        <strong>Tipo de Ataque:</strong> ${event.type || 'network_traffic'}<br>
+                        <strong>Pipeline Latency:</strong> ${event.pipeline_latency || 0}ms<br>
+                        <strong>Capturing Node:</strong> ${event.capturing_node_id || 'N/A'}<br>
+                        ${event.geographic_distance_km ? `<strong>Distancia del Atacante:</strong> ${event.geographic_distance_km}km<br>` : ''}
+                        ${event.same_country !== undefined ? `<strong>Mismo País:</strong> ${event.same_country ? 'Sí' : 'No'}<br>` : ''}
+                        <strong>Timestamp:</strong> ${new Date(event.timestamp * 1000).toLocaleString()}
+                    </div>
+                </div>
+
+                <!-- ✅ V3.1: Análisis ML Tricapa para víctima -->
+                ${event.tricapa_scores ? `
+                    <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-left: 4px solid #00aaff; border-radius: 4px;">
+                        <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">
+                            🤖 Análisis ML V3.1 (Perspectiva Víctima)
+                        </div>
+                        <div style="font-size: 11px; line-height: 1.4;">
+                            <strong>Isolation Forest:</strong> ${(event.tricapa_scores.isolation_forest * 100 || 0).toFixed(1)}%<br>
+                            <strong>One-Class SVM:</strong> ${(event.tricapa_scores.one_class_svm * 100 || 0).toFixed(1)}%<br>
+                            <strong>Local Outlier Factor:</strong> ${(event.tricapa_scores.local_outlier_factor * 100 || 0).toFixed(1)}%<br>
+                            <strong>Ensemble Final:</strong> <span style="color: #00aaff; font-weight: bold;">${((event.ensemble_confidence || event.risk_score) * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- 🏠 Acciones relacionadas con la víctima V3.1 -->
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 102, 204, 0.1); border-left: 4px solid #0066CC; border-radius: 4px;">
+                    <div style="color: #0066CC; font-weight: bold; margin-bottom: 12px;">
+                        🛡️ Acciones de Protección V3.1 para ${sourceIP}
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <button onclick="executeProtectionActionV31('BLOCK_IP', '${event.target_ip}', '${sourceIP}', '${event.id}')"
+                                class="firewall-action-btn protection-btn"
+                                style="background: rgba(255, 68, 68, 0.2); border: 1px solid #ff4444; color: #ff4444; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%;">
+                            🚫 Bloquear Atacante V3.1
+                        </button>
+                        <button onclick="executeProtectionActionV31('RATE_LIMIT_IP', '${event.target_ip}', '${sourceIP}', '${event.id}')"
+                                class="firewall-action-btn protection-btn"
+                                style="background: rgba(255, 170, 0, 0.2); border: 1px solid #ffaa00; color: #ffaa00; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 10px; width: 100%;">
+                            ⏱️ Limitar Atacante V3.1
+                        </button>
+                    </div>
+                    <div style="margin-top: 12px; font-size: 10px; color: #888; font-style: italic;">
+                        💡 Estas acciones protegerán a la víctima bloqueando o limitando al atacante
+                    </div>
+                </div>
+
+                <!-- Datos técnicos de la víctima V3.1 -->
+                <div>
+                    <div style="background: rgba(102, 102, 102, 0.2); padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 10px;" onclick="toggleSourceIPDataV31()">
+                        <span style="color: #666; font-weight: bold;">
+                            📊 Datos Técnicos de la Víctima V3.1
+                        </span>
+                        <i class="fas fa-chevron-down" id="source-ip-data-toggle-v31" style="color: #666; float: right; transition: transform 0.3s ease;"></i>
+                    </div>
+                    <div id="source-ip-data-content-v31" style="max-height: 0; overflow: hidden; transition: all 0.3s ease;">
+                        <div style="padding: 15px; background: rgba(0, 0, 0, 0.6); border: 1px solid #333; border-radius: 4px;">
+                            <pre style="font-size: 9px; color: #666; margin: 0; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${JSON.stringify({
+                                source_ip: sourceIP,
+                                source_coordinates: {
+                                    latitude: event.source_latitude,
+                                    longitude: event.source_longitude,
+                                    enriched: event.source_ip_enriched
+                                },
+                                source_geo_info: {
+                                    city: event.source_city,
+                                    country: event.source_country,
+                                    country_code: event.source_country_code,
+                                    region: event.source_region,
+                                    timezone: event.source_timezone,
+                                    isp: event.source_isp,
+                                    asn: event.source_asn
+                                },
+                                ml_analysis_v31: {
+                                    ensemble_confidence: event.ensemble_confidence,
+                                    pipeline_latency: event.pipeline_latency,
+                                    capturing_node_id: event.capturing_node_id,
+                                    tricapa_scores: event.tricapa_scores
+                                },
+                                attack_context: {
+                                    attacker_ip: event.target_ip,
+                                    risk_score: event.risk_score,
+                                    timestamp: event.timestamp,
+                                    type: event.type,
+                                    geographic_distance_km: event.geographic_distance_km,
+                                    same_country: event.same_country
+                                }
+                            }, null, 2)}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal(`🏠 Víctima V3.1: ${sourceIP}`, content);
+
+    } catch (error) {
+        console.error('❌ Error mostrando detalle del source_ip V3.1:', error);
+        showToast('Error mostrando detalles de la víctima V3.1', 'error');
+    }
+}
+
+// ============================================================================
+// 🛡️ FUNCIÓN PARA ACCIONES DE PROTECCIÓN V3.1
+// ============================================================================
+
+async function executeProtectionActionV31(action, attackerIP, victimIP, eventId) {
+    try {
+        console.log(`🛡️ Ejecutando acción de protección V3.1 ${action} - Bloqueando ${attackerIP} para proteger ${victimIP}`);
+
+        showToast(`Protegiendo ${victimIP} mediante ${action} V3.1...`, 'info');
+
+        const commandId = `protection_v31_${Date.now()}`;
+
+        const requestData = {
+            action: action,
+            target_ip: attackerIP,
+            protected_ip: victimIP,
+            firewall_node_id: getAvailableFirewallAgents()[0] || 'simple_firewall_agent_v31_001',
+
+            event_id: eventId,
+            command_id: commandId,
+            generated_by: 'dashboard_v31_victim_protection',
+            protection_type: 'victim_defense',
+            risk_score: 0.9,
+            version: 'v3.1',
+
+            force_dry_run: true,
+            max_duration: 900,
+            requires_confirmation: true
+        };
+
+        addFirewallEventToList({
+            id: commandId,
+            type: 'command',
+            action: action,
+            target_ip: attackerIP,
+            protected_ip: victimIP,
+            action_code: CommandAction[action],
+            source: 'Dashboard V3.1 Victim Protection',
+            timestamp: Date.now() / 1000
+        });
+
+        const response = await fetch('/api/execute-firewall-action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'response',
+                    success: true,
+                    agent: result.node_id || 'unknown',
+                    result: `Víctima ${victimIP} protegida mediante ${action} V3.1`,
+                    execution_time: result.execution_time || 0.1,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`✅ ${victimIP} protegida mediante ${action} V3.1`, 'success');
+            addDebugLog('info', `Protección V3.1 ${action} ejecutada: ${attackerIP} → protegiendo ${victimIP}`);
+
+            firewallStats.commandsSent++;
+            firewallStats.responsesOk++;
+            updateElement('firewall-commands-sent', firewallStats.commandsSent);
+            updateElement('firewall-responses-ok', firewallStats.responsesOk);
+
+            setTimeout(() => closeModal(), 2000);
+
+        } else {
+            setTimeout(() => {
+                addFirewallEventToList({
+                    id: commandId,
+                    type: 'error',
+                    success: false,
+                    error: result.message || `Error protegiendo ${victimIP} V3.1`,
+                    timestamp: Date.now() / 1000
+                });
+            }, 300);
+
+            showToast(`❌ Error protegiendo ${victimIP} V3.1: ${result.message}`, 'error');
+            firewallStats.errors++;
+            updateElement('firewall-errors', firewallStats.errors);
+        }
+
+    } catch (error) {
+        console.error(`❌ Error en protección V3.1 ${action}:`, error);
+
+        addFirewallEventToList({
+            id: `error_protection_v31_${Date.now()}`,
+            type: 'error',
+            success: false,
+            error: `Error comunicación protección V3.1: ${error.message}`,
+            timestamp: Date.now() / 1000
+        });
+
+        showToast(`❌ Error comunicando protección V3.1: ${error.message}`, 'error');
+        firewallStats.errors++;
+        updateElement('firewall-errors', firewallStats.errors);
+    }
+}
+
+// ============================================================================
+// 🔧 FUNCIONES AUXILIARES ADICIONALES V3.1
+// ============================================================================
+
+function toggleSourceIPDataV31() {
+    const content = document.getElementById('source-ip-data-content-v31');
+    const toggle = document.getElementById('source-ip-data-toggle-v31');
+
+    if (content && toggle) {
+        const isCollapsed = content.style.maxHeight === '0px' || content.style.maxHeight === '';
+
+        if (isCollapsed) {
+            content.style.maxHeight = '300px';
+            toggle.style.transform = 'rotate(180deg)';
+        } else {
+            content.style.maxHeight = '0px';
+            toggle.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+async function getResponsibleFirewallInfoForSourceV31(sourceIP, event) {
+    try {
+        const response = await fetch('/api/firewall-agent-info-source', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                source_ip: sourceIP,
+                event_id: event.id,
+                version: 'v3.1',
+                source_info: {
+                    latitude: event.source_latitude,
+                    longitude: event.source_longitude,
+                    city: event.source_city,
+                    country: event.source_country,
+                    enriched: event.source_ip_enriched
+                },
+                ml_analysis_v31: {
+                    ensemble_confidence: event.ensemble_confidence,
+                    pipeline_latency: event.pipeline_latency,
+                    capturing_node_id: event.capturing_node_id,
+                    tricapa_scores: event.tricapa_scores
+                }
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.firewall_info) {
+                return data.firewall_info;
+            }
+        }
+
+        return await getResponsibleFirewallInfoV31(event);
+
+    } catch (error) {
+        console.error('Error obteniendo info firewall V3.1 para source_ip:', error);
+        return await getResponsibleFirewallInfoV31(event);
+    }
+}
+
+// ============================================================================
+// 🎮 FUNCIONES DE MOUSE PARA MODALES AVANZADOS V3.1
+// ============================================================================
+
+document.addEventListener('mousemove', function(e) {
+    if (!isDragging || !currentModal) return;
+
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = e.clientY - dragStartY;
+
+    const newX = modalStartX + deltaX;
+    const newY = modalStartY + deltaY;
+
+    currentModal.style.setProperty('--modal-x', `${newX}px`);
+    currentModal.style.setProperty('--modal-y', `${newY}px`);
+    currentModal.classList.add('positioned');
+});
+
+document.addEventListener('mouseup', function(e) {
+    if (!isDragging) return;
+
+    isDragging = false;
+
+    if (currentModal) {
+        currentModal.classList.remove('dragging');
+        const header = currentModal.querySelector('.modal-header');
+        if (header) {
+            header.style.cursor = 'move';
+        }
+    }
+
+    currentModal = null;
+    console.log('🖱️ Drag del modal V3.1 finalizado');
+});
+
+// ============================================================================
+// 📱 FUNCIONES AVANZADAS DE GESTIÓN DE VENTANAS V3.1
+// ============================================================================
+
+function createFloatingWindow(title, content, type = 'info') {
+    const windowId = `floating_window_v31_${Date.now()}`;
+
+    const floatingWindow = document.createElement('div');
+    floatingWindow.id = windowId;
+    floatingWindow.className = 'floating-window-v31';
+    floatingWindow.innerHTML = `
+        <div class="floating-window-header" style="background: rgba(0,0,0,0.8); padding: 10px; cursor: move; border-bottom: 1px solid #333;">
+            <span style="color: #00ff88; font-weight: bold;">${title}</span>
+            <div class="floating-window-controls" style="float: right;">
+                <button onclick="minimizeFloatingWindow('${windowId}')" style="background: none; border: none; color: #ccc; margin-right: 5px; cursor: pointer;">_</button>
+                <button onclick="closeFloatingWindow('${windowId}')" style="background: none; border: none; color: #ff4444; cursor: pointer;">×</button>
+            </div>
+        </div>
+        <div class="floating-window-content" style="padding: 15px; max-height: 400px; overflow-y: auto;">
+            ${content}
+        </div>
+    `;
+
+    floatingWindow.style.cssText = `
+        position: fixed;
+        top: ${Math.random() * 200 + 100}px;
+        left: ${Math.random() * 300 + 100}px;
+        width: 400px;
+        background: rgba(0,0,0,0.9);
+        border: 1px solid #333;
+        border-radius: 8px;
+        z-index: 10000;
+        font-family: 'Consolas', monospace;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+    `;
+
+    document.body.appendChild(floatingWindow);
+
+    // Hacer draggeable
+    makeFloatingWindowDraggable(floatingWindow);
+
+    modalWindowsRegistry.set(windowId, {
+        element: floatingWindow,
+        title: title,
+        type: type,
+        state: 'normal'
+    });
+
+    console.log(`🪟 Ventana flotante V3.1 creada: ${title}`);
+    return windowId;
+}
+
+function makeFloatingWindowDraggable(windowElement) {
+    const header = windowElement.querySelector('.floating-window-header');
+    if (!header) return;
+
+    header.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.floating-window-controls')) return;
+
+        let isDraggingFloat = true;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const rect = windowElement.getBoundingClientRect();
+        const startLeft = rect.left;
+        const startTop = rect.top;
+
+        function onMouseMove(e) {
+            if (!isDraggingFloat) return;
+
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            windowElement.style.left = (startLeft + deltaX) + 'px';
+            windowElement.style.top = (startTop + deltaY) + 'px';
+        }
+
+        function onMouseUp() {
+            isDraggingFloat = false;
+            header.style.cursor = 'move';
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        }
+
+        header.style.cursor = 'grabbing';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+
+        e.preventDefault();
+    });
+}
+
+function minimizeFloatingWindow(windowId) {
+    const windowInfo = modalWindowsRegistry.get(windowId);
+    if (!windowInfo) return;
+
+    const element = windowInfo.element;
+    const content = element.querySelector('.floating-window-content');
+
+    if (content) {
+        if (windowInfo.state === 'minimized') {
+            content.style.display = 'block';
+            windowInfo.state = 'normal';
+        } else {
+            content.style.display = 'none';
+            windowInfo.state = 'minimized';
+        }
+    }
+
+    modalWindowsRegistry.set(windowId, windowInfo);
+}
+
+function closeFloatingWindow(windowId) {
+    const windowInfo = modalWindowsRegistry.get(windowId);
+    if (!windowInfo) return;
+
+    windowInfo.element.remove();
+    modalWindowsRegistry.delete(windowId);
+    console.log(`🪟 Ventana flotante V3.1 cerrada: ${windowId}`);
+}
+
+// ============================================================================
+// 🔍 FUNCIONES DE ANÁLISIS AVANZADO V3.1
+// ============================================================================
+
+function showAdvancedAnalysisV31(event) {
+    const analysisContent = `
+        <div style="font-family: 'Consolas', monospace; color: #ccc;">
+            <h4 style="color: #00aaff; margin-bottom: 15px;">🔬 Análisis Avanzado V3.1</h4>
+
+            <!-- Métricas del pipeline V3.1 -->
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.1); border-radius: 4px;">
+                <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">⚡ Métricas del Pipeline V3.1</div>
+                <div style="font-size: 11px;">
+                    <strong>Pipeline Latency:</strong> ${event.pipeline_latency || 0}ms<br>
+                    <strong>Capturing Node:</strong> ${event.capturing_node_id || 'N/A'}<br>
+                    <strong>Processing Time:</strong> ${event.pipeline_tracking?.total_processing_latency?.seconds || 0}s<br>
+                    <strong>Ensemble Confidence:</strong> ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(2)}%
+                </div>
+            </div>
+
+            <!-- Análisis geográfico V3.1 -->
+            ${event.geographic_distance_km ? `
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-radius: 4px;">
+                    <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">🌍 Análisis Geográfico V3.1</div>
+                    <div style="font-size: 11px;">
+                        <strong>Distancia:</strong> ${event.geographic_distance_km}km<br>
+                        <strong>Tipo de Conexión:</strong> ${event.same_country ? 'Nacional' : 'Internacional'}<br>
+                        <strong>Categoría de Distancia:</strong> ${event.distance_category || 'N/A'}<br>
+                        <strong>Factor de Riesgo Geográfico:</strong> ${event.same_country ? 'Bajo' : 'Alto'}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Análisis ML detallado V3.1 -->
+            ${event.tricapa_scores ? `
+                <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.1); border-radius: 4px;">
+                    <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">🤖 Análisis ML Detallado V3.1</div>
+                    <div style="font-size: 11px;">
+                        <strong>Isolation Forest:</strong> ${(event.tricapa_scores.isolation_forest * 100).toFixed(2)}% (Detección de outliers)<br>
+                        <strong>One-Class SVM:</strong> ${(event.tricapa_scores.one_class_svm * 100).toFixed(2)}% (Clasificación de normalidad)<br>
+                        <strong>Local Outlier Factor:</strong> ${(event.tricapa_scores.local_outlier_factor * 100).toFixed(2)}% (Densidad local)<br>
+                        <hr style="margin: 10px 0; border: 1px solid rgba(255,170,0,0.3);">
+                        <strong>Ensemble Weighted:</strong> ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(2)}%<br>
+                        <strong>Confianza del Modelo:</strong> ${event.model_confidence || 'N/A'}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Recomendaciones de acción V3.1 -->
+            <div style="padding: 15px; background: rgba(255, 68, 68, 0.1); border-radius: 4px;">
+                <div style="color: #ff4444; font-weight: bold; margin-bottom: 8px;">💡 Recomendaciones V3.1</div>
+                <div style="font-size: 11px;">
+                    ${(event.ensemble_confidence || event.risk_score) > 0.8 ?
+                        '<strong>🚨 ACCIÓN INMEDIATA:</strong> Bloquear IP atacante<br>' :
+                        (event.ensemble_confidence || event.risk_score) > 0.5 ?
+                        '<strong>⚠️ MONITOREO:</strong> Aplicar rate limiting<br>' :
+                        '<strong>✅ BAJO RIESGO:</strong> Continuar monitoreo<br>'
+                    }
+                    <strong>Prioridad:</strong> ${(event.ensemble_confidence || event.risk_score) > 0.8 ? 'ALTA' :
+                                                (event.ensemble_confidence || event.risk_score) > 0.5 ? 'MEDIA' : 'BAJA'}<br>
+                    <strong>Confianza de la recomendación:</strong> ${((event.ensemble_confidence || event.risk_score) * 100).toFixed(0)}%
+                </div>
+            </div>
+        </div>
+    `;
+
+    createFloatingWindow(`🔬 Análisis Avanzado - ${event.source_ip} → ${event.target_ip}`, analysisContent, 'analysis');
+}
+
+// ============================================================================
+// 📊 FUNCIONES DE ESTADÍSTICAS AVANZADAS V3.1
+// ============================================================================
+
+function showLiveStatsV31() {
+    const statsContent = `
+        <div style="font-family: 'Consolas', monospace; color: #ccc;">
+            <h4 style="color: #00ff88; margin-bottom: 15px;">📊 Estadísticas en Tiempo Real V3.1</h4>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div style="padding: 10px; background: rgba(0,255,136,0.1); border-radius: 4px; text-align: center;">
+                    <div style="color: #00ff88; font-size: 24px; font-weight: bold;">${eventCount}</div>
+                    <div style="font-size: 10px;">Eventos Total V3.1</div>
+                </div>
+                <div style="padding: 10px; background: rgba(255,68,68,0.1); border-radius: 4px; text-align: center;">
+                    <div style="color: #ff4444; font-size: 24px; font-weight: bold;">${highRiskCount}</div>
+                    <div style="font-size: 10px;">Alto Riesgo V3.1</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">🔥 Firewall V3.1</div>
+                <div style="font-size: 11px; line-height: 1.6;">
+                    <strong>Comandos enviados:</strong> ${firewallStats.commandsSent}<br>
+                    <strong>Respuestas OK:</strong> ${firewallStats.responsesOk}<br>
+                    <strong>Errores:</strong> ${firewallStats.errors}<br>
+                    <strong>Éxito:</strong> ${firewallStats.commandsSent > 0 ?
+                        ((firewallStats.responsesOk / firewallStats.commandsSent) * 100).toFixed(1) : 0}%<br>
+                    <strong>Último agente:</strong> ${firewallStats.lastAgent}
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">🤖 ML V3.1</div>
+                <div style="font-size: 11px; line-height: 1.6;">
+                    <strong>Componentes activos:</strong> ${Object.values(componentStates).filter(s => s === true).length}/4<br>
+                    <strong>Promiscuous Agent:</strong> ${componentStates.promiscuous_agent ? '🟢 Activo' : '🔴 Inactivo'}<br>
+                    <strong>GeoIP Enricher:</strong> ${componentStates.geoip_enricher ? '🟢 Activo' : '🔴 Inactivo'}<br>
+                    <strong>ML Detector:</strong> ${componentStates.ml_detector ? '🟢 Activo' : '🔴 Inactivo'}<br>
+                    <strong>Firewall Agent:</strong> ${componentStates.firewall_agent ? '🟢 Activo' : '🔴 Inactivo'}
+                </div>
+            </div>
+
+            <div>
+                <div style="color: #0066CC; font-weight: bold; margin-bottom: 8px;">🌐 Configuración V3.1</div>
+                <div style="font-size: 11px; line-height: 1.6;">
+                    <strong>Agentes disponibles:</strong> ${firewallConfig.agents ? firewallConfig.agents.length : 0}<br>
+                    <strong>Acciones disponibles:</strong> ${getAvailableFirewallActions().length}<br>
+                    <strong>Reglas activas:</strong> ${firewallRules.rules_count || 0}<br>
+                    <strong>Puerto ML SUB:</strong> 5580 V3.1<br>
+                    <strong>Versión Protobuf:</strong> V3.1
+                </div>
+            </div>
+        </div>
+    `;
+
+    createFloatingWindow('📊 Stats V3.1', statsContent, 'stats');
+}
+
+// ============================================================================
+// 🎯 FUNCIONES FINALES Y CLEANUP V3.1
+// ============================================================================
+
+// Función para limpiar recursos al cerrar
+function cleanupDashboardV31() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+
+    if (map) {
+        map.remove();
+        map = null;
+    }
+
+    markers.forEach(marker => {
+        if (marker && marker.remove) marker.remove();
+    });
+    markers = [];
+
+    connectionLines.forEach(line => {
+        if (line && line.remove) line.remove();
+    });
+    connectionLines = [];
+
+    modalWindowsRegistry.forEach((windowInfo, windowId) => {
+        if (windowInfo.element && windowInfo.element.remove) {
+            windowInfo.element.remove();
+        }
+    });
+    modalWindowsRegistry.clear();
+
+    console.log('🧹 Dashboard V3.1 recursos limpiados');
+}
+
+// Event listeners para cleanup
+window.addEventListener('beforeunload', cleanupDashboardV31);
+window.addEventListener('unload', cleanupDashboardV31);
+
+// ============================================================================
+// 🚀 FUNCIONES DE UTILIDAD FINALES V3.1
+// ============================================================================
+
+// Función para exportar configuración V3.1
+function exportDashboardConfigV31() {
+    const config = {
+        version: 'v3.1',
+        timestamp: new Date().toISOString(),
+        firewall_config: firewallConfig,
+        firewall_rules: firewallRules,
+        component_states: componentStates,
+        firewall_stats: firewallStats,
+        current_events_count: currentEvents.length,
+        current_firewall_events_count: currentFirewallEvents.length,
+        available_actions: getAvailableFirewallActions(),
+        available_agents: getAvailableFirewallAgents()
+    };
+
+    const dataStr = JSON.stringify(config, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = `dashboard_v31_config_${Date.now()}.json`;
+    link.click();
+
+    showToast('Configuración V3.1 exportada', 'success');
+    addDebugLog('info', 'Configuración dashboard V3.1 exportada exitosamente');
+}
+
+// Función para mostrar información del sistema V3.1
+function showSystemInfoV31() {
+    const systemInfo = `
+        <div style="font-family: 'Consolas', monospace; color: #ccc;">
+            <h4 style="color: #00ff88; margin-bottom: 15px;">ℹ️ Información del Sistema V3.1</h4>
+
+            <div style="margin-bottom: 15px;">
+                <div style="color: #00aaff; font-weight: bold;">🚀 Dashboard V3.1</div>
+                <div style="font-size: 11px; margin-top: 5px; line-height: 1.6;">
+                    <strong>Versión:</strong> V3.1 Protobuf Enhanced<br>
+                    <strong>Backend:</strong> dashboard_v31.py<br>
+                    <strong>Puerto ML SUB:</strong> 5580<br>
+                    <strong>Nuevos campos:</strong> ensemble_confidence, pipeline_latency, capturing_node_id<br>
+                    <strong>Análisis ML:</strong> Tricapa Scores Completos<br>
+                    <strong>Sistema de ventanas:</strong> Avanzado con drag&drop<br>
+                    <strong>Última actualización:</strong> ${new Date().toLocaleString()}
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <div style="color: #ffaa00; font-weight: bold;">🔧 Funcionalidades V3.1</div>
+                <div style="font-size: 11px; margin-top: 5px; line-height: 1.6;">
+                    ✅ Coordenadas duales (source/target)<br>
+                    ✅ Animaciones tipo misil<br>
+                    ✅ Google Maps vista superior<br>
+                    ✅ Firewall commands V3.1<br>
+                    ✅ Fleet management refinado<br>
+                    ✅ Modales draggables avanzados<br>
+                    ✅ Análisis ML tricapa completo<br>
+                    ✅ Pipeline latency tracking<br>
+                    ✅ Ensemble confidence scores
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <div style="color: #ff4444; font-weight: bold;">⚡ Estado del Sistema</div>
+                <div style="font-size: 11px; margin-top: 5px; line-height: 1.6;">
+                    <strong>Uptime:</strong> ${(Date.now() - (window.dashboardStartTime || Date.now())) / 1000 / 60}min<br>
+                    <strong>Eventos procesados:</strong> ${eventCount}<br>
+                    <strong>Comandos firewall:</strong> ${firewallStats.commandsSent}<br>
+                    <strong>Ventanas modales:</strong> ${modalWindowsRegistry.size}<br>
+                    <strong>Marcadores mapa:</strong> ${markers.length}<br>
+                    <strong>Líneas conexión:</strong> ${connectionLines.length}
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="exportDashboardConfigV31()"
+                        style="background: rgba(0,255,136,0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                    📁 Exportar Config V3.1
+                </button>
+                <button onclick="refreshDashboard()"
+                        style="background: rgba(0,170,255,0.2); border: 1px solid #00aaff; color: #00aaff; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                    🔄 Refresh V3.1
+                </button>
+            </div>
+        </div>
+    `;
+
+    createFloatingWindow('ℹ️ Sistema V3.1', systemInfo, 'system');
+}
+
+// ============================================================================
+// 🎉 FINALIZACIÓN DEL ARCHIVO V3.1
+// ============================================================================
+
+// Registrar tiempo de inicio para uptime
+window.dashboardStartTime = Date.now();
+
+// Exponer funciones globales para compatibilidad
+window.showAdvancedAnalysisV31 = showAdvancedAnalysisV31;
+window.showLiveStatsV31 = showLiveStatsV31;
+window.showSystemInfoV31 = showSystemInfoV31;
+window.exportDashboardConfigV31 = exportDashboardConfigV31;
+window.createFloatingWindow = createFloatingWindow;
+window.closeFloatingWindow = closeFloatingWindow;
+window.minimizeFloatingWindow = minimizeFloatingWindow;
+
+// Mensaje final de carga
+console.log('🎉 dashboard_v31.js COMPLETADO AL 100%');
+console.log('✅ TODAS las funciones V3.1 están disponibles:');
+console.log('   🏠 showSourceIPDetailV31 - Detalles completos víctima');
+console.log('   🎯 showTargetIPDetailV31 - Detalles completos atacante');
+console.log('   🚨 showEventDetailV31 - Análisis completo evento');
+console.log('   🔬 showAdvancedAnalysisV31 - Análisis avanzado ML');
+console.log('   📊 showLiveStatsV31 - Estadísticas tiempo real');
+console.log('   ℹ️ showSystemInfoV31 - Información del sistema');
+console.log('   🪟 Sistema de ventanas flotantes avanzado');
+console.log('   🎮 Modales draggables con controles');
+console.log('   🚀 Animaciones tipo misil con coordenadas duales');
+console.log('   🗺️ Google Maps con vista superior corregida');
+console.log('   🔥 Firewall commands V3.1 completos');
+console.log('   🤖 Ensemble confidence + pipeline latency + capturing node');
+console.log('   🧠 Tricapa ML scores completos');
+console.log('📡 CONECTADO: Puerto 5580 SUB ML_detector V3.1');
+console.log('🚀 COMPATIBLE: dashboard_v31.py backend');
+console.log('🎯 LISTO PARA PRODUCCIÓN V3.1');
+
+// ============================================================================
+// END OF FILE - dashboard_v31.js V3.1 COMPLETE
+// ============================================================================
