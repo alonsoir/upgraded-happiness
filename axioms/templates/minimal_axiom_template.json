@@ -1,0 +1,11 @@
+{
+  "axiom_id": "",
+  "timestamp": "",
+  "event_id": "",
+  "src_ip": "",
+  "dst_ip": "",
+  "ml_pred": "",
+  "ml_conf": 0.0,
+  "pb_path": "",
+  "retrain": false
+}

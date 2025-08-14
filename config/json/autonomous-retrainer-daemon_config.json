@@ -1,0 +1,295 @@
+{
+  "daemon_name": "autonomous-retrainer-orchestrator",
+  "version": "1.0.0",
+  "description": "Autonomous model evolution daemon - Continuous mathematical perfection",
+
+  "enabled_models": [
+    "ddos_detector_v31",
+    "ransomware_detector_v31",
+    "ensemble_classifier_v31"
+  ],
+
+  "axiom_input_dir": "./axioms/training_ready",
+  "task_queue_db": "./data/autonomous_training_tasks.db",
+  "monitor_interval_seconds": 30,
+  "trainer_poll_interval": 15,
+
+  "resource_management": {
+    "max_cpu_percent": 80,
+    "max_memory_percent": 85,
+    "max_disk_io_mb": 500,
+    "gpu_enabled": true,
+    "gpu_memory_threshold_percent": 80,
+
+    "model_specific_resources": {
+      "ddos_detector_v31": {
+        "cpu_cores": 8,
+        "memory_gb": 16,
+        "gpu_memory_gb": 4,
+        "max_training_time_hours": 2,
+        "parallel_jobs": 2
+      },
+      "ransomware_detector_v31": {
+        "cpu_cores": 12,
+        "memory_gb": 24,
+        "gpu_memory_gb": 6,
+        "max_training_time_hours": 4,
+        "parallel_jobs": 1
+      },
+      "ensemble_classifier_v31": {
+        "cpu_cores": 16,
+        "memory_gb": 32,
+        "gpu_memory_gb": 8,
+        "max_training_time_hours": 6,
+        "parallel_jobs": 1
+      }
+    }
+  },
+
+  "model_configs": {
+    "ddos_detector_v31": {
+      "algorithm_candidates": ["random_forest", "xgboost", "lightgbm"],
+      "cooldown_hours": 4,
+      "min_improvement_threshold": 0.02,
+      "max_training_samples": 100000,
+      "validation_split": 0.2,
+
+      "hyperparameters": {
+        "random_forest": {
+          "n_estimators": [200, 500, 1000],
+          "max_depth": [15, 25, null],
+          "min_samples_split": [2, 5],
+          "min_samples_leaf": [1, 2],
+          "n_jobs": -1
+        },
+        "xgboost": {
+          "n_estimators": [200, 500, 1000],
+          "learning_rate": [0.01, 0.05, 0.1],
+          "max_depth": [6, 10, 15],
+          "subsample": [0.8, 0.9],
+          "colsample_bytree": [0.8, 0.9],
+          "n_jobs": -1,
+          "tree_method": "gpu_hist"
+        },
+        "lightgbm": {
+          "n_estimators": [200, 500, 1000],
+          "learning_rate": [0.01, 0.05, 0.1],
+          "max_depth": [6, 10, 15],
+          "num_leaves": [31, 63, 127],
+          "n_jobs": -1,
+          "device": "gpu"
+        }
+      },
+
+      "performance_thresholds": {
+        "min_accuracy": 0.93,
+        "min_f1_score": 0.91,
+        "max_false_positive_rate": 0.05,
+        "max_inference_time_ms": 50
+      }
+    },
+
+    "ransomware_detector_v31": {
+      "algorithm_candidates": ["xgboost", "lightgbm", "neural_network"],
+      "cooldown_hours": 6,
+      "min_improvement_threshold": 0.03,
+      "max_training_samples": 150000,
+      "validation_split": 0.25,
+
+      "hyperparameters": {
+        "xgboost": {
+          "n_estimators": [500, 1000, 2000],
+          "learning_rate": [0.005, 0.01, 0.05],
+          "max_depth": [8, 12, 16],
+          "subsample": [0.7, 0.8, 0.9],
+          "colsample_bytree": [0.7, 0.8, 0.9],
+          "reg_alpha": [0, 0.1, 0.5],
+          "reg_lambda": [1, 2, 5],
+          "n_jobs": -1,
+          "tree_method": "gpu_hist"
+        },
+        "lightgbm": {
+          "n_estimators": [500, 1000, 2000],
+          "learning_rate": [0.005, 0.01, 0.05],
+          "max_depth": [8, 12, 16],
+          "num_leaves": [63, 127, 255],
+          "reg_alpha": [0, 0.1, 0.5],
+          "reg_lambda": [1, 2, 5],
+          "n_jobs": -1,
+          "device": "gpu"
+        },
+        "neural_network": {
+          "hidden_layers": [3, 4, 5],
+          "neurons_per_layer": [128, 256, 512],
+          "activation": ["relu", "tanh"],
+          "dropout_rate": [0.2, 0.3, 0.4],
+          "learning_rate": [0.0001, 0.001, 0.01],
+          "batch_size": [32, 64, 128],
+          "epochs": [100, 200, 300]
+        }
+      },
+
+      "performance_thresholds": {
+        "min_accuracy": 0.90,
+        "min_f1_score": 0.88,
+        "max_false_positive_rate": 0.08,
+        "max_inference_time_ms": 100
+      }
+    },
+
+    "ensemble_classifier_v31": {
+      "algorithm_candidates": ["voting_classifier", "stacking_classifier"],
+      "cooldown_hours": 8,
+      "min_improvement_threshold": 0.01,
+      "max_training_samples": 200000,
+      "validation_split": 0.3,
+
+      "base_models": ["ddos_detector_v31", "ransomware_detector_v31"],
+      "ensemble_methods": {
+        "voting_classifier": {
+          "voting": ["soft", "hard"],
+          "weights": [null, [1, 1], [1.2, 0.8], [0.8, 1.2]]
+        },
+        "stacking_classifier": {
+          "meta_classifier": ["logistic_regression", "random_forest", "xgboost"],
+          "cv_folds": [3, 5],
+          "use_probas": true
+        }
+      },
+
+      "performance_thresholds": {
+        "min_accuracy": 0.95,
+        "min_f1_score": 0.93,
+        "max_false_positive_rate": 0.03,
+        "max_inference_time_ms": 75
+      }
+    }
+  },
+
+  "autonomous_learning": {
+    "hyperparameter_optimization": {
+      "enabled": true,
+      "method": "bayesian_optimization",
+      "max_trials": 100,
+      "timeout_hours": 2,
+      "early_stopping_patience": 10
+    },
+
+    "feature_engineering": {
+      "auto_feature_selection": true,
+      "feature_importance_threshold": 0.001,
+      "correlation_threshold": 0.95,
+      "variance_threshold": 0.01
+    },
+
+    "model_ensembling": {
+      "dynamic_weight_adjustment": true,
+      "performance_based_weights": true,
+      "temporal_decay_factor": 0.95
+    },
+
+    "continual_learning": {
+      "enabled": true,
+      "memory_buffer_size": 10000,
+      "catastrophic_forgetting_prevention": true,
+      "knowledge_distillation": true
+    }
+  },
+
+  "validation_pipeline": {
+    "stages": {
+      "basic_validation": {
+        "model_serialization": true,
+        "prediction_consistency": true,
+        "memory_leak_test": true,
+        "latency_test": true
+      },
+
+      "performance_validation": {
+        "cross_validation_folds": 5,
+        "holdout_test_size": 0.15,
+        "bootstrap_iterations": 1000,
+        "adversarial_robustness": true
+      },
+
+      "production_readiness": {
+        "load_test_qps": 1000,
+        "stress_test_duration_minutes": 30,
+        "integration_test": true,
+        "rollback_safety_check": true
+      }
+    },
+
+    "auto_promotion_rules": {
+      "require_all_stages_pass": true,
+      "min_performance_improvement": 0.02,
+      "max_acceptable_degradation": 0.005,
+      "require_human_approval": false,
+      "notification_channels": ["file", "log"]
+    }
+  },
+
+  "monitoring_and_alerting": {
+    "health_checks": {
+      "trainer_heartbeat_interval": 60,
+      "resource_monitoring_interval": 30,
+      "task_queue_monitoring_interval": 45
+    },
+
+    "alerts": {
+      "trainer_died": {
+        "enabled": true,
+        "auto_restart": true,
+        "max_restarts_per_hour": 3
+      },
+      "high_resource_usage": {
+        "enabled": true,
+        "cpu_threshold": 90,
+        "memory_threshold": 90
+      },
+      "training_failure_rate": {
+        "enabled": true,
+        "failure_rate_threshold": 0.3,
+        "time_window_hours": 24
+      }
+    }
+  },
+
+  "data_management": {
+    "training_data_retention": {
+      "max_protobuf_age_days": 90,
+      "max_training_cache_size_gb": 50,
+      "compression_enabled": true,
+      "cleanup_interval_hours": 24
+    },
+
+    "model_versioning": {
+      "max_model_versions": 10,
+      "auto_cleanup_old_versions": true,
+      "backup_before_promotion": true
+    }
+  },
+
+  "logging": {
+    "orchestrator_log": "./logs/autonomous_orchestrator.log",
+    "trainer_log_pattern": "./logs/trainer_{model_type}.log",
+    "log_level": "INFO",
+    "log_rotation": {
+      "max_size_mb": 100,
+      "backup_count": 10
+    },
+    "structured_logging": true,
+    "performance_metrics_log": "./logs/performance_metrics.log"
+  },
+
+  "evolution_tracking": {
+    "track_model_lineage": true,
+    "performance_history_db": "./data/model_evolution_history.db",
+    "mathematical_perfection_metrics": {
+      "convergence_rate": true,
+      "stability_measure": true,
+      "generalization_capability": true,
+      "computational_efficiency": true
+    }
+  }
+}
