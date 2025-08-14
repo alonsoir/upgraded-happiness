@@ -3,33 +3,73 @@
   "timestamp": "",
   "source_proto_info": {
     "proto_filename": "",
-    "proto_version": "",
-    "message_type": "",
-    "message_id": ""
+    "proto_version": "3.1",
+    "message_type": "NetworkSecurityEvent",
+    "message_id": "",
+    "proto_file_path": "",
+    "feature_count": 83
   },
   "event": {
     "event_id": "",
     "source_ip": "",
     "destination_ip": "",
+    "port": 0,
     "protocol": "",
-    "ml_prediction": "",
-    "ml_confidence": 0.0
+    "packet_size": 0,
+    "flow_duration": 0.0,
+    "geo_info": {
+      "source_country": "",
+      "source_asn": "",
+      "destination_country": "",
+      "destination_asn": ""
+    }
+  },
+  "ml_analysis": {
+    "model_version": "",
+    "model_type": "",
+    "prediction": "",
+    "confidence": 0.0,
+    "prediction_time_ms": 0,
+    "feature_importance": {},
+    "alternative_predictions": []
   },
   "policy_context": {
     "rule_matched": "",
-    "policy_action": ""
+    "policy_action": "",
+    "rule_confidence": 0.0,
+    "policy_version": ""
   },
   "scheduler_decision": {
     "final_action": "",
-    "reason": ""
+    "reason": "",
+    "override_applied": false,
+    "human_intervention": false,
+    "decision_time_ms": 0
   },
   "axiom": {
     "logic": "",
-    "type": "",
-    "source": []
+    "type": "detection|policy|hybrid",
+    "confidence_axiom": 0.0,
+    "conditions": {
+      "ml_threshold": 0.0,
+      "geo_conditions": [],
+      "protocol_conditions": [],
+      "temporal_conditions": []
+    },
+    "source": [],
+    "validation_status": "pending"
   },
   "training_flag": {
     "retrain_candidate": false,
-    "reason": ""
+    "reason": "",
+    "model_targets": [],
+    "priority": "low|medium|high",
+    "data_quality_score": 0.0
+  },
+  "metadata": {
+    "pipeline_stage": "scheduler_firewall",
+    "processing_time_total_ms": 0,
+    "anomaly_detected": false,
+    "false_positive_risk": 0.0
   }
 }

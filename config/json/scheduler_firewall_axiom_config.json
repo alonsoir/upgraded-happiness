@@ -1,0 +1,91 @@
+{
+  "component_name": "scheduler-firewall-axiom",
+  "version": "1.0.0",
+
+  "zmq": {
+    "ml_events_endpoint": "tcp://localhost:5556",
+    "firewall_commands_endpoint": "tcp://*:5557",
+    "receive_timeout_ms": 1000
+  },
+
+  "protobuf_storage": {
+    "enabled": true,
+    "storage_path": "./protobuf_storage/enriched/",
+    "archive_path": "./protobuf_storage/archived/",
+    "file_naming": "enriched_{timestamp}_{event_id}.pb",
+    "compression": "gzip",
+    "retention_days": 30,
+    "auto_archive": true,
+    "max_storage_size_gb": 10,
+    "storage_conditions": {
+      "store_all": false,
+      "store_on_ml_confidence_below": 0.8,
+      "store_on_policy_override": true,
+      "store_on_human_intervention": true,
+      "store_on_retrain_candidate": true,
+      "store_on_attack_types": ["DDOS", "RANSOMWARE"],
+      "store_on_geo_anomaly": true,
+      "store_random_sample_rate": 0.01
+    }
+  },
+
+  "axiom_generation": {
+    "enabled": true,
+    "axiom_output_path": "./axioms/pending/",
+    "template_path": "./axioms/templates/axiom_template.json",
+    "generate_conditions": {
+      "always_generate": false,
+      "on_ml_prediction": true,
+      "on_policy_decision": true,
+      "min_confidence_threshold": 0.1,
+      "on_confidence_discrepancy": true,
+      "confidence_discrepancy_threshold": 0.3,
+      "on_new_geo_pattern": true,
+      "on_temporal_anomaly": true
+    },
+    "axiom_enrichment": {
+      "include_feature_importance": true,
+      "include_alternative_predictions": true,
+      "include_confidence_intervals": true,
+      "include_temporal_context": true
+    }
+  },
+
+  "firewall_policy": {
+    "rules_file": "./firewall_rules.json",
+    "default_action": "MONITOR",
+    "confidence_thresholds": {
+      "block": 0.9,
+      "monitor": 0.7,
+      "allow": 0.5
+    },
+    "override_rules": {
+      "human_intervention_weight": 1.0,
+      "geo_reputation_weight": 0.3,
+      "temporal_pattern_weight": 0.2
+    }
+  },
+
+  "performance": {
+    "max_events_per_second": 1000,
+    "batch_processing": false,
+    "batch_size": 10,
+    "processing_timeout_ms": 5000
+  },
+
+  "logging": {
+    "level": "INFO",
+    "file": "./logs/scheduler_axiom.log",
+    "max_size_mb": 100,
+    "backup_count": 5,
+    "console_output": true
+  },
+
+  "monitoring": {
+    "metrics_enabled": true,
+    "metrics_endpoint": "tcp://*:8080",
+    "health_check_interval": 30,
+    "alert_on_high_error_rate": true,
+    "error_rate_threshold": 0.05
+  }
+}

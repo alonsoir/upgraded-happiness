@@ -1,0 +1,105 @@
+{
+  "component_name": "axiom-trainer-watcher",
+  "version": "1.0.0",
+
+  "axioms_dir": "./axioms/pending",
+  "processed_dir": "./axioms/processed",
+  "training_ready_dir": "./axioms/training_ready",
+  "notification_dir": "./notifications",
+  "reports_dir": "./reports",
+
+  "database_path": "./data/axioms.db",
+  "poll_interval_seconds": 10,
+  "report_interval_minutes": 60,
+
+  "retraining_rules": {
+    "model_types_to_monitor": [
+      "ddos_detector_v31",
+      "ransomware_detector_v31",
+      "ensemble_classifier_v31"
+    ],
+
+    "min_retrain_candidates": 10,
+    "high_priority_threshold": 3,
+    "low_confidence_ratio_threshold": 0.4,
+    "min_attack_diversity": 2,
+    "cooldown_hours": 6,
+
+    "advanced_rules": {
+      "temporal_degradation": {
+        "enabled": true,
+        "window_hours": 24,
+        "min_degradation_samples": 50,
+        "degradation_threshold": 0.15
+      },
+
+      "geographical_anomalies": {
+        "enabled": true,
+        "new_country_threshold": 3,
+        "suspicious_asn_threshold": 5
+      },
+
+      "confidence_drift": {
+        "enabled": true,
+        "drift_detection_window": 48,
+        "significant_drift_threshold": 0.2
+      },
+
+      "false_positive_rate": {
+        "enabled": true,
+        "max_acceptable_fp_rate": 0.05,
+        "evaluation_window_hours": 72
+      }
+    }
+  },
+
+  "data_quality": {
+    "min_axiom_quality_score": 0.6,
+    "require_protobuf_availability": true,
+    "validate_feature_completeness": true,
+    "exclude_outliers": true,
+    "outlier_detection_method": "isolation_forest"
+  },
+
+  "notifications": {
+    "retraining_triggered": {
+      "enabled": true,
+      "methods": ["file", "log"],
+      "file_format": "json",
+      "include_statistics": true
+    },
+
+    "performance_alerts": {
+      "enabled": true,
+      "high_error_rate_threshold": 0.1,
+      "low_throughput_threshold": 100,
+      "alert_cooldown_minutes": 30
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "log_file": "./logs/axiom_trainer_watcher.log",
+    "max_size_mb": 100,
+    "backup_count": 5,
+    "console_output": true,
+    "structured_logging": true
+  },
+
+  "performance": {
+    "max_axioms_per_batch": 100,
+    "processing_timeout_seconds": 30,
+    "database_optimization": {
+      "vacuum_interval_hours": 24,
+      "index_optimization": true,
+      "connection_pool_size": 5
+    }
+  },
+
+  "backup_and_recovery": {
+    "backup_enabled": true,
+    "backup_interval_hours": 12,
+    "backup_retention_days": 30,
+    "backup_location": "./backups/axioms"
+  }
+}

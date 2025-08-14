@@ -209,5 +209,32 @@
     "socket_pattern": "SUB/PUSH/PULL",
     "firewall_integration": "Ultra-secure JSON-controlled",
     "performance_target": "STABLE_DECISION_ENGINE_WITH_CORRECTED_PORTS"
+  },
+  "protobuf_storage": {
+    "enabled": true,
+    "storage_path": "./protobuf_storage/enriched/",
+    "archive_path": "./protobuf_storage/archived/",
+    "file_naming": "enriched_{timestamp}_{event_id}.pb",
+    "compression": "gzip",
+    "retention_days": 30,
+    "auto_archive": true,
+    "storage_conditions": {
+      "store_all": false,
+      "store_on_ml_confidence_below": 0.8,
+      "store_on_policy_override": true,
+      "store_on_human_intervention": true,
+      "store_on_retrain_candidate": true
+    }
+  },
+  "axiom_generation": {
+    "enabled": true,
+    "axiom_output_path": "./axioms/pending/",
+    "template_path": "./axioms/templates/axiom_template.json",
+    "generate_conditions": {
+      "always_generate": false,
+      "on_ml_prediction": true,
+      "on_policy_decision": true,
+      "min_confidence_threshold": 0.1
+    }
   }
 }

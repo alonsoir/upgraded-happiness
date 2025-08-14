@@ -1,0 +1,269 @@
+{
+  "model_inventory": {
+    "version": "1.0.0",
+    "last_updated": "2025-01-15T10:00:00Z",
+    "inventory_by": "feature/axiom-retrain",
+
+    "current_production_models": {
+      "ddos_detector_v31": {
+        "algorithm": "Random Forest",
+        "version": "2.1.0",
+        "training_date": "2024-12-01T00:00:00Z",
+        "feature_count": 83,
+        "performance_metrics": {
+          "accuracy": 0.94,
+          "precision": 0.92,
+          "recall": 0.96,
+          "f1_score": 0.94,
+          "auc_roc": 0.97
+        },
+        "model_file": "./models/production/ddos_detector_v31_rf_2.1.0.pkl",
+        "config_file": "./models/production/ddos_detector_v31_config.json",
+        "feature_importance_file": "./models/production/ddos_detector_v31_features.json",
+        "validation_report": "./models/production/ddos_detector_v31_validation.json"
+      },
+
+      "ransomware_detector_v31": {
+        "algorithm": "XGBoost",
+        "version": "1.8.3",
+        "training_date": "2024-11-15T00:00:00Z",
+        "feature_count": 83,
+        "performance_metrics": {
+          "accuracy": 0.91,
+          "precision": 0.89,
+          "recall": 0.93,
+          "f1_score": 0.91,
+          "auc_roc": 0.95
+        },
+        "model_file": "./models/production/ransomware_detector_v31_xgb_1.8.3.pkl",
+        "config_file": "./models/production/ransomware_detector_v31_config.json",
+        "feature_importance_file": "./models/production/ransomware_detector_v31_features.json",
+        "validation_report": "./models/production/ransomware_detector_v31_validation.json"
+      },
+
+      "ensemble_classifier_v31": {
+        "algorithm": "Voting Classifier",
+        "version": "3.0.1",
+        "training_date": "2024-12-15T00:00:00Z",
+        "feature_count": 83,
+        "sub_models": ["ddos_detector_v31", "ransomware_detector_v31"],
+        "performance_metrics": {
+          "accuracy": 0.96,
+          "precision": 0.94,
+          "recall": 0.97,
+          "f1_score": 0.95,
+          "auc_roc": 0.98
+        },
+        "model_file": "./models/production/ensemble_classifier_v31_3.0.1.pkl",
+        "config_file": "./models/production/ensemble_classifier_v31_config.json",
+        "validation_report": "./models/production/ensemble_classifier_v31_validation.json"
+      }
+    },
+
+    "available_algorithms": {
+      "supervised_learning": {
+        "random_forest": {
+          "library": "scikit-learn",
+          "version": "1.3.0",
+          "best_for": ["ddos_detection", "general_classification"],
+          "hyperparameters": {
+            "n_estimators": [100, 200, 300],
+            "max_depth": [10, 20, 30, null],
+            "min_samples_split": [2, 5, 10],
+            "min_samples_leaf": [1, 2, 4]
+          },
+          "training_time_estimate": "fast",
+          "memory_requirements": "medium"
+        },
+
+        "xgboost": {
+          "library": "xgboost",
+          "version": "1.7.4",
+          "best_for": ["ransomware_detection", "feature_importance"],
+          "hyperparameters": {
+            "n_estimators": [100, 200, 500],
+            "learning_rate": [0.01, 0.1, 0.2],
+            "max_depth": [3, 6, 10],
+            "subsample": [0.8, 0.9, 1.0],
+            "colsample_bytree": [0.8, 0.9, 1.0]
+          },
+          "training_time_estimate": "medium",
+          "memory_requirements": "medium"
+        },
+
+        "lightgbm": {
+          "library": "lightgbm",
+          "version": "3.3.5",
+          "best_for": ["large_datasets", "fast_inference"],
+          "hyperparameters": {
+            "n_estimators": [100, 200, 500],
+            "learning_rate": [0.01, 0.1, 0.2],
+            "max_depth": [3, 6, 10],
+            "num_leaves": [31, 63, 127]
+          },
+          "training_time_estimate": "fast",
+          "memory_requirements": "low"
+        },
+
+        "support_vector_machine": {
+          "library": "scikit-learn",
+          "version": "1.3.0",
+          "best_for": ["high_dimensional_data", "kernel_methods"],
+          "hyperparameters": {
+            "C": [0.1, 1, 10, 100],
+            "kernel": ["rbf", "poly", "sigmoid"],
+            "gamma": ["scale", "auto", 0.1, 1]
+          },
+          "training_time_estimate": "slow",
+          "memory_requirements": "high"
+        }
+      },
+
+      "neural_networks": {
+        "feed_forward_nn": {
+          "library": "tensorflow",
+          "version": "2.13.0",
+          "best_for": ["complex_patterns", "non_linear_relationships"],
+          "hyperparameters": {
+            "hidden_layers": [2, 3, 4],
+            "neurons_per_layer": [64, 128, 256],
+            "activation": ["relu", "tanh", "sigmoid"],
+            "dropout_rate": [0.2, 0.3, 0.5],
+            "learning_rate": [0.001, 0.01, 0.1]
+          },
+          "training_time_estimate": "slow",
+          "memory_requirements": "high"
+        },
+
+        "lstm_rnn": {
+          "library": "tensorflow",
+          "version": "2.13.0",
+          "best_for": ["temporal_patterns", "sequence_analysis"],
+          "hyperparameters": {
+            "lstm_units": [50, 100, 200],
+            "layers": [1, 2, 3],
+            "dropout": [0.2, 0.3, 0.5],
+            "learning_rate": [0.001, 0.01]
+          },
+          "training_time_estimate": "very_slow",
+          "memory_requirements": "very_high"
+        }
+      },
+
+      "ensemble_methods": {
+        "voting_classifier": {
+          "library": "scikit-learn",
+          "version": "1.3.0",
+          "best_for": ["combining_multiple_models", "reducing_overfitting"],
+          "base_estimators": ["random_forest", "xgboost", "lightgbm"],
+          "voting_type": ["hard", "soft"],
+          "training_time_estimate": "depends_on_base_models",
+          "memory_requirements": "high"
+        },
+
+        "stacking_classifier": {
+          "library": "scikit-learn",
+          "version": "1.3.0",
+          "best_for": ["meta_learning", "advanced_ensembles"],
+          "meta_classifier": ["logistic_regression", "random_forest"],
+          "training_time_estimate": "slow",
+          "memory_requirements": "very_high"
+        }
+      }
+    },
+
+    "hybrid_retraining_strategies": {
+      "axiom_guided_retraining": {
+        "description": "Usa axiomas para decidir qué datos incluir en reentrenamiento",
+        "data_selection": "axiom_candidates",
+        "weight_adjustment": "confidence_based",
+        "validation_method": "temporal_split"
+      },
+
+      "incremental_learning": {
+        "description": "Actualiza modelo existente con nuevos datos",
+        "supported_algorithms": ["xgboost", "lightgbm"],
+        "data_requirement": "axiom_candidates + historical_sample",
+        "validation_method": "rolling_window"
+      },
+
+      "full_retraining": {
+        "description": "Entrena modelo completamente nuevo",
+        "data_requirement": "all_available_data",
+        "trigger_conditions": ["major_performance_degradation", "new_attack_patterns"],
+        "validation_method": "holdout_test"
+      },
+
+      "ensemble_update": {
+        "description": "Actualiza pesos de ensemble basado en performance reciente",
+        "supported_models": ["voting_classifier", "stacking_classifier"],
+        "data_requirement": "recent_axioms_with_outcomes",
+        "validation_method": "cross_validation"
+      }
+    },
+
+    "staging_pipeline": {
+      "validation_stages": {
+        "stage_1_basic_validation": {
+          "tests": [
+            "model_serialization_test",
+            "prediction_latency_test",
+            "memory_usage_test",
+            "feature_schema_validation"
+          ],
+          "pass_criteria": {
+            "max_prediction_time_ms": 100,
+            "max_memory_mb": 512,
+            "serialization_success": true
+          }
+        },
+
+        "stage_2_performance_validation": {
+          "tests": [
+            "holdout_dataset_performance",
+            "cross_validation_performance",
+            "adversarial_robustness_test"
+          ],
+          "pass_criteria": {
+            "min_accuracy": 0.90,
+            "min_f1_score": 0.88,
+            "max_performance_degradation": 0.05
+          }
+        },
+
+        "stage_3_production_readiness": {
+          "tests": [
+            "load_test_1000_qps",
+            "integration_test_with_ml_detector",
+            "failover_behavior_test"
+          ],
+          "pass_criteria": {
+            "max_latency_p95_ms": 50,
+            "integration_success": true,
+            "graceful_degradation": true
+          }
+        }
+      },
+
+      "promotion_criteria": {
+        "automatic_promotion": {
+          "enabled": true,
+          "conditions": [
+            "all_validation_stages_passed",
+            "performance_improvement_min_5_percent",
+            "no_critical_issues_in_staging_24h"
+          ]
+        },
+
+        "manual_approval_required": {
+          "conditions": [
+            "new_algorithm_type",
+            "major_version_change",
+            "performance_degradation_detected"
+          ],
+          "approvers": ["ml_team_lead", "security_team_lead"]
+        }
+      }
+    }
+  }
+}
