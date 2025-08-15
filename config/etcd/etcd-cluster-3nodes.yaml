@@ -1,0 +1,93 @@
+# config/etcd/etcd-cluster-3nodes.yaml
+# Cluster etcd de alta disponibilidad (3 nodos)
+
+# =============================================================================
+# NODO 1 - etcd-1
+# =============================================================================
+# Para: etcd-1.cluster.local
+name: etcd-1
+data-dir: ./data/etcd-1
+listen-peer-urls: http://0.0.0.0:2380
+listen-client-urls: http://0.0.0.0:2379
+advertise-client-urls: http://etcd-1:2379
+initial-advertise-peer-urls: http://etcd-1:2380
+
+# Configuración del cluster
+initial-cluster: |
+  etcd-1=http://etcd-1:2380,
+  etcd-2=http://etcd-2:2380,
+  etcd-3=http://etcd-3:2380
+initial-cluster-token: axiom-cluster-token
+initial-cluster-state: new
+
+# Quorum y consensus
+heartbeat-interval: 100
+election-timeout: 1000
+max-snapshots: 5
+max-wals: 5
+
+# Logging
+log-level: info
+log-outputs: [stderr]
+
+---
+# =============================================================================
+# NODO 2 - etcd-2
+# =============================================================================
+# Para: etcd-2.cluster.local
+name: etcd-2
+data-dir: ./data/etcd-2
+listen-peer-urls: http://0.0.0.0:2381  # ← Puerto diferente
+listen-client-urls: http://0.0.0.0:2382 # ← Puerto diferente
+advertise-client-urls: http://etcd-2:2382
+initial-advertise-peer-urls: http://etcd-2:2381
+
+# Misma configuración de cluster
+initial-cluster: |
+  etcd-1=http://etcd-1:2380,
+  etcd-2=http://etcd-2:2381,  # ← Mismo puerto que listen-peer
+  etcd-3=http://etcd-3:2383
+initial-cluster-token: axiom-cluster-token
+initial-cluster-state: new
+
+heartbeat-interval: 100
+election-timeout: 1000
+
+---
+# =============================================================================
+# NODO 3 - etcd-3
+# =============================================================================
+# Para: etcd-3.cluster.local
+name: etcd-3
+data-dir: ./data/etcd-3
+listen-peer-urls: http://0.0.0.0:2383  # ← Puerto diferente
+listen-client-urls: http://0.0.0.0:2384 # ← Puerto diferente
+advertise-client-urls: http://etcd-3:2384
+initial-advertise-peer-urls: http://etcd-3:2383
+
+# Misma configuración de cluster
+initial-cluster: |
+  etcd-1=http://etcd-1:2380,
+  etcd-2=http://etcd-2:2381,
+  etcd-3=http://etcd-3:2383   # ← Mismo puerto que listen-peer
+initial-cluster-token: axiom-cluster-token
+initial-cluster-state: new
+
+heartbeat-interval: 100
+election-timeout: 1000
+
+# =============================================================================
+# CARACTERÍSTICAS DEL CLUSTER
+# =============================================================================
+# - 3 nodos → Quorum: 2 nodos (tolerancia: 1 fallo)
+# - 5 nodos → Quorum: 3 nodos (tolerancia: 2 fallos)
+# - 7 nodos → Quorum: 4 nodos (tolerancia: 3 fallos)
+#
+# RAFT Consensus:
+# - Leader election automática
+# - Log replication
+# - Consistency garantizada
+# - Split-brain protection
+#
+# Endpoints cliente:
+# - http

@@ -1,0 +1,35 @@
+# config/etcd/etcd-basic-config.yaml
+# Configuración básica de etcd para desarrollo local
+
+name: etcd-node1
+data-dir: ./data/etcd
+listen-peer-urls: http://0.0.0.0:2380
+listen-client-urls: http://0.0.0.0:2379
+advertise-client-urls: http://localhost:2379
+initial-advertise-peer-urls: http://localhost:2380
+initial-cluster: etcd-node1=http://localhost:2380
+initial-cluster-token: etcd-cluster-token
+initial-cluster-state: new
+
+# Logging
+log-level: info
+log-outputs: [stderr]
+
+# Seguridad básica (sin TLS por ahora)
+client-transport-security:
+  cert-file: ""
+  key-file: ""
+  client-cert-auth: false
+  trusted-ca-file: ""
+  auto-tls: false
+
+peer-transport-security:
+  cert-file: ""
+  key-file: ""
+  peer-client-cert-auth: false
+  trusted-ca-file: ""
+  auto-tls: false
+
+# Performance básico
+heartbeat-interval: 100
+election-timeout: 1000
