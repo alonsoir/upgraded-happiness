@@ -306,3 +306,4 @@ Las contribuciones son bienvenidas! Por favor lee [CONTRIBUTING.md](CONTRIBUTING
 ![pantallazo4.png](pantallazos/pantallazo4.png)
 ![pantallazo5.png](pantallazos/pantallazo5.png)
 ![pantallazo6.png](pantallazos/pantallazo6.png)
+![hamza.png](pantallazos/hamza.png)
