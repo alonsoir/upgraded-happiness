@@ -107,6 +107,7 @@ show_help() {
     echo "  watch [nombre]                                - Monitorear cambios"
     echo "  cleanup                                       - Limpiar servicios"
     echo "  test                                          - Ejecutar pruebas"
+    echo "  healthcheck                                   - Comprobar estado de salud."
     echo ""
     echo "Ejemplos:"
     echo "  $0 register axiom-api localhost 8080 60"
@@ -130,6 +131,90 @@ run_tests() {
     echo ""
     echo -e "${BLUE}🔍 Buscando axiom-api específicamente:${NC}"
     discover_services "axiom-api"
+}
+# =============================================================================
+# ARREGLO PARA healthcheck() - Reemplazar la función existente
+# =============================================================================
+
+healthcheck() {
+    local service_name=${1:-""}
+
+    echo -e "${BLUE}🏥 Ejecutando healthcheck de servicios...${NC}"
+
+    if [ -z "$service_name" ]; then
+        # Healthcheck de todos los servicios
+        local healthy_count=0
+        local total_count=0
+        local temp_file="/tmp/healthcheck_results_$$"
+
+        # Usar archivo temporal para evitar el problema del subshell
+        etcdctl --endpoints=$ETCD_ENDPOINT get $SERVICE_PREFIX/ --prefix --keys-only | while read key; do
+            if [ ! -z "$key" ]; then
+                service=$(echo $key | cut -d'/' -f3)
+                instance=$(echo $key | cut -d'/' -f4)
+                value=$(etcdctl --endpoints=$ETCD_ENDPOINT get $key --print-value-only)
+
+                # Extraer datos del servicio (usar cut si no hay jq)
+                if command -v jq >/dev/null 2>&1; then
+                    address=$(echo $value | jq -r '.address' 2>/dev/null || echo "localhost")
+                    port=$(echo $value | jq -r '.port' 2>/dev/null || echo "unknown")
+                else
+                    # Fallback sin jq - parsing básico
+                    address=$(echo $value | grep -o '"address":"[^"]*"' | cut -d'"' -f4 || echo "localhost")
+                    port=$(echo $value | grep -o '"port":[0-9]*' | cut -d':' -f2 || echo "unknown")
+                fi
+
+                # Incrementar contador total
+                echo "total++" >> "$temp_file"
+
+                # Test de conectividad
+                if [ "$port" != "unknown" ] && [ "$port" != "null" ] && [ ! -z "$port" ]; then
+                    if timeout 3 bash -c "</dev/tcp/$address/$port" 2>/dev/null; then
+                        echo -e "   ${GREEN}✅ $service ($instance): HEALTHY${NC} - $address:$port"
+                        echo "healthy++" >> "$temp_file"
+                    else
+                        echo -e "   ${RED}❌ $service ($instance): UNHEALTHY${NC} - $address:$port"
+                    fi
+                else
+                    echo -e "   ${YELLOW}⚠️  $service ($instance): UNKNOWN PORT${NC}"
+                fi
+            fi
+        done
+
+        # Leer contadores del archivo temporal
+        if [ -f "$temp_file" ]; then
+            total_count=$(grep -c "total++" "$temp_file" 2>/dev/null || echo 0)
+            healthy_count=$(grep -c "healthy++" "$temp_file" 2>/dev/null || echo 0)
+            rm -f "$temp_file"
+        fi
+
+        echo ""
+        echo -e "${BLUE}📊 Resumen Healthcheck:${NC}"
+        echo -e "   Total servicios: $total_count"
+        echo -e "   Servicios healthy: ${GREEN}$healthy_count${NC}"
+        echo -e "   Servicios unhealthy: ${RED}$((total_count - healthy_count))${NC}"
+
+    else
+        # Healthcheck de servicio específico
+        echo -e "${BLUE}🔍 Checking $service_name...${NC}"
+        etcdctl --endpoints=$ETCD_ENDPOINT get $SERVICE_PREFIX/$service_name/ --prefix --print-value-only | while read value; do
+            if [ ! -z "$value" ]; then
+                if command -v jq >/dev/null 2>&1; then
+                    address=$(echo $value | jq -r '.address' 2>/dev/null || echo "localhost")
+                    port=$(echo $value | jq -r '.port' 2>/dev/null || echo "unknown")
+                else
+                    address=$(echo $value | grep -o '"address":"[^"]*"' | cut -d'"' -f4 || echo "localhost")
+                    port=$(echo $value | grep -o '"port":[0-9]*' | cut -d':' -f2 || echo "unknown")
+                fi
+
+                if [ "$port" != "unknown" ] && timeout 3 bash -c "</dev/tcp/$address/$port" 2>/dev/null; then
+                    echo -e "   ${GREEN}✅ HEALTHY${NC} - $address:$port"
+                else
+                    echo -e "   ${RED}❌ UNHEALTHY${NC} - $address:$port"
+                fi
+            fi
+        done
+    fi
 }
 
 # Main
@@ -159,7 +244,12 @@ case "${1:-help}" in
         check_etcd
         run_tests
         ;;
+    "healthcheck")
+        check_etcd
+        healthcheck "$2"
+        ;;
     "help"|*)
         show_help
         ;;
+
 esac
