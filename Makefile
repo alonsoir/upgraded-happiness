@@ -162,7 +162,7 @@ NUCLEAR_STOP_SCRIPT = scripts/deployment/nuclear-stop.sh
         dist-cluster dist-cluster-status dist-cluster-stop dist-cluster-test \
         dist-ha dist-register-cluster \
         dist-ui dist-ui-stop dist-ui-open dist-secure dist-info dist-troubleshoot \
-        dist-quick dist-install-etcd dist-dev
+        dist-quick dist-install-etcd dist-dev dist-register-auto dist-healthcheck dist-auto-stop stop-robust
 
 # =============================================================================
 # HELP INTEGRADO - TODAS LAS FUNCIONALIDADES
@@ -611,20 +611,68 @@ start_v31: install verify-protobuf-compiled-v31 create-configs-v31 stop
 stop:
 	@echo "$(YELLOW)🛑 Deteniendo sistemas (V3.1 + demo + distribuido)...$(NC)"
 
-	# Detener PIDs V3.1
+	# Detener PIDs V3.1 - Con manejo de errores mejorado
+	@echo "$(BLUE)📝 Deteniendo servicios V3.1...$(NC)"
 	@-if [ -f $(DASHBOARD_PID_V31) ]; then echo "📊 Deteniendo Dashboard V3.1..."; kill $$(cat $(DASHBOARD_PID_V31)) 2>/dev/null || true; rm -f $(DASHBOARD_PID_V31); fi
 	@-if [ -f $(SCHEDULER_PID) ]; then echo "🎯 Deteniendo Scheduler..."; kill $$(cat $(SCHEDULER_PID)) 2>/dev/null || true; rm -f $(SCHEDULER_PID); fi
 	@-if [ -f $(ML_TRICAPA_PID_V31) ]; then echo "🤖 Deteniendo ML Tricapa V3.1..."; kill $$(cat $(ML_TRICAPA_PID_V31)) 2>/dev/null || true; rm -f $(ML_TRICAPA_PID_V31); fi
 	@-if [ -f $(GEOIP_PID_V31) ]; then echo "🌍 Deteniendo GeoIP V3.1..."; kill $$(cat $(GEOIP_PID_V31)) 2>/dev/null || true; rm -f $(GEOIP_PID_V31); fi
-	@-if [ -f $(EVOLUTIONARY_SNIFFER_PID_V31) ]; then echo "🕵️  Deteniendo Evolutionary Sniffer V3.1..."; kill $$(cat $(EVOLUTIONARY_SNIFFER_PID_V31)) 2>/dev/null || true; sudo kill $$(cat $(EVOLUTIONARY_SNIFFER_PID_V31)) 2>/dev/null || true; rm -f $(EVOLUTIONARY_SNIFFER_PID_V31); fi
 	@-if [ -f $(FIREWALL_PID_V31) ]; then echo "🛡️  Deteniendo Firewall V3.1..."; kill $$(cat $(FIREWALL_PID_V31)) 2>/dev/null || true; rm -f $(FIREWALL_PID_V31); fi
 
-	# pkill por patrón
-	@-pkill -f "dashboard_v31\|evolutionary_sniffer_v31\|geoip_enricher_v31\|ml_detector_tricapa_v31\|scheduler-firewall\|simple_firewall_agent_v31" 2>/dev/null || true
+	# Detener Evolutionary Sniffer con sudo mejorado
+	@echo "$(BLUE)🕵️  Deteniendo Evolutionary Sniffer V3.1...$(NC)"
+	@-if [ -f $(EVOLUTIONARY_SNIFFER_PID_V31) ]; then \
+		PID=$$(cat $(EVOLUTIONARY_SNIFFER_PID_V31)); \
+		kill $$PID 2>/dev/null || sudo kill $$PID 2>/dev/null || true; \
+		rm -f $(EVOLUTIONARY_SNIFFER_PID_V31); \
+	fi
+
+	# pkill por patrón - Con prefijo - para ignorar errores
+	@echo "$(BLUE)🔄 Limpieza por patrón...$(NC)"
+	@-pkill -f "dashboard_v31|evolutionary_sniffer_v31|geoip_enricher_v31|ml_detector_tricapa_v31|scheduler-firewall|simple_firewall_agent_v31" 2>/dev/null || true
 	@-sudo pkill -f "evolutionary_sniffer_v31" 2>/dev/null || true
 
 	@echo "$(GREEN)✅ Sistemas V3.1 detenidos$(NC)"
 	@echo "$(YELLOW)💡 Para detener backbone distribuido: make dist-stop$(NC)"
+
+# Nueva regla stop mejorada (alternativa más robusta)
+stop-robust:
+	@echo "$(YELLOW)🛑 STOP ROBUSTO - Deteniendo todos los sistemas...$(NC)"
+
+	# 1. Detener por PIDs primero
+	@echo "$(BLUE)1. 📝 Deteniendo por PIDs...$(NC)"
+	@-for pid_file in $(PIDS_DIR)/*.pid; do \
+		if [ -f "$$pid_file" ]; then \
+			pid=$$(cat $$pid_file 2>/dev/null || echo ""); \
+			if [ ! -z "$$pid" ]; then \
+				echo "  Deteniendo PID $$pid ($$(basename $$pid_file))"; \
+				kill $$pid 2>/dev/null || sudo kill $$pid 2>/dev/null || true; \
+			fi; \
+			rm -f $$pid_file; \
+		fi \
+	done
+
+	# 2. Detener por nombres de proceso
+	@echo "$(BLUE)2. 🔄 Limpieza por nombres de proceso...$(NC)"
+	@-pkill -f "python.*core.*v31" 2>/dev/null || true
+	@-sudo pkill -f "python.*core.*v31" 2>/dev/null || true
+	@-pkill -f "python.*evolutionary_sniffer" 2>/dev/null || true
+	@-sudo pkill -f "python.*evolutionary_sniffer" 2>/dev/null || true
+
+	# 3. Liberar puertos específicos
+	@echo "$(BLUE)3. 🔌 Liberando puertos específicos...$(NC)"
+	@-for port in $(CAPTURE_PORT_V31) $(GEOIP_PORT_V31) $(ML_PORT_V31) $(FIREWALL_PORT_V31) $(DASHBOARD_PORT_V31) $(DASHBOARD_WEB_PORT); do \
+		PIDS=$$(lsof -ti:$$port 2>/dev/null || true); \
+		if [ ! -z "$$PIDS" ]; then \
+			echo "  Liberando puerto $$port..."; \
+			echo "$$PIDS" | xargs -r kill 2>/dev/null || true; \
+			echo "$$PIDS" | xargs -r sudo kill 2>/dev/null || true; \
+		fi \
+	done
+
+	# 4. Limpieza final
+	@-rm -f $(PIDS_DIR)/*.pid 2>/dev/null || true
+	@echo "$(GREEN)✅ STOP ROBUSTO COMPLETADO$(NC)"
 
 stop-nuclear:
 	@echo "$(RED)☢️  PARADA NUCLEAR - TODO EL ECOSISTEMA ☢️$(NC)"
@@ -949,4 +997,47 @@ test:
 		$(MAKE) dist-test; \
 	else \
 		echo "  $(YELLOW)⚠️  etcd no disponible - saltando tests distribuidos$(NC)"; \
+	fi
+
+# Después de la regla test:, agregar:
+
+# =============================================================================
+# REGISTRO AUTOMATICO Y HEALTHCHECK CONTINUO
+# =============================================================================
+dist-register-auto: ## Registro automático con renovación de TTL
+	@echo "$(BLUE)🔄 Iniciando registro automático con renovación...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
+		nohup bash -c 'while true; do \
+			$(SERVICE_DISCOVERY_SCRIPT) register axiom-sniffer localhost $(CAPTURE_PORT_V31) 120; \
+			$(SERVICE_DISCOVERY_SCRIPT) register axiom-geoip localhost $(GEOIP_PORT_V31) 120; \
+			$(SERVICE_DISCOVERY_SCRIPT) register axiom-ml localhost $(ML_PORT_V31) 120; \
+			$(SERVICE_DISCOVERY_SCRIPT) register axiom-scheduler localhost $(ML_PORT_V31) 120; \
+			$(SERVICE_DISCOVERY_SCRIPT) register axiom-firewall localhost $(FIREWALL_PORT_V31) 120; \
+			$(SERVICE_DISCOVERY_SCRIPT) register axiom-dashboard localhost $(DASHBOARD_WEB_PORT) 120; \
+			sleep 60; \
+		done' > $(LOGS_DIR)/auto-register.log 2>&1 & \
+		echo $$! > $(PIDS_DIR)/auto-register.pid; \
+		echo "$(GREEN)✅ Registro automático iniciado (renovación cada 60s)$(NC)"; \
+	else \
+		echo "$(RED)❌ etcd no disponible$(NC)"; \
+		exit 1; \
+	fi
+
+dist-healthcheck: ## Verificar salud de todos los servicios registrados
+	@echo "$(BLUE)🏥 Verificando salud de servicios registrados...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		$(SERVICE_DISCOVERY_SCRIPT) healthcheck; \
+	else \
+		echo "$(RED)❌ etcd no disponible para healthcheck$(NC)"; \
+	fi
+
+dist-auto-stop: ## Detener registro automático
+	@echo "$(YELLOW)🛑 Deteniendo registro automático...$(NC)"
+	@-if [ -f $(PIDS_DIR)/auto-register.pid ]; then \
+		kill $$(cat $(PIDS_DIR)/auto-register.pid) 2>/dev/null || true; \
+		rm -f $(PIDS_DIR)/auto-register.pid; \
+		echo "$(GREEN)✅ Registro automático detenido$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  No hay registro automático corriendo$(NC)"; \
 	fi
