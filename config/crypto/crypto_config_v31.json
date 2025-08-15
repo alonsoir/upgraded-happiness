@@ -1,0 +1,11 @@
+{
+  "encryption_enabled": true,
+  "algorithm": "AES-256-GCM",
+  "key_rotation_minutes": 15,
+  "compression_enabled": true,
+  "compression_algorithm": "lz4",
+  "compression_threshold": 512,
+  "curve_enabled": true,
+  "perfect_forward_secrecy": true,
+  "auto_rotation": true
+}
