@@ -107,7 +107,6 @@ show_help() {
     echo "  watch [nombre]                                - Monitorear cambios"
     echo "  cleanup                                       - Limpiar servicios"
     echo "  test                                          - Ejecutar pruebas"
-    echo "  healthcheck                                   - Comprobar estado de salud."
     echo ""
     echo "Ejemplos:"
     echo "  $0 register axiom-api localhost 8080 60"
@@ -132,42 +131,44 @@ run_tests() {
     echo -e "${BLUE}🔍 Buscando axiom-api específicamente:${NC}"
     discover_services "axiom-api"
 }
-# =============================================================================
-# ARREGLO PARA healthcheck() - Reemplazar la función existente
-# =============================================================================
 
 healthcheck() {
     local service_name=${1:-""}
 
-    echo -e "${BLUE}🏥 Ejecutando healthcheck de servicios...${NC}"
+    # Verificar si etcd está disponible
+    if ! curl -s $ETCD_ENDPOINT/health > /dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  etcd no disponible, usando healthcheck directo...${NC}"
+        echo ""
+        healthcheck_direct
+        return 0
+    fi
+
+    # Si etcd está disponible, usar el healthcheck normal
+    echo -e "${GREEN}✅ etcd está disponible${NC}"
+    echo -e "${BLUE}🏥 Ejecutando healthcheck de servicios registrados...${NC}"
 
     if [ -z "$service_name" ]; then
-        # Healthcheck de todos los servicios
+        # Healthcheck de todos los servicios (código existente)
         local healthy_count=0
         local total_count=0
         local temp_file="/tmp/healthcheck_results_$$"
 
-        # Usar archivo temporal para evitar el problema del subshell
         etcdctl --endpoints=$ETCD_ENDPOINT get $SERVICE_PREFIX/ --prefix --keys-only | while read key; do
             if [ ! -z "$key" ]; then
                 service=$(echo $key | cut -d'/' -f3)
                 instance=$(echo $key | cut -d'/' -f4)
                 value=$(etcdctl --endpoints=$ETCD_ENDPOINT get $key --print-value-only)
 
-                # Extraer datos del servicio (usar cut si no hay jq)
                 if command -v jq >/dev/null 2>&1; then
                     address=$(echo $value | jq -r '.address' 2>/dev/null || echo "localhost")
                     port=$(echo $value | jq -r '.port' 2>/dev/null || echo "unknown")
                 else
-                    # Fallback sin jq - parsing básico
                     address=$(echo $value | grep -o '"address":"[^"]*"' | cut -d'"' -f4 || echo "localhost")
                     port=$(echo $value | grep -o '"port":[0-9]*' | cut -d':' -f2 || echo "unknown")
                 fi
 
-                # Incrementar contador total
                 echo "total++" >> "$temp_file"
 
-                # Test de conectividad
                 if [ "$port" != "unknown" ] && [ "$port" != "null" ] && [ ! -z "$port" ]; then
                     if timeout 3 bash -c "</dev/tcp/$address/$port" 2>/dev/null; then
                         echo -e "   ${GREEN}✅ $service ($instance): HEALTHY${NC} - $address:$port"
@@ -181,7 +182,6 @@ healthcheck() {
             fi
         done
 
-        # Leer contadores del archivo temporal
         if [ -f "$temp_file" ]; then
             total_count=$(grep -c "total++" "$temp_file" 2>/dev/null || echo 0)
             healthy_count=$(grep -c "healthy++" "$temp_file" 2>/dev/null || echo 0)
@@ -189,13 +189,13 @@ healthcheck() {
         fi
 
         echo ""
-        echo -e "${BLUE}📊 Resumen Healthcheck:${NC}"
+        echo -e "${BLUE}📊 Resumen Healthcheck etcd:${NC}"
         echo -e "   Total servicios: $total_count"
         echo -e "   Servicios healthy: ${GREEN}$healthy_count${NC}"
         echo -e "   Servicios unhealthy: ${RED}$((total_count - healthy_count))${NC}"
 
     else
-        # Healthcheck de servicio específico
+        # Healthcheck de servicio específico (código existente)
         echo -e "${BLUE}🔍 Checking $service_name...${NC}"
         etcdctl --endpoints=$ETCD_ENDPOINT get $SERVICE_PREFIX/$service_name/ --prefix --print-value-only | while read value; do
             if [ ! -z "$value" ]; then
@@ -214,6 +214,47 @@ healthcheck() {
                 fi
             fi
         done
+    fi
+}
+
+# Nueva función: healthcheck directo sin etcd
+healthcheck_direct() {
+    echo -e "${BLUE}🏥 Healthcheck directo (sin etcd)...${NC}"
+
+    # Puertos V3.1 a verificar
+    local ports=(5559 5560 5561 5562 8080)
+    local services=("sniffer" "geoip" "ml" "firewall" "dashboard")
+
+    local healthy_count=0
+    local total_count=${#ports[@]}
+
+    echo -e "${BLUE}🔍 Verificando puertos del pipeline V3.1:${NC}"
+
+    for i in "${!ports[@]}"; do
+        port=${ports[$i]}
+        service=${services[$i]}
+
+        if timeout 3 bash -c "</dev/tcp/localhost/$port" 2>/dev/null; then
+            echo -e "   ${GREEN}✅ $service (puerto $port): HEALTHY${NC}"
+            ((healthy_count++))
+        else
+            echo -e "   ${RED}❌ $service (puerto $port): UNHEALTHY${NC}"
+        fi
+    done
+
+    echo ""
+    echo -e "${BLUE}📊 Resumen Healthcheck Directo:${NC}"
+    echo -e "   Total servicios: $total_count"
+    echo -e "   Servicios healthy: ${GREEN}$healthy_count${NC}"
+    echo -e "   Servicios unhealthy: ${RED}$((total_count - healthy_count))${NC}"
+
+    # Status general
+    if [ $healthy_count -eq $total_count ]; then
+        echo -e "   ${GREEN}🎉 Sistema V3.1: COMPLETAMENTE OPERATIVO${NC}"
+    elif [ $healthy_count -gt 0 ]; then
+        echo -e "   ${YELLOW}⚠️  Sistema V3.1: PARCIALMENTE OPERATIVO${NC}"
+    else
+        echo -e "   ${RED}❌ Sistema V3.1: TODOS LOS SERVICIOS CAÍDOS${NC}"
     fi
 }
 
@@ -245,11 +286,13 @@ case "${1:-help}" in
         run_tests
         ;;
     "healthcheck")
-        check_etcd
         healthcheck "$2"
         ;;
+    "healthcheck-direct")
+        healthcheck_direct
+        ;;
+
     "help"|*)
         show_help
         ;;
-
 esac
