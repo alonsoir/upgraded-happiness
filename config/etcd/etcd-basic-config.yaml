@@ -1,35 +1,37 @@
 # config/etcd/etcd-basic-config.yaml
-# Configuración básica de etcd para desarrollo local
+# Configuración etcd básica para desarrollo - Single node
+# No usar en producción
 
-name: etcd-node1
-data-dir: ./data/etcd
-listen-peer-urls: http://0.0.0.0:2380
-listen-client-urls: http://0.0.0.0:2379
-advertise-client-urls: http://localhost:2379
-initial-advertise-peer-urls: http://localhost:2380
-initial-cluster: etcd-node1=http://localhost:2380
-initial-cluster-token: etcd-cluster-token
-initial-cluster-state: new
+name: 'etcd-node1'
+data-dir: './data/etcd'
 
-# Logging
-log-level: info
-log-outputs: [stderr]
+# URLs de cliente (donde los clientes se conectan)
+listen-client-urls: 'http://0.0.0.0:2379'
+advertise-client-urls: 'http://localhost:2379'
 
-# Seguridad básica (sin TLS por ahora)
-client-transport-security:
-  cert-file: ""
-  key-file: ""
-  client-cert-auth: false
-  trusted-ca-file: ""
-  auto-tls: false
+# URLs de peer (comunicación cluster - single node)
+listen-peer-urls: 'http://0.0.0.0:2380'
+initial-advertise-peer-urls: 'http://localhost:2380'
 
-peer-transport-security:
-  cert-file: ""
-  key-file: ""
-  peer-client-cert-auth: false
-  trusted-ca-file: ""
-  auto-tls: false
+# Configuración de cluster (single node)
+initial-cluster: 'etcd-node1=http://localhost:2380'
+initial-cluster-token: 'axiom-dev-cluster'
+initial-cluster-state: 'new'
 
-# Performance básico
+# Configuración de rendimiento para desarrollo
 heartbeat-interval: 100
 election-timeout: 1000
+max-snapshots: 5
+max-wals: 5
+
+# Logging
+log-level: 'info'
+log-outputs: ['stderr']
+
+# Configuración de seguridad (desarrollo - no usar en producción)
+auto-tls: false
+peer-auto-tls: false
+
+# Configuración de base de datos
+quota-backend-bytes: 2147483648  # 2GB
+max-request-bytes: 1572864       # 1.5MB

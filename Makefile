@@ -159,7 +159,7 @@ NUCLEAR_STOP_SCRIPT = scripts/deployment/nuclear-stop.sh
         quick quick_v31 debug benchmark \
         create-configs-v31 verify-configs-v31 \
         dist-setup dist-start dist-stop dist-status dist-test dist-discover dist-watch dist-clean dist-register dist-reset \
-        dist-cluster dist-cluster-status dist-cluster-stop dist-cluster-test dist-cluster-advanced create-cluster-configs create-cluster-configs-from-file \
+        dist-cluster dist-cluster-status dist-cluster-stop dist-cluster-test \
         dist-ha dist-register-cluster \
         dist-ui dist-ui-stop dist-ui-open dist-secure dist-info dist-troubleshoot \
         dist-quick dist-install-etcd dist-dev
@@ -178,7 +178,6 @@ help:
 	@echo "$(YELLOW)🚀 INICIO RÁPIDO:$(NC)"
 	@echo "  $(GREEN)make quick_v31$(NC)           - Setup completo V3.1 (RECOMENDADO)"
 	@echo "  $(GREEN)make dist-quick$(NC)          - Setup distribuido completo (etcd + V3.1)"
-	@echo "  $(PURPLE)make dist-ha$(NC)             - Setup HA completo (cluster 3 nodos + V3.1)"
 	@echo ""
 	@echo "$(YELLOW)🌐 MODO DISTRIBUIDO (etcd backbone):$(NC)"
 	@echo "  $(CYAN)make dist-setup$(NC)          - Configurar infraestructura distribuida"
@@ -197,43 +196,20 @@ help:
 	@echo "  $(GREEN)make monitor_v31$(NC)         - Monitor tiempo real V3.1"
 	@echo "  $(GREEN)make logs-v31$(NC)            - Logs específicos V3.1"
 	@echo ""
-	@echo "$(YELLOW)📚 DEMO Y ENSEÑANZA:$(NC)"
-	@echo "  $(BLUE)make start$(NC)               - Iniciar versión demo (enseñanza)"
-	@echo "  $(BLUE)make status$(NC)              - Estado versión demo"
-	@echo "  $(BLUE)make monitor$(NC)             - Monitor versión demo"
+	@echo "$(YELLOW)🚀 UI WEB:$(NC)"
+	@echo "  $(CYAN)make dist-ui$(NC)             - UI web etcd (puerto 8081)"
+	@echo "  $(CYAN)make dist-ui-open$(NC)        - Abrir UI etcd en navegador"
+	@echo "  $(CYAN)make dist-ui-stop$(NC)        - Detener UI etcd"
 	@echo ""
 	@echo "$(YELLOW)🛑 CONTROL SISTEMA:$(NC)"
 	@echo "  stop                     - Parada normal (V3.1 + demo)"
 	@echo "  stop-nuclear             - Parada nuclear (TODO)"
 	@echo "  restart                  - Reiniciar sistema completo"
 	@echo ""
-	@echo "$(YELLOW)📦 SETUP Y CONFIGURACIÓN:$(NC)"
-	@echo "  setup                    - Crear entorno virtual"
-	@echo "  install                  - Instalar dependencias"
-	@echo "  setup-perms              - Configurar permisos sudo"
-	@echo "  compile-protobuf-v31     - Compilar protobuf V3.1"
-	@echo "  verify                   - Verificar integridad completa"
-	@echo ""
-	@echo "$(YELLOW)📊 MONITORIZACIÓN:$(NC)"
-	@echo "  logs                     - Ver logs (ambas versiones + distribuido)"
-	@echo "  debug                    - Modo debug interactivo"
-	@echo "  benchmark                - Ejecutar benchmarks"
-	@echo ""
-	@echo "$(CYAN)🏗️ ARQUITECTURA DISTRIBUIDA + HA:$(NC)"
-	@echo "  Modo Simple: etcd (puerto 2379) ← Service Discovery Backbone"
-	@echo "  Modo HA: etcd Cluster (puertos 2379,2389,2399) ← Quorum + Consensus"
-	@echo "  ↓"
-	@echo "  evolutionary_sniffer_v31 → geoip_enricher_v31 → ml_detector_tricapa_v31"
-	@echo "  ↓"
-	@echo "  scheduler-firewall ↔ simple_firewall_agent_v31"
-	@echo "  ↓"
-	@echo "  dashboard_v31 (puerto $(DASHBOARD_WEB_PORT))"
-	@echo ""
 	@echo "$(GREEN)💡 FLUJO RECOMENDADO:$(NC)"
 	@echo "  $(BLUE)Desarrollo:$(NC) $(CYAN)make dist-quick$(NC)     # Setup distribuido"
-	@echo "  $(PURPLE)Enterprise:$(NC) $(PURPLE)make dist-ha$(NC)       # Setup HA cluster"
 	@echo "  $(GREEN)Dashboard:$(NC)  $(GREEN)make show-dashboard$(NC) # Abrir dashboard"
-	@echo "  $(CYAN)Monitor:$(NC)    $(CYAN)make dist-watch$(NC)     # Monitorear servicios"
+	@echo "  $(CYAN)UI etcd:$(NC)    $(CYAN)make dist-ui-open$(NC)   # UI web etcd"
 
 # =============================================================================
 # MODO DISTRIBUIDO - etcd BACKBONE
@@ -252,6 +228,11 @@ dist-setup: setup dist-install-etcd ## Configurar infraestructura distribuida
 	@echo "$(BLUE)🔧 Configurando infraestructura distribuida...$(NC)"
 	@mkdir -p $(ETCD_CONFIG_DIR) $(ETCD_DATA_DIR) $(ETCD_LOG_DIR) scripts $(PIDS_DIR)
 	@chmod +x scripts/*.sh 2>/dev/null || true
+	@if [ ! -f "$(ETCD_CONFIG_FILE)" ]; then \
+		echo "$(RED)❌ Archivo de configuración no encontrado: $(ETCD_CONFIG_FILE)$(NC)"; \
+		echo "$(YELLOW)💡 Asegúrate de que existe: config/etcd/etcd-basic-config.yaml$(NC)"; \
+		exit 1; \
+	fi
 	@echo "$(GREEN)✅ Infraestructura distribuida configurada$(NC)"
 
 dist-start: dist-setup ## Iniciar backbone etcd + service discovery
@@ -351,16 +332,6 @@ dist-ui-open: ## Abrir interfaz web de etcd en navegador
 		echo "$(RED)❌ UI no disponible. Ejecuta: make dist-ui$(NC)"; \
 	fi
 
-dist-secure: ## Configurar etcd con TLS + cifrado (modo seguro)
-	@echo "$(BLUE)🔒 Configurando etcd en modo seguro...$(NC)"
-	@echo "$(YELLOW)🚧 Implementación futura: TLS + at-rest encryption$(NC)"
-	@echo "$(CYAN)📋 Características del modo seguro:$(NC)"
-	@echo "  🔐 TLS client-server + peer-to-peer"
-	@echo "  🗜️ Cifrado at-rest (database encryption)"
-	@echo "  🛡️ RBAC + autenticación"
-	@echo "  📊 Audit logging"
-	@echo "$(YELLOW)💡 Para desarrollo usar: make dist-start (modo inseguro)$(NC)"
-
 dist-info: ## Información completa del cluster etcd
 	@echo "$(CYAN)📊 Información Cluster etcd$(NC)"
 	@echo "$(CYAN)============================$(NC)"
@@ -415,330 +386,6 @@ dist-reset: ## Reset completo del backbone distribuido
 
 	@echo "$(GREEN)✅ Reset completado - Listo para iniciar limpio$(NC)"
 	@echo "$(CYAN)💡 Ejecuta: make dist-start$(NC)"
-
-dist-cluster: ## Iniciar cluster etcd de 3 nodos (HA real)
-	@echo "$(GREEN)🏗️ Iniciando Cluster etcd de Alta Disponibilidad$(NC)"
-	@echo "$(CYAN)===============================================$(NC)"
-	@echo "$(YELLOW)💡 Cluster de 3 nodos para quorum y tolerancia a fallos$(NC)"
-	@echo ""
-
-	@echo "$(BLUE)🔍 Verificando configuración...$(NC)"
-	@mkdir -p data/etcd/{node1,node2,node3} config/etcd logs/cluster
-
-	@echo "$(BLUE)📝 Generando configuraciones de cluster...$(NC)"
-	@$(MAKE) -s create-cluster-configs
-
-	@echo "$(BLUE)🚀 Iniciando nodos del cluster...$(NC)"
-	@echo "  🗂️ Nodo 1 (Leader candidate) - Puerto 2379..."
-	@etcd --config-file config/etcd/etcd-node1.yaml > logs/cluster/node1.log 2>&1 & echo $! > .pids/etcd-node1.pid
-	@sleep 3
-
-	@echo "  🗂️ Nodo 2 (Follower) - Puerto 2389..."
-	@etcd --config-file config/etcd/etcd-node2.yaml > logs/cluster/node2.log 2>&1 & echo $! > .pids/etcd-node2.pid
-	@sleep 3
-
-	@echo "  🗂️ Nodo 3 (Follower) - Puerto 2399..."
-	@etcd --config-file config/etcd/etcd-node3.yaml > logs/cluster/node3.log 2>&1 & echo $! > .pids/etcd-node3.pid
-	@sleep 5
-
-	@echo "$(BLUE)🔍 Verificando quorum del cluster...$(NC)"
-	@if etcdctl --endpoints=localhost:2379,localhost:2389,localhost:2399 endpoint health; then \
-		echo "$(GREEN)✅ Cluster etcd operativo con quorum$(NC)"; \
-		echo "$(CYAN)📊 Miembros del cluster:$(NC)"; \
-		etcdctl --endpoints=localhost:2379 member list; \
-		echo ""; \
-		echo "$(GREEN)🎯 Cluster Endpoints:$(NC)"; \
-		echo "  🗂️ Nodo 1: http://localhost:2379"; \
-		echo "  🗂️ Nodo 2: http://localhost:2389"; \
-		echo "  🗂️ Nodo 3: http://localhost:2399"; \
-		echo "  🌐 Load Balancer: http://localhost:2379,localhost:2389,localhost:2399"; \
-	else \
-		echo "$(RED)❌ Error en el cluster, verificando logs...$(NC)"; \
-		echo "$(YELLOW)💡 Logs en: logs/cluster/$(NC)"; \
-	fi
-
-create-cluster-configs-from-file: ## Usar archivo etcd-cluster-3nodes.yaml (corregido)
-	@echo "$(BLUE)📝 Creando configuraciones desde etcd-cluster-3nodes.yaml...$(NC)"
-	@if [ -f "config/etcd/etcd-cluster-3nodes.yaml" ]; then \
-		echo "$(YELLOW)⚠️  Archivo encontrado, pero necesita corrección para localhost$(NC)"; \
-		echo "$(BLUE)💡 Generando versión corregida para localhost...$(NC)"; \
-		mkdir -p config/etcd; \
-		echo "$(BLUE)  📄 Procesando configuración multi-nodo...$(NC)"; \
-		cat > config/etcd/etcd-cluster-3nodes-fixed.yaml << 'EOF'
-# Cluster etcd de alta disponibilidad (3 nodos) - CORREGIDO para localhost
-# =============================================================================
-# NODO 1 - etcd-node1
-# =============================================================================
-name: etcd-node1
-data-dir: ./data/etcd/node1
-listen-peer-urls: http://0.0.0.0:2380
-listen-client-urls: http://0.0.0.0:2379
-advertise-client-urls: http://localhost:2379
-initial-advertise-peer-urls: http://localhost:2380
-
-# Configuración del cluster
-initial-cluster: etcd-node1=http://localhost:2380,etcd-node2=http://localhost:2390,etcd-node3=http://localhost:2400
-initial-cluster-token: axiom-cluster-token
-initial-cluster-state: new
-
-# Quorum y consensus
-heartbeat-interval: 100
-election-timeout: 1000
-max-snapshots: 5
-max-wals: 5
-
-# Logging
-log-level: info
-log-outputs: [stderr]
-EOF
-		echo "$(GREEN)✅ Archivo corregido creado: config/etcd/etcd-cluster-3nodes-fixed.yaml$(NC)"; \
-		echo "$(YELLOW)💡 Para usar: make create-cluster-configs (recomendado)$(NC)"; \
-	else \
-		echo "$(RED)❌ Archivo config/etcd/etcd-cluster-3nodes.yaml no encontrado$(NC)"; \
-		echo "$(CYAN)💡 Ejecuta: make create-cluster-configs$(NC)"; \
-	fi
-
-dist-cluster-advanced: ## Iniciar cluster usando configuración avanzada
-	@echo "$(PURPLE)🏛️ Iniciando Cluster etcd Avanzado (3 nodos HA)$(NC)"
-	@echo "$(PURPLE)===============================================$(NC)"
-	@echo ""
-
-	@echo "$(BLUE)🔍 Verificando configuraciones...$(NC)"
-	@if [ ! -f "config/etcd/etcd-node1.yaml" ]; then \
-		echo "$(YELLOW)⚠️  Configuraciones no encontradas, generando...$(NC)"; \
-		$(MAKE) -s create-cluster-configs; \
-	fi
-
-	@echo "$(BLUE)🧹 Limpiando datos anteriores del cluster...$(NC)"
-	@$(MAKE) -s dist-cluster-stop 2>/dev/null || true
-	@rm -rf data/etcd/{node1,node2,node3} 2>/dev/null || true
-	@mkdir -p data/etcd/{node1,node2,node3} logs/cluster
-
-	@echo "$(BLUE)🚀 Iniciando nodos del cluster (modo avanzado)...$(NC)"
-	@echo "  🗂️ Nodo 1 (Bootstrap) - Puerto 2379..."
-	@ETCD_UNSUPPORTED_ARCH="$(shell uname -m)" etcd --config-file config/etcd/etcd-node1.yaml > logs/cluster/node1.log 2>&1 & echo $! > .pids/etcd-node1.pid
-	@sleep 4
-
-	@echo "  🗂️ Nodo 2 (Join cluster) - Puerto 2389..."
-	@ETCD_UNSUPPORTED_ARCH="$(shell uname -m)" etcd --config-file config/etcd/etcd-node2.yaml > logs/cluster/node2.log 2>&1 & echo $! > .pids/etcd-node2.pid
-	@sleep 4
-
-	@echo "  🗂️ Nodo 3 (Join cluster) - Puerto 2399..."
-	@ETCD_UNSUPPORTED_ARCH="$(shell uname -m)" etcd --config-file config/etcd/etcd-node3.yaml > logs/cluster/node3.log 2>&1 & echo $! > .pids/etcd-node3.pid
-	@sleep 6
-
-	@echo "$(BLUE)🔍 Verificando salud del cluster...$(NC)"
-	@if etcdctl --endpoints=$(ETCD_CLUSTER_ENDPOINTS) endpoint health 2>/dev/null; then \
-		echo "$(GREEN)✅ Cluster etcd HA operativo con quorum$(NC)"; \
-		echo ""; \
-		echo "$(CYAN)📊 Información del cluster:$(NC)"; \
-		etcdctl --endpoints=localhost:2379 member list; \
-		echo ""; \
-		echo "$(CYAN)🎯 Endpoints del cluster:$(NC)"; \
-		echo "  🗂️ Nodo 1: http://localhost:2379 (Leader candidate)"; \
-		echo "  🗂️ Nodo 2: http://localhost:2389 (Follower)"; \
-		echo "  🗂️ Nodo 3: http://localhost:2399 (Follower)"; \
-		echo "  🌐 Load Balancer: $(ETCD_CLUSTER_ENDPOINTS)"; \
-		echo ""; \
-		echo "$(GREEN)🎉 Cluster listo para service discovery HA$(NC)"; \
-	else \
-		echo "$(RED)❌ Error en el cluster$(NC)"; \
-		echo "$(YELLOW)💡 Verificando logs:$(NC)"; \
-		echo "  📋 Nodo 1: logs/cluster/node1.log"; \
-		echo "  📋 Nodo 2: logs/cluster/node2.log"; \
-		echo "  📋 Nodo 3: logs/cluster/node3.log"; \
-		echo "$(BLUE)🔧 Para diagnóstico: make dist-troubleshoot$(NC)"; \
-	fi
-
-create-cluster-configs: ## Crear configuraciones para cluster de 3 nodos
-	@echo "$(BLUE)📝 Creando configuraciones de cluster etcd (método integrado)...$(NC)"
-	@mkdir -p $(ETCD_CONFIG_DIR)
-
-	@echo "$(BLUE)  📄 Configuración Nodo 1 (Leader candidate)...$(NC)"
-	@cat > config/etcd/etcd-node1.yaml << 'EOF'
-# Nodo 1 del cluster etcd - Leader candidate
-name: etcd-node1
-data-dir: ./data/etcd/node1
-
-# URLs de cliente (donde los clientes se conectan)
-listen-client-urls: http://0.0.0.0:2379
-advertise-client-urls: http://localhost:2379
-
-# URLs de peer (comunicación interna cluster)
-listen-peer-urls: http://0.0.0.0:2380
-initial-advertise-peer-urls: http://localhost:2380
-
-# Configuración del cluster (TODOS los nodos iguales)
-initial-cluster: etcd-node1=http://localhost:2380,etcd-node2=http://localhost:2390,etcd-node3=http://localhost:2400
-initial-cluster-token: axiom-cluster-ha-token
-initial-cluster-state: new
-
-# Configuración de consenso Raft
-heartbeat-interval: 100
-election-timeout: 1000
-max-snapshots: 5
-max-wals: 5
-
-# Logging
-log-level: info
-log-outputs: [stderr]
-
-# Configuración de rendimiento
-quota-backend-bytes: 2147483648
-max-request-bytes: 1572864
-EOF
-
-	@echo "$(BLUE)  📄 Configuración Nodo 2 (Follower)...$(NC)"
-	@cat > config/etcd/etcd-node2.yaml << 'EOF'
-# Nodo 2 del cluster etcd - Follower
-name: etcd-node2
-data-dir: ./data/etcd/node2
-
-# URLs de cliente
-listen-client-urls: http://0.0.0.0:2389
-advertise-client-urls: http://localhost:2389
-
-# URLs de peer
-listen-peer-urls: http://0.0.0.0:2390
-initial-advertise-peer-urls: http://localhost:2390
-
-# Configuración del cluster (IDÉNTICA para todos)
-initial-cluster: etcd-node1=http://localhost:2380,etcd-node2=http://localhost:2390,etcd-node3=http://localhost:2400
-initial-cluster-token: axiom-cluster-ha-token
-initial-cluster-state: new
-
-# Configuración de consenso Raft
-heartbeat-interval: 100
-election-timeout: 1000
-max-snapshots: 5
-max-wals: 5
-
-# Logging
-log-level: info
-log-outputs: [stderr]
-
-# Configuración de rendimiento
-quota-backend-bytes: 2147483648
-max-request-bytes: 1572864
-EOF
-
-	@echo "$(BLUE)  📄 Configuración Nodo 3 (Follower)...$(NC)"
-	@cat > config/etcd/etcd-node3.yaml << 'EOF'
-# Nodo 3 del cluster etcd - Follower
-name: etcd-node3
-data-dir: ./data/etcd/node3
-
-# URLs de cliente
-listen-client-urls: http://0.0.0.0:2399
-advertise-client-urls: http://localhost:2399
-
-# URLs de peer
-listen-peer-urls: http://0.0.0.0:2400
-initial-advertise-peer-urls: http://localhost:2400
-
-# Configuración del cluster (IDÉNTICA para todos)
-initial-cluster: etcd-node1=http://localhost:2380,etcd-node2=http://localhost:2390,etcd-node3=http://localhost:2400
-initial-cluster-token: axiom-cluster-ha-token
-initial-cluster-state: new
-
-# Configuración de consenso Raft
-heartbeat-interval: 100
-election-timeout: 1000
-max-snapshots: 5
-max-wals: 5
-
-# Logging
-log-level: info
-log-outputs: [stderr]
-
-# Configuración de rendimiento
-quota-backend-bytes: 2147483648
-max-request-bytes: 1572864
-EOF
-
-	@echo "$(GREEN)✅ Configuraciones de cluster creadas en:$(NC)"
-	@echo "   📄 config/etcd/etcd-node1.yaml (2379/2380)"
-	@echo "   📄 config/etcd/etcd-node2.yaml (2389/2390)"
-	@echo "   📄 config/etcd/etcd-node3.yaml (2399/2400)"
-	@echo ""
-	@echo "$(CYAN)💡 Cluster endpoints: localhost:2379,localhost:2389,localhost:2399$(NC)"
-
-dist-cluster-status: ## Estado del cluster etcd HA
-	@echo "$(CYAN)📊 Estado Cluster etcd HA$(NC)"
-	@echo "$(CYAN)==========================$(NC)"
-	@echo ""
-
-	@echo "$(YELLOW)🔍 Verificando nodos individuales:$(NC)"
-	@for port in 2379 2389 2399; do \
-		if curl -s http://localhost:$port/health > /dev/null 2>&1; then \
-			echo "  Nodo puerto $port: $(GREEN)✅ Activo$(NC)"; \
-		else \
-			echo "  Nodo puerto $port: $(RED)⭕ Inactivo$(NC)"; \
-		fi \
-	done
-
-	@echo ""
-	@echo "$(YELLOW)🏛️ Estado del cluster:$(NC)"
-	@if etcdctl --endpoints=localhost:2379,localhost:2389,localhost:2399 endpoint health 2>/dev/null; then \
-		echo "$(GREEN)✅ Cluster operativo$(NC)"; \
-		echo ""; \
-		echo "$(YELLOW)👥 Miembros del cluster:$(NC)"; \
-		etcdctl --endpoints=localhost:2379 member list; \
-		echo ""; \
-		echo "$(YELLOW)🎯 Leader actual:$(NC)"; \
-		etcdctl --endpoints=localhost:2379,localhost:2389,localhost:2399 endpoint status --write-out=table; \
-	else \
-		echo "$(RED)❌ Cluster no operativo$(NC)"; \
-	fi
-
-dist-cluster-stop: ## Detener cluster etcd HA
-	@echo "$(YELLOW)🛑 Deteniendo cluster etcd HA...$(NC)"
-	@for node in node1 node2 node3; do \
-		if [ -f .pids/etcd-$node.pid ]; then \
-			echo "  🛑 Deteniendo $node..."; \
-			kill $(cat .pids/etcd-$node.pid) 2>/dev/null || true; \
-			rm -f .pids/etcd-$node.pid; \
-		fi \
-	done
-	@pkill -f "etcd.*etcd-node" 2>/dev/null || true
-	@echo "$(GREEN)✅ Cluster detenido$(NC)"
-
-dist-cluster-test: ## Probar tolerancia a fallos del cluster
-	@echo "$(BLUE)🧪 Probando Tolerancia a Fallos del Cluster$(NC)"
-	@echo "$(BLUE)===========================================$(NC)"
-	@echo ""
-
-	@echo "$(YELLOW)1. 📝 Escribiendo datos de prueba...$(NC)"
-	@etcdctl --endpoints=localhost:2379 put /test/ha "cluster-working" || exit 1
-	@echo "   ✅ Datos escritos en cluster"
-
-	@echo ""
-	@echo "$(YELLOW)2. 📖 Leyendo desde diferentes nodos...$(NC)"
-	@for port in 2379 2389 2399; do \
-		value=$(etcdctl --endpoints=localhost:$port get /test/ha --print-value-only 2>/dev/null); \
-		echo "   Nodo $port: $value"; \
-	done
-
-	@echo ""
-	@echo "$(YELLOW)3. 💀 Simulando fallo de un nodo...$(NC)"
-	@if [ -f .pids/etcd-node2.pid ]; then \
-		echo "   🔥 Matando nodo 2 (puerto 2389)..."; \
-		kill $(cat .pids/etcd-node2.pid) 2>/dev/null || true; \
-		rm -f .pids/etcd-node2.pid; \
-		sleep 3; \
-	fi
-
-	@echo ""
-	@echo "$(YELLOW)4. 🔍 Verificando que el cluster sigue operativo...$(NC)"
-	@if etcdctl --endpoints=localhost:2379,localhost:2399 get /test/ha > /dev/null 2>&1; then \
-		echo "   $(GREEN)✅ Cluster sobrevivió al fallo de un nodo$(NC)"; \
-		echo "   $(GREEN)✅ Quorum mantenido (2/3 nodos)$(NC)"; \
-	else \
-		echo "   $(RED)❌ Cluster falló$(NC)"; \
-	fi
-
-	@echo ""
-	@echo "$(BLUE)💡 Para restaurar el nodo: make dist-cluster$(NC)"
 
 dist-troubleshoot: ## Diagnosticar problemas del backbone distribuido
 	@echo "$(BLUE)🔧 Diagnóstico del Backbone Distribuido$(NC)"
@@ -851,7 +498,6 @@ dist-dev: dist-quick start_v31 ## Setup completo distribuido + V3.1
 	else \
 		echo "$(YELLOW)⚠️  Service discovery no disponible$(NC)"; \
 		echo "$(BLUE)💡 Para habilitarlo: make dist-reset && make dist-start$(NC)"; \
-		echo "$(PURPLE)💡 Para HA: make dist-cluster$(NC)"; \
 	fi
 
 	@make show-dashboard
@@ -865,66 +511,16 @@ dist-dev: dist-quick start_v31 ## Setup completo distribuido + V3.1
 		echo "$(CYAN)📊 Dashboard V3.1: http://localhost:8080$(NC)"; \
 		echo "$(CYAN)🗂️ etcd UI: http://localhost:8081$(NC)"; \
 		echo "$(CYAN)🔍 Para info detallada: make dist-info$(NC)"; \
-		echo "$(PURPLE)🏛️ Para alta disponibilidad: make dist-cluster$(NC)"; \
 	else \
 		echo "$(YELLOW)⚠️  UI etcd no disponible (requiere backbone)$(NC)"; \
 		echo ""; \
 		echo "$(GREEN)🎉 SISTEMA V3.1 OPERATIVO (modo local):$(NC)"; \
 		echo "$(CYAN)📊 Dashboard V3.1: http://localhost:8080$(NC)"; \
 		echo "$(CYAN)🔧 Para modo distribuido: make dist-reset && make dist-dev$(NC)"; \
-		echo "$(PURPLE)🏛️ Para alta disponibilidad: make dist-cluster$(NC)"; \
-	fi
-
-dist-ha: dist-cluster start_v31 ## Setup completo HA + V3.1 (3 nodos etcd)
-	@echo ""
-	@echo "$(PURPLE)🏛️ MODO ALTA DISPONIBILIDAD + V3.1 OPERATIVO$(NC)"
-	@echo "$(PURPLE)============================================$(NC)"
-	@echo "$(YELLOW)Sistema enterprise con cluster etcd HA$(NC)"
-	@sleep 3
-
-	@echo "$(BLUE)🔍 Registrando servicios en cluster HA...$(NC)"
-	@make dist-register-cluster
-
-	@echo "$(BLUE)🔍 Verificando servicios distribuidos...$(NC)"
-	@make dist-discover
-
-	@make show-dashboard
-
-	@echo ""
-	@echo "$(BLUE)🌐 Iniciando UI web para cluster...$(NC)"
-	@make dist-ui
-
-	@echo ""
-	@echo "$(PURPLE)🎉 ECOSISTEMA HA COMPLETO OPERATIVO:$(NC)"
-	@echo "$(CYAN)📊 Dashboard V3.1: http://localhost:8080$(NC)"
-	@echo "$(CYAN)🗂️ etcd UI: http://localhost:8081$(NC)"
-	@echo "$(CYAN)🏛️ Cluster Status: make dist-cluster-status$(NC)"
-	@echo "$(CYAN)💀 Test Failover: make dist-cluster-test$(NC)"
-
-dist-register-cluster: ## Re-registrar servicios V3.1 en cluster HA
-	@echo "$(BLUE)📝 Re-registrando servicios V3.1 en cluster HA...$(NC)"
-	@if etcdctl --endpoints=$(ETCD_CLUSTER_ENDPOINTS) endpoint health > /dev/null 2>&1; then \
-		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
-		echo "  🕵️  Registrando axiom-sniffer en cluster..."; \
-		ETCD_ENDPOINTS="$(ETCD_CLUSTER_ENDPOINTS)" $(SERVICE_DISCOVERY_SCRIPT) register axiom-sniffer localhost 5559 120; \
-		echo "  🌍 Registrando axiom-geoip en cluster..."; \
-		ETCD_ENDPOINTS="$(ETCD_CLUSTER_ENDPOINTS)" $(SERVICE_DISCOVERY_SCRIPT) register axiom-geoip localhost 5560 120; \
-		echo "  🤖 Registrando axiom-ml en cluster..."; \
-		ETCD_ENDPOINTS="$(ETCD_CLUSTER_ENDPOINTS)" $(SERVICE_DISCOVERY_SCRIPT) register axiom-ml localhost 5561 120; \
-		echo "  🎯 Registrando axiom-scheduler en cluster..."; \
-		ETCD_ENDPOINTS="$(ETCD_CLUSTER_ENDPOINTS)" $(SERVICE_DISCOVERY_SCRIPT) register axiom-scheduler localhost 5561 120; \
-		echo "  🛡️  Registrando axiom-firewall en cluster..."; \
-		ETCD_ENDPOINTS="$(ETCD_CLUSTER_ENDPOINTS)" $(SERVICE_DISCOVERY_SCRIPT) register axiom-firewall localhost 5562 120; \
-		echo "  📊 Registrando axiom-dashboard en cluster..."; \
-		ETCD_ENDPOINTS="$(ETCD_CLUSTER_ENDPOINTS)" $(SERVICE_DISCOVERY_SCRIPT) register axiom-dashboard localhost 8080 120; \
-		echo "$(GREEN)✅ Servicios V3.1 registrados en cluster HA$(NC)"; \
-	else \
-		echo "$(RED)❌ Cluster etcd no disponible$(NC)"; \
-		exit 1; \
 	fi
 
 # =============================================================================
-# SETUP Y CONFIGURACIÓN (Existente pero mejorado)
+# SETUP Y CONFIGURACIÓN
 # =============================================================================
 setup:
 	@echo "$(BLUE)🔧 Configurando entorno virtual V3.1 + Distribuido...$(NC)"
@@ -948,7 +544,7 @@ install: setup
 	@echo "$(GREEN)✅ Dependencias instaladas$(NC)"
 
 # =============================================================================
-# SISTEMA V3.1 EVOLUTIVO (Existente - sin cambios)
+# SISTEMA V3.1 EVOLUTIVO
 # =============================================================================
 start_v31: install verify-protobuf-compiled-v31 create-configs-v31 stop
 	@echo "$(GREEN)🚀 Iniciando Sistema Autoinmune Digital V3.1 EVOLUTIVO...$(NC)"
@@ -1010,7 +606,7 @@ start_v31: install verify-protobuf-compiled-v31 create-configs-v31 stop
 	@$(MAKE) status_v31
 
 # =============================================================================
-# PARADAS (NUCLEAR MEJORADO)
+# PARADAS
 # =============================================================================
 stop:
 	@echo "$(YELLOW)🛑 Deteniendo sistemas (V3.1 + demo + distribuido)...$(NC)"
@@ -1023,26 +619,16 @@ stop:
 	@-if [ -f $(EVOLUTIONARY_SNIFFER_PID_V31) ]; then echo "🕵️  Deteniendo Evolutionary Sniffer V3.1..."; kill $$(cat $(EVOLUTIONARY_SNIFFER_PID_V31)) 2>/dev/null || true; sudo kill $$(cat $(EVOLUTIONARY_SNIFFER_PID_V31)) 2>/dev/null || true; rm -f $(EVOLUTIONARY_SNIFFER_PID_V31); fi
 	@-if [ -f $(FIREWALL_PID_V31) ]; then echo "🛡️  Deteniendo Firewall V3.1..."; kill $$(cat $(FIREWALL_PID_V31)) 2>/dev/null || true; rm -f $(FIREWALL_PID_V31); fi
 
-	# Detener PIDs Demo
-	@-if [ -f $(DASHBOARD_PID_DEMO) ]; then echo "📊 Deteniendo Dashboard Demo..."; kill $$(cat $(DASHBOARD_PID_DEMO)) 2>/dev/null || true; rm -f $(DASHBOARD_PID_DEMO); fi
-	@-if [ -f $(ML_PID_DEMO) ]; then echo "🤖 Deteniendo ML Demo..."; kill $$(cat $(ML_PID_DEMO)) 2>/dev/null || true; rm -f $(ML_PID_DEMO); fi
-	@-if [ -f $(GEOIP_PID_DEMO) ]; then echo "🌍 Deteniendo GeoIP Demo..."; kill $$(cat $(GEOIP_PID_DEMO)) 2>/dev/null || true; rm -f $(GEOIP_PID_DEMO); fi
-	@-if [ -f $(PROMISCUOUS_PID_DEMO) ]; then echo "🕵️  Deteniendo Promiscuous Demo..."; kill $$(cat $(PROMISCUOUS_PID_DEMO)) 2>/dev/null || true; sudo kill $$(cat $(PROMISCUOUS_PID_DEMO)) 2>/dev/null || true; rm -f $(PROMISCUOUS_PID_DEMO); fi
-	@-if [ -f $(FIREWALL_PID_DEMO) ]; then echo "🛡️  Deteniendo Firewall Demo..."; kill $$(cat $(FIREWALL_PID_DEMO)) 2>/dev/null || true; rm -f $(FIREWALL_PID_DEMO); fi
-
 	# pkill por patrón
 	@-pkill -f "dashboard_v31\|evolutionary_sniffer_v31\|geoip_enricher_v31\|ml_detector_tricapa_v31\|scheduler-firewall\|simple_firewall_agent_v31" 2>/dev/null || true
-	@-pkill -f "promiscuous_agent\|geoip_enricher\|lightweight_ml_detector\|real_zmq_dashboard\|simple_firewall_agent" 2>/dev/null || true
-	@-sudo pkill -f "evolutionary_sniffer_v31\|promiscuous_agent" 2>/dev/null || true
+	@-sudo pkill -f "evolutionary_sniffer_v31" 2>/dev/null || true
 
-	@echo "$(GREEN)✅ Sistemas V3.1 + demo detenidos$(NC)"
+	@echo "$(GREEN)✅ Sistemas V3.1 detenidos$(NC)"
 	@echo "$(YELLOW)💡 Para detener backbone distribuido: make dist-stop$(NC)"
 
 stop-nuclear:
-	@echo "$(RED)☢️  PARADA NUCLEAR ULTRA - TODO EL ECOSISTEMA ☢️$(NC)"
-	@echo "$(RED)================================================$(NC)"
-	@echo "$(RED)⚠️  EXTERMINACIÓN: V3.1 + Demo + Distribuido$(NC)"
-	@echo ""
+	@echo "$(RED)☢️  PARADA NUCLEAR - TODO EL ECOSISTEMA ☢️$(NC)"
+	@echo "$(RED)===========================================$(NC)"
 
 	# Detener sistemas normales primero
 	@$(MAKE) stop 2>/dev/null || true
@@ -1069,7 +655,7 @@ stop-nuclear:
 	@echo "$(GREEN)Todo el ecosistema eliminado - listo para reinicio$(NC)"
 
 # =============================================================================
-# MONITORIZACIÓN INTEGRADA
+# MONITORIZACIÓN
 # =============================================================================
 status_v31:
 	@echo "$(CYAN)📊 Estado Sistema V3.1 Evolutivo$(NC)"
@@ -1092,8 +678,57 @@ status_v31:
 		echo "$(CYAN)🌐 Backbone Distribuido: $(YELLOW)⚠️  No disponible$(NC)"; \
 	fi
 
+monitor_v31:
+	@echo "$(CYAN)🔄 Iniciando monitor V3.1 avanzado...$(NC)"
+	@if [ -f "$(MONITOR_SCRIPT_V31)" ]; then \
+		chmod +x $(MONITOR_SCRIPT_V31); \
+		$(MONITOR_SCRIPT_V31); \
+	else \
+		echo "$(YELLOW)⚠️  Monitor V3.1 no encontrado en $(MONITOR_SCRIPT_V31)$(NC)"; \
+		echo "$(BLUE)💡 Usando monitor básico integrado...$(NC)"; \
+		while true; do \
+			clear; \
+			echo "$(CYAN)📊 Monitor V3.1 + Distribuido - $(date)$(NC)"; \
+			echo "$(CYAN)===========================================$(NC)"; \
+			$(MAKE) -s status_v31; \
+			echo ""; \
+			echo "$(CYAN)📊 Servicios Distribuidos:$(NC)"; \
+			if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+				$(SERVICE_DISCOVERY_SCRIPT) discover 2>/dev/null | head -10; \
+			else \
+				echo "  $(YELLOW)⚠️  Backbone no disponible$(NC)"; \
+			fi; \
+			echo ""; \
+			echo "$(YELLOW)Presiona Ctrl+C para salir$(NC)"; \
+			sleep 3; \
+		done \
+	fi
+
+logs-v31:
+	@echo "$(CYAN)📋 Logs Sistema V3.1$(NC)"
+	@echo "$(CYAN)====================$(NC)"
+	@if [ -f $(EVOLUTIONARY_SNIFFER_LOG_V31) ]; then echo "$(YELLOW)=== 🕵️  Evolutionary Sniffer V3.1 ===$(NC)"; tail -10 $(EVOLUTIONARY_SNIFFER_LOG_V31); echo ""; fi
+	@if [ -f $(GEOIP_LOG_V31) ]; then echo "$(YELLOW)=== 🌍 GeoIP Enricher V3.1 ===$(NC)"; tail -10 $(GEOIP_LOG_V31); echo ""; fi
+	@if [ -f $(ML_TRICAPA_LOG_V31) ]; then echo "$(YELLOW)=== 🤖 ML Detector Tricapa V3.1 ===$(NC)"; tail -10 $(ML_TRICAPA_LOG_V31); echo ""; fi
+	@if [ -f $(SCHEDULER_LOG) ]; then echo "$(YELLOW)=== 🎯 Scheduler Firewall ===$(NC)"; tail -10 $(SCHEDULER_LOG); echo ""; fi
+	@if [ -f $(FIREWALL_LOG_V31) ]; then echo "$(YELLOW)=== 🛡️  Firewall Agent V3.1 ===$(NC)"; tail -10 $(FIREWALL_LOG_V31); echo ""; fi
+	@if [ -f $(DASHBOARD_LOG_V31) ]; then echo "$(YELLOW)=== 📊 Dashboard V3.1 ===$(NC)"; tail -10 $(DASHBOARD_LOG_V31); fi
+
+	# Logs distribuidos
+	@if [ -f $(ETCD_LOG_DIR)/etcd.log ]; then echo ""; echo "$(YELLOW)=== 🗂️  etcd Backbone ===$(NC)"; tail -5 $(ETCD_LOG_DIR)/etcd.log; fi
+
 # =============================================================================
-# COMANDOS RÁPIDOS MEJORADOS
+# UTILIDADES Y DASHBOARDS
+# =============================================================================
+show-dashboard:
+	@echo "$(BLUE)🌐 Abriendo dashboard...$(NC)"
+	@echo "$(YELLOW)V3.1 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+	@which open >/dev/null && open http://localhost:$(DASHBOARD_WEB_PORT) || \
+       which xdg-open >/dev/null && xdg-open http://localhost:$(DASHBOARD_WEB_PORT) || \
+       echo "💡 Abrir manualmente: http://localhost:$(DASHBOARD_WEB_PORT)"
+
+# =============================================================================
+# COMANDOS RÁPIDOS
 # =============================================================================
 quick_v31: setup install setup-perms create-configs-v31 compile-protobuf-v31 start_v31 show-dashboard
 	@echo ""
@@ -1139,10 +774,6 @@ verify-protobuf-compiled-v31:
 		$(MAKE) compile-protobuf-v31; \
 	fi
 
-check-protobuf-v31:
-	@echo "$(BLUE)🔍 Verificando protobuf V3.1...$(NC)"
-	@$(MAKE) verify-protobuf-compiled-v31
-
 # =============================================================================
 # CONFIGURACIONES V3.1
 # =============================================================================
@@ -1182,224 +813,6 @@ verify-configs-v31:
 			echo "  ❌ $config falta"; \
 		fi \
 	done
-
-# =============================================================================
-# SISTEMA DEMO (ENSEÑANZA)
-# =============================================================================
-start: install create-configs-demo stop
-	@echo "$(BLUE)🚀 Iniciando Sistema DEMO (Enseñanza)...$(NC)"
-	@echo "$(BLUE)======================================$(NC)"
-	@echo "$(YELLOW)💡 Versión estable para demostración y enseñanza$(NC)"
-	@echo ""
-
-	@echo "$(BLUE)📁 Verificando configuraciones demo...$(NC)"
-	@test -f $(FIREWALL_CONFIG_DEMO) || (mkdir -p $(CONFIG_DIR) && echo '{"agent_id": "firewall_demo_001", "enabled": true, "log_level": "INFO"}' > $(FIREWALL_CONFIG_DEMO))
-	@test -f $(DASHBOARD_CONFIG_DEMO) || (mkdir -p $(CONFIG_DIR) && echo '{"port": 8080, "host": "localhost", "debug": false}' > $(DASHBOARD_CONFIG_DEMO))
-
-	@echo "$(BLUE)1. 🛡️  Firewall Agent Demo...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT_DEMO) $(FIREWALL_CONFIG_DEMO) $(FIREWALL_RULES_DEMO) > $(LOGS_DIR)/firewall_demo.log 2>&1 & echo $! > $(FIREWALL_PID_DEMO)
-	@sleep 2
-
-	@echo "$(BLUE)2. 🕵️  Promiscuous Agent Demo...$(NC)"
-	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT_DEMO) $(PROMISCUOUS_CONFIG_DEMO) > $(LOGS_DIR)/promiscuous_demo.log 2>&1 & echo $! > $(PROMISCUOUS_PID_DEMO)'
-	@sleep 2
-
-	@echo "$(BLUE)3. 🌍 GeoIP Enricher Demo...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER_DEMO) $(GEOIP_CONFIG_DEMO) > $(LOGS_DIR)/geoip_demo.log 2>&1 & echo $! > $(GEOIP_PID_DEMO)
-	@sleep 2
-
-	@echo "$(BLUE)4. 🤖 ML Detector Demo...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR_DEMO) $(ML_CONFIG_DEMO) > $(LOGS_DIR)/ml_demo.log 2>&1 & echo $! > $(ML_PID_DEMO)
-	@sleep 2
-
-	@echo "$(BLUE)5. 📊 Dashboard Demo...$(NC)"
-	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD_DEMO) $(DASHBOARD_CONFIG_DEMO) $(FIREWALL_RULES_DEMO) > $(LOGS_DIR)/dashboard_demo.log 2>&1 & echo $! > $(DASHBOARD_PID_DEMO)
-	@sleep 3
-
-	@echo ""
-	@echo "$(GREEN)✅ Sistema DEMO iniciado$(NC)"
-	@echo "$(YELLOW)📊 Dashboard Demo: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
-	@$(MAKE) status
-
-create-configs-demo:
-	@echo "$(BLUE)📁 Creando configuraciones demo...$(NC)"
-	@mkdir -p $(CONFIG_DIR)
-	@test -f $(PROMISCUOUS_CONFIG_DEMO) || echo '{"interface": "en0", "capture_filter": "", "output_port": 5559}' > $(PROMISCUOUS_CONFIG_DEMO)
-	@test -f $(GEOIP_CONFIG_DEMO) || echo '{"input_port": 5559, "output_port": 5560}' > $(GEOIP_CONFIG_DEMO)
-	@test -f $(ML_CONFIG_DEMO) || echo '{"input_port": 5560, "output_port": 5561, "models_path": "models/production/"}' > $(ML_CONFIG_DEMO)
-	@test -f $(DASHBOARD_CONFIG_DEMO) || echo '{"port": 8080, "host": "localhost", "debug": false}' > $(DASHBOARD_CONFIG_DEMO)
-	@test -f $(FIREWALL_CONFIG_DEMO) || echo '{"agent_id": "firewall_demo", "enabled": true}' > $(FIREWALL_CONFIG_DEMO)
-	@test -f $(FIREWALL_RULES_DEMO) || echo '{"firewall_rules": {"rules": [], "manual_actions": {}}}' > $(FIREWALL_RULES_DEMO)
-
-status:
-	@echo "$(BLUE)📊 Estado Sistema Demo$(NC)"
-	@echo "$(BLUE)=====================$(NC)"
-	@pgrep -f "$(FIREWALL_AGENT_DEMO)" >/dev/null && echo "  🛡️  Firewall Agent Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🛡️  Firewall Agent Demo: $(RED)⭕ Detenido$(NC)"
-	@pgrep -f "promiscuous_agent" >/dev/null && echo "  🕵️  Promiscuous Agent Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🕵️  Promiscuous Agent Demo: $(RED)⭕ Detenido$(NC)"
-	@pgrep -f "geoip_enricher" >/dev/null && echo "  🌍 GeoIP Enricher Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🌍 GeoIP Enricher Demo: $(RED)⭕ Detenido$(NC)"
-	@pgrep -f "lightweight_ml_detector" >/dev/null && echo "  🤖 ML Detector Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🤖 ML Detector Demo: $(RED)⭕ Detenido$(NC)"
-	@pgrep -f "real_zmq_dashboard" >/dev/null && echo "  📊 Dashboard Demo: $(GREEN)✅ Ejecutándose$(NC) $(YELLOW)(http://localhost:$(DASHBOARD_WEB_PORT))$(NC)" || echo "  📊 Dashboard Demo: $(RED)⭕ Detenido$(NC)"
-
-# =============================================================================
-# MONITORIZACIÓN AVANZADA
-# =============================================================================
-monitor_v31:
-	@echo "$(CYAN)🔄 Iniciando monitor V3.1 avanzado...$(NC)"
-	@if [ -f "$(MONITOR_SCRIPT_V31)" ]; then \
-		chmod +x $(MONITOR_SCRIPT_V31); \
-		$(MONITOR_SCRIPT_V31); \
-	else \
-		echo "$(YELLOW)⚠️  Monitor V3.1 no encontrado en $(MONITOR_SCRIPT_V31)$(NC)"; \
-		echo "$(BLUE)💡 Usando monitor básico integrado...$(NC)"; \
-		while true; do \
-			clear; \
-			echo "$(CYAN)📊 Monitor V3.1 + Distribuido - $(date)$(NC)"; \
-			echo "$(CYAN)===========================================$(NC)"; \
-			$(MAKE) -s status_v31; \
-			echo ""; \
-			echo "$(CYAN)📊 Servicios Distribuidos:$(NC)"; \
-			if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
-				$(SERVICE_DISCOVERY_SCRIPT) discover 2>/dev/null | head -10; \
-			else \
-				echo "  $(YELLOW)⚠️  Backbone no disponible$(NC)"; \
-			fi; \
-			echo ""; \
-			echo "$(YELLOW)Presiona Ctrl+C para salir$(NC)"; \
-			sleep 3; \
-		done \
-	fi
-
-monitor:
-	@echo "$(BLUE)🔄 Iniciando monitor demo...$(NC)"
-	@watch -n 3 "$(MAKE) -s status"
-
-logs-v31:
-	@echo "$(CYAN)📋 Logs Sistema V3.1$(NC)"
-	@echo "$(CYAN)====================$(NC)"
-	@if [ -f $(EVOLUTIONARY_SNIFFER_LOG_V31) ]; then echo "$(YELLOW)=== 🕵️  Evolutionary Sniffer V3.1 ===$(NC)"; tail -10 $(EVOLUTIONARY_SNIFFER_LOG_V31); echo ""; fi
-	@if [ -f $(GEOIP_LOG_V31) ]; then echo "$(YELLOW)=== 🌍 GeoIP Enricher V3.1 ===$(NC)"; tail -10 $(GEOIP_LOG_V31); echo ""; fi
-	@if [ -f $(ML_TRICAPA_LOG_V31) ]; then echo "$(YELLOW)=== 🤖 ML Detector Tricapa V3.1 ===$(NC)"; tail -10 $(ML_TRICAPA_LOG_V31); echo ""; fi
-	@if [ -f $(SCHEDULER_LOG) ]; then echo "$(YELLOW)=== 🎯 Scheduler Firewall ===$(NC)"; tail -10 $(SCHEDULER_LOG); echo ""; fi
-	@if [ -f $(FIREWALL_LOG_V31) ]; then echo "$(YELLOW)=== 🛡️  Firewall Agent V3.1 ===$(NC)"; tail -10 $(FIREWALL_LOG_V31); echo ""; fi
-	@if [ -f $(DASHBOARD_LOG_V31) ]; then echo "$(YELLOW)=== 📊 Dashboard V3.1 ===$(NC)"; tail -10 $(DASHBOARD_LOG_V31); fi
-
-	# Logs distribuidos
-	@if [ -f $(ETCD_LOG_DIR)/etcd.log ]; then echo ""; echo "$(YELLOW)=== 🗂️  etcd Backbone ===$(NC)"; tail -5 $(ETCD_LOG_DIR)/etcd.log; fi
-
-logs:
-	@echo "$(BLUE)📋 Logs Sistema (Todas las Versiones)$(NC)"
-	@echo "$(BLUE)==================================$(NC)"
-	@$(MAKE) logs-v31
-	@echo ""
-	@echo "$(BLUE)📋 Logs Demo:$(NC)"
-	@if [ -d "$(LOGS_DIR)" ]; then \
-		for log in $(LOGS_DIR)/*demo*.log; do \
-			if [ -f "$log" ]; then \
-				echo "$(YELLOW)=== $(basename $log) ===$(NC)"; \
-				tail -5 $log; \
-				echo ""; \
-			fi \
-		done \
-	fi
-
-# =============================================================================
-# UTILIDADES Y DASHBOARDS
-# =============================================================================
-show-dashboard:
-	@echo "$(BLUE)🌐 Abriendo dashboard...$(NC)"
-	@echo "$(YELLOW)V3.1 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
-	@which open >/dev/null && open http://localhost:$(DASHBOARD_WEB_PORT) || \
-       which xdg-open >/dev/null && xdg-open http://localhost:$(DASHBOARD_WEB_PORT) || \
-       echo "💡 Abrir manualmente: http://localhost:$(DASHBOARD_WEB_PORT)"
-
-show-architecture-v31:
-	@echo "$(CYAN)🏗️ Arquitectura V3.1 Evolutiva + Distribuida + HA$(NC)"
-	@echo "$(CYAN)================================================$(NC)"
-	@echo ""
-	@echo "$(YELLOW)🏛️ BACKBONE DISTRIBUIDO HA:$(NC)"
-	@echo "  ┌─────────────────────────────────────────────┐"
-	@echo "  │           etcd Cluster HA (Quorum)         │"
-	@echo "  │  🗂️ Node1:2379  🗂️ Node2:2389  🗂️ Node3:2399  │"
-	@echo "  │         Leader Election + Consensus        │"
-	@echo "  └─────────────────┬───────────────────────────┘"
-	@echo "                    │ Service Discovery + Config"
-	@echo "  ┌─────────────────┴───────────────────────────┐"
-	@echo "  │           Load Balancer / Proxy             │"
-	@echo "  └─────────────────┬───────────────────────────┘"
-	@echo ""
-	@echo "$(YELLOW)📡 PIPELINE V3.1:$(NC)"
-	@echo "  🕵️  $(EVOLUTIONARY_SNIFFER_V31) → Puerto $(CAPTURE_PORT_V31)"
-	@echo "  ↓"
-	@echo "  🌍 $(GEOIP_ENRICHER_V31) → Puerto $(GEOIP_PORT_V31)"
-	@echo "  ↓"
-	@echo "  🤖 $(ML_DETECTOR_TRICAPA_V31) → Puerto $(ML_PORT_V31) + $(DASHBOARD_PORT_V31)"
-	@echo "  ↓"
-	@echo "  🎯 $(SCHEDULER_FIREWALL) → Orquestación"
-	@echo "  ↓"
-	@echo "  🛡️  $(FIREWALL_AGENT_V31) → Puerto $(FIREWALL_PORT_V31)"
-	@echo "  ↓"
-	@echo "  📊 $(DASHBOARD_V31) → Puerto $(DASHBOARD_WEB_PORT)"
-	@echo ""
-	@echo "$(YELLOW)🔄 FLUJO INTEGRADO HA:$(NC)"
-	@echo "  ┌──────────────────────────────────────────┐"
-	@echo "  │  etcd Cluster HA ← Service Discovery ←   │"
-	@echo "  │  ↓ Auto-registration with TTL           │"
-	@echo "  │  ↓ Health checks + Leader election      │"
-	@echo "  │  ↓ Consensus + Fault tolerance          │"
-	@echo "  └──────────────────────────────────────────┘"
-	@echo "               ↓"
-	@echo "  Evolutionary Sniffer → GeoIP → ML Tricapa → Scheduler"
-	@echo "               ↓                                ↓"
-	@echo "         Dashboard V3.1 ←──────────────→ Firewall Agent"
-	@echo ""
-	@echo "$(YELLOW)🌟 CARACTERÍSTICAS HA:$(NC)"
-	@echo "  • Auto-registro de servicios en cluster etcd"
-	@echo "  • Health checks con consensus distribuido"
-	@echo "  • Leader election automática"
-	@echo "  • Tolerancia a fallos (N-1 nodos pueden fallar)"
-	@echo "  • Service discovery distribuido y replicado"
-	@echo "  • Quorum-based decision making"
-	@echo "  • Split-brain protection"
-	@echo "  • Auto-recovery de nodos"
-	@echo ""
-	@echo "$(YELLOW)🌐 PUERTOS DEL CLUSTER:$(NC)"
-	@echo "  • Nodo 1: 2379 (client), 2380 (peer)"
-	@echo "  • Nodo 2: 2389 (client), 2390 (peer)"
-	@echo "  • Nodo 3: 2399 (client), 2400 (peer)"
-	@echo "  • Load Balancer: localhost:2379,localhost:2389,localhost:2399"
-
-show-roadmap-v31:
-	@echo "$(CYAN)🔮 Roadmap V3.1 Evolutivo + Distribuido + HA$(NC)"
-	@echo "$(CYAN)=============================================$(NC)"
-	@echo ""
-	@echo "$(GREEN)✅ COMPLETADO:$(NC)"
-	@echo "  • 🏗️  Pipeline V3.1 completamente funcional"
-	@echo "  • 📊 Dashboard V3.1 operativo (1600+ eventos)"
-	@echo "  • 🤖 ML Tricapa con ensemble confidence"
-	@echo "  • 🔒 Protobuf V3.1 con coordenadas duales"
-	@echo "  • 🛡️  Firewall integrado click-to-block"
-	@echo "  • 🗂️  etcd backbone para service discovery"
-	@echo "  • 📝 Auto-registro de servicios con TTL"
-	@echo "  • 👀 Monitoreo distribuido en tiempo real"
-	@echo "  • 🌐 UI web para etcd (puerto 8081)"
-	@echo "  • 🏛️  Cluster etcd HA con quorum (3 nodos)"
-	@echo "  • 💀 Tolerancia a fallos probada"
-	@echo ""
-	@echo "$(YELLOW)🔄 EN DESARROLLO:$(NC)"
-	@echo "  • 🔐 TLS + autenticación para cluster etcd"
-	@echo "  • 🎫 Token management con JWT + TTL"
-	@echo "  • ⚖️  Load balancing inteligente"
-	@echo "  • 📈 Advanced analytics distribuidas"
-	@echo "  • 🔄 Auto-scaling basado en carga del cluster"
-	@echo ""
-	@echo "$(BLUE)🎯 PRÓXIMO:$(NC)"
-	@echo "  • 🚀 Kubernetes deployment con Helm"
-	@echo "  • 🤖 Auto-reentrenamiento ML distribuido"
-	@echo "  • 📱 Mobile dashboard"
-	@echo "  • 🔐 Advanced encryption end-to-end"
-	@echo "  • 🌍 Multi-region deployment"
-	@echo "  • 🎯 Cross-datacenter replication"
-	@echo "  • 📊 Observability stack completo (Prometheus + Grafana)"
 
 # =============================================================================
 # VERIFICACIONES Y PERMISOS
@@ -1458,10 +871,6 @@ restart: stop
 	@sleep 3
 	@$(MAKE) start_v31
 
-restart-distributed: stop-nuclear
-	@sleep 3
-	@$(MAKE) dist-dev
-
 clean:
 	@echo "$(YELLOW)🧹 Limpiando sistema completo...$(NC)"
 	@$(MAKE) stop 2>/dev/null || true
@@ -1475,23 +884,14 @@ clean:
 	@echo "$(GREEN)✅ Limpieza completa completada$(NC)"
 
 # =============================================================================
-# COMANDOS RÁPIDOS ADICIONALES
+# COMANDOS ADICIONALES
 # =============================================================================
-quick: setup install setup-perms start show-dashboard
-	@echo ""
-	@echo "$(BLUE)✅ QUICK START DEMO COMPLETADO$(NC)"
-	@echo "$(BLUE)==============================$(NC)"
-	@echo "$(YELLOW)Sistema demo para enseñanza listo!$(NC)"
-
 debug:
 	@echo "$(PURPLE)🔧 Modo Debug Distribuido$(NC)"
 	@echo "$(PURPLE)==========================$(NC)"
 	@echo ""
 	@echo "$(CYAN)📊 Estado V3.1:$(NC)"
 	@$(MAKE) status_v31
-	@echo ""
-	@echo "$(CYAN)📊 Estado Demo:$(NC)"
-	@$(MAKE) status
 	@echo ""
 	@echo "$(CYAN)🗂️  Estado Distribuido:$(NC)"
 	@$(MAKE) dist-status
@@ -1550,15 +950,3 @@ test:
 	else \
 		echo "  $(YELLOW)⚠️  etcd no disponible - saltando tests distribuidos$(NC)"; \
 	fi
-
-# =============================================================================
-# COMANDOS DE CONTROL ESPECÍFICOS
-# =============================================================================
-start-bg: start_v31
-	@echo "$(GREEN)🚀 Sistema V3.1 iniciado en background$(NC)"
-
-restart-v31:
-	@echo "$(YELLOW)🔄 Reiniciando solo V3.1...$(NC)"
-	@$(MAKE) stop 2>/dev/null || true
-	@sleep 2
-	@$(MAKE) start_v31
