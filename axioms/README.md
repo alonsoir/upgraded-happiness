@@ -316,4 +316,59 @@ python3 autonomous-retrainer-daemon.py ./config/config_autonomous_retrainer.json
 - ✅ **Escalabilidad**: Trainers especializados
 - ✅ **Robustez**: Auto-recuperación y monitoring
 
+- Sabado 16 de Agosto.
+
+Lo esencial para avanzar desde hoy
+“Sweet spot” de modelos (sin GPU infinita)
+
+Champion/Challenger: en laboratorio, cada nuevo modelo compite contra el actual; solo “promociona” si supera umbrales fijados.
+Métricas fijas: F1 y PR-AUC por fase (recon, intrusión, lateral, acción). Nada de mover la portería.
+
+Regularización simple y validación temporal: CV estratificada + time-based split para evitar overfit a una campaña.
+
+Ciclo axiomas con gobernanza mínima
+
+Estados: draft → candidate → active → deprecated.
+
+Pruebas: un axioma pasa a active si mejora recall sin degradar precision > X% (define X=2–3% al inicio).
+
+Coherencia: versionado + checksum del conjunto de axiomas activo; los modelos guardan el axioms_checksum con el que fueron entrenados.
+
+Promoción a producción (cuando toque)
+
+Puerta de calidad: 1) métricas ≥ umbral, 2) pruebas de estrés con adversario IA, 3) validación humana rápida (15 min checklist).
+
+Despliegue canario: 10–20% del tráfico espejo primero; si OK, 100%.
+
+Coste computacional controlado
+
+Entrenamiento “batch nocturno” en máquinas puntuales (spot/preemptibles) y inferencia ligera (RF/GBDT) en producción.
+
+Dataset rolling: ventanas deslizantes (p.ej. 30–60 días) + re-weighting de clases raras. Nada de crecer infinito.
+
+Telemetría de “salud” del sistema
+
+Drift: PSI/KS por feature clave; alerta si PSI>0.2.
+
+Tasa de falsos positivos por segmento (externo/interno) y por axioma.
+
+Tiempo de reacción del Fast Ejector (p95).
+
+Lo que define tu “secreto industrial”
+
+Adversarios IA + variación sintética antes de producción.
+
+Axiomas que sobreviven al tiempo (selección natural, no ideología).
+
+Malla de clasificadores (global + normal externo + interno) con champion/challenger continuo.
+
+Kill switch operativo: si algo se desvía, vuelves al champion estable en segundos.
+
+Mini-roadmap realista (con lo que ya tenéis)
+[] Fijar umbral de promoción (p.ej. F1 global +2% sin perder >1% precision).
+[] Definir schema de axiomas (YAML/Proto) con estados y checksum.
+[] Implementar canal canario (mirror traffic) en k3s para pruebas futuras.
+[] Añadir PSI y PR-AUC por fase al dashboard (telemetría de ciencia, no solo de sistemas).
+[] Script simple de champion/challenger que compare métricas y emita “promote/hold”.
+
 > *"Un sistema que aprende de sí mismo, se mejora a sí mismo, y tiende asintóticamente hacia la perfección matemática en la detección de amenazas de seguridad."*
