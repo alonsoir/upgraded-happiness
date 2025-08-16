@@ -753,7 +753,8 @@ class EvolutionarySniffer:
         # 📄 Cargar configuración JSON
         self.config = self._load_config_strict(config_file)
         self.config_file = config_file
-
+        # 🔐 Crypto wrapper (inicialmente None)
+        self.crypto_wrapper = None
         # 🏷️ Identidad distribuida
         self.node_id = self.config["node_id"]
         self.process_id = os.getpid()
@@ -973,6 +974,20 @@ class EvolutionarySniffer:
             connection_info = f"CONNECT to {connect_address}"
         else:
             raise ValueError(f"❌ Modo desconocido: {mode}")
+
+        # En setup_socket() después de crear socket
+        if self.config.get("crypto", {}).get("enabled", False):
+            from crypto.crypto_zmq_v31 import CryptoZMQV31
+
+            self.crypto_wrapper = CryptoZMQV31(
+                component_name=self.node_id,
+                config_path=self.config["crypto"]["config_file"]
+            )
+
+            self.socket = self.crypto_wrapper.wrap_socket_send(self.socket)
+            self.logger.info("🔐 Crypto wrapper enabled")
+        else:
+            self.logger.info("🔓 Crypto disabled")
 
         self.logger.info(f"🔌 ZeroMQ configurado: {connection_info}")
         self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
@@ -1458,6 +1473,14 @@ class EvolutionarySniffer:
         """Cierre graceful del sniffer v3.1"""
         self.running = False
         self.stop_event.set()
+
+        # 🔐 Close crypto wrapper
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 Crypto wrapper closed")
+            except Exception as e:
+                self.logger.error(f"❌ Error closing crypto wrapper: {e}")
 
         # Stats finales
         runtime = time.time() - self.stats['start_time']

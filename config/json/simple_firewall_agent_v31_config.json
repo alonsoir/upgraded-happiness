@@ -393,5 +393,30 @@
     "human_oversight_guaranteed": "Dashboard always receives copies of all actions",
     "command_origin_tracking": "Every action tracked to scheduler or dashboard origin",
     "protobuf_v31_native": "Native node_id and timestamp fields for full traceability"
-  }
+  },
+    "_comment_crypto": "🔐 CRYPTO - Dual communication cifrada (MÁXIMA SEGURIDAD)",
+    "crypto": {
+      "enabled": true,
+      "role": "receiver_sender",
+      "config_file": "config/crypto/crypto_config_v31.json",
+      "channels": {
+        "scheduler_commands": {
+          "decrypt": true,
+          "description": "Descifrar comandos del scheduler (CRÍTICO)"
+        },
+        "scheduler_responses": {
+          "encrypt": true,
+          "description": "Cifrar respuestas hacia scheduler"
+        },
+        "dashboard_commands": {
+          "decrypt": true,
+          "description": "Descifrar comandos del dashboard (oversight humano)"
+        },
+        "dashboard_responses": {
+          "encrypt": true,
+          "description": "Cifrar respuestas hacia dashboard"
+        }
+      },
+      "component_crypto_id": "simple_firewall_agent_001"
+    }
 }

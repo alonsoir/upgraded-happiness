@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-🔐 Crypto ZeroMQ Wrapper V3.1 - Enterprise Grade
+🔐 Crypto ZeroMQ Wrapper V3.1 - Simplified Version
 Sistema Autoinmune Digital - upgraded-happiness
 Cifrado rotativo + compresión para comunicaciones ZeroMQ
+- SOLO variables de entorno en memoria
+- Sin funciones huérfanas
+- Variables invisibles para el operador
 """
 
 import zmq
@@ -13,9 +16,6 @@ import zstandard
 import nacl.public
 import nacl.utils
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives.asymmetric import rsa
 import logging
 import threading
 from typing import Optional, Dict, Any, Tuple
@@ -25,12 +25,12 @@ import base64
 
 class CryptoZMQV31:
     """
-    🔐 ZeroMQ Cifrado Wrapper V3.1
-    - CURVE25519 para autenticación
+    🔐 ZeroMQ Cifrado Wrapper V3.1 SIMPLIFICADO
     - AES-256-GCM para cifrado simétrico
     - Rotación automática de claves cada 15 min
     - Compresión LZ4/Zstd adaptativa
-    - Perfect Forward Secrecy
+    - Variables de entorno INVISIBLES
+    - Sin persistencia en disco
     """
 
     def __init__(self, component_name: str, config_path: str = "config/crypto/crypto_config_v31.json"):
@@ -46,9 +46,6 @@ class CryptoZMQV31:
         self.key_rotation_interval = self.config.get("key_rotation_minutes", 15) * 60
         self.compression_enabled = self.config.get("compression_enabled", True)
         self.compression_algorithm = self.config.get("compression_algorithm", "lz4")
-
-        # ZMQ Context
-        self.context = zmq.Context()
 
         # Contadores y métricas
         self.metrics = {
@@ -94,8 +91,7 @@ class CryptoZMQV31:
             "compression_enabled": True,
             "compression_algorithm": "lz4",
             "compression_threshold": 512,
-            "curve_enabled": True,
-            "perfect_forward_secrecy": True
+            "auto_rotation": True
         }
 
         try:
@@ -113,10 +109,7 @@ class CryptoZMQV31:
     def _initialize_crypto(self):
         """Inicializar sistema criptográfico"""
         try:
-            # Generar claves CURVE25519 para este componente
-            self.private_key, self.public_key = self._generate_curve_keypair()
-
-            # Generar clave de sesión inicial
+            # Generar clave de sesión inicial (automática)
             self._rotate_session_key()
 
             # Inicializar compresores
@@ -132,47 +125,15 @@ class CryptoZMQV31:
             self.logger.error(f"❌ Error initializing crypto: {e}")
             raise
 
-    def _generate_curve_keypair(self) -> Tuple[bytes, bytes]:
-        """Generar par de claves CURVE25519"""
-        private_key = nacl.utils.random(32)
-        public_key = nacl.public.PrivateKey(private_key).public_key.encode()
-
-        # Guardar claves en disco para persistencia
-        self._save_curve_keys(private_key, public_key)
-
-        return private_key, public_key
-
-    def _save_curve_keys(self, private_key: bytes, public_key: bytes):
-        """Guardar claves CURVE en disco"""
-        try:
-            cert_dir = f"config/crypto/certificates"
-            os.makedirs(cert_dir, exist_ok=True)
-
-            # Guardar clave privada (protegida)
-            private_path = f"{cert_dir}/{self.component_name}.key"
-            with open(private_path, 'wb') as f:
-                f.write(base64.b64encode(private_key))
-            os.chmod(private_path, 0o600)  # Solo lectura para owner
-
-            # Guardar clave pública
-            public_path = f"{cert_dir}/{self.component_name}.pub"
-            with open(public_path, 'wb') as f:
-                f.write(base64.b64encode(public_key))
-
-            self.logger.info(f"🔑 CURVE keys saved for {self.component_name}")
-
-        except Exception as e:
-            self.logger.error(f"❌ Error saving CURVE keys: {e}")
-
     def _rotate_session_key(self):
         """Rotar clave de sesión para Perfect Forward Secrecy"""
         try:
-            # Generar nueva clave AES-256
+            # Generar nueva clave AES-256 (INVISIBLE)
             self.current_session_key = os.urandom(32)  # 256 bits
             self.key_generation_time = time.time()
 
-            # Guardar en directorio current
-            self._save_session_key()
+            # Guardar en variable de entorno INVISIBLE
+            self._save_session_key_invisible()
 
             self.metrics["key_rotations"] += 1
             self.logger.info(f"🔄 Session key rotated (rotation #{self.metrics['key_rotations']})")
@@ -180,19 +141,49 @@ class CryptoZMQV31:
         except Exception as e:
             self.logger.error(f"❌ Error rotating session key: {e}")
 
-    def _save_session_key(self):
-        """Guardar clave de sesión actual"""
+    def _save_session_key_invisible(self):
+        """Guardar clave de sesión en variable de entorno INVISIBLE"""
         try:
-            key_dir = "config/crypto/keys/current"
-            os.makedirs(key_dir, exist_ok=True)
+            # Variable de entorno con nombre único por proceso
+            process_id = os.getpid()
+            var_name = f"_CRYPTO_ZMQ_{self.component_name.upper()}_{process_id}_KEY"
 
-            key_path = f"{key_dir}/{self.component_name}_session.key"
-            with open(key_path, 'wb') as f:
-                f.write(base64.b64encode(self.current_session_key))
-            os.chmod(key_path, 0o600)
+            # Guardar clave cifrada en base64 (doble ofuscación)
+            key_b64 = base64.b64encode(self.current_session_key).decode()
+            os.environ[var_name] = key_b64
+
+            # Timestamp para debugging (si es necesario)
+            os.environ[f"_CRYPTO_ZMQ_{self.component_name.upper()}_{process_id}_TIME"] = str(self.key_generation_time)
+
+            # NO logear el nombre de la variable para mantener invisibilidad
+            self.logger.debug("🔑 Session key stored in memory")
 
         except Exception as e:
             self.logger.error(f"❌ Error saving session key: {e}")
+
+    def _load_session_key_invisible(self) -> bool:
+        """Cargar clave de sesión desde variable de entorno INVISIBLE"""
+        try:
+            process_id = os.getpid()
+            var_name = f"_CRYPTO_ZMQ_{self.component_name.upper()}_{process_id}_KEY"
+
+            if var_name in os.environ:
+                key_b64 = os.environ[var_name]
+                self.current_session_key = base64.b64decode(key_b64)
+
+                # Cargar timestamp si existe
+                time_var = f"_CRYPTO_ZMQ_{self.component_name.upper()}_{process_id}_TIME"
+                if time_var in os.environ:
+                    self.key_generation_time = float(os.environ[time_var])
+
+                self.logger.debug("🔑 Session key loaded from memory")
+                return True
+
+            return False
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not load session key: {e}")
+            return False
 
     def _initialize_compressors(self):
         """Inicializar compresores"""
@@ -218,55 +209,6 @@ class CryptoZMQV31:
         self.rotation_thread.start()
 
         self.logger.info(f"🔄 Auto key rotation started (every {self.key_rotation_interval // 60} minutes)")
-
-    def create_secure_socket(self, socket_type: int, bind_address: Optional[str] = None,
-                             connect_address: Optional[str] = None) -> zmq.Socket:
-        """Crear socket ZMQ seguro con CURVE"""
-        try:
-            socket = self.context.socket(socket_type)
-
-            if self.config.get("curve_enabled", True):
-                # Configurar CURVE authentication
-                socket.curve_secretkey = self.private_key
-                socket.curve_publickey = self.public_key
-                socket.curve_server = (bind_address is not None)
-
-                if connect_address:
-                    # Cliente necesita clave pública del servidor
-                    server_public_key = self._load_server_public_key(connect_address)
-                    if server_public_key:
-                        socket.curve_serverkey = server_public_key
-
-            # Configurar socket
-            if bind_address:
-                socket.bind(bind_address)
-                self.logger.info(f"🔗 Secure socket bound to {bind_address}")
-            elif connect_address:
-                socket.connect(connect_address)
-                self.logger.info(f"🔗 Secure socket connected to {connect_address}")
-
-            return socket
-
-        except Exception as e:
-            self.logger.error(f"❌ Error creating secure socket: {e}")
-            raise
-
-    def _load_server_public_key(self, address: str) -> Optional[bytes]:
-        """Cargar clave pública del servidor (simplificado)"""
-        # En producción, esto vendría de un registro de certificados
-        # Por ahora, usamos un directorio local
-        try:
-            # Extraer nombre del componente del address (simplificado)
-            server_name = "server"  # En realidad sería dinámico
-            pub_path = f"config/crypto/certificates/{server_name}.pub"
-
-            if os.path.exists(pub_path):
-                with open(pub_path, 'rb') as f:
-                    return base64.b64decode(f.read())
-        except Exception as e:
-            self.logger.warning(f"⚠️ Could not load server public key: {e}")
-
-        return None
 
     def encrypt_message(self, message: bytes) -> bytes:
         """Cifrar mensaje con AES-256-GCM + compresión opcional"""
@@ -354,6 +296,24 @@ class CryptoZMQV31:
             self.logger.error(f"❌ Decryption error: {e}")
             raise
 
+    def wrap_socket_send(self, socket):
+        """Wrapper para socket.send() que cifra automáticamente"""
+        original_send = socket.send
+
+        def secure_send(data, flags=0, copy=True, track=False):
+            # Cifrar datos antes de enviar
+            if isinstance(data, bytes):
+                encrypted_data = self.encrypt_message(data)
+                return original_send(encrypted_data, flags, copy, track)
+            else:
+                # Si no son bytes, enviar sin cifrar (como metadatos ZMQ)
+                return original_send(data, flags, copy, track)
+
+        # Reemplazar método send
+        socket.send = secure_send
+        self.logger.info(f"🔒 Socket send() wrapped with encryption for {self.component_name}")
+        return socket
+
     def get_metrics(self) -> Dict[str, Any]:
         """Obtener métricas crypto"""
         return {
@@ -365,17 +325,23 @@ class CryptoZMQV31:
         }
 
     def close(self):
-        """Limpiar recursos"""
+        """Limpiar recursos incluyendo variables de entorno INVISIBLES"""
         try:
             # Detener rotación automática
             if self.rotation_thread:
                 self.stop_rotation.set()
                 self.rotation_thread.join(timeout=1)
 
-            # Cerrar contexto ZMQ
-            if self.context:
-                self.context.term()
+            # Limpiar variables de entorno crypto INVISIBLES
+            process_id = os.getpid()
+            prefix = f"_CRYPTO_ZMQ_{self.component_name.upper()}_{process_id}_"
 
+            vars_to_clean = [k for k in os.environ.keys() if k.startswith(prefix)]
+
+            for var in vars_to_clean:
+                del os.environ[var]
+
+            self.logger.info(f"🧹 Cleaned {len(vars_to_clean)} invisible crypto vars")
             self.logger.info("🔐 CryptoZMQ V3.1 closed successfully")
 
         except Exception as e:

@@ -265,7 +265,6 @@
     "enable_distributed_feature_extraction": false,
     "_comment": "Características experimentales para futuras versiones"
   },
-
   "_comment_compatibility": "🚫 NO COMPATIBILITY - v3.1 ONLY",
   "compatibility": {
     "legacy_support": false,
@@ -273,5 +272,18 @@
     "forward_compatibility": true,
     "migration_mode": false,
     "_comment": "TODO O NADA - Solo v3.1 - Sin legacyware"
+  },
+  "_comment_crypto": "🔐 CRYPTO - Cifrado específico de este componente",
+  "crypto": {
+    "enabled": true,
+    "role": "sender",
+    "config_file": "config/crypto/crypto_config_v31.json",
+    "channels": {
+      "output": {
+        "encrypt": true,
+        "description": "Cifrar eventos hacia siguiente componente"
+      }
+    },
+    "component_crypto_id": "evolutionary_sniffer_v31_001"
   }
 }
