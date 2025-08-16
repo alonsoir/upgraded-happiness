@@ -439,5 +439,32 @@
       "Fleet health monitoring",
       "Nuclear broadcast operations"
     ]
+  },
+  "6_dashboard_v31_ADD": {
+    "_comment_crypto": "🔐 CRYPTO - ML events + Fleet management",
+    "crypto": {
+      "enabled": true,
+      "role": "receiver_sender",
+      "config_file": "config/crypto/crypto_config_v31.json",
+      "channels": {
+        "ml_events_input": {
+          "decrypt": true,
+          "socket_port": 5580,
+          "socket_type": "SUB",
+          "description": "Descifrar eventos ML para visualización"
+        },
+        "firewall_agents_fleet": {
+          "commands_encrypt": true,
+          "responses_decrypt": true,
+          "description": "Cifrado dual para fleet de agentes firewall",
+          "agents": {
+            "agent_001": {"cmd_port": 5580, "resp_port": 5584},
+            "agent_002": {"cmd_port": 5590, "resp_port": 5594},
+            "agent_003": {"cmd_port": 5600, "resp_port": 5604}
+          }
+        }
+      },
+      "component_crypto_id": "dashboard_main_v31_001"
+    }
   }
 }

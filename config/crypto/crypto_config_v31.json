@@ -1,11 +1,11 @@
 {
-  "encryption_enabled": true,
-  "algorithm": "AES-256-GCM",
-  "key_rotation_minutes": 15,
-  "compression_enabled": true,
-  "compression_algorithm": "lz4",
-  "compression_threshold": 512,
-  "curve_enabled": true,
-  "perfect_forward_secrecy": true,
-  "auto_rotation": true
-}
+    "_comment": "📄 config/crypto/crypto_config_v31.json - COMPARTIDO POR TODOS",
+    "encryption_enabled": true,
+    "algorithm": "AES-256-GCM",
+    "key_rotation_minutes": 15,
+    "compression_enabled": true,
+    "compression_algorithm": "lz4",
+    "compression_threshold": 512,
+    "auto_rotation": true,
+    "_comment_keys": "🔑 Claves compartidas en variables de entorno invisibles"
+  }
