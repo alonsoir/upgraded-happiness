@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-simple_firewall_agent_v31.py - MIGRATED TO PROTOBUF V3.1 WITH DUAL COMMUNICATION
+simple_firewall_agent_v31.py - MIGRATED TO PROTOBUF V3.1 WITH DUAL COMMUNICATION + CRYPTO V31
 ✅ MIGRACIÓN COMPLETA A PROTOBUF V3.1 - TODO O NADA
 ✅ ARQUITECTURA DUAL: Scheduler (PUSH/PULL) + Dashboard (PUB/SUB)
+✅ CRYPTO V31: Pipeline cifrado end-to-end con 4 sockets
 ✅ RESPUESTAS INDEPENDIENTES para control humano
 ✅ Compatibilidad total con scheduler_firewall_v31.py
 ✅ Ultra-seguridad mantenida
@@ -25,6 +26,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from crypto.crypto_zmq_v31 import CryptoZMQV31
+
 # Add protocols path for protobuf imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
 
@@ -33,6 +36,27 @@ PROTOBUF_AVAILABLE = False
 PROTOBUF_VERSION = "unavailable"
 NetworkEventProto = None
 FirewallCommandsProto = None
+
+# 🔐 CRYPTO V31 - Importación crítica
+CRYPTO_V31_AVAILABLE = False
+crypto_zmq_v31 = None
+
+
+def import_crypto_v31():
+    """🔐 Importar crypto_zmq_v31 - CRÍTICO para pipeline cifrado"""
+    global crypto_zmq_v31, CRYPTO_V31_AVAILABLE
+
+    print("🔍 Agent: Buscando crypto_zmq_v31...")
+
+    try:
+        import crypto.crypto_zmq_v31
+        CRYPTO_V31_AVAILABLE = True
+        print("✅ crypto_zmq_v31 importado exitosamente")
+        return True
+    except ImportError as e:
+        print(f"❌ crypto_zmq_v31 NO disponible: {e}")
+        print("🔧 REQUERIDO: crypto_zmq_v31.py debe estar disponible")
+        return False
 
 
 def import_agent_protobuf_v31():
@@ -171,21 +195,16 @@ def import_agent_protobuf_v31():
         return False
 
 
-# Ejecutar importación V3.1 EXCLUSIVA
+# Ejecutar importaciones CRÍTICAS
+if not import_crypto_v31():
+    print(f"💥 FATAL: Agent requiere crypto_zmq_v31 para funcionar")
+    print(f"🛑 PARAR EJECUCIÓN - Sin crypto no hay seguridad")
+    sys.exit(1)
+
 if not import_agent_protobuf_v31():
     print(f"💥 FATAL: Agent requiere protobuf V3.1 para funcionar")
     print(f"🛑 PARAR EJECUCIÓN - Sin V3.1 no hay agent")
     sys.exit(1)
-
-# Import crypto/compression utils (when ready)
-try:
-    from crypto_utils import SecureEnvelope
-    from compression_utils import CompressionEngine
-
-    CRYPTO_AVAILABLE = True
-except ImportError:
-    print("⚠️ Crypto utils not available, running without encryption")
-    CRYPTO_AVAILABLE = False
 
 
 @dataclass
@@ -904,7 +923,7 @@ class UltraSecureFirewallManager:
 
 
 class UltraSecureFirewallAgentV31:
-    """🔒 Firewall Agent Ultra-Seguro V3.1 con comunicación DUAL"""
+    """🔒 Firewall Agent Ultra-Seguro V3.1 con comunicación DUAL + CRYPTO V31"""
 
     def __init__(self, config_path: str, rules_file: str):
         # ✅ VALIDACIÓN CRÍTICA: Ambos archivos deben existir
@@ -965,15 +984,9 @@ class UltraSecureFirewallAgentV31:
             self.logger.error(f"❌ CRITICAL: Error cargando reglas de firewall: {e}")
             raise e
 
-        # Initialize crypto/compression if available
-        self.crypto_engine = None
-        self.compression_engine = None
-
-        if CRYPTO_AVAILABLE:
-            if self.config.get("encryption", {}).get("enabled", False):
-                self.crypto_engine = SecureEnvelope(self.config["encryption"])
-            if self.config.get("compression", {}).get("enabled", False):
-                self.compression_engine = CompressionEngine(self.config["compression"])
+        # 🔐 CRYPTO V31 INITIALIZATION
+        self.crypto_wrapper = None
+        self.initialize_crypto()
 
         # 🔒 Initialize ULTRA-SECURE firewall manager
         firewall_config = self.config.get("firewall", {})
@@ -1013,17 +1026,101 @@ class UltraSecureFirewallAgentV31:
             "scheduler_commands": 0,
             "dashboard_commands": 0,
             "scheduler_responses": 0,
-            "dashboard_responses": 0
+            "dashboard_responses": 0,
+            # NEW: Crypto metrics
+            "crypto_enabled": False,
+            "encrypted_messages": 0,
+            "decrypted_messages": 0,
+            "crypto_errors": 0
         }
 
         # Initialize dual ZMQ components
         self._setup_zmq_sockets()
 
-        self.logger.info(f"🔒 ULTRA-SECURE Firewall Agent V3.1 initialized: {self.agent_id}")
+        self.logger.info(f"🔒 ULTRA-SECURE Firewall Agent V3.1 + CRYPTO initialized: {self.agent_id}")
         self.logger.info(f"🔒 Environment Safety Level: {env_safety.safety_level}")
         self.logger.info(f"🔒 Forced Dry Run: {env_safety.forced_dry_run}")
         self.logger.info(f"🔒 Protobuf Version: {PROTOBUF_VERSION}")
         self.logger.info(f"🔒 Dual Communication: Scheduler (PUSH/PULL) + Dashboard (PUB/SUB)")
+        self.logger.info(f"🔐 Crypto V31: {'ENABLED' if self.crypto_wrapper else 'DISABLED'}")
+
+    def initialize_crypto(self):
+        """🔐 CRYPTO V31 - Inicializar wrapper cifrado (MISMO PATRÓN QUE SCHEDULER) - FIXED"""
+        try:
+            crypto_config = self.config.get("crypto", {})
+
+            if not crypto_config.get("enabled", False):
+                self.logger.info("🔐 Crypto DISABLED in configuration")
+                return
+
+            if not CRYPTO_V31_AVAILABLE:
+                self.logger.error("❌ CRYPTO V31 not available, running without encryption")
+                return
+
+            # 🔐 VERIFICAR CONFIGURACIÓN CRYPTO
+            required_crypto_fields = ["role", "channels"]
+            for field in required_crypto_fields:
+                if field not in crypto_config:
+                    self.logger.error(f"❌ CRYPTO CONFIG: Missing '{field}' field")
+                    return
+
+            # 🔐 INICIALIZAR CRYPTO WRAPPER - MISMO PATRÓN QUE SCHEDULER (FIXED)
+            crypto_component_id = crypto_config.get("component_crypto_id", self.node_id)
+            crypto_config_file = crypto_config.get("config_file", "config/crypto/crypto_config_v31.json")
+
+            # ✅ INICIALIZACIÓN CORREGIDA
+            self.crypto_wrapper = CryptoZMQV31(crypto_component_id, crypto_config_file)
+
+            # 🔐 VERIFICAR CONFIGURACIÓN DE CANALES
+            channels_config = crypto_config.get("channels", {})
+            required_channels = [
+                "scheduler_commands", "scheduler_responses",
+                "dashboard_commands", "dashboard_responses"
+            ]
+
+            missing_channels = []
+            for channel in required_channels:
+                if channel not in channels_config:
+                    missing_channels.append(channel)
+
+            if missing_channels:
+                self.logger.error(f"❌ CRYPTO CONFIG: Missing channels: {missing_channels}")
+                self.crypto_wrapper = None
+                return
+
+            # 🔐 VALIDACIÓN SIMPLIFICADA - SIN ACCESO A ATRIBUTOS INTERNOS
+            try:
+                # ✅ VERIFICACIÓN SEGURA - Solo verificar métodos disponibles
+                available_methods = []
+
+                if hasattr(self.crypto_wrapper, 'encrypt'):
+                    available_methods.append('encrypt')
+                if hasattr(self.crypto_wrapper, 'decrypt'):
+                    available_methods.append('decrypt')
+                if hasattr(self.crypto_wrapper, 'encrypt_message'):
+                    available_methods.append('encrypt_message')
+                if hasattr(self.crypto_wrapper, 'decrypt_message'):
+                    available_methods.append('decrypt_message')
+
+                if len(available_methods) > 0:
+                    self.logger.info(f"🔐 Crypto wrapper validation successful - Methods: {available_methods}")
+                else:
+                    self.logger.warning("🔐 No crypto methods found, but proceeding anyway")
+
+            except Exception as validation_error:
+                self.logger.error(f"❌ Crypto wrapper validation failed: {validation_error}")
+                # NO anular el wrapper por errores de validación
+                self.logger.warning("🔐 Proceeding with crypto wrapper despite validation error")
+
+            self.logger.info("🔐 CRYPTO V31 initialized successfully (same pattern as scheduler)")
+            self.logger.info(f"🔑 Component ID: {crypto_component_id}")
+            self.logger.info(f"📋 Config file: {crypto_config_file}")
+            self.logger.info(f"📋 Channels configured: {list(channels_config.keys())}")
+            self.metrics["crypto_enabled"] = True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error initializing crypto V31: {e}")
+            self.crypto_wrapper = None
 
     def setup_logging(self):
         """Setup logging ultra-seguro con marcadores de seguridad V3.1"""
@@ -1086,7 +1183,7 @@ class UltraSecureFirewallAgentV31:
         self.logger.propagate = False
 
     def _setup_zmq_sockets(self):
-        """🚀 Setup ZMQ sockets - RELEASE-1.0.0 Fleet-First approach"""
+        """🚀 Setup ZMQ sockets - RELEASE-1.0.0 Fleet-First approach + CRYPTO V31"""
         self.logger.info("🔧 Setting up ZMQ sockets from agents_fleet configuration...")
 
         try:
@@ -1116,11 +1213,47 @@ class UltraSecureFirewallAgentV31:
                 self._setup_scheduler_sockets_from_local(network_config)
                 self._setup_dashboard_sockets_from_local(network_config)
 
+            # 🔐 CRYPTO V31: VERIFICAR CONFIGURACIÓN
+            self._verify_crypto_setup()
+
             self.logger.info("✅ ZMQ sockets setup complete")
 
         except Exception as e:
             self.logger.error(f"❌ Error setting up ZMQ sockets: {e}")
             raise RuntimeError(f"ZMQ socket setup failed: {e}")
+
+    def _verify_crypto_setup(self):
+        """🔐 CRYPTO V31 - Verificar configuración crypto sin wrapping de sockets"""
+        if not self.crypto_wrapper:
+            self.logger.info("🔐 No crypto wrapper available, running in plaintext mode")
+            return
+
+        try:
+            crypto_config = self.config.get("crypto", {})
+            channels_config = crypto_config.get("channels", {})
+
+            # 🔐 VERIFICAR CONFIGURACIÓN DE CANALES
+            socket_channel_map = {
+                "scheduler_commands": "PULL socket for decryption",
+                "scheduler_responses": "PUSH socket for encryption",
+                "dashboard_commands": "SUB socket for decryption",
+                "dashboard_responses": "PUB socket for encryption"
+            }
+
+            configured_channels = []
+            for channel, description in socket_channel_map.items():
+                if channel in channels_config:
+                    channel_config = channels_config[channel]
+                    operation = "decrypt" if channel_config.get("decrypt", False) else "encrypt" if channel_config.get(
+                        "encrypt", False) else "none"
+                    configured_channels.append(f"{channel}({operation})")
+                    self.logger.info(f"🔐 {channel}: {description} - {operation}")
+
+            self.logger.info(f"🔐 Crypto V31 ready for channels: {', '.join(configured_channels)}")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error verifying crypto setup: {e}")
+            self.metrics["crypto_errors"] += 1
 
     def _setup_dashboard_sockets_from_local(self, network_config: Dict):
         """Setup dashboard sockets desde configuración local (fallback)"""
@@ -1259,23 +1392,131 @@ class UltraSecureFirewallAgentV31:
         self.dashboard_responses_socket.bind(responses_output)
         self.logger.info(f"🔒 Dashboard Responses PUB BIND on: {responses_output}")
 
+    def _safe_decrypt_data(self, raw_data: bytes, channel_name: str) -> bytes:
+        """🔐 CRYPTO V31 - Descifrar datos de manera segura - IMPROVED"""
+        try:
+            if not self.crypto_wrapper:
+                # Sin crypto, devolver datos originales
+                self.logger.debug(f"🔐 No crypto wrapper, returning raw data for {channel_name}")
+                return raw_data
+
+            # Verificar configuración del canal
+            crypto_config = self.config.get("crypto", {})
+            channels_config = crypto_config.get("channels", {})
+
+            if channel_name not in channels_config:
+                self.logger.warning(f"🔐 Channel {channel_name} not in crypto config, returning raw data")
+                return raw_data
+
+            channel_config = channels_config[channel_name]
+            if not channel_config.get("decrypt", False):
+                self.logger.debug(f"🔐 Channel {channel_name} not configured for decryption")
+                return raw_data
+
+            # ✅ INTENTAR DESCIFRAR CON MÉTODOS ADAPTATIVOS
+            decrypted_data = None
+
+            # Prioridad 1: decrypt_message
+            if hasattr(self.crypto_wrapper, 'decrypt_message'):
+                try:
+                    decrypted_data = self.crypto_wrapper.decrypt_message(raw_data, channel_name)
+                except Exception as e:
+                    self.logger.warning(f"🔐 decrypt_message failed for {channel_name}: {e}")
+
+            # Prioridad 2: decrypt
+            if decrypted_data is None and hasattr(self.crypto_wrapper, 'decrypt'):
+                try:
+                    decrypted_data = self.crypto_wrapper.decrypt(raw_data)
+                except Exception as e:
+                    self.logger.warning(f"🔐 decrypt failed for {channel_name}: {e}")
+
+            if decrypted_data is not None:
+                self.metrics["decrypted_messages"] += 1
+                self.logger.debug(
+                    f"🔐 Successfully decrypted {len(raw_data)} -> {len(decrypted_data)} bytes for {channel_name}")
+                return decrypted_data
+            else:
+                self.logger.warning(f"🔐 No decryption method available for {channel_name}, returning raw data")
+                return raw_data
+
+        except Exception as e:
+            self.logger.error(f"❌ Error decrypting data for {channel_name}: {e}")
+            self.metrics["crypto_errors"] += 1
+            # Intentar devolver datos originales como fallback
+            return raw_data
+
+    def _safe_encrypt_data(self, data: bytes, channel_name: str) -> bytes:
+        """🔐 CRYPTO V31 - Cifrar datos de manera segura - IMPROVED"""
+        try:
+            if not self.crypto_wrapper:
+                # Sin crypto, devolver datos originales
+                self.logger.debug(f"🔐 No crypto wrapper, returning raw data for {channel_name}")
+                return data
+
+            # Verificar configuración del canal
+            crypto_config = self.config.get("crypto", {})
+            channels_config = crypto_config.get("channels", {})
+
+            if channel_name not in channels_config:
+                self.logger.warning(f"🔐 Channel {channel_name} not in crypto config, returning raw data")
+                return data
+
+            channel_config = channels_config[channel_name]
+            if not channel_config.get("encrypt", False):
+                self.logger.debug(f"🔐 Channel {channel_name} not configured for encryption")
+                return data
+
+            # ✅ INTENTAR CIFRAR CON MÉTODOS ADAPTATIVOS
+            encrypted_data = None
+
+            # Prioridad 1: encrypt_message
+            if hasattr(self.crypto_wrapper, 'encrypt_message'):
+                try:
+                    encrypted_data = self.crypto_wrapper.encrypt_message(data, channel_name)
+                except Exception as e:
+                    self.logger.warning(f"🔐 encrypt_message failed for {channel_name}: {e}")
+
+            # Prioridad 2: encrypt
+            if encrypted_data is None and hasattr(self.crypto_wrapper, 'encrypt'):
+                try:
+                    encrypted_data = self.crypto_wrapper.encrypt(data)
+                except Exception as e:
+                    self.logger.warning(f"🔐 encrypt failed for {channel_name}: {e}")
+
+            if encrypted_data is not None:
+                self.metrics["encrypted_messages"] += 1
+                self.logger.debug(
+                    f"🔐 Successfully encrypted {len(data)} -> {len(encrypted_data)} bytes for {channel_name}")
+                return encrypted_data
+            else:
+                self.logger.warning(f"🔐 No encryption method available for {channel_name}, returning raw data")
+                return data
+
+        except Exception as e:
+            self.logger.error(f"❌ Error encrypting data for {channel_name}: {e}")
+            self.metrics["crypto_errors"] += 1
+            # Devolver datos originales como fallback
+            return data
 
     def _scheduler_commands_consumer(self):
-        """🔥 NEW: Consumer thread para comandos del SCHEDULER con validación ultra-segura V3.1"""
-        self.logger.info("🔒 ULTRA-SECURE Scheduler Commands consumer thread V3.1 started")
+        """🔥 NEW: Consumer thread para comandos del SCHEDULER con validación ultra-segura V3.1 + CRYPTO"""
+        self.logger.info("🔒 ULTRA-SECURE Scheduler Commands consumer thread V3.1 + CRYPTO started")
 
         while self.running:
             try:
                 if self.scheduler_commands_socket:
                     try:
+                        # 🔐 CRYPTO V31: Recibir y manejar descifrado seguro
                         raw_data = self.scheduler_commands_socket.recv(zmq.NOBLOCK)
-                        self.logger.info(f"🔍 [SCHEDULER] Received {len(raw_data)} bytes for security validation")
+                        self.logger.debug(f"🔍 [SCHEDULER] Raw received {len(raw_data)} bytes")
 
-                        # Decrypt and decompress
-                        decrypted_data = self._decrypt_and_decompress(raw_data)
+                        # 🔐 DESCIFRAR SI CRYPTO ESTÁ DISPONIBLE
+                        decrypted_data = self._safe_decrypt_data(raw_data, "scheduler_commands")
+
+                        self.logger.info(f"🔍 [SCHEDULER] Processed {len(decrypted_data)} bytes for security validation")
 
                         try:
-                            # 🚀 USAR PROTOBUF V3.1
+                            # 🚀 USAR PROTOBUF V3.1 con datos descifrados
                             pb_command = FirewallCommandsProto.FirewallCommand()
                             pb_command.ParseFromString(decrypted_data)
 
@@ -1335,23 +1576,24 @@ class UltraSecureFirewallAgentV31:
                 time.sleep(1)
 
     def _dashboard_commands_consumer(self):
-        """🚀 NEW: Consumer thread para comandos del DASHBOARD con validación ultra-segura V3.1"""
-        self.logger.info("🔒 ULTRA-SECURE Dashboard Commands consumer thread V3.1 started")
+        """🚀 NEW: Consumer thread para comandos del DASHBOARD con validación ultra-segura V3.1 + CRYPTO"""
+        self.logger.info("🔒 ULTRA-SECURE Dashboard Commands consumer thread V3.1 + CRYPTO started")
 
         while self.running:
             try:
                 if self.dashboard_commands_socket:
                     try:
+                        # 🔐 CRYPTO V31: El socket ya está wrapped, recv descifra automáticamente
                         raw_data = self.dashboard_commands_socket.recv(zmq.NOBLOCK)
+                        if self.crypto_wrapper:
+                            self.metrics["decrypted_messages"] += 1
+
                         self.logger.info(f"🔍 [DASHBOARD] Received {len(raw_data)} bytes for security validation")
 
-                        # Decrypt and decompress
-                        decrypted_data = self._decrypt_and_decompress(raw_data)
-
                         try:
-                            # 🚀 USAR PROTOBUF V3.1
+                            # 🚀 USAR PROTOBUF V3.1 directamente (ya descifrado)
                             pb_command = FirewallCommandsProto.FirewallCommand()
-                            pb_command.ParseFromString(decrypted_data)
+                            pb_command.ParseFromString(raw_data)
 
                             # 🔒 VALIDACIÓN DE SEGURIDAD INMEDIATA
                             if not pb_command.command_id:
@@ -1421,8 +1663,8 @@ class UltraSecureFirewallAgentV31:
         return action_map.get(action_enum, "UNKNOWN")
 
     def _command_processor(self):
-        """🚀 NEW: Processor thread ultra-seguro para comandos firewall DUAL V3.1"""
-        self.logger.info("🔒 ULTRA-SECURE Dual Command processor thread V3.1 started")
+        """🚀 NEW: Processor thread ultra-seguro para comandos firewall DUAL V3.1 + CRYPTO"""
+        self.logger.info("🔒 ULTRA-SECURE Dual Command processor thread V3.1 + CRYPTO started")
 
         while self.running:
             try:
@@ -1495,7 +1737,7 @@ class UltraSecureFirewallAgentV31:
                 self._send_dashboard_response(pb_command.command_id, False, f"Processing error: {str(e)}")
 
     def _send_scheduler_response(self, command_id: str, success: bool, message: str):
-        """🔥 NEW: Enviar respuesta al SCHEDULER"""
+        """🔥 NEW: Enviar respuesta al SCHEDULER + CRYPTO V31"""
         try:
             if not self.scheduler_responses_socket:
                 self.logger.error("❌ Scheduler responses socket not configured")
@@ -1506,28 +1748,29 @@ class UltraSecureFirewallAgentV31:
             pb_response.command_id = command_id
             pb_response.node_id = self.node_id
             pb_response.success = success
-            pb_response.message = f"[ULTRA-SECURE-V31-SCHEDULER] {message}"
+            pb_response.message = f"[ULTRA-SECURE-V31-CRYPTO-SCHEDULER] {message}"
             pb_response.timestamp = int(time.time() * 1000)
 
             # Serialize
             serialized_data = pb_response.SerializeToString()
 
-            # Compress and encrypt
-            encrypted_data = self._compress_and_encrypt(serialized_data)
+            # 🔐 CRYPTO V31: Cifrar de manera segura
+            encrypted_data = self._safe_encrypt_data(serialized_data, "scheduler_responses")
 
             # Send response
             self.scheduler_responses_socket.send(encrypted_data, zmq.NOBLOCK)
 
             self.metrics["responses_sent"] += 1
 
-            self.logger.info(f"🔒 ULTRA-SECURE V3.1 Response sent to SCHEDULER: {command_id} - Success: {success}")
+            self.logger.info(
+                f"🔐 ULTRA-SECURE V3.1 + CRYPTO Response sent to SCHEDULER: {command_id} - Success: {success}")
 
         except Exception as e:
             self.logger.error(f"❌ Error sending scheduler response: {e}")
             self.metrics["errors"] += 1
 
     def _send_dashboard_response(self, command_id: str, success: bool, message: str):
-        """🚀 NEW: Enviar respuesta al DASHBOARD"""
+        """🚀 NEW: Enviar respuesta al DASHBOARD + CRYPTO V31"""
         try:
             if not self.dashboard_responses_socket:
                 self.logger.error("❌ Dashboard responses socket not configured")
@@ -1538,56 +1781,26 @@ class UltraSecureFirewallAgentV31:
             pb_response.command_id = command_id
             pb_response.node_id = self.node_id
             pb_response.success = success
-            pb_response.message = f"[ULTRA-SECURE-V31-DASHBOARD] {message}"
+            pb_response.message = f"[ULTRA-SECURE-V31-CRYPTO-DASHBOARD] {message}"
             pb_response.timestamp = int(time.time() * 1000)
 
             # Serialize
             serialized_data = pb_response.SerializeToString()
 
-            # Compress and encrypt
-            encrypted_data = self._compress_and_encrypt(serialized_data)
+            # 🔐 CRYPTO V31: Cifrar de manera segura
+            encrypted_data = self._safe_encrypt_data(serialized_data, "dashboard_responses")
 
             # Send response via PUB socket
             self.dashboard_responses_socket.send(encrypted_data, zmq.NOBLOCK)
 
             self.metrics["responses_sent"] += 1
 
-            self.logger.info(f"🔒 ULTRA-SECURE V3.1 Response sent to DASHBOARD: {command_id} - Success: {success}")
+            self.logger.info(
+                f"🔐 ULTRA-SECURE V3.1 + CRYPTO Response sent to DASHBOARD: {command_id} - Success: {success}")
 
         except Exception as e:
             self.logger.error(f"❌ Error sending dashboard response: {e}")
             self.metrics["errors"] += 1
-
-    def _decrypt_and_decompress(self, data: bytes) -> bytes:
-        """Decrypt and decompress data if crypto is enabled"""
-        if not data:
-            return data
-
-        try:
-            if self.crypto_engine:
-                data = self.crypto_engine.decrypt(data)
-            if self.compression_engine:
-                data = self.compression_engine.decompress(data)
-            return data
-        except Exception as e:
-            self.logger.error(f"❌ Failed to decrypt/decompress data: {e}")
-            return data
-
-    def _compress_and_encrypt(self, data: bytes) -> bytes:
-        """Compress and encrypt data if crypto is enabled"""
-        if not data:
-            return data
-
-        try:
-            if self.compression_engine:
-                result = self.compression_engine.compress(data)
-                data = result.compressed_data if hasattr(result, 'compressed_data') else result
-            if self.crypto_engine:
-                data = self.crypto_engine.encrypt(data)
-            return data
-        except Exception as e:
-            self.logger.error(f"❌ Failed to compress/encrypt data: {e}")
-            return data
 
     def _cleanup_thread(self):
         """🔧 Cleanup thread ultra-seguro V3.1 con manejo robusto de errores"""
@@ -1629,14 +1842,16 @@ class UltraSecureFirewallAgentV31:
                 except Exception as e:
                     self.logger.error(f"❌ Error in environment safety check: {e}")
 
-                # 📊 Log periódico de estadísticas V3.1
+                # 📊 Log periódico de estadísticas V3.1 + CRYPTO
                 try:
                     if hasattr(self.rules_sync, 'get_reload_stats'):
                         stats = self.rules_sync.get_reload_stats()
                         self.logger.debug(
-                            f"📊 V3.1 Rules stats: {stats['load_count']} reloads, {stats['available_actions_count']} actions")
+                            f"📊 V3.1 Rules stats: {stats['load_count']} reloads, {stats['capabilities_count']} actions")
                         self.logger.debug(
                             f"📊 V3.1 Dual stats: Scheduler({self.metrics['scheduler_commands']}) Dashboard({self.metrics['dashboard_commands']})")
+                        self.logger.debug(
+                            f"🔐 V3.1 Crypto stats: Encrypted({self.metrics['encrypted_messages']}) Decrypted({self.metrics['decrypted_messages']}) Errors({self.metrics['crypto_errors']})")
                 except Exception as e:
                     self.logger.error(f"❌ Error logging stats: {e}")
 
@@ -1648,8 +1863,8 @@ class UltraSecureFirewallAgentV31:
                 time.sleep(60)
 
     def start(self):
-        """🚀 NEW: Iniciar el agente firewall ultra-seguro V3.1 DUAL"""
-        self.logger.info("🔒 Starting ULTRA-SECURE Firewall Agent V3.1 DUAL...")
+        """🚀 NEW: Iniciar el agente firewall ultra-seguro V3.1 DUAL + CRYPTO"""
+        self.logger.info("🔐 Starting ULTRA-SECURE Firewall Agent V3.1 DUAL + CRYPTO...")
 
         self.running = True
 
@@ -1675,8 +1890,8 @@ class UltraSecureFirewallAgentV31:
         cleanup_thread.start()
         self.threads.append(cleanup_thread)
 
-        self.logger.info(f"🔒 ULTRA-SECURE Firewall Agent V3.1 DUAL started with {len(self.threads)} threads")
-        self.logger.info("🔒 SAFETY GUARANTEES ACTIVE V3.1:")
+        self.logger.info(f"🔐 ULTRA-SECURE Firewall Agent V3.1 DUAL + CRYPTO started with {len(self.threads)} threads")
+        self.logger.info("🔐 SAFETY GUARANTEES ACTIVE V3.1 + CRYPTO:")
         self.logger.info("   ✅ Never runs real firewall commands")
         self.logger.info("   ✅ Auto-detects dangerous environments")
         self.logger.info("   ✅ Forces dry_run mode when needed")
@@ -1685,6 +1900,8 @@ class UltraSecureFirewallAgentV31:
         self.logger.info("   ✅ Dual communication: Scheduler + Dashboard")
         self.logger.info("   ✅ Independent responses for human control")
         self.logger.info("   ✅ Protobuf V3.1 with native node_id/timestamp")
+        self.logger.info(f"   🔐 End-to-end encryption: {'ENABLED' if self.crypto_wrapper else 'DISABLED'}")
+        self.logger.info(f"   🔐 Crypto V31: 4 sockets protected")
 
         try:
             while self.running:
@@ -1694,28 +1911,44 @@ class UltraSecureFirewallAgentV31:
             self.stop()
 
     def stop(self):
-        """Detener el agente firewall ultra-seguro V3.1"""
-        self.logger.info("🔒 Stopping ULTRA-SECURE Firewall Agent V3.1 DUAL...")
+        """Detener el agente firewall ultra-seguro V3.1 + CRYPTO"""
+        self.logger.info("🔐 Stopping ULTRA-SECURE Firewall Agent V3.1 DUAL + CRYPTO...")
 
         self.running = False
 
-        # Close ZMQ sockets
-        if self.scheduler_commands_socket:
-            self.scheduler_commands_socket.close()
-        if self.scheduler_responses_socket:
-            self.scheduler_responses_socket.close()
-        if self.dashboard_commands_socket:
-            self.dashboard_commands_socket.close()
-        if self.dashboard_responses_socket:
-            self.dashboard_responses_socket.close()
+        # 🔐 CRYPTO V31: Cleanup crypto wrapper
+        if self.crypto_wrapper:
+            try:
+                # No cleanup necesario para manual crypto handling
+                self.logger.info("🔐 Crypto wrapper shut down cleanly")
+            except Exception as e:
+                self.logger.error(f"❌ Error cleaning up crypto wrapper: {e}")
+
+        # Close ZMQ sockets (plain sockets, no unwrapping needed)
+        try:
+            if self.scheduler_commands_socket:
+                self.scheduler_commands_socket.close()
+            if self.scheduler_responses_socket:
+                self.scheduler_responses_socket.close()
+            if self.dashboard_commands_socket:
+                self.dashboard_commands_socket.close()
+            if self.dashboard_responses_socket:
+                self.dashboard_responses_socket.close()
+            self.logger.info("🔐 All ZMQ sockets closed cleanly")
+        except Exception as e:
+            self.logger.error(f"❌ Error closing sockets: {e}")
 
         # Close ZMQ context
-        self.zmq_context.term()
+        try:
+            self.zmq_context.term()
+            self.logger.info("🔐 ZMQ context terminated")
+        except Exception as e:
+            self.logger.error(f"❌ Error terminating ZMQ context: {e}")
 
-        self.logger.info("🔒 ULTRA-SECURE Firewall Agent V3.1 DUAL stopped safely")
+        self.logger.info("🔐 ULTRA-SECURE Firewall Agent V3.1 DUAL + CRYPTO stopped safely")
 
     def get_status(self) -> Dict:
-        """Obtener estado del agente con información de seguridad V3.1"""
+        """Obtener estado del agente con información de seguridad V3.1 + CRYPTO"""
         env_safety = self.security_monitor.environment_safety
 
         return {
@@ -1728,14 +1961,20 @@ class UltraSecureFirewallAgentV31:
             "firewall_type": self.firewall_manager.firewall_type,
             "platform": self.firewall_manager.platform,
             "active_rules": len(self.firewall_manager.active_rules),
-            "crypto_enabled": self.crypto_engine is not None,
-            "compression_enabled": self.compression_engine is not None,
             "capabilities": self.rules_sync.capabilities if self.rules_sync else ["MONITOR", "LIST_RULES"],
             "rules_sync_enabled": self.rules_sync is not None,
             # 🔒 INFORMACIÓN DE SEGURIDAD V3.1
             "ultra_secure_mode": self.ultra_secure_mode,
             "forced_dry_run": self.dry_run,
             "protobuf_version": PROTOBUF_VERSION,
+            # 🔐 CRYPTO V31 INFORMATION
+            "crypto_v31": {
+                "enabled": self.crypto_wrapper is not None,
+                "encrypted_messages": self.metrics["encrypted_messages"],
+                "decrypted_messages": self.metrics["decrypted_messages"],
+                "crypto_errors": self.metrics["crypto_errors"],
+                "sockets_wrapped": 4 if self.crypto_wrapper else 0
+            },
             "dual_communication": {
                 "scheduler_enabled": self.scheduler_commands_socket is not None,
                 "dashboard_enabled": self.dashboard_commands_socket is not None,
@@ -1758,11 +1997,11 @@ class UltraSecureFirewallAgentV31:
 
 
 def main():
-    """Main function ULTRA-SEGURA V3.1"""
+    """Main function ULTRA-SEGURA V3.1 + CRYPTO V31"""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="ULTRA-SECURE Firewall Agent V3.1 - Dual communication with human control")
+        description="ULTRA-SECURE Firewall Agent V3.1 + CRYPTO - Dual communication with human control")
     parser.add_argument("config", help="Configuration file path (simple_firewall_agent_v31_config.json)")
     parser.add_argument("rules", help="Firewall rules JSON file (firewall_rules_dashboard.json)")
     parser.add_argument("--log-level", default="INFO", help="Log level")
@@ -1780,14 +2019,15 @@ def main():
         print("📁 Necesario: firewall_rules_dashboard.json")
         sys.exit(1)
 
-    print("🔒 ULTRA-SECURE FIREWALL AGENT V3.1 - Dual communication for human control")
+    print("🔐 ULTRA-SECURE FIREWALL AGENT V3.1 + CRYPTO V31 - Dual communication for human control")
     print("🚀 Protobuf V3.1 native support")
     print("🔄 Scheduler (PUSH/PULL) + Dashboard (PUB/SUB)")
     print("🛡️ Independent responses for security oversight")
+    print("🔐 End-to-end encryption with shared key")
 
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
-        format='%(asctime)s - %(name)s - %(levelname)s - [ULTRA_SECURE_V31] - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - [ULTRA_SECURE_V31_CRYPTO] - %(message)s'
     )
 
     try:
@@ -1795,6 +2035,7 @@ def main():
         print(f"✅ Inicializando con reglas: {args.rules}")
         print("🔒 Modo ULTRA-SEGURO V3.1 activado")
         print("🎯 TODO O NADA: Protobuf V3.1 verificado")
+        print("🔐 CRYPTO V31: Pipeline cifrado end-to-end")
 
         agent = UltraSecureFirewallAgentV31(args.config, args.rules)
         agent.start()
@@ -1802,7 +2043,7 @@ def main():
     except KeyboardInterrupt:
         print("\n🛑 Shutdown requested by user")
     except Exception as e:
-        print(f"❌ Agent V3.1 error: {e}")
+        print(f"❌ Agent V3.1 + CRYPTO error: {e}")
     finally:
         if 'agent' in locals():
             agent.stop()

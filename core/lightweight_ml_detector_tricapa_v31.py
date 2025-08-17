@@ -56,6 +56,7 @@ from pathlib import Path
 from collections import deque, defaultdict
 from typing import Dict, Any, Optional, Tuple, List
 from threading import Event, Lock
+from crypto.crypto_zmq_v31 import CryptoZMQV31
 
 # 📦 Protobuf v3.1 - REQUERIDO
 PROTOBUF_AVAILABLE = False
@@ -145,7 +146,8 @@ class TricapaMLDetectorV31JsonControlled:
         # 📄 Cargar configuración PURA (sin modificaciones)
         self.config = self._load_config_pure(config_file)
         self.config_file = config_file
-
+        # 🔐 Crypto wrapper setup
+        self.crypto_wrapper = None
         # 🏷️ Identidad distribuida
         self.node_id = self.config["node_id"]
         self.process_id = os.getpid()
@@ -337,7 +339,7 @@ class TricapaMLDetectorV31JsonControlled:
             self.logger.info(f"📁 Protobuf logging: {self.proto_log_dir}")
 
     def setup_sockets_from_json(self):
-        """🔒 Configuración ZMQ 100% desde JSON - CON SOPORTE PUB/SUB"""
+        """🔒 Configuración ZMQ 100% desde JSON - CON SOPORTE PUB/SUB + CRYPTO"""
         network_config = self.config.get("network", {})
         zmq_config = self.config.get("zmq", {})
 
@@ -402,6 +404,32 @@ class TricapaMLDetectorV31JsonControlled:
 
             output_address = f"tcp://*:{output_config.get('port', 5580)}"
             self.output_socket.bind(output_address)
+
+            # 🔐 NUEVO: CRYPTO WRAPPER SETUP
+            if self.config.get("crypto", {}).get("enabled", False):
+                try:
+                    crypto_config_file = self.config.get("crypto", {}).get("config_file",
+                                                                           "config/crypto/crypto_config_v31.json")
+                    crypto_component_id = self.config.get("crypto", {}).get("component_crypto_id", self.node_id)
+
+                    # Inicializar crypto wrapper
+                    self.crypto_wrapper = CryptoZMQV31(crypto_component_id, crypto_config_file)
+
+                    # 🔓 Wrap input socket para DESCIFRAR (del geoip_enricher)
+                    self.input_socket = self.crypto_wrapper.wrap_socket_recv(self.input_socket)
+
+                    # 🔒 Wrap output socket para CIFRAR (hacia múltiples suscriptores)
+                    self.output_socket = self.crypto_wrapper.wrap_socket_send(self.output_socket)
+
+                    self.logger.info("🔐 Crypto wrapper habilitado para Tricapa ML Detector v3.1.2")
+                    self.logger.info(f"   🔓 Input: Descifrado automático desde geoip_enricher")
+                    self.logger.info(f"   🔒 Output: Cifrado automático hacia múltiples suscriptores ({socket_type})")
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error configurando crypto wrapper: {e}")
+                    raise RuntimeError(f"Error inicializando crypto: {e}")
+            else:
+                self.logger.info("🔐 Crypto wrapper deshabilitado")
 
             self.logger.info(f"🔌 Sockets ZMQ desde JSON:")
             self.logger.info(f"   📥 Input: {input_address} (HWM: {zmq_config.get('rcvhwm', 500)})")
@@ -1296,6 +1324,14 @@ class TricapaMLDetectorV31JsonControlled:
             thread.join(timeout=2.0)
             if thread.is_alive():
                 self.logger.warning(f"⚠️ Thread {thread.name} no terminó")
+
+        # 🔐 NUEVO: Cleanup crypto wrapper
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 Crypto wrapper cerrado correctamente")
+            except Exception as e:
+                self.logger.error(f"❌ Error cerrando crypto wrapper: {e}")
 
         with self.socket_lock:
             if self.input_socket:

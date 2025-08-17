@@ -25,6 +25,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict, deque
+from crypto.crypto_zmq_v31 import CryptoZMQV31
 
 # Add protocols path for protobuf imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
@@ -769,6 +770,8 @@ class FirewallScheduler:
 
     def __init__(self, config: SchedulerConfig, firewall_rules_file: str):
         self.config = config
+        # 🔐 Crypto wrapper setup
+        self.crypto_wrapper = None
         self.logger = SchedulerLogger(config.node_id, config.logging_config)
 
         # Motor de reglas de firewall
@@ -814,7 +817,7 @@ class FirewallScheduler:
         self.logger.info(f"🎯 Mode: {self.config.mode} | Role: {self.config.role}")
 
     def _setup_zmq_sockets(self):
-        """Setup ZMQ sockets según configuración JSON"""
+        """Setup ZMQ sockets según configuración JSON + CRYPTO"""
         self.logger.info("🔧 Setting up ZMQ sockets for scheduler...")
 
         try:
@@ -888,6 +891,47 @@ class FirewallScheduler:
             elif self.config.firewall_responses_mode == 'connect':
                 self.firewall_responses_socket.connect(fw_responses_endpoint)
                 self.logger.info(f"🟢 Firewall Responses socket CONNECT to {fw_responses_endpoint}")
+
+            # 🔐 NUEVO: CRYPTO WRAPPER SETUP PARA MÚLTIPLES SOCKETS
+            if self.config.config.get("crypto", {}).get("enabled", False):
+                try:
+                    crypto_config_file = self.config.config.get("crypto", {}).get("config_file",
+                                                                                  "config/crypto/crypto_config_v31.json")
+                    crypto_component_id = self.config.config.get("crypto", {}).get("component_crypto_id",
+                                                                                   self.config.node_id)
+
+                    # Inicializar crypto wrapper
+                    self.crypto_wrapper = CryptoZMQV31(crypto_component_id, crypto_config_file)
+
+                    # 🔓 Wrap ML events input socket para DESCIFRAR (del ml_detector)
+                    crypto_channels = self.config.config.get("crypto", {}).get("channels", {})
+
+                    if crypto_channels.get("ml_events_input", {}).get("decrypt", False):
+                        self.ml_events_socket = self.crypto_wrapper.wrap_socket_recv(self.ml_events_socket)
+                        self.logger.info("🔓 ML Events input socket wrapped for DECRYPTION")
+
+                    # 🔒 Wrap firewall commands output socket para CIFRAR (hacia firewall agent)
+                    if crypto_channels.get("firewall_commands_output", {}).get("encrypt", False):
+                        self.firewall_commands_socket = self.crypto_wrapper.wrap_socket_send(
+                            self.firewall_commands_socket)
+                        self.logger.info("🔒 Firewall Commands output socket wrapped for ENCRYPTION")
+
+                    # 🔓 Wrap firewall responses input socket para DESCIFRAR (del firewall agent)
+                    if crypto_channels.get("firewall_responses_input", {}).get("decrypt", False):
+                        self.firewall_responses_socket = self.crypto_wrapper.wrap_socket_recv(
+                            self.firewall_responses_socket)
+                        self.logger.info("🔓 Firewall Responses input socket wrapped for DECRYPTION")
+
+                    self.logger.info("🔐 Crypto wrapper habilitado para Scheduler Firewall v1.0.0")
+                    self.logger.info(f"   🔓 ML Events: Descifrado automático desde ml_detector")
+                    self.logger.info(f"   🔒 Commands: Cifrado automático hacia firewall_agent")
+                    self.logger.info(f"   🔓 Responses: Descifrado automático desde firewall_agent")
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error configurando crypto wrapper: {e}")
+                    raise SchedulerConfigurationError(f"Error inicializando crypto: {e}")
+            else:
+                self.logger.info("🔐 Crypto wrapper deshabilitado")
 
             self.logger.info("✅ All ZMQ sockets configured for scheduler")
 
@@ -1640,6 +1684,14 @@ class FirewallScheduler:
             self.logger.info(f"   📥 Total responses: {self.stats.responses_received}")
         except Exception as e:
             self.logger.error(f"Error logging final stats: {e}")
+
+            # 🔐 NUEVO: Cleanup crypto wrapper
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 Crypto wrapper cerrado correctamente")
+            except Exception as e:
+                self.logger.error(f"❌ Error cerrando crypto wrapper: {e}")
 
         # Cerrar sockets ZMQ
         try:
