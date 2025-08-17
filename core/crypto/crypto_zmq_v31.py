@@ -57,7 +57,7 @@ class CryptoZMQV31:
             "key_rotations": 0,
             "encryption_errors": 0
         }
-
+        self.using_shared_key = False  # Flag para indicar si usa clave compartida
         # Thread para rotación automática
         self.rotation_thread = None
         self.stop_rotation = threading.Event()
@@ -107,19 +107,47 @@ class CryptoZMQV31:
             return default_config
 
     def _initialize_crypto(self):
-        """Inicializar sistema criptográfico"""
+        """Inicializar sistema criptográfico CON CLAVE COMPARTIDA AUTOMÁTICA"""
         try:
-            # Generar clave de sesión inicial (automática)
-            self._rotate_session_key()
+            # 🔐🤝 PASO 1: Configurar clave compartida para el pipeline
+            if self._setup_shared_pipeline_key():
+                self.logger.info("🔐 ✅ Shared pipeline key configured successfully")
+                self.logger.info(f"🔐 🏁 DEBUG: using_shared_key = {getattr(self, 'using_shared_key', 'NOT_SET')}")
+            else:
+                # Fallback: usar clave individual (como antes)
+                self.logger.warning("⚠️ Falling back to individual component key")
+                self._rotate_session_key()
+                self.using_shared_key = False
 
-            # Inicializar compresores
+            # 🗜️ PASO 2: Inicializar compresores
             self._initialize_compressors()
 
-            # Iniciar rotación automática
-            if self.config.get("auto_rotation", True):
-                self._start_key_rotation()
+            # 🔄 PASO 3: Configurar rotación automática (SOLO si NO usamos clave compartida)
+            if hasattr(self, 'using_shared_key') and self.using_shared_key:
+                # NO rotar claves cuando usamos clave compartida
+                self.logger.info("🔐 🔒 Key rotation DISABLED (using shared pipeline key)")
+            else:
+                # Rotación normal para claves individuales
+                if self.config.get("auto_rotation", True):
+                    self._start_key_rotation()
+                    self.logger.info("🔐 🔄 Key rotation ENABLED (individual component key)")
 
             self.logger.info("🔐 Crypto system initialized successfully")
+
+            # 📊 Log resumen de configuración CON DEBUG
+            if hasattr(self, 'using_shared_key') and self.using_shared_key:
+                self.logger.info("🔐 📋 Crypto Configuration Summary:")
+                self.logger.info("   🤝 Mode: SHARED PIPELINE KEY")
+                self.logger.info("   🔄 Key Rotation: DISABLED")
+                self.logger.info("   🌐 Pipeline Communication: ENCRYPTED")
+                self.logger.info("   🔒 Algorithm: AES-256-GCM")
+                self.logger.info(f"   🏁 Flag State: using_shared_key = {self.using_shared_key}")
+            else:
+                self.logger.info("🔐 📋 Crypto Configuration Summary:")
+                self.logger.info("   🔑 Mode: INDIVIDUAL COMPONENT KEY")
+                self.logger.info("   🔄 Key Rotation: ENABLED")
+                self.logger.info("   🔒 Algorithm: AES-256-GCM")
+                self.logger.info(f"   🏁 Flag State: using_shared_key = {getattr(self, 'using_shared_key', 'NOT_SET')}")
 
         except Exception as e:
             self.logger.error(f"❌ Error initializing crypto: {e}")
@@ -185,6 +213,75 @@ class CryptoZMQV31:
             self.logger.warning(f"⚠️ Could not load session key: {e}")
             return False
 
+    def _setup_shared_pipeline_key(self):
+        """
+        🔐🤝 FIXED: Configurar clave compartida para todo el pipeline
+        - Si no existe: Generar nueva clave y establecer como variable de entorno
+        - Si existe: Cargar y usar la clave existente
+        - SIEMPRE establecer using_shared_key = True si es exitoso
+        """
+        try:
+            # Variable de entorno para clave compartida del pipeline
+            shared_key_env_name = "UPGRADED_HAPPINESS_PIPELINE_KEY"
+
+            # Verificar si ya existe clave compartida
+            existing_shared_key = os.environ.get(shared_key_env_name)
+
+            if existing_shared_key:
+                # 🔑 Intentar usar clave compartida existente
+                try:
+                    shared_key = base64.b64decode(existing_shared_key)
+
+                    if len(shared_key) == 32:  # AES-256 requiere 32 bytes
+                        self.current_session_key = shared_key
+                        self.key_generation_time = time.time()
+                        self.using_shared_key = True  # ✅ ESTABLECER FLAG
+
+                        self.logger.info(f"🔐 🤝 Using existing shared pipeline key")
+                        self.logger.info(f"   🔑 Component: {self.component_name}")
+                        self.logger.info(f"   🌐 Pipeline communication: ENCRYPTED with shared key")
+                        self.logger.info(f"   🏁 using_shared_key = {self.using_shared_key}")  # DEBUG
+                        return True
+                    else:
+                        self.logger.error(f"❌ Invalid shared key length: {len(shared_key)} bytes (need 32)")
+                        # Regenerar clave si es inválida - CONTINUAR al bloque de generación
+                        del os.environ[shared_key_env_name]
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error decoding existing shared key: {e}")
+                    # Limpiar clave corrupta - CONTINUAR al bloque de generación
+                    if shared_key_env_name in os.environ:
+                        del os.environ[shared_key_env_name]
+
+            # 🆕 Generar nueva clave compartida para el pipeline
+            # (Este bloque se ejecuta si no había clave O si la clave existente era inválida)
+            self.logger.info("🔐 🆕 Generating NEW shared pipeline key...")
+
+            new_shared_key = os.urandom(32)  # 256 bits para AES-256
+            new_shared_key_b64 = base64.b64encode(new_shared_key).decode()
+
+            # Establecer como variable de entorno global
+            os.environ[shared_key_env_name] = new_shared_key_b64
+
+            # Usar la nueva clave
+            self.current_session_key = new_shared_key
+            self.key_generation_time = time.time()
+            self.using_shared_key = True  # ✅ ESTABLECER FLAG
+
+            self.logger.info(f"🔐 🆕 Generated NEW shared pipeline key")
+            self.logger.info(f"   🔑 First component: {self.component_name}")
+            self.logger.info(f"   🌐 Pipeline key established for ALL components")
+            self.logger.info(f"   📝 Environment variable: {shared_key_env_name}")
+            self.logger.info(f"   🔒 Key length: 32 bytes (AES-256)")
+            self.logger.info(f"   🏁 using_shared_key = {self.using_shared_key}")  # DEBUG
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error setting up shared pipeline key: {e}")
+            self.using_shared_key = False  # ✅ ASEGURAR FLAG EN FALSE si falla
+            return False
+
     def _initialize_compressors(self):
         """Inicializar compresores"""
         if self.compression_algorithm == "lz4":
@@ -233,8 +330,9 @@ class CryptoZMQV31:
                 self.logger.debug(f"📦 Compressed {original_size} → {compressed_size} bytes "
                                   f"(ratio: {self.metrics['compression_ratio']:.3f})")
 
-            # Verificar si necesitamos rotar clave
-            if (time.time() - self.key_generation_time) > self.key_rotation_interval:
+            # ✅ FIX: Verificar rotación SOLO si NO usamos clave compartida
+            if (not getattr(self, 'using_shared_key', False) and
+                    (time.time() - self.key_generation_time) > self.key_rotation_interval):
                 self._rotate_session_key()
 
             # Cifrar con AES-256-GCM
@@ -314,6 +412,33 @@ class CryptoZMQV31:
         self.logger.info(f"🔒 Socket send() wrapped with encryption for {self.component_name}")
         return socket
 
+    def wrap_socket_recv(self, socket):
+        """
+        Wraps a ZeroMQ socket to automatically decrypt received messages
+        """
+        original_recv = socket.recv
+        original_recv_multipart = socket.recv_multipart
+
+        def encrypted_recv(flags=0, copy=True, track=False):
+            """Receive and decrypt single message"""
+            encrypted_data = original_recv(flags, copy, track)
+            return self.decrypt_message(encrypted_data)
+
+        def encrypted_recv_multipart(flags=0, copy=True, track=False):
+            """Receive and decrypt multipart message"""
+            encrypted_parts = original_recv_multipart(flags, copy, track)
+            decrypted_parts = []
+            for part in encrypted_parts:
+                decrypted_parts.append(self.decrypt_message(part))
+            return decrypted_parts
+
+        # Replace methods
+        socket.recv = encrypted_recv
+        socket.recv_multipart = encrypted_recv_multipart
+
+        self.logger.info("🔐 🔓 Socket recv() wrapped with decryption")
+        return socket
+
     def get_metrics(self) -> Dict[str, Any]:
         """Obtener métricas crypto"""
         return {
@@ -325,14 +450,22 @@ class CryptoZMQV31:
         }
 
     def close(self):
-        """Limpiar recursos incluyendo variables de entorno INVISIBLES"""
+        """Limpiar recursos incluyendo clave compartida SI somos el último componente"""
         try:
             # Detener rotación automática
             if self.rotation_thread:
                 self.stop_rotation.set()
                 self.rotation_thread.join(timeout=1)
 
-            # Limpiar variables de entorno crypto INVISIBLES
+            # 🔐🤝 NUEVO: Gestión de clave compartida
+            if hasattr(self, 'using_shared_key') and self.using_shared_key:
+                shared_key_env_name = "UPGRADED_HAPPINESS_PIPELINE_KEY"
+
+                # NOTA: NO eliminar la variable de entorno aquí porque otros componentes
+                # podrían seguir usándola. La clave compartida persiste durante toda la sesión.
+                self.logger.info("🔐 🤝 Shared pipeline key kept in environment for other components")
+
+            # Limpiar variables de entorno individuales del componente
             process_id = os.getpid()
             prefix = f"_CRYPTO_ZMQ_{self.component_name.upper()}_{process_id}_"
 
@@ -341,7 +474,9 @@ class CryptoZMQV31:
             for var in vars_to_clean:
                 del os.environ[var]
 
-            self.logger.info(f"🧹 Cleaned {len(vars_to_clean)} invisible crypto vars")
+            if vars_to_clean:
+                self.logger.info(f"🧹 Cleaned {len(vars_to_clean)} individual crypto vars")
+
             self.logger.info("🔐 CryptoZMQ V3.1 closed successfully")
 
         except Exception as e:
