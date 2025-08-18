@@ -133,8 +133,6 @@ class SecurityValidator:
         if self.forced_dry_run:
             self.logger.warning("🔒 FORCED DRY_RUN: Running as root user")
 
-    # 🔧 FIX RÁPIDO: Actualizar el método validate_command en SecurityValidator
-
     def validate_command(self, action: str, target_ip: str, params: Dict) -> Tuple[bool, str]:
         """Validar comando con máxima seguridad"""
         # Solo permitir acciones ultra-seguras
@@ -143,16 +141,12 @@ class SecurityValidator:
         if action not in safe_actions:
             return False, f"Action {action} not permitted. Only {safe_actions} allowed."
 
-        # ✅ PERMITIR "all" para LIST_RULES (es un comando de información)
-        if action == "LIST_RULES" and target_ip == "all":
-            return True, "LIST_RULES with target 'all' is permitted"
-
-        # Validar IP para otras acciones
+        # Validar IP
         if not self._is_valid_ip(target_ip):
             return False, f"Invalid IP: {target_ip}"
 
-        # Bloquear IPs peligrosas (solo para acciones que no sean LIST_RULES)
-        if action != "LIST_RULES" and self._is_dangerous_ip(target_ip):
+        # Bloquear IPs peligrosas
+        if self._is_dangerous_ip(target_ip):
             return False, f"IP {target_ip} is in blocked range"
 
         return True, "Command validation passed"
