@@ -683,7 +683,7 @@ class DashboardBackendV31:
             """Página principal del dashboard"""
             try:
                 # Cargar template HTML
-                template_path = Path(__file__).parent / 'templates' / 'dashboard_v31.html'
+                template_path = Path(__file__).parent / 'templates' / 'dashboard.html'
                 if template_path.exists():
                     with open(template_path, 'r', encoding='utf-8') as f:
                         return f.read()
@@ -1755,7 +1755,17 @@ class DashboardBackendV31:
             try:
                 # 🔐 Recibir mensaje (AUTOMÁTICAMENTE DESCIFRADO)
                 message_bytes = socket.recv(zmq.NOBLOCK)
+                # Antes de procesar el mensaje:
+                self.logger.info(f"🔍 Message received: {len(message_bytes)} bytes")
+                self.logger.info(f"🔍 First 20 bytes: {message_bytes[:20]}")
+                self.logger.info(f"🔐 Crypto wrapper: {bool(self.crypto_wrapper)}")
 
+                # Test UTF-8 validity
+                try:
+                    test_decode = message_bytes.decode('utf-8')
+                    self.logger.info(f"✅ UTF-8 valid")
+                except UnicodeDecodeError as e:
+                    self.logger.warning(f"❌ UTF-8 invalid: {e}")
                 # Procesar evento
                 event = self._parse_ml_event_v31(message_bytes)
                 if event:
@@ -1780,139 +1790,101 @@ class DashboardBackendV31:
         self.logger.info("📡 ML Events processor thread terminado")
 
     def _parse_ml_event_v31(self, message_bytes: bytes) -> Optional[NetworkEventV31]:
-        """Parser para eventos ML V3.1 con campos adicionales"""
+        """🔥 Parser PROTOBUF ONLY - SIN FALLBACK JSON"""
         try:
-            # Intentar protobuf primero
-            if PROTOBUF_AVAILABLE and NetworkEventProto:
-                try:
-                    pb_event = NetworkEventProto.NetworkEvent()
-                    pb_event.ParseFromString(message_bytes)
+            # 🎯 PROTOBUF O NADA - Como todos los otros componentes
+            if not PROTOBUF_AVAILABLE or not NetworkEventProto:
+                self.logger.error("❌ Protobuf V3.1 no disponible - REQUERIDO")
+                return None
 
-                    # Convertir a NetworkEventV31
-                    return NetworkEventV31(
-                        id=getattr(pb_event, 'event_id', f"event_{int(time.time())}"),
-                        timestamp=getattr(pb_event, 'timestamp', time.time() * 1000) / 1000,
-                        source_ip=getattr(pb_event, 'source_ip', '127.0.0.1'),
-                        target_ip=getattr(pb_event, 'target_ip', '127.0.0.1'),
-                        src_port=getattr(pb_event, 'src_port', 0),
-                        dest_port=getattr(pb_event, 'dest_port', 0),
-                        protocol=getattr(pb_event, 'protocol', 'TCP'),
-                        risk_score=float(getattr(pb_event, 'risk_score', 0.5)),
+            # ✅ SOLO PROTOBUF - NOMBRE DE CLASE CORRECTO
+            pb_event = NetworkEventProto.NetworkSecurityEvent()
+            pb_event.ParseFromString(message_bytes)
 
-                        # ✅ NUEVOS CAMPOS V3.1
-                        ensemble_confidence=float(
-                            getattr(pb_event, 'ensemble_confidence', getattr(pb_event, 'risk_score', 0.5))),
-                        pipeline_latency=float(getattr(pb_event, 'pipeline_latency', 0.0)),
-                        capturing_node_id=getattr(pb_event, 'capturing_node_id',
-                                                  getattr(pb_event, 'node_id', 'unknown')),
-
-                        # Coordenadas duales
-                        source_latitude=getattr(pb_event, 'source_latitude', None),
-                        source_longitude=getattr(pb_event, 'source_longitude', None),
-                        target_latitude=getattr(pb_event, 'target_latitude', None),
-                        target_longitude=getattr(pb_event, 'target_longitude', None),
-
-                        # Geolocalización
-                        source_city=getattr(pb_event, 'source_city', None),
-                        source_country=getattr(pb_event, 'source_country', None),
-                        target_city=getattr(pb_event, 'target_city', None),
-                        target_country=getattr(pb_event, 'target_country', None),
-                        geographic_distance_km=getattr(pb_event, 'geographic_distance_km', None),
-                        same_country=getattr(pb_event, 'same_country', None),
-
-                        # Enriquecimiento V3.1
-                        source_ip_enriched=bool(getattr(pb_event, 'source_ip_enriched', False)),
-                        target_ip_enriched=bool(getattr(pb_event, 'target_ip_enriched', False)),
-
-                        # ML Tricapa scores
-                        tricapa_scores={
-                            'isolation_forest': getattr(pb_event, 'isolation_forest_score', 0.5),
-                            'one_class_svm': getattr(pb_event, 'one_class_svm_score', 0.5),
-                            'local_outlier_factor': getattr(pb_event, 'local_outlier_factor_score', 0.5)
-                        },
-
-                        # Información del nodo
-                        node_id=getattr(pb_event, 'node_id', 'unknown'),
-                        agent_id=getattr(pb_event, 'agent_id', ''),
-
-                        # Metadatos
-                        event_type=getattr(pb_event, 'event_type', 'network_event'),
-                        packet_size=getattr(pb_event, 'packet_size', 0)
-                    )
-
-                except Exception as pb_error:
-                    self.logger.debug(f"⚠️ Protobuf parse failed, trying JSON: {pb_error}")
-
-            # Fallback a JSON
-            try:
-                message_text = message_bytes.decode('utf-8')
-                event_data = json.loads(message_text)
-
-                return NetworkEventV31(
-                    id=event_data.get('id', f"event_{int(time.time())}"),
-                    timestamp=event_data.get('timestamp', time.time()),
-                    source_ip=event_data.get('source_ip', '127.0.0.1'),
-                    target_ip=event_data.get('target_ip', '127.0.0.1'),
-                    src_port=event_data.get('src_port', 0),
-                    dest_port=event_data.get('dest_port', 0),
-                    protocol=event_data.get('protocol', 'TCP'),
-                    risk_score=float(event_data.get('risk_score', 0.5)),
-
-                    # V3.1 fields con fallbacks
-                    ensemble_confidence=float(event_data.get('ensemble_confidence', event_data.get('risk_score', 0.5))),
-                    pipeline_latency=float(event_data.get('pipeline_latency', 0.0)),
-                    capturing_node_id=event_data.get('capturing_node_id', 'unknown'),
-
-                    # Geolocalización con fallbacks
-                    source_latitude=event_data.get('source_latitude', event_data.get('latitude')),
-                    source_longitude=event_data.get('source_longitude', event_data.get('longitude')),
-                    target_latitude=event_data.get('target_latitude'),
-                    target_longitude=event_data.get('target_longitude'),
-
-                    source_city=event_data.get('source_city'),
-                    source_country=event_data.get('source_country'),
-                    target_city=event_data.get('target_city'),
-                    target_country=event_data.get('target_country'),
-                    geographic_distance_km=event_data.get('geographic_distance_km'),
-                    same_country=event_data.get('same_country'),
-
-                    source_ip_enriched=bool(event_data.get('source_ip_enriched', False)),
-                    target_ip_enriched=bool(event_data.get('target_ip_enriched', False)),
-
-                    tricapa_scores=event_data.get('tricapa_scores', {
-                        'isolation_forest': 0.5,
-                        'one_class_svm': 0.5,
-                        'local_outlier_factor': 0.5
-                    }),
-
-                    node_id=event_data.get('node_id', 'unknown'),
-                    agent_id=event_data.get('agent_id', ''),
-                    event_type=event_data.get('event_type', 'network_event'),
-                    packet_size=event_data.get('packet_size', 0)
-                )
-
-            except Exception as json_error:
-                self.logger.warning(f"⚠️ JSON parse failed: {json_error}")
-
-            # Crear evento básico como último recurso
+            # Convertir a NetworkEventV31 con todos los campos V3.1
             return NetworkEventV31(
-                id=f"fallback_{int(time.time())}",
-                timestamp=time.time(),
-                source_ip='127.0.0.1',
-                target_ip='127.0.0.1',
-                src_port=0,
-                dest_port=80,
-                protocol='TCP',
-                risk_score=0.1,
-                ensemble_confidence=0.1,
-                pipeline_latency=0.0,
-                capturing_node_id='unknown',
-                event_type='fallback_event'
+                id=getattr(pb_event, 'event_id', f"event_{int(time.time())}"),
+                timestamp=getattr(pb_event, 'timestamp', time.time() * 1000) / 1000,
+                source_ip=getattr(pb_event, 'source_ip', '127.0.0.1'),
+                target_ip=getattr(pb_event, 'target_ip', '127.0.0.1'),
+                src_port=getattr(pb_event, 'src_port', 0),
+                dest_port=getattr(pb_event, 'dest_port', 0),
+                protocol=getattr(pb_event, 'protocol', 'TCP'),
+                risk_score=float(getattr(pb_event, 'risk_score', 0.5)),
+
+                # ✅ CAMPOS V3.1 ESPECÍFICOS
+                ensemble_confidence=float(
+                    getattr(pb_event, 'ensemble_confidence', getattr(pb_event, 'risk_score', 0.5))),
+                pipeline_latency=float(getattr(pb_event, 'pipeline_latency', 0.0)),
+                capturing_node_id=getattr(pb_event, 'capturing_node_id', getattr(pb_event, 'node_id', 'unknown')),
+
+                # Coordenadas duales V3.1
+                source_latitude=getattr(pb_event, 'source_latitude', None),
+                source_longitude=getattr(pb_event, 'source_longitude', None),
+                target_latitude=getattr(pb_event, 'target_latitude', None),
+                target_longitude=getattr(pb_event, 'target_longitude', None),
+
+                # Geolocalización enriquecida
+                source_city=getattr(pb_event, 'source_city', None),
+                source_country=getattr(pb_event, 'source_country', None),
+                target_city=getattr(pb_event, 'target_city', None),
+                target_country=getattr(pb_event, 'target_country', None),
+                geographic_distance_km=getattr(pb_event, 'geographic_distance_km', None),
+                same_country=getattr(pb_event, 'same_country', None),
+
+                # Enriquecimiento V3.1
+                source_ip_enriched=bool(getattr(pb_event, 'source_ip_enriched', False)),
+                target_ip_enriched=bool(getattr(pb_event, 'target_ip_enriched', False)),
+
+                # ML Tricapa scores
+                tricapa_scores={
+                    'isolation_forest': getattr(pb_event, 'isolation_forest_score', 0.5),
+                    'one_class_svm': getattr(pb_event, 'one_class_svm_score', 0.5),
+                    'local_outlier_factor': getattr(pb_event, 'local_outlier_factor_score', 0.5)
+                },
+
+                # Información del nodo
+                node_id=getattr(pb_event, 'node_id', 'unknown'),
+                agent_id=getattr(pb_event, 'agent_id', ''),
+
+                # Metadatos
+                event_type=getattr(pb_event, 'event_type', 'network_event'),
+                packet_size=getattr(pb_event, 'packet_size', 0)
             )
 
         except Exception as e:
-            self.logger.error(f"❌ Error parsing ML event: {e}")
+            # 🚨 Si falla protobuf = ERROR REAL, no fallback
+            self.logger.error(f"❌ PROTOBUF parse failed: {e}")
+            self.logger.error(f"   📊 Message size: {len(message_bytes)} bytes")
+            self.logger.error(f"   🔍 First 20 bytes: {message_bytes[:20]}")
+
+            # ❌ SIN FALLBACK - Protobuf o nada
             return None
+
+    # ✅ COMENTAR/ELIMINAR COMPLETAMENTE TODO EL CÓDIGO DE FALLBACK JSON:
+
+    """
+    # ❌ ELIMINADO: Fallback JSON problemático
+    # try:
+    #     message_text = message_bytes.decode('utf-8')  # ← Aquí estaba el problema
+    #     event_data = json.loads(message_text)
+    #     return NetworkEventV31(...) # ← Fallback innecesario
+    # except Exception as json_error:
+    #     self.logger.warning(f"⚠️ JSON processing failed: {json_error}")
+
+    # ❌ ELIMINADO: Evento básico de fallback
+    # return NetworkEventV31(
+    #     id=f"fallback_{int(time.time())}",
+    #     ...
+    # )
+    """
+
+    # 🎯 FILOSOFÍA:
+    #   - PROTOBUF es la norma
+    #   - JSON solo para axiomas y RAG
+    #   - SIN fallbacks que nos distraigan
+    #   - Falla rápido y limpio
+    #   - Consistencia con otros componentes
 
     def _update_basic_stats(self, event: NetworkEventV31):
         """Actualizar estadísticas básicas"""
