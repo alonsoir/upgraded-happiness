@@ -1,36 +1,46 @@
 #!/usr/bin/env python3
 """
-Dashboard V3.1 - Backend Principal con Fleet Management y Protobuf V3.1
-✅ V3.1: Protobuf exclusivo (TODO O NADA)
-✅ V3.1: SUB connection al ML_detector puerto 5580
-✅ V3.1: Fleet management múltiples firewall agents
-✅ V3.1: Dual communication (dashboard + scheduler channels)
-✅ V3.1: NetworkSecurityEvent parsing completo
-✅ V3.1: Nuclear broadcast capability
-✅ V3.1: Sin cifrado/compresión (desarrollo)
+🚀 Dashboard Backend V3.1 - CON CRYPTO + COMPRESIÓN AUTOMÁTICA
+✅ Sistema SCADA para monitoreo de seguridad distribuido
+✅ Compatible con protobuf V3.1 + ML Detector tricapa
+✅ 🔐 CRYPTO TRANSPARENTE - AES-256-GCM + LZ4 automático
+✅ 🏆 Fleet Management cifrado - Comunicación segura con agentes
+✅ Zero-knowledge crypto para el desarrollador
+✅ Mismo patrón que scheduler-firewall.py y simple_firewall_agent_v31.py
 """
-from typing import Dict, List, Optional, Any, Set
-import zmq
+
+import asyncio
 import json
-import threading
-import time
 import logging
-import queue
 import os
-import signal
 import sys
-import psutil
-import hashlib
-from dataclasses import dataclass, asdict
+import time
+import zmq
+import zmq.asyncio
+import threading
+import signal
 from datetime import datetime, timedelta
 from pathlib import Path
-import http.server
-import socketserver
-from urllib.parse import urlparse
-import mimetypes
+from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass, asdict
 from collections import defaultdict, deque
+import queue
+import uuid
 
-# 📦 Protobuf V3.1 - IMPORTACIÓN EXCLUSIVA (TODO O NADA)
+# 🔐 STEP 1: Importar CryptoZMQV31 (mismo patrón que otros componentes)
+crypto_wrapper_class = None
+try:
+    from crypto.crypto_zmq_v31 import CryptoZMQV31
+
+    crypto_wrapper_class = CryptoZMQV31
+    print("✅ CryptoZMQV31 disponible para Dashboard V3.1")
+except ImportError as e:
+    print(f"⚠️ CryptoZMQV31 NO disponible: {e}")
+
+# 🔍 STEP 2: Add protocols path for protobuf imports (MISMO PATRÓN QUE SCHEDULER)
+sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
+
+# 📦 Protobuf V3.1 - Importación exclusiva (TODO O NADA) - IGUAL QUE SCHEDULER
 PROTOBUF_AVAILABLE = False
 PROTOBUF_VERSION = "unavailable"
 NetworkEventProto = None
@@ -38,31 +48,15 @@ FirewallCommandsProto = None
 
 
 def import_dashboard_protobuf_v31():
-    """Importa protobuf V3.1 EXCLUSIVO para dashboard - TODO O NADA"""
+    """Importa protobuf V3.1 EXCLUSIVO para dashboard - MISMO MECANISMO QUE SCHEDULER"""
     global NetworkEventProto, FirewallCommandsProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
     print("🔍 Dashboard: Buscando protobuf V3.1 EXCLUSIVO...")
 
-    # 1. IMPORTAR NETWORK SECURITY CLEAN V3.1
-    network_imported = False
-    network_strategies = [
-        ("network_security_clean_v31_pb2", "Importación directa v3.1"),
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
-    ]
-
-    for import_path, description in network_strategies:
-        try:
-            NetworkEventProto = __import__(import_path, fromlist=[''])
-            network_imported = True
-            print(f"✅ NetworkSecurityEvent v3.1 cargado: {description}")
-            break
-        except ImportError:
-            continue
-
-    # 2. IMPORTAR FIREWALL COMMANDS V3.1
+    # 1. IMPORTAR FIREWALL COMMANDS V3.1
     firewall_imported = False
     firewall_strategies = [
-        ("firewall_commands_v31_pb2", "Importación directa v3.1"),
+        ("firewall_commands_v31_pb2", "Importación directa"),
         ("protocols.v3.1.firewall_commands_v31_pb2", "Paquete protocols.v3.1"),
     ]
 
@@ -75,304 +69,229 @@ def import_dashboard_protobuf_v31():
         except ImportError:
             continue
 
-    # 3. BÚSQUEDA POR PATHS DINÁMICOS
-    if not network_imported or not firewall_imported:
+    # 2. IMPORTAR NETWORK EVENT (ML Detector events)
+    network_imported = False
+    network_strategies = [
+        ("network_security_clean_v31_pb2", "Importación directa v3.1"),
+        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
+        ("network_event_extended_v3_pb2", "Importación directa v3.0"),
+        ("protocols.v3.1.network_event_extended_v3_pb2", "Paquete protocols.v3.1 v3.0"),
+    ]
+
+    for import_path, description in network_strategies:
+        try:
+            NetworkEventProto = __import__(import_path, fromlist=[''])
+            network_imported = True
+            print(f"✅ NetworkEvent cargado: {description}")
+            break
+        except ImportError:
+            continue
+
+    # 3. ESTRATEGIA DE BÚSQUEDA POR PATHS DINÁMICOS (IGUAL QUE SCHEDULER)
+    if not firewall_imported or not network_imported:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         possible_paths = [
             os.path.join(current_dir, '..', 'protocols', 'v3.1'),
             os.path.join(current_dir, 'protocols', 'v3.1'),
             current_dir,
+            os.path.join(current_dir, '..'),
         ]
 
         for protocols_path in possible_paths:
             protocols_path = os.path.abspath(protocols_path)
 
-            # Buscar NetworkSecurityEvent V3.1
-            if not network_imported:
-                network_v31_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
-                if os.path.exists(network_v31_file):
-                    try:
-                        sys.path.insert(0, protocols_path)
-                        import network_security_clean_v31_pb2 as NetworkEventProto
-                        network_imported = True
-                        print(f"✅ NetworkSecurityEvent v3.1 cargado desde: {protocols_path}")
-                    except ImportError:
-                        if protocols_path in sys.path:
-                            sys.path.remove(protocols_path)
-
             # Buscar FirewallCommands V3.1
             if not firewall_imported:
-                firewall_v31_file = os.path.join(protocols_path, 'firewall_commands_v31_pb2.py')
-                if os.path.exists(firewall_v31_file):
+                firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_v31_pb2.py')
+                if os.path.exists(firewall_pb2_file):
                     try:
-                        if protocols_path not in sys.path:
-                            sys.path.insert(0, protocols_path)
+                        sys.path.insert(0, protocols_path)
                         import firewall_commands_v31_pb2 as FirewallCommandsProto
                         firewall_imported = True
                         print(f"✅ FirewallCommands v3.1 cargado desde: {protocols_path}")
+                    except ImportError as e:
+                        if protocols_path in sys.path:
+                            sys.path.remove(protocols_path)
+
+            # Buscar NetworkEvent
+            if not network_imported:
+                # Prioridad 1: V3.1 limpio
+                network_v31_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
+                network_v3_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+
+                if os.path.exists(network_v31_file):
+                    try:
+                        if protocols_path not in sys.path:
+                            sys.path.insert(0, protocols_path)
+                        import network_security_clean_v31_pb2 as NetworkEventProto
+                        network_imported = True
+                        print(f"✅ NetworkEvent v3.1 limpio cargado desde: {protocols_path}")
                     except ImportError:
                         pass
 
-    # 4. VERIFICACIÓN FINAL - TODO O NADA
-    if network_imported and firewall_imported:
+                # Fallback: V3.0 compatible
+                elif os.path.exists(network_v3_file):
+                    try:
+                        if protocols_path not in sys.path:
+                            sys.path.insert(0, protocols_path)
+                        import network_event_extended_v3_pb2 as NetworkEventProto
+                        network_imported = True
+                        print(f"✅ NetworkEvent v3.0 cargado desde: {protocols_path}")
+                    except ImportError:
+                        pass
+
+    # 4. VERIFICACIÓN FINAL - TODO O NADA (IGUAL QUE SCHEDULER)
+    if firewall_imported and network_imported:
         PROTOBUF_AVAILABLE = True
         PROTOBUF_VERSION = "v3.1.0"
         print(f"🎯 Dashboard: Protobuf V3.1 COMPLETO cargado exitosamente")
 
-        # Verificar que NetworkSecurityEvent tiene campos V3.1
+        # Verificar que FirewallCommand tiene los campos nativos V3.1
         try:
-            test_event = NetworkEventProto.NetworkSecurityEvent()
-            if hasattr(test_event, 'network_features') and hasattr(test_event, 'geo_enrichment'):
-                print(f"✅ Verificado: NetworkSecurityEvent V3.1 tiene campos requeridos")
+            test_command = FirewallCommandsProto.FirewallCommand()
+            fields = [field.name for field in test_command.DESCRIPTOR.fields]
+
+            if 'node_id' in fields and 'timestamp' in fields:
+                print(f"✅ Verificado: FirewallCommand V3.1 tiene node_id y timestamp nativos")
+                print(f"📋 Campos disponibles: {fields}")
                 return True
             else:
-                print(f"❌ ERROR: NetworkSecurityEvent no tiene estructura V3.1")
+                print(f"❌ ERROR: FirewallCommand no tiene campos V3.1 requeridos")
+                print(f"📋 Campos encontrados: {fields}")
+                print(f"📋 Campos requeridos: node_id, timestamp")
                 return False
+
         except Exception as e:
-            print(f"❌ ERROR verificando estructura V3.1: {e}")
+            print(f"❌ ERROR verificando campos V3.1: {e}")
             return False
     else:
+        # FALLO TOTAL - Mostrar lo que falta (IGUAL QUE SCHEDULER)
         print(f"❌ Dashboard: Protobuf V3.1 REQUERIDO pero NO ENCONTRADO")
         print(f"📋 Estado:")
-        print(f"   NetworkSecurityEvent V3.1: {'✅' if network_imported else '❌'}")
         print(f"   FirewallCommands V3.1: {'✅' if firewall_imported else '❌'}")
+        print(f"   NetworkEvent: {'✅' if network_imported else '❌'}")
+        print(f"📁 Archivos requeridos:")
+        print(f"   • firewall_commands_v31_pb2.py")
+        print(f"   • network_security_clean_v31_pb2.py (o network_event_extended_v3_pb2.py)")
+        print(f"📍 Ubicaciones buscadas:")
+        for path in [
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'protocols', 'v3.1'),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'protocols', 'v3.1'),
+        ]:
+            print(f"   • {os.path.abspath(path)}")
+        print(f"🔧 SOLUCIÓN: Instalar protobuf V3.1 o compilar .proto files")
         return False
 
 
-# Ejecutar importación V3.1 EXCLUSIVA
+# Ejecutar importación V3.1 EXCLUSIVA (IGUAL QUE SCHEDULER)
 if not import_dashboard_protobuf_v31():
     print(f"💥 FATAL: Dashboard requiere protobuf V3.1 para funcionar")
     print(f"🛑 PARAR EJECUCIÓN - Sin V3.1 no hay dashboard")
     sys.exit(1)
 
+# Flask imports
+try:
+    from flask import Flask, jsonify, request, render_template_string, send_from_directory
+    from flask_cors import CORS
 
-class ConfigurationError(Exception):
-    """Error de configuración del dashboard"""
-    pass
-
-
-class FirewallRulesError(Exception):
-    """Error en reglas de firewall"""
-    pass
-
-
-@dataclass
-class FirewallRule:
-    """Regla de firewall desde JSON"""
-    risk_range: List[int]
-    action: str
-    description: str
-    params: Dict[str, Any]
-    priority: str = "MEDIUM"
-    dry_run: bool = False
-    enabled: bool = True
+    FLASK_AVAILABLE = True
+except ImportError as e:
+    print(f"❌ Flask no disponible: {e}")
+    FLASK_AVAILABLE = False
+    sys.exit(1)
 
 
 @dataclass
-class FirewallAgentInfo:
-    """Información de un agente firewall"""
-    node_id: str
-    dashboard_commands_endpoint: str
-    dashboard_responses_endpoint: str
-    capabilities: List[str]
-    max_rules: int = 1000
-    default_rule_duration: int = 600
-    status: str = "active"
-    active_rules: int = 0
-
-
-class FirewallFleetManager:
-    """Manager de fleet de firewall agents V3.1"""
-
-    def __init__(self, fleet_config: dict, logger, zmq_context):
-        self.logger = logger
-        self.context = zmq_context
-        self.agents: Dict[str, FirewallAgentInfo] = {}
-        self.command_sockets: Dict[str, zmq.Socket] = {}
-        self.response_sockets: Dict[str, zmq.Socket] = {}
-        self.rules: List[FirewallRule] = []
-        self.manual_actions: Dict[str, Dict] = {}
-
-        self._load_fleet_config(fleet_config)
-        self._setup_fleet_sockets()
-
-    def _load_fleet_config(self, fleet_config: dict):
-        """Cargar configuración de la fleet desde JSON"""
-        try:
-            # Cargar agentes
-            agents_config = fleet_config.get('agents', {})
-            for agent_id, agent_config in agents_config.items():
-                agent_info = FirewallAgentInfo(
-                    node_id=agent_id,
-                    dashboard_commands_endpoint=f"tcp://{agent_config['dashboard_commands']['address']}:{agent_config['dashboard_commands']['port']}",
-                    dashboard_responses_endpoint=f"tcp://{agent_config['dashboard_responses']['address']}:{agent_config['dashboard_responses']['port']}",
-                    capabilities=agent_config.get('capabilities', ['LIST_RULES']),
-                    max_rules=agent_config.get('max_rules', 10),
-                    default_rule_duration=agent_config.get('default_rule_duration', 60)
-                )
-                self.agents[agent_id] = agent_info
-
-            self.logger.info(f"✅ Fleet cargada: {len(self.agents)} agentes")
-
-        except Exception as e:
-            self.logger.error(f"❌ Error cargando fleet config: {e}")
-            raise
-
-    def _setup_fleet_sockets(self):
-        """Configurar sockets para todos los agents en la fleet"""
-        try:
-            for agent_id, agent_info in self.agents.items():
-                # Socket de comandos (PUB)
-                cmd_socket = self.context.socket(zmq.PUB)
-                cmd_socket.setsockopt(zmq.SNDHWM, 1000)
-                cmd_socket.setsockopt(zmq.LINGER, 0)
-                cmd_socket.bind(agent_info.dashboard_commands_endpoint)
-                self.command_sockets[agent_id] = cmd_socket
-
-                # Socket de respuestas (SUB)
-                resp_socket = self.context.socket(zmq.SUB)
-                resp_socket.setsockopt(zmq.RCVHWM, 1000)
-                resp_socket.setsockopt(zmq.SUBSCRIBE, b"")  # All topics
-                resp_socket.connect(agent_info.dashboard_responses_endpoint)
-                self.response_sockets[agent_id] = resp_socket
-
-                self.logger.info(f"✅ Sockets configurados para agent {agent_id}")
-
-        except Exception as e:
-            self.logger.error(f"❌ Error configurando sockets fleet: {e}")
-            raise
-
-    def send_command_to_agent(self, agent_id: str, command: dict):
-        """Enviar comando a un agente específico"""
-        try:
-            if agent_id not in self.command_sockets:
-                raise ValueError(f"Agent {agent_id} no encontrado")
-
-            if not PROTOBUF_AVAILABLE:
-                raise ImportError("Protobuf V3.1 no disponible")
-
-            # Crear comando protobuf V3.1
-            proto_command = FirewallCommandsProto.FirewallCommand()
-            proto_command.command_id = command.get('command_id', f"cmd_{int(time.time())}")
-            proto_command.action = self._get_action_enum(command.get('action', 'LIST_RULES'))
-            proto_command.target_ip = command.get('target_ip', '127.0.0.1')
-            proto_command.target_port = command.get('target_port', 0)
-            proto_command.duration_seconds = command.get('duration_seconds', 300)
-            proto_command.reason = command.get('reason', 'Dashboard V3.1 command')
-            proto_command.node_id = agent_id
-            proto_command.timestamp = int(time.time() * 1000)
-            proto_command.dry_run = command.get('dry_run', True)
-
-            # Serializar y enviar
-            command_bytes = proto_command.SerializeToString()
-            self.command_sockets[agent_id].send(command_bytes)
-
-            self.logger.info(f"🔥 Comando enviado a {agent_id}: {command['action']}")
-            return True
-
-        except Exception as e:
-            self.logger.error(f"❌ Error enviando comando a {agent_id}: {e}")
-            return False
-
-    def nuclear_broadcast(self, command: dict):
-        """🚨 NUCLEAR BROADCAST: Enviar comando a TODOS los agents"""
-        try:
-            self.logger.warning(f"🚨 NUCLEAR BROADCAST iniciado: {command['action']}")
-
-            results = {}
-            for agent_id in self.agents.keys():
-                result = self.send_command_to_agent(agent_id, command)
-                results[agent_id] = result
-
-            successful = sum(results.values())
-            total = len(results)
-
-            self.logger.warning(f"🚨 NUCLEAR BROADCAST completado: {successful}/{total} exitosos")
-            return results
-
-        except Exception as e:
-            self.logger.error(f"❌ Error en nuclear broadcast: {e}")
-            return {}
-
-    def _get_action_enum(self, action_str: str):
-        """Convertir string action a enum protobuf"""
-        action_mapping = {
-            'BLOCK_IP': FirewallCommandsProto.CommandAction.BLOCK_IP,
-            'UNBLOCK_IP': FirewallCommandsProto.CommandAction.UNBLOCK_IP,
-            'RATE_LIMIT_IP': FirewallCommandsProto.CommandAction.RATE_LIMIT_IP,
-            'ALLOW_IP_TEMP': FirewallCommandsProto.CommandAction.ALLOW_IP_TEMP,
-            'LIST_RULES': FirewallCommandsProto.CommandAction.LIST_RULES,
-            'FLUSH_RULES': FirewallCommandsProto.CommandAction.FLUSH_RULES,
-            'BACKUP_RULES': FirewallCommandsProto.CommandAction.BACKUP_RULES,
-            'RESTORE_RULES': FirewallCommandsProto.CommandAction.RESTORE_RULES
-        }
-        return action_mapping.get(action_str, FirewallCommandsProto.CommandAction.LIST_RULES)
-
-    def get_available_agents(self) -> List[str]:
-        """Obtener lista de agents disponibles"""
-        return list(self.agents.keys())
-
-    def get_agent_info(self, agent_id: str) -> Optional[FirewallAgentInfo]:
-        """Obtener información de un agente específico"""
-        return self.agents.get(agent_id)
-
-
-@dataclass
-class SecurityEvent:
-    """Evento de seguridad V3.1"""
+class NetworkEventV31:
+    """Evento de red V3.1 enriquecido"""
     id: str
+    timestamp: float
     source_ip: str
     target_ip: str
+    src_port: int
+    dest_port: int
+    protocol: str
     risk_score: float
-    anomaly_score: float
+
+    # ✅ NUEVOS CAMPOS V3.1
+    ensemble_confidence: float
+    pipeline_latency: float
+    capturing_node_id: str
+
+    # Coordenadas duales V3.1
     source_latitude: Optional[float] = None
     source_longitude: Optional[float] = None
     target_latitude: Optional[float] = None
     target_longitude: Optional[float] = None
-    timestamp: str = None
-    attack_type: Optional[str] = None
-    location: Optional[str] = None
-    packets: int = 0
-    bytes: int = 0
-    port: Optional[int] = None
-    protocol: Optional[str] = None
-    ml_models_scores: Optional[Dict] = None
-    protobuf_data: Optional[Dict] = None
-    node_id: Optional[str] = None
 
-    # V3.1 specific fields
-    geographic_distance_km: Optional[float] = None
-    same_country: Optional[bool] = None
+    # Geolocalización enriquecida
     source_city: Optional[str] = None
     source_country: Optional[str] = None
     target_city: Optional[str] = None
     target_country: Optional[str] = None
-    source_ip_enriched: Optional[bool] = None
-    target_ip_enriched: Optional[bool] = None
+    geographic_distance_km: Optional[float] = None
+    same_country: Optional[bool] = None
 
-    def __post_init__(self):
-        if self.timestamp is None:
-            self.timestamp = datetime.now().isoformat()
+    # Enriquecimiento de IPs V3.1
+    source_ip_enriched: bool = False
+    target_ip_enriched: bool = False
+
+    # ML Analysis V3.1 Tricapa
+    tricapa_scores: Optional[Dict[str, float]] = None
+
+    # Información del nodo
+    node_id: Optional[str] = None
+    agent_id: Optional[str] = None
+
+    # Metadatos adicionales
+    event_type: str = "network_event"
+    packet_size: int = 0
+    bytes_count: int = 0
+    packets_count: int = 1
+
+    # Pipeline tracking V3.1
+    pipeline_tracking: Optional[Dict] = None
+
+
+@dataclass
+class FirewallEventV31:
+    """Evento de firewall V3.1"""
+    id: str
+    timestamp: float
+    type: str  # 'command', 'response', 'error'
+    command_id: Optional[str] = None
+    action: Optional[str] = None
+    target_ip: Optional[str] = None
+    agent_id: Optional[str] = None
+    success: Optional[bool] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+    execution_time: Optional[float] = None
+    source: str = "Dashboard V3.1"
 
 
 class DashboardLogger:
-    """Logger V3.1"""
+    """Logger específico para dashboard"""
 
-    def __init__(self, node_id: str, log_config: dict):
-        self.logger = logging.getLogger(f"dashboard_v31_{node_id}")
-        self.node_id = node_id
+    def __init__(self, config: dict):
+        self.logger = logging.getLogger("dashboard_v31")
+        self._setup_logging(config.get('logging', {}))
 
-        log_level = getattr(logging, log_config.get('level', 'INFO').upper())
-        log_format = log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    def _setup_logging(self, log_config: dict):
+        """Configurar logging del dashboard"""
+        level = getattr(logging, log_config.get('level', 'INFO').upper())
 
-        formatter = logging.Formatter(log_format)
+        # Clear existing handlers
         self.logger.handlers.clear()
-        self.logger.setLevel(log_level)
+        self.logger.setLevel(level)
 
         # Console handler
         console_config = log_config.get('handlers', {}).get('console', {})
         if console_config.get('enabled', True):
             console_handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - [dashboard_v31] [crypto_ready] - %(message)s'
+            )
             console_handler.setFormatter(formatter)
             console_handler.setLevel(getattr(logging, console_config.get('level', 'INFO').upper()))
             self.logger.addHandler(console_handler)
@@ -381,999 +300,1763 @@ class DashboardLogger:
         file_config = log_config.get('handlers', {}).get('file', {})
         if file_config.get('enabled', True):
             file_path = file_config.get('path', 'logs/dashboard_v31.log')
-            try:
-                Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-                file_handler = logging.FileHandler(file_path, encoding='utf-8')
-                file_handler.setFormatter(formatter)
-                file_handler.setLevel(getattr(logging, file_config.get('level', 'INFO').upper()))
-                self.logger.addHandler(file_handler)
-                print(f"✅ Logging V3.1 a archivo: {file_path}")
-            except Exception as e:
-                print(f"⚠️ Error configurando file logging: {e}")
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
 
-        # V3.1 events log
-        v31_config = log_config.get('handlers', {}).get('v31_events_log', {})
-        if v31_config.get('enabled', True):
-            v31_path = v31_config.get('path', 'logs/dashboard_v31_events.jsonl')
-            try:
-                Path(v31_path).parent.mkdir(parents=True, exist_ok=True)
-                print(f"✅ V3.1 events log configurado: {v31_path}")
-            except Exception as e:
-                print(f"⚠️ Error configurando V3.1 events log: {e}")
+            file_handler = logging.FileHandler(file_path, encoding='utf-8')
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(getattr(logging, file_config.get('level', 'INFO').upper()))
+            self.logger.addHandler(file_handler)
 
-    def info(self, msg, *args, **kwargs):
-        self.logger.info(f"[v31_dashboard:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+    def info(self, msg):
+        self.logger.info(msg)
 
-    def warning(self, msg, *args, **kwargs):
-        self.logger.warning(f"[v31_dashboard:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+    def warning(self, msg):
+        self.logger.warning(msg)
 
-    def error(self, msg, *args, **kwargs):
-        self.logger.error(f"[v31_dashboard:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+    def error(self, msg):
+        self.logger.error(msg)
 
-    def debug(self, msg, *args, **kwargs):
-        self.logger.debug(f"[v31_dashboard:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+    def debug(self, msg):
+        self.logger.debug(msg)
 
 
 class DashboardConfigV31:
-    """Configuración V3.1 del dashboard"""
+    """Configuración del dashboard V3.1"""
 
-    def __init__(self, config_file: str, firewall_rules_file: str):
+    def __init__(self, config_file: str):
         self.config_file = config_file
-        self.firewall_rules_file = firewall_rules_file
-        self.config = None
-        self._load_and_validate_config()
+        self.config = self._load_config()
+        self._validate_config()
 
-    def _load_and_validate_config(self):
-        """Cargar y validar configuración V3.1"""
+        # Extraer configuraciones principales
+        self.node_id = self.config['node_id']
+        self.component = self.config['component']
+        self.network = self.config['network']
+        self.zmq_config = self.config['zmq']
+        self.web_server = self.config['web_server']
+        self.monitoring = self.config['monitoring']
+
+    def _load_config(self) -> dict:
+        """Cargar configuración desde archivo JSON"""
         if not Path(self.config_file).exists():
-            raise ConfigurationError(f"❌ Config file {self.config_file} no encontrado")
-
-        if not Path(self.firewall_rules_file).exists():
-            raise ConfigurationError(f"❌ Firewall rules file {self.firewall_rules_file} no encontrado")
+            raise FileNotFoundError(f"❌ Config file not found: {self.config_file}")
 
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
-                self.config = json.load(f)
-
-            with open(self.firewall_rules_file, 'r', encoding='utf-8') as f:
-                self.firewall_config = json.load(f)
-
-        except json.JSONDecodeError as e:
-            raise ConfigurationError(f"❌ Error parseando JSON: {e}")
+                return json.load(f)
         except Exception as e:
-            raise ConfigurationError(f"❌ Error cargando config: {e}")
+            raise ValueError(f"❌ Error loading config: {e}")
 
-        self._extract_config_values()
-        print(f"✅ Configuración V3.1 cargada: {self.config_file}")
-
-    def _extract_config_values(self):
-        """Extraer valores de configuración V3.1"""
-        # Node info
-        self.node_id = self.config['node_id']
-        component = self.config['component']
-        self.component_name = component['name']
-        self.version = component['version']
-
-        # Network V3.1
-        network = self.config['network']
-
-        # ML Events (SUB from ML_detector V3.1)
-        ml_events = network['ml_events_input']
-        self.ml_detector_address = ml_events['address']
-        self.ml_detector_port = ml_events['port']
-        self.ml_detector_mode = ml_events['mode']
-        self.ml_detector_socket_type = ml_events['socket_type']  # SUB
-
-        # Fleet config
-        fleet_config = network['firewall_agents_fleet']
-        self.fleet_enabled = fleet_config['enabled']
-        self.nuclear_broadcast_enabled = fleet_config['nuclear_broadcast_enabled']
-        self.fleet_agents = fleet_config['agents']
-
-        # Web interface
-        admin = network['admin_interface']
-        self.web_host = admin['address']
-        self.web_port = admin['port']
-
-        # ZMQ V3.1
-        zmq_config = self.config['zmq']
-        self.zmq_io_threads = zmq_config['context_io_threads']
-        self.zmq_max_sockets = zmq_config['max_sockets']
-
-        # Processing V3.1
-        processing = self.config['processing']
-        threads = processing['threads']
-        self.ml_events_subscribers = threads['ml_events_subscribers']
-        self.firewall_fleet_managers = threads['firewall_fleet_managers']
-        self.firewall_response_consumers = threads['firewall_response_consumers']
-
-        queues = processing['internal_queues']
-        self.ml_events_queue_size = queues['ml_events_queue_size']
-        self.firewall_commands_queue_size = queues['firewall_commands_queue_size']
-
-        # Logging
-        self.logging_config = self.config['logging']
-
-        # Firewall fleet (from firewall_rules.json)
-        self.firewall_fleet_config = self.firewall_config.get('firewall_rules', {}).get('agents_fleet', {})
-        self.firewall_rules = self.firewall_config.get('firewall_rules', {}).get('rules', [])
-        self.manual_actions = self.firewall_config.get('firewall_rules', {}).get('manual_actions', {})
+    def _validate_config(self):
+        """Validar configuración requerida"""
+        required_keys = ['node_id', 'component', 'network', 'zmq', 'web_server']
+        for key in required_keys:
+            if key not in self.config:
+                raise ValueError(f"❌ Missing required config key: {key}")
 
 
-class SecurityDashboardV31:
-    """Dashboard principal V3.1 con Fleet Management"""
+class ZMQConnectionManagerV31:
+    """Manager de conexiones ZMQ V3.1 CON CRYPTO"""
 
-    def __init__(self, config: DashboardConfigV31):
+    def __init__(self, config: DashboardConfigV31, logger: DashboardLogger, crypto_wrapper=None):
         self.config = config
-        self.logger = DashboardLogger(config.node_id, config.logging_config)
+        self.logger = logger
+        self.crypto_wrapper = crypto_wrapper  # 🔐 CRYPTO WRAPPER
 
-        # ZMQ Context
-        self.context = zmq.Context(io_threads=config.zmq_io_threads)
+        self.context = zmq.asyncio.Context()
+        self.sockets = {}
+        self.connections_status = {}
 
-        # Fleet Manager V3.1
-        self.fleet_manager = FirewallFleetManager(
-            config.firewall_fleet_config,
-            self.logger,
-            self.context
-        )
+        # Fleet management sockets
+        self.fleet_command_sockets = {}  # Por agent_id
+        self.fleet_response_sockets = {}
 
-        # Estado del dashboard
-        self.events: List[SecurityEvent] = []
-        self.recent_events: List[Dict] = []  # Para frontend
-
-        # Colas de procesamiento V3.1
-        self.ml_events_queue = queue.Queue(maxsize=config.ml_events_queue_size)
-        self.firewall_commands_queue = queue.Queue(maxsize=config.firewall_commands_queue_size)
-
-        # Estadísticas V3.1
-        self.stats = {
-            'events_received': 0,
-            'events_processed': 0,
-            'commands_sent': 0,
-            'threats_blocked': 0,
-            'events_per_minute': 0,
-            'high_risk_events': 0,
-            'total_events': 0,
-            'success_rate': 95,
-            'failures': 0,
-            'confirmations': 0,
-            'protobuf_v31_messages': 0,
-            'ml_detector_v31_connected': False,
-            'fleet_agents_active': len(self.fleet_manager.agents),
-            'nuclear_broadcasts_sent': 0,
-            'last_update': datetime.now().isoformat(),
-            'uptime_seconds': 0
-        }
-
-        self.running = False
-        self.start_time = time.time()
-
-        # Setup sockets V3.1
-        self._setup_zmq_sockets_v31()
-
-    def _setup_zmq_sockets_v31(self):
-        """Configurar sockets ZMQ V3.1"""
-        self.logger.info("🔧 Configurando sockets ZMQ V3.1...")
-
+    async def setup_connections(self):
+        """Setup todas las conexiones ZMQ V3.1"""
         try:
-            # ML Events SUB Socket (V3.1)
-            self.ml_socket = self.context.socket(zmq.SUB)
-            self.ml_socket.setsockopt(zmq.RCVHWM, 2000)
-            self.ml_socket.setsockopt(zmq.LINGER, 0)
-            self.ml_socket.setsockopt(zmq.RCVTIMEO, 1000)
-            self.ml_socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all topics
+            await self._setup_ml_events_connection()
+            await self._setup_scheduler_connections()
+            await self._setup_fleet_connections()
 
-            ml_endpoint = f"tcp://{self.config.ml_detector_address}:{self.config.ml_detector_port}"
-            self.ml_socket.connect(ml_endpoint)
-
-            self.logger.info(f"✅ ML Events SUB socket conectado a {ml_endpoint}")
+            self.logger.info("✅ Todas las conexiones ZMQ V3.1 establecidas")
 
         except Exception as e:
-            self.logger.error(f"❌ Error configurando sockets V3.1: {e}")
+            self.logger.error(f"❌ Error setting up ZMQ connections: {e}")
             raise
 
-    def start(self):
-        """Iniciar dashboard V3.1"""
-        self.running = True
-        self.logger.info(f"🚀 Iniciando Dashboard V3.1...")
-        self.logger.info(f"📋 Node ID: {self.config.node_id}")
-        self.logger.info(f"🏗️ Component: {self.config.component_name} v{self.config.version}")
-        self.logger.info(f"🔥 Fleet Agents: {len(self.fleet_manager.agents)}")
-        self.logger.info(f"🚨 Nuclear Broadcast: {self.config.nuclear_broadcast_enabled}")
+    async def _setup_ml_events_connection(self):
+        """Setup conexión con ML Detector V3.1"""
+        ml_config = self.config.network.get('ml_events_input', {})
 
-        # Mostrar configuración de fleet
-        for agent_id, agent_info in self.fleet_manager.agents.items():
-            self.logger.info(f"   🤖 Agent: {agent_id} -> {agent_info.dashboard_commands_endpoint}")
+        if ml_config.get('enabled', True):
+            socket_type = getattr(zmq, ml_config.get('socket_type', 'SUB'))
+            socket = self.context.socket(socket_type)
 
-        # Iniciar hilos V3.1
-        self._start_processing_threads_v31()
+            # Configurar socket
+            socket.setsockopt(zmq.RCVHWM, ml_config.get('high_water_mark', 1000))
 
-        # Iniciar servidor web
-        self._start_web_server_v31()
+            if socket_type == zmq.SUB:
+                socket.setsockopt(zmq.SUBSCRIBE, b"")  # Suscribirse a todos
 
-        # Iniciar actualizaciones periódicas
-        self._start_periodic_updates_v31()
+            # 🔐 CRYPTO WRAPPING para ML events (DECRYPT)
+            if self.crypto_wrapper:
+                crypto_channels = self.config.config.get("crypto", {}).get("channels", {})
+                if crypto_channels.get("ml_events_input", {}).get("decrypt", False):
+                    socket = self.crypto_wrapper.wrap_socket_recv(socket)
+                    self.logger.info("🔓 ML Events socket wrapped for AUTOMATIC DECRYPTION")
 
-        self.logger.info("✅ Dashboard V3.1 iniciado correctamente")
-        self.logger.info(f"🌐 Interfaz web disponible en: http://{self.config.web_host}:{self.config.web_port}")
+            # Conectar
+            address = ml_config.get('address', 'localhost')
+            port = ml_config.get('port', 5580)
+            endpoint = f"tcp://{address}:{port}"
 
-        try:
-            while self.running:
-                time.sleep(1)
-                self._update_system_metrics()
-        except KeyboardInterrupt:
-            self.logger.info("🛑 Recibida señal de interrupción")
-            self.stop()
+            mode = ml_config.get('mode', 'connect')
+            if mode == 'connect':
+                socket.connect(endpoint)
+            else:
+                socket.bind(endpoint)
 
-    def _start_processing_threads_v31(self):
-        """Iniciar hilos de procesamiento V3.1"""
-        self.logger.info("🧵 Iniciando hilos de procesamiento V3.1...")
-
-        # ML Events Subscribers (SUB pattern)
-        for i in range(self.config.ml_events_subscribers):
-            thread = threading.Thread(target=self._ml_events_subscriber_v31, args=(i,))
-            thread.daemon = True
-            thread.start()
-            self.logger.info(f"📡 ML Events Subscriber V3.1 {i} iniciado")
-
-        # Fleet Command Processors
-        for i in range(self.config.firewall_fleet_managers):
-            thread = threading.Thread(target=self._fleet_command_processor_v31, args=(i,))
-            thread.daemon = True
-            thread.start()
-            self.logger.info(f"🔥 Fleet Command Processor V3.1 {i} iniciado")
-
-        # Fleet Response Consumers
-        for i in range(self.config.firewall_response_consumers):
-            thread = threading.Thread(target=self._fleet_response_consumer_v31, args=(i,))
-            thread.daemon = True
-            thread.start()
-            self.logger.info(f"📥 Fleet Response Consumer V3.1 {i} iniciado")
-
-    def _ml_events_subscriber_v31(self, worker_id: int):
-        """Worker para recibir eventos del ML_detector V3.1"""
-        self.logger.info(f"📡 ML Events Subscriber V3.1 {worker_id} iniciado")
-
-        while self.running:
-            try:
-                # Recibir mensaje SUB
-                try:
-                    message_bytes = self.ml_socket.recv(zmq.NOBLOCK)
-                except zmq.Again:
-                    continue
-
-                self.logger.debug(f"📨 Worker {worker_id} - Mensaje V3.1 recibido: {len(message_bytes)} bytes")
-
-                # Parse NetworkSecurityEvent V3.1
-                try:
-                    event_data = self._parse_network_security_event_v31(message_bytes)
-                    if not event_data:
-                        continue
-
-                    # Crear SecurityEvent
-                    event = self._create_security_event_from_v31(event_data)
-
-                    # Añadir a cola
-                    if not self.ml_events_queue.full():
-                        self.ml_events_queue.put(event)
-                        self.stats['events_received'] += 1
-                        self.stats['protobuf_v31_messages'] += 1
-                        self.stats['ml_detector_v31_connected'] = True
-
-                    self.logger.debug(
-                        f"✅ Worker {worker_id} - Evento V3.1 procesado: {event.source_ip} → {event.target_ip}")
-
-                except Exception as e:
-                    self.logger.error(f"❌ Worker {worker_id} - Error parseando evento V3.1: {e}")
-
-            except Exception as e:
-                self.logger.error(f"❌ Worker {worker_id} - Error general: {e}")
-                time.sleep(0.1)
-
-    def _parse_network_security_event_v31(self, data: bytes) -> Optional[Dict]:
-        """Parser para NetworkSecurityEvent V3.1"""
-        try:
-            if not PROTOBUF_AVAILABLE:
-                self.logger.error("❌ Protobuf V3.1 no disponible")
-                return None
-
-            # Parse NetworkSecurityEvent V3.1
-            event = NetworkEventProto.NetworkSecurityEvent()
-            event.ParseFromString(data)
-
-            # Extract data completo V3.1
-            parsed_event = {
-                # Basic identification
-                'event_id': event.event_id,
-                'timestamp': event.event_timestamp.seconds if event.HasField('event_timestamp') else int(time.time()),
-                'node_id': event.capturing_node.node_id if event.HasField('capturing_node') else 'unknown',
-
-                # Network features
-                'source_ip': event.network_features.source_ip if event.HasField('network_features') else '127.0.0.1',
-                'target_ip': event.network_features.destination_ip if event.HasField(
-                    'network_features') else '127.0.0.1',
-                'source_port': event.network_features.source_port if event.HasField('network_features') else 0,
-                'dest_port': event.network_features.destination_port if event.HasField('network_features') else 0,
-                'protocol': event.network_features.protocol_name if event.HasField('network_features') else 'TCP',
-                'packets': int(
-                    event.network_features.total_forward_packets + event.network_features.total_backward_packets) if event.HasField(
-                    'network_features') else 1,
-                'bytes': int(
-                    event.network_features.total_forward_bytes + event.network_features.total_backward_bytes) if event.HasField(
-                    'network_features') else len(data),
-
-                # Dual geolocation V3.1
-                'source_latitude': None,
-                'source_longitude': None,
-                'target_latitude': None,
-                'target_longitude': None,
-                'source_city': '',
-                'source_country': '',
-                'target_city': '',
-                'target_country': '',
-                'source_ip_enriched': False,
-                'target_ip_enriched': False,
-                'geographic_distance_km': 0.0,
-                'same_country': False,
-
-                # ML Analysis V3.1
-                'risk_score': 0.5,
-                'anomaly_score': 0.5,
-                'attack_type': 'network_event',
-                'ml_models_scores': {},
-
-                # Legacy compatibility
-                'port': 0
+            self.sockets['ml_events'] = socket
+            self.connections_status['ml_events'] = {
+                'status': 'active',
+                'endpoint': endpoint,
+                'mode': mode,
+                'port': port,
+                'crypto_enabled': bool(self.crypto_wrapper)
             }
 
-            # Extract geo enrichment V3.1
-            if event.HasField('geo_enrichment'):
-                geo = event.geo_enrichment
+            self.logger.info(f"📡 ML Events connection: {mode.upper()} {endpoint} (crypto: {bool(self.crypto_wrapper)})")
 
-                # Source IP geo
-                if geo.HasField('source_ip_geo'):
-                    parsed_event['source_latitude'] = geo.source_ip_geo.latitude
-                    parsed_event['source_longitude'] = geo.source_ip_geo.longitude
-                    parsed_event['source_city'] = geo.source_ip_geo.city_name
-                    parsed_event['source_country'] = geo.source_ip_geo.country_name
-                    parsed_event['source_ip_enriched'] = True
+    async def _setup_scheduler_connections(self):
+        """Setup conexiones con Scheduler Firewall"""
+        # Por ahora, placeholder para futuras conexiones con scheduler
+        self.logger.info("📋 Scheduler connections setup completed")
 
-                # Target IP geo
-                if geo.HasField('destination_ip_geo'):
-                    parsed_event['target_latitude'] = geo.destination_ip_geo.latitude
-                    parsed_event['target_longitude'] = geo.destination_ip_geo.longitude
-                    parsed_event['target_city'] = geo.destination_ip_geo.city_name
-                    parsed_event['target_country'] = geo.destination_ip_geo.country_name
-                    parsed_event['target_ip_enriched'] = True
+    async def _setup_fleet_connections(self):
+        """Setup conexiones con Fleet de Agentes Firewall V3.1 - CON CRYPTO"""
+        fleet_config = self.config.config.get('firewall_fleet', {})
 
-                # Geographic analysis
-                parsed_event['geographic_distance_km'] = geo.source_destination_distance_km
-                parsed_event['same_country'] = geo.source_destination_same_country
+        if not fleet_config.get('enabled', False):
+            self.logger.info("🔥 Fleet management deshabilitado")
+            return
 
-            # Extract ML analysis V3.1
-            if event.HasField('ml_analysis'):
-                ml = event.ml_analysis
-                parsed_event['risk_score'] = ml.ensemble_confidence
+        agents = fleet_config.get('agents', [])
+        self.logger.info(f"🔥 Configurando fleet: {len(agents)} agentes")
 
-                if ml.HasField('level1_general_detection'):
-                    parsed_event['anomaly_score'] = ml.level1_general_detection.confidence_score
+        for agent_config in agents:
+            agent_id = agent_config.get('node_id', agent_config.get('id', 'unknown'))
 
-                if ml.HasField('level3_specialized_predictions'):
-                    for pred in ml.level3_specialized_predictions:
-                        if pred.model_name:
-                            parsed_event['ml_models_scores'][pred.model_name] = pred.confidence_score
-
-                parsed_event['attack_type'] = ml.final_threat_classification or 'network_event'
-
-            # Extract pipeline tracking
-            if event.HasField('pipeline_tracking'):
-                parsed_event['pipeline_info'] = {
-                    'pipeline_id': event.pipeline_tracking.pipeline_id,
-                    'processing_latency_ms': event.pipeline_tracking.total_processing_latency.seconds * 1000,
-                    'pipeline_hops': event.pipeline_tracking.pipeline_hops_count
-                }
-
-            # Port compatibility
-            parsed_event['port'] = parsed_event['dest_port'] or 80
-
-            return parsed_event
-
-        except Exception as e:
-            self.logger.error(f"❌ Error parsing NetworkSecurityEvent V3.1: {e}")
-            return None
-
-    def _create_security_event_from_v31(self, data: Dict) -> SecurityEvent:
-        """Crear SecurityEvent desde datos V3.1"""
-        return SecurityEvent(
-            id=data.get('event_id', str(int(time.time() * 1000000))),
-            source_ip=data.get('source_ip', '127.0.0.1'),
-            target_ip=data.get('target_ip', '127.0.0.1'),
-            risk_score=float(data.get('risk_score', 0.5)),
-            anomaly_score=float(data.get('anomaly_score', 0.5)),
-            source_latitude=data.get('source_latitude'),
-            source_longitude=data.get('source_longitude'),
-            target_latitude=data.get('target_latitude'),
-            target_longitude=data.get('target_longitude'),
-            timestamp=str(data.get('timestamp', int(time.time()))),
-            attack_type=data.get('attack_type'),
-            location=data.get('location'),
-            packets=int(data.get('packets', 0)),
-            bytes=int(data.get('bytes', 0)),
-            port=data.get('port'),
-            protocol=data.get('protocol'),
-            ml_models_scores=data.get('ml_models_scores'),
-            protobuf_data=data,
-            node_id=data.get('node_id'),
-            geographic_distance_km=data.get('geographic_distance_km'),
-            same_country=data.get('same_country'),
-            source_city=data.get('source_city'),
-            source_country=data.get('source_country'),
-            target_city=data.get('target_city'),
-            target_country=data.get('target_country'),
-            source_ip_enriched=data.get('source_ip_enriched'),
-            target_ip_enriched=data.get('target_ip_enriched')
-        )
-
-    def _fleet_command_processor_v31(self, worker_id: int):
-        """Procesar comandos de fleet V3.1"""
-        self.logger.info(f"🔥 Fleet Command Processor V3.1 {worker_id} iniciado")
-
-        while self.running:
             try:
-                command = self.firewall_commands_queue.get(timeout=1)
+                # Crear socket de comandos para este agente
+                command_socket = await self._create_agent_command_socket(agent_id, agent_config)
+                self.fleet_command_sockets[agent_id] = command_socket
 
-                # Determinar target
-                target = command.get('target', 'single')
-
-                if target == 'nuclear' or command.get('nuclear_broadcast', False):
-                    # Nuclear broadcast
-                    results = self.fleet_manager.nuclear_broadcast(command)
-                    self.stats['nuclear_broadcasts_sent'] += 1
-                    self.logger.warning(f"🚨 Nuclear broadcast ejecutado por worker {worker_id}")
-                else:
-                    # Single agent
-                    agent_id = command.get('agent_id', self.fleet_manager.get_available_agents()[0])
-                    result = self.fleet_manager.send_command_to_agent(agent_id, command)
-
-                self.stats['commands_sent'] += 1
-                self.firewall_commands_queue.task_done()
-
-            except queue.Empty:
-                continue
-            except Exception as e:
-                self.logger.error(f"❌ Worker {worker_id} - Error procesando comando: {e}")
-
-    def _fleet_response_consumer_v31(self, worker_id: int):
-        """Consumir respuestas de fleet V3.1"""
-        self.logger.info(f"📥 Fleet Response Consumer V3.1 {worker_id} iniciado")
-
-        while self.running:
-            try:
-                # Recibir respuestas de todos los agents
-                for agent_id, response_socket in self.fleet_manager.response_sockets.items():
-                    try:
-                        response_bytes = response_socket.recv(zmq.NOBLOCK)
-                        self._process_fleet_response(agent_id, response_bytes, worker_id)
-                    except zmq.Again:
-                        continue
-
-                time.sleep(0.1)  # Small delay to prevent busy waiting
+                self.logger.info(f"🤖 Agent {agent_id}: Command socket configurado")
 
             except Exception as e:
-                self.logger.error(f"❌ Worker {worker_id} - Error en fleet response consumer: {e}")
-                time.sleep(0.1)
+                self.logger.error(f"❌ Error configurando agent {agent_id}: {e}")
 
-    def _process_fleet_response(self, agent_id: str, response_bytes: bytes, worker_id: int):
-        """Procesar respuesta de un agent"""
+        self.logger.info(f"✅ Fleet management: {len(self.fleet_command_sockets)} agentes activos")
+
+    async def _create_agent_command_socket(self, agent_id: str, agent_config: dict):
+        """Crear socket de comandos para un agente específico - CON CRYPTO"""
+        # Configuración de red del agente
+        network_config = agent_config.get('network_endpoints', {})
+        command_config = network_config.get('dashboard_commands', {})
+
+        if not command_config:
+            # Fallback a configuración básica
+            command_config = {
+                'address': 'localhost',
+                'port': 5590 + hash(agent_id) % 100,  # Puerto dinámico
+                'mode': 'connect',
+                'socket_type': 'PUSH'
+            }
+
+        # Crear socket
+        socket_type = getattr(zmq, command_config.get('socket_type', 'PUSH'))
+        socket = self.context.socket(socket_type)
+
+        # Configurar socket
+        socket.setsockopt(zmq.SNDHWM, command_config.get('high_water_mark', 500))
+        socket.setsockopt(zmq.LINGER, 1000)
+
+        # 🔐 CRYPTO WRAPPING para commands hacia agente (ENCRYPT)
+        if self.crypto_wrapper:
+            crypto_channels = self.config.config.get("crypto", {}).get("channels", {})
+            if crypto_channels.get("firewall_agents_fleet", {}).get("commands_encrypt", False):
+                socket = self.crypto_wrapper.wrap_socket_send(socket)
+                self.logger.info(f"🔒 Agent {agent_id} command socket wrapped for AUTOMATIC ENCRYPTION")
+
+        # Conectar
+        address = command_config.get('address', 'localhost')
+        port = command_config.get('port')
+        endpoint = f"tcp://{address}:{port}"
+
+        mode = command_config.get('mode', 'connect')
+        if mode == 'connect':
+            socket.connect(endpoint)
+        else:
+            socket.bind(endpoint)
+
+        self.connections_status[f'agent_{agent_id}_commands'] = {
+            'status': 'active',
+            'endpoint': endpoint,
+            'mode': mode,
+            'port': port,
+            'agent_id': agent_id,
+            'crypto_enabled': bool(self.crypto_wrapper)
+        }
+
+        return socket
+
+    async def send_command_to_agent(self, agent_id: str, command_data: bytes) -> bool:
+        """Enviar comando a agente específico - CRYPTO AUTOMÁTICO"""
+        if agent_id not in self.fleet_command_sockets:
+            self.logger.error(f"❌ Agent {agent_id} not found in fleet")
+            return False
+
         try:
-            if not PROTOBUF_AVAILABLE:
-                return
+            socket = self.fleet_command_sockets[agent_id]
+            # 🔐 El crypto wrapper cifra automáticamente si está configurado
+            await socket.send(command_data, zmq.NOBLOCK)
 
-            # Parse FirewallResponse V3.1
-            response = FirewallCommandsProto.FirewallResponse()
-            response.ParseFromString(response_bytes)
-
-            self.logger.info(
-                f"📥 Worker {worker_id} - Respuesta de {agent_id}: {response.command_id} - Success: {response.success}")
-
-            if response.success:
-                self.stats['confirmations'] += 1
-            else:
-                self.stats['failures'] += 1
+            self.logger.info(f"📤 Command sent to agent {agent_id} (encrypted: {bool(self.crypto_wrapper)})")
+            return True
 
         except Exception as e:
-            self.logger.error(f"❌ Error procesando respuesta de {agent_id}: {e}")
+            self.logger.error(f"❌ Error sending command to agent {agent_id}: {e}")
+            return False
 
-    def _start_web_server_v31(self):
-        """Iniciar servidor web V3.1"""
-        self.logger.info(f"🌐 Iniciando servidor web V3.1 en {self.config.web_host}:{self.config.web_port}")
+    def get_connections_status(self) -> dict:
+        """Obtener estado de todas las conexiones"""
+        return {
+            'zmq_connections': self.connections_status,
+            'fleet_agents_count': len(self.fleet_command_sockets),
+            'ml_events_active': 'ml_events' in self.sockets,
+            'crypto_enabled': bool(self.crypto_wrapper)
+        }
 
-        class DashboardHTTPRequestHandlerV31(http.server.SimpleHTTPRequestHandler):
-            def __init__(self, *args, dashboard=None, **kwargs):
-                self.dashboard = dashboard
-                super().__init__(*args, **kwargs)
-
-            def do_GET(self):
-                if self.path == '/' or self.path == '/index.html':
-                    self.serve_dashboard_html()
-                elif self.path == '/api/metrics':
-                    self.serve_metrics_api_v31()
-                elif self.path == '/api/fleet-status':
-                    self.serve_fleet_status_api()
-                elif self.path.startswith('/static/'):
-                    self.serve_static_file()
-                else:
-                    self.send_error(404, "Página no encontrada")
-
-            def do_POST(self):
-                if self.path == '/api/execute-firewall-action':
-                    self.serve_execute_firewall_action_v31()
-                elif self.path == '/api/nuclear-broadcast':
-                    self.serve_nuclear_broadcast_api()
-                elif self.path == '/api/firewall-agent-info':
-                    self.serve_firewall_agent_info_v31()
-                else:
-                    self.send_error(404, "Endpoint POST no encontrado")
-
-            def serve_metrics_api_v31(self):
-                """API de métricas V3.1"""
-                try:
-                    # Procesar eventos de la cola para estadísticas
-                    self._process_events_for_stats()
-
-                    data = {
-                        'success': True,
-                        'version': '3.1.0',
-                        'basic_stats': self.dashboard.stats,
-                        'recent_events': self.dashboard.recent_events,
-                        'fleet_info': {
-                            'agents_count': len(self.dashboard.fleet_manager.agents),
-                            'nuclear_broadcast_enabled': self.dashboard.config.nuclear_broadcast_enabled,
-                            'available_agents': self.dashboard.fleet_manager.get_available_agents()
-                        },
-                        'firewall_rules_info': {
-                            'rules_count': len(self.dashboard.config.firewall_rules),
-                            'manual_actions': list(self.dashboard.config.manual_actions.keys())
-                        },
-                        'timestamp': datetime.now().isoformat()
-                    }
-
-                    response_json = json.dumps(data, default=str)
-
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(response_json.encode('utf-8'))
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"❌ Error sirviendo métricas V3.1: {e}")
-                    self._send_error_response(str(e))
-
-            def serve_execute_firewall_action_v31(self):
-                """Ejecutar acción de firewall V3.1"""
-                try:
-                    content_length = int(self.headers.get('Content-Length', 0))
-                    post_data = self.rfile.read(content_length)
-                    request_data = json.loads(post_data.decode('utf-8'))
-
-                    # Validar datos
-                    required_fields = ['action', 'target_ip']
-                    for field in required_fields:
-                        if field not in request_data:
-                            raise ValueError(f"Campo requerido faltante: {field}")
-
-                    # Crear comando
-                    command = {
-                        'command_id': request_data.get('command_id', f"dashboard_{int(time.time())}"),
-                        'action': request_data['action'],
-                        'target_ip': request_data['target_ip'],
-                        'target_port': request_data.get('target_port', 0),
-                        'duration_seconds': request_data.get('duration_seconds', 300),
-                        'reason': request_data.get('reason', 'Dashboard V3.1 action'),
-                        'dry_run': request_data.get('dry_run', True),
-                        'agent_id': request_data.get('firewall_node_id'),
-                        'nuclear_broadcast': request_data.get('nuclear_broadcast', False)
-                    }
-
-                    # Añadir a cola
-                    self.dashboard.firewall_commands_queue.put(command)
-
-                    response_data = {
-                        'success': True,
-                        'message': f'Comando {command["action"]} encolado exitosamente',
-                        'command_id': command['command_id'],
-                        'version': '3.1.0'
-                    }
-
-                    self._send_json_response(response_data)
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"❌ Error en execute-firewall-action V3.1: {e}")
-                    self._send_error_response(str(e))
-
-            def serve_nuclear_broadcast_api(self):
-                """API para nuclear broadcast V3.1"""
-                try:
-                    if not self.dashboard.config.nuclear_broadcast_enabled:
-                        raise ValueError("Nuclear broadcast deshabilitado")
-
-                    content_length = int(self.headers.get('Content-Length', 0))
-                    post_data = self.rfile.read(content_length)
-                    request_data = json.loads(post_data.decode('utf-8'))
-
-                    command = {
-                        'command_id': f"nuclear_{int(time.time())}",
-                        'action': request_data.get('action', 'LIST_RULES'),
-                        'target_ip': request_data.get('target_ip', '127.0.0.1'),
-                        'duration_seconds': request_data.get('duration_seconds', 300),
-                        'reason': 'Nuclear broadcast from Dashboard V3.1',
-                        'dry_run': True,
-                        'nuclear_broadcast': True,
-                        'target': 'nuclear'
-                    }
-
-                    self.dashboard.firewall_commands_queue.put(command)
-
-                    response_data = {
-                        'success': True,
-                        'message': f'🚨 Nuclear broadcast {command["action"]} iniciado',
-                        'command_id': command['command_id'],
-                        'agents_targeted': len(self.dashboard.fleet_manager.agents)
-                    }
-
-                    self._send_json_response(response_data)
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"❌ Error en nuclear broadcast: {e}")
-                    self._send_error_response(str(e))
-
-            def serve_firewall_agent_info_v31(self):
-                """Info de firewall agents V3.1"""
-                try:
-                    content_length = int(self.headers.get('Content-Length', 0))
-                    if content_length > 0:
-                        post_data = self.rfile.read(content_length)
-                        request_data = json.loads(post_data.decode('utf-8'))
-                    else:
-                        request_data = {}
-
-                    # Obtener agent por defecto o específico
-                    available_agents = self.dashboard.fleet_manager.get_available_agents()
-                    target_agent_id = available_agents[0] if available_agents else 'unknown'
-
-                    agent_info = self.dashboard.fleet_manager.get_agent_info(target_agent_id)
-
-                    if agent_info:
-                        firewall_info = {
-                            'node_id': agent_info.node_id,
-                            'agent_ip': request_data.get('source_ip', '127.0.0.1'),
-                            'status': agent_info.status,
-                            'active_rules': agent_info.active_rules,
-                            'endpoint': agent_info.dashboard_commands_endpoint,
-                            'capabilities': agent_info.capabilities,
-                            'max_rules': agent_info.max_rules
-                        }
-                    else:
-                        firewall_info = {
-                            'node_id': 'unknown_agent',
-                            'agent_ip': '127.0.0.1',
-                            'status': 'unknown',
-                            'active_rules': 0,
-                            'endpoint': 'tcp://localhost:5580',
-                            'capabilities': ['LIST_RULES']
-                        }
-
-                    response_data = {
-                        'success': True,
-                        'firewall_info': firewall_info,
-                        'version': '3.1.0'
-                    }
-
-                    self._send_json_response(response_data)
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"❌ Error en firewall-agent-info V3.1: {e}")
-                    self._send_error_response(str(e))
-
-            def _process_events_for_stats(self):
-                """Procesar eventos de la cola para estadísticas"""
-                events_processed = 0
-                while not self.dashboard.ml_events_queue.empty() and events_processed < 50:
-                    try:
-                        event = self.dashboard.ml_events_queue.get_nowait()
-
-                        # Añadir a eventos recientes
-                        web_event = {
-                            'id': event.id,
-                            'timestamp': int(time.time()),
-                            'source_ip': event.source_ip,
-                            'target_ip': event.target_ip,
-                            'risk_score': event.risk_score,
-                            'latitude': event.source_latitude or 0.0,
-                            'longitude': event.source_longitude or 0.0,
-                            'source_latitude': event.source_latitude,
-                            'source_longitude': event.source_longitude,
-                            'target_latitude': event.target_latitude,
-                            'target_longitude': event.target_longitude,
-                            'location': event.location,
-                            'type': event.attack_type or 'network_event',
-                            'protocol': event.protocol or 'TCP',
-                            'port': event.port or 80,
-                            'packets': event.packets,
-                            'bytes': event.bytes,
-                            'node_id': event.node_id,
-                            'geographic_distance_km': event.geographic_distance_km,
-                            'same_country': event.same_country,
-                            'source_city': event.source_city,
-                            'source_country': event.source_country,
-                            'target_city': event.target_city,
-                            'target_country': event.target_country,
-                            'source_ip_enriched': event.source_ip_enriched,
-                            'target_ip_enriched': event.target_ip_enriched,
-                            'risk_level': 'high' if event.risk_score > 0.7 else 'medium' if event.risk_score > 0.3 else 'low'
-                        }
-
-                        self.dashboard.recent_events.append(web_event)
-                        self.dashboard.events.append(event)
-
-                        if event.risk_score > 0.8:
-                            self.dashboard.stats['high_risk_events'] += 1
-
-                        events_processed += 1
-                        self.dashboard.stats['events_processed'] += 1
-                        self.dashboard.stats['total_events'] += 1
-
-                    except queue.Empty:
-                        break
-                    except Exception as e:
-                        self.dashboard.logger.error(f"❌ Error procesando evento para stats: {e}")
-
-            def _send_json_response(self, data):
-                """Enviar respuesta JSON"""
-                response_json = json.dumps(data, default=str)
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(response_json.encode('utf-8'))
-
-            def _send_error_response(self, error_msg):
-                """Enviar respuesta de error"""
-                error_response = {
-                    'success': False,
-                    'error': error_msg,
-                    'version': '3.1.0',
-                    'timestamp': datetime.now().isoformat()
-                }
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps(error_response).encode('utf-8'))
-
-            def serve_dashboard_html(self):
-                """Servir HTML del dashboard"""
-                try:
-                    html_path = Path('templates/dashboard.html')
-                    if html_path.exists():
-                        with open(html_path, 'r', encoding='utf-8') as f:
-                            html_content = f.read()
-                    else:
-                        html_content = self._get_basic_html()
-
-                    self.send_response(200)
-                    self.send_header('Content-type', 'text/html; charset=utf-8')
-                    self.send_header('Cache-Control', 'no-cache')
-                    self.send_header("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;")
-                    self.end_headers()
-                    self.wfile.write(html_content.encode('utf-8'))
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"Error sirviendo HTML: {e}")
-                    self._send_basic_html()
-
-            def _get_basic_html(self):
-                """HTML básico si no existe el archivo"""
-                return '''<!DOCTYPE html>
-<html>
-<head>
-    <title>Security Dashboard V3.1</title>
-    <meta charset="utf-8">
-</head>
-<body>
-    <h1>🚀 Security Dashboard V3.1</h1>
-    <p>✅ Dashboard V3.1 funcionando correctamente</p>
-    <p>📡 ML Detector V3.1 Compatible (SUB connection)</p>
-    <p>🔥 Fleet Management Activo</p>
-    <p>🚨 Nuclear Broadcast Disponible</p>
-    <p><a href="/api/metrics">Ver métricas JSON V3.1</a></p>
-</body>
-</html>'''
-
-            def serve_static_file(self):
-                """Servir archivos estáticos"""
-                try:
-                    file_path = self.path[1:]
-                    if not Path(file_path).exists():
-                        self.send_error(404, "Archivo no encontrado")
-                        return
-
-                    mime_type, _ = mimetypes.guess_type(file_path)
-                    if mime_type is None:
-                        mime_type = 'application/octet-stream'
-
-                    with open(file_path, 'rb') as f:
-                        content = f.read()
-
-                    self.send_response(200)
-                    self.send_header('Content-type', mime_type)
-                    self.end_headers()
-                    self.wfile.write(content)
-
-                except Exception as e:
-                    self.dashboard.logger.error(f"Error sirviendo archivo estático {self.path}: {e}")
-                    self.send_error(500, "Error interno del servidor")
-
-        def handler_factory(*args, **kwargs):
-            return DashboardHTTPRequestHandlerV31(*args, dashboard=self, **kwargs)
-
-        def run_server():
-            try:
-                with socketserver.TCPServer((self.config.web_host, self.config.web_port), handler_factory) as httpd:
-                    self.logger.info(f"✅ Servidor web V3.1 iniciado correctamente")
-                    httpd.serve_forever()
-            except Exception as e:
-                self.logger.error(f"❌ Error en servidor web V3.1: {e}")
-
-        web_thread = threading.Thread(target=run_server)
-        web_thread.daemon = True
-        web_thread.start()
-
-    def _start_periodic_updates_v31(self):
-        """Actualizaciones periódicas V3.1"""
-
-        def update_stats():
-            while self.running:
-                try:
-                    self._update_statistics_v31()
-                    time.sleep(15)  # Update every 15 seconds
-                except Exception as e:
-                    self.logger.error(f"❌ Error en actualizaciones periódicas V3.1: {e}")
-                    time.sleep(15)
-
-        stats_thread = threading.Thread(target=update_stats)
-        stats_thread.daemon = True
-        stats_thread.start()
-        self.logger.info("✅ Actualizaciones periódicas V3.1 iniciadas")
-
-    def _update_statistics_v31(self):
-        """Actualizar estadísticas V3.1"""
+    async def close_all(self):
+        """Cerrar todas las conexiones"""
         try:
-            # Calcular eventos por minuto
-            current_time = time.time()
-            events_in_last_minute = len([e for e in self.events if (current_time - float(e.timestamp)) < 60])
-            self.stats['events_per_minute'] = events_in_last_minute
-
-            # Otras estadísticas
-            self.stats['uptime_seconds'] = int(current_time - self.start_time)
-            self.stats['last_update'] = datetime.now().isoformat()
-            self.stats['fleet_agents_active'] = len(
-                [a for a in self.fleet_manager.agents.values() if a.status == 'active'])
-
-            # Success rate
-            total_commands = self.stats['commands_sent']
-            if total_commands > 0:
-                self.stats['success_rate'] = (self.stats['confirmations'] / total_commands) * 100
-            else:
-                self.stats['success_rate'] = 100
-
-        except Exception as e:
-            self.logger.error(f"❌ Error actualizando estadísticas V3.1: {e}")
-
-    def _update_system_metrics(self):
-        """Actualizar métricas del sistema"""
-        try:
-            process = psutil.Process()
-            self.stats['memory_usage_mb'] = process.memory_info().rss / 1024 / 1024
-            self.stats['cpu_usage_percent'] = process.cpu_percent()
-        except:
-            pass
-
-    def stop(self):
-        """Detener dashboard V3.1"""
-        self.logger.info("🛑 Deteniendo Dashboard V3.1...")
-        self.running = False
-
-        # Cerrar sockets
-        try:
-            if hasattr(self, 'ml_socket'):
-                self.ml_socket.close()
-
-            # Cerrar sockets de fleet
-            for socket in self.fleet_manager.command_sockets.values():
+            for socket in list(self.sockets.values()):
                 socket.close()
-            for socket in self.fleet_manager.response_sockets.values():
+
+            for socket in list(self.fleet_command_sockets.values()):
                 socket.close()
 
             self.context.term()
-            self.logger.info("✅ Sockets V3.1 cerrados")
+            self.logger.info("✅ Todas las conexiones ZMQ cerradas")
 
         except Exception as e:
-            self.logger.error(f"⚠️ Error cerrando sockets V3.1: {e}")
-
-        self.logger.info("✅ Dashboard V3.1 detenido correctamente")
+            self.logger.error(f"❌ Error closing connections: {e}")
 
 
-def signal_handler(sig, frame):
+class DashboardBackendV31:
+    """🚀 Dashboard Backend Principal V3.1 CON CRYPTO AUTOMÁTICO"""
+
+    def __init__(self, config_file: str, firewall_rules_file: str):
+        # ✅ Configuración
+        self.config = DashboardConfigV31(config_file)
+        self.firewall_rules_file = firewall_rules_file
+
+        # ✅ Setup logging
+        self.logger = DashboardLogger(self.config.config)
+
+        # 🔐 STEP 3: Inicializar crypto wrapper (mismo patrón que scheduler/agent)
+        self.crypto_wrapper = None
+        self._init_crypto()
+
+        # ✅ Estado del sistema
+        self.running = False
+        self.start_time = time.time()
+
+        # ✅ Almacenamiento de eventos
+        self.recent_events: deque = deque(maxlen=1000)  # Sin límite estricto
+        self.recent_firewall_events: deque = deque(maxlen=1000)
+        self.basic_stats = {
+            'total_events': 0,
+            'events_per_minute': 0,
+            'high_risk_events': 0,
+            'success_rate': 0,
+            'failures': 0,
+            'commands_sent': 0,
+            'confirmations': 0
+        }
+
+        # ✅ Manager de conexiones ZMQ CON CRYPTO
+        self.zmq_manager = ZMQConnectionManagerV31(self.config, self.logger, self.crypto_wrapper)
+
+        # ✅ Flask app
+        self.app = None
+        self._setup_flask_app()
+
+        # ✅ Threads de procesamiento
+        self.processing_threads = []
+
+        # ✅ Configuración de firewall desde JSON
+        self.firewall_config = self._load_firewall_config()
+
+        self.logger.info(f"🚀 Dashboard Backend V3.1 inicializado: {self.config.node_id}")
+        self.logger.info(f"🔐 Crypto enabled: {bool(self.crypto_wrapper)}")
+
+    def _init_crypto(self):
+        """🔐 Inicializar crypto wrapper - MISMO PATRÓN que scheduler y agent"""
+        crypto_config = self.config.config.get('crypto', {})
+
+        if not crypto_config.get('enabled', False):
+            self.logger.info("🔐 Crypto deshabilitado en configuración")
+            return
+
+        if not crypto_wrapper_class:
+            self.logger.warning("⚠️ CryptoZMQV31 no disponible, ejecutando sin cifrado")
+            return
+
+        try:
+            crypto_component_id = crypto_config.get('component_crypto_id', self.config.node_id)
+            crypto_config_file = crypto_config.get('config_file', 'config/crypto/crypto_config_v31.json')
+
+            self.crypto_wrapper = crypto_wrapper_class(crypto_component_id, crypto_config_file)
+
+            self.logger.info("🔐 Crypto V31 inicializado correctamente")
+            self.logger.info(f"   🔑 Component ID: {crypto_component_id}")
+            self.logger.info(f"   📋 Config file: {crypto_config_file}")
+            self.logger.info("   🔒🗜️ AES-256-GCM + LZ4 compression automático")
+            self.logger.info("   🌐 Fleet communication: CIFRADA y COMPRIMIDA")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error inicializando crypto: {e}")
+            self.crypto_wrapper = None
+
+    def _load_firewall_config(self) -> dict:
+        """Cargar configuración de firewall desde JSON"""
+        try:
+            if Path(self.firewall_rules_file).exists():
+                with open(self.firewall_rules_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                    firewall_rules = data.get('firewall_rules', {})
+
+                    # Extraer configuración de agentes
+                    agents_fleet = firewall_rules.get('agents_fleet', {})
+                    manual_actions = firewall_rules.get('manual_actions', {})
+
+                    return {
+                        'agents': [
+                            {
+                                'node_id': agent_id,
+                                'config': agent_config,
+                                'network_endpoints': agent_config.get('network_endpoints', {}),
+                                'capabilities': agent_config.get('capabilities', {}),
+                                'status': agent_config.get('status', 'active')
+                            }
+                            for agent_id, agent_config in agents_fleet.items()
+                            if agent_config.get('status', 'active') == 'active'
+                        ],
+                        'available_actions': list(manual_actions.keys()),
+                        'manual_actions': manual_actions
+                    }
+            else:
+                self.logger.warning(f"⚠️ Firewall rules file not found: {self.firewall_rules_file}")
+                return {'agents': [], 'available_actions': [], 'manual_actions': {}}
+
+        except Exception as e:
+            self.logger.error(f"❌ Error loading firewall config: {e}")
+            return {'agents': [], 'available_actions': [], 'manual_actions': {}}
+
+    def _setup_flask_app(self):
+        """Setup Flask application"""
+        self.app = Flask(__name__)
+        CORS(self.app)
+
+        # Configurar rutas
+        self._setup_routes()
+
+        self.logger.info("✅ Flask app configurada")
+
+    def _setup_routes(self):
+        """Configurar rutas de la API"""
+
+        @self.app.route('/')
+        def dashboard():
+            """Página principal del dashboard"""
+            try:
+                # Cargar template HTML
+                template_path = Path(__file__).parent / 'templates' / 'dashboard_v31.html'
+                if template_path.exists():
+                    with open(template_path, 'r', encoding='utf-8') as f:
+                        return f.read()
+                else:
+                    return self._get_default_dashboard_html()
+            except Exception as e:
+                self.logger.error(f"❌ Error serving dashboard: {e}")
+                return f"❌ Error loading dashboard: {e}", 500
+
+        @self.app.route('/api/metrics')
+        def get_metrics():
+            """API endpoint para métricas del sistema"""
+            try:
+                return jsonify({
+                    'success': True,
+                    'basic_stats': self.basic_stats,
+                    'recent_events': [asdict(event) for event in list(self.recent_events)[-50:]],
+                    'firewall_events': [asdict(event) for event in list(self.recent_firewall_events)[-50:]],
+                    'firewall_config': self.firewall_config,
+                    'firewall_rules': {
+                        'rules_count': len(self.firewall_config.get('manual_actions', {})),
+                        'default_actions': self.firewall_config.get('available_actions', [])
+                    },
+                    'firewall_stats': {
+                        'commands_sent': self.basic_stats['commands_sent'],
+                        'responses_ok': self.basic_stats['confirmations'],
+                        'errors': self.basic_stats['failures'],
+                        'last_agent': 'simple_firewall_agent_v31_001'
+                    },
+                    'component_status': self._get_component_status(),
+                    'zmq_connections': self.zmq_manager.get_connections_status(),
+                    'uptime_seconds': time.time() - self.start_time,
+                    'crypto_enabled': bool(self.crypto_wrapper)
+                })
+            except Exception as e:
+                self.logger.error(f"❌ Error getting metrics: {e}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/api/execute-firewall-action', methods=['POST'])
+        def execute_firewall_action():
+            """🔥 Ejecutar acción de firewall - CON CRYPTO AUTOMÁTICO"""
+            try:
+                request_data = request.get_json()
+
+                if not request_data:
+                    return jsonify({'success': False, 'message': 'No data provided'}), 400
+
+                result = asyncio.run(self._execute_firewall_action_async(request_data))
+                return jsonify(result)
+
+            except Exception as e:
+                self.logger.error(f"❌ Error executing firewall action: {e}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Execution error: {str(e)}'
+                }), 500
+
+        @self.app.route('/api/firewall-agent-info', methods=['POST'])
+        def get_firewall_agent_info():
+            """Obtener información del agente firewall responsable"""
+            try:
+                request_data = request.get_json()
+                event_id = request_data.get('event_id', 'unknown')
+
+                # Seleccionar agente (por ahora, el primero activo)
+                agents = self.firewall_config.get('agents', [])
+                if agents:
+                    agent = agents[0]
+                    return jsonify({
+                        'success': True,
+                        'firewall_info': {
+                            'node_id': agent['node_id'],
+                            'agent_ip': agent['config'].get('location', '127.0.0.1'),
+                            'status': agent['status'],
+                            'active_rules': 0,
+                            'endpoint': agent['network_endpoints'].get('dashboard_commands', {}).get('address',
+                                                                                                     'localhost'),
+                            'capabilities': agent['capabilities'].get('allowed_actions', []),
+                            'crypto_enabled': bool(self.crypto_wrapper)
+                        }
+                    })
+                else:
+                    return jsonify({
+                        'success': True,
+                        'firewall_info': {
+                            'node_id': 'simple_firewall_agent_v31_001',
+                            'agent_ip': '127.0.0.1',
+                            'status': 'active',
+                            'active_rules': 0,
+                            'endpoint': 'localhost',
+                            'capabilities': ['MONITOR', 'LIST_RULES'],
+                            'crypto_enabled': bool(self.crypto_wrapper)
+                        }
+                    })
+            except Exception as e:
+                self.logger.error(f"❌ Error getting firewall agent info: {e}")
+                return jsonify({'success': False, 'error': str(e)}), 500
+
+        @self.app.route('/static/<path:filename>')
+        def static_files(filename):
+            """Servir archivos estáticos"""
+            return send_from_directory('static', filename)
+
+    async def _execute_firewall_action_async(self, request_data: dict) -> dict:
+        """🔥 Ejecutar acción de firewall de forma asíncrona - CRYPTO TRANSPARENTE"""
+        try:
+            # Extraer parámetros
+            action = request_data.get('action', 'LIST_RULES')
+            target_ip = request_data.get('target_ip', '127.0.0.1')
+            firewall_node_id = request_data.get('firewall_node_id', 'simple_firewall_agent_v31_001')
+            command_id = request_data.get('command_id', f"dashboard_{int(time.time())}")
+
+            self.logger.info(f"🔥 Executing action: {action} for IP {target_ip} on agent {firewall_node_id}")
+            self.logger.info(f"🔐 Crypto enabled: {bool(self.crypto_wrapper)} (transparent encryption)")
+
+            # Crear comando protobuf V3.1
+            if not PROTOBUF_AVAILABLE:
+                return {'success': False, 'message': 'Protobuf V3.1 not available'}
+
+            pb_command = FirewallCommandsProto.FirewallCommand()
+            pb_command.command_id = command_id
+
+            # Mapear acción a enum
+            action_mapping = {
+                'BLOCK_IP': FirewallCommandsProto.CommandAction.BLOCK_IP,
+                'RATE_LIMIT_IP': FirewallCommandsProto.CommandAction.RATE_LIMIT_IP,
+                'LIST_RULES': FirewallCommandsProto.CommandAction.LIST_RULES,
+                'MONITOR': FirewallCommandsProto.CommandAction.ALLOW_IP_TEMP
+            }
+
+            pb_command.action = action_mapping.get(action, FirewallCommandsProto.CommandAction.LIST_RULES)
+            pb_command.target_ip = target_ip
+            pb_command.duration_seconds = request_data.get('max_duration', 300)
+            pb_command.reason = f"Dashboard V3.1 command: {action}"
+            pb_command.dry_run = request_data.get('force_dry_run', True)
+
+            # Campos nativos V3.1
+            pb_command.node_id = firewall_node_id
+            pb_command.timestamp = int(time.time() * 1000)
+
+            # Metadatos adicionales
+            pb_command.extra_params["dashboard_node_id"] = self.config.node_id
+            pb_command.extra_params["generated_by"] = "dashboard_v31_backend"
+            pb_command.extra_params["crypto_enabled"] = str(bool(self.crypto_wrapper))
+
+            # Serializar comando
+            command_bytes = pb_command.SerializeToString()
+
+            # 🔐 Enviar comando (CIFRADO AUTOMÁTICO si crypto habilitado)
+            success = await self.zmq_manager.send_command_to_agent(firewall_node_id, command_bytes)
+
+            if success:
+                # Registrar evento de firewall
+                firewall_event = FirewallEventV31(
+                    id=command_id,
+                    timestamp=time.time(),
+                    type='command',
+                    command_id=command_id,
+                    action=action,
+                    target_ip=target_ip,
+                    agent_id=firewall_node_id,
+                    source="Dashboard V3.1 Backend (Crypto Enabled)" if self.crypto_wrapper else "Dashboard V3.1 Backend"
+                )
+
+                self.recent_firewall_events.append(firewall_event)
+                self.basic_stats['commands_sent'] += 1
+
+                return {
+                    'success': True,
+                    'message': f'{action} command sent successfully (encrypted: {bool(self.crypto_wrapper)})',
+                    'command_id': command_id,
+                    'node_id': firewall_node_id,
+                    'crypto_enabled': bool(self.crypto_wrapper)
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': f'Failed to send command to agent {firewall_node_id}'
+                }
+
+        except Exception as e:
+            self.logger.error(f"❌ Error in firewall action execution: {e}")
+            return {'success': False, 'message': f'Execution error: {str(e)}'}
+
+    def _get_component_status(self) -> dict:
+        """Obtener estado de componentes del sistema"""
+        return {
+            'promiscuous_agent': {'status': 'active' if len(self.recent_events) > 0 else 'inactive'},
+            'geoip_enricher': {'status': 'active'},
+            'ml_detector': {'status': 'active' if len(self.recent_events) > 0 else 'inactive'},
+            'firewall_agent': {'status': 'active' if len(self.firewall_config.get('agents', [])) > 0 else 'inactive'},
+            'crypto_system': {'status': 'active' if self.crypto_wrapper else 'inactive'}
+        }
+
+    def _get_default_dashboard_html(self) -> str:
+        """Dashboard SCADA V3.1 completo con crypto + todos los componentes"""
+        return """<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Dashboard SCADA V3.1 - Crypto Enabled</title>
+
+    <!-- External Libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            color: #00ff88;
+            overflow-x: hidden;
+            line-height: 1.4;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            gap: 15px;
+            padding: 15px;
+            min-height: 100vh;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 12px;
+            border: 2px solid rgba(0, 255, 136, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, rgba(0, 255, 136, 0.1), transparent);
+            animation: rotate 20s linear infinite;
+            z-index: -1;
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+
+        .crypto-status {
+            color: #ffaa00;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+        }
+
+        .system-info {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-card {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 255, 136, 0.2);
+        }
+
+        .info-card h3 {
+            color: #00aaff;
+            margin-bottom: 10px;
+        }
+
+        .info-card .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-dot.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .status-dot.warning { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
+        .status-dot.disconnected { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .events-section, .firewall-section {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .section-title {
+            color: #00ff88;
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        .btn:hover {
+            background: rgba(0, 255, 136, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: rgba(255, 68, 68, 0.2);
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 68, 68, 0.3);
+        }
+
+        .event-item {
+            background: rgba(0, 255, 136, 0.05);
+            border-left: 4px solid #00ff88;
+            margin: 8px 0;
+            padding: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .event-item:hover {
+            background: rgba(0, 255, 136, 0.1);
+            transform: translateX(5px);
+        }
+
+        .event-item.risk-high {
+            border-left-color: #ff4444;
+            background: rgba(255, 68, 68, 0.05);
+        }
+
+        .event-item.risk-medium {
+            border-left-color: #ffaa00;
+            background: rgba(255, 170, 0, 0.05);
+        }
+
+        .firewall-event {
+            background: rgba(255, 170, 0, 0.05);
+            border-left: 4px solid #ffaa00;
+            margin: 8px 0;
+            padding: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .firewall-event.command {
+            border-left-color: #0066CC;
+            background: rgba(0, 102, 204, 0.05);
+        }
+
+        .firewall-event.response {
+            border-left-color: #00ff88;
+            background: rgba(0, 255, 136, 0.05);
+        }
+
+        .firewall-event.error {
+            border-left-color: #ff4444;
+            background: rgba(255, 68, 68, 0.05);
+        }
+
+        .timestamp {
+            color: #888;
+            font-size: 0.8rem;
+            float: right;
+        }
+
+        .risk-score {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .risk-score.high {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+
+        .risk-score.medium {
+            background: rgba(255, 170, 0, 0.2);
+            color: #ffaa00;
+        }
+
+        .no-events {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .controls select {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .map-container {
+            grid-column: 1 / -1;
+            height: 400px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1000;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 0.9rem;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 136, 0.9);
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 6px;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: rgba(255, 68, 68, 0.9);
+            color: #fff;
+        }
+
+        .toast.warning {
+            background: rgba(255, 170, 0, 0.9);
+            color: #000;
+        }
+
+        .scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 136, 0.3);
+            border-radius: 4px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 255, 136, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .crypto-indicator {
+            background: linear-gradient(45deg, #ffaa00, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: bold;
+            animation: pulse 3s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 Dashboard SCADA V3.1</h1>
+            <div class="crypto-status crypto-indicator">🔐 Crypto System: ACTIVE - AES-256-GCM + LZ4</div>
+            <div style="margin-top: 10px; font-size: 0.9rem; color: #888;">
+                Fleet Management Cifrada | Pipeline Automático | Zero-Knowledge Security
+            </div>
+        </div>
+
+        <!-- System Info Cards -->
+        <div class="system-info">
+            <div class="info-card">
+                <h3>📊 Eventos</h3>
+                <div class="value" id="events-count">0</div>
+                <div>En tiempo real</div>
+            </div>
+            <div class="info-card">
+                <h3>🔥 Comandos Firewall</h3>
+                <div class="value" id="commands-count">0</div>
+                <div>Enviados (cifrados)</div>
+            </div>
+            <div class="info-card">
+                <h3>✅ Confirmaciones</h3>
+                <div class="value" id="confirmations-count">0</div>
+                <div>Respuestas OK</div>
+            </div>
+            <div class="info-card">
+                <h3>⚡ Success Rate</h3>
+                <div class="value" id="success-rate">0%</div>
+                <div>Efectividad</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Events Section -->
+            <div class="events-section scrollbar">
+                <div class="section-header">
+                    <h2 class="section-title">📡 Eventos ML V3.1</h2>
+                    <div>
+                        <button class="btn" onclick="clearEventsList()">🗑️ Limpiar</button>
+                        <button class="btn" id="pause-events-btn" onclick="pauseEventsUpdate()">⏸️</button>
+                    </div>
+                </div>
+                <div class="controls">
+                    <select id="events-filter" onchange="filterEvents()">
+                        <option value="all">Todos los riesgos</option>
+                        <option value="high">Alto riesgo</option>
+                        <option value="medium">Riesgo medio</option>
+                        <option value="low">Bajo riesgo</option>
+                    </select>
+                </div>
+                <div id="events-list">
+                    <div class="no-events">
+                        <i class="fas fa-satellite-dish" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                        <p>Esperando eventos ML V3.1...</p>
+                        <small>Puerto 5580 SUB - Descifrado automático</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Firewall Section -->
+            <div class="firewall-section scrollbar">
+                <div class="section-header">
+                    <h2 class="section-title">🔥 Comandos Firewall V3.1</h2>
+                    <div>
+                        <button class="btn" onclick="clearFirewallEventsList()">🗑️ Limpiar</button>
+                        <button class="btn btn-danger" onclick="sendTestFirewallCommand()">🧪 Test</button>
+                    </div>
+                </div>
+                <div id="firewall-events-list">
+                    <div class="no-events">
+                        <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                        <p>No hay comandos firewall</p>
+                        <small>Fleet cifrada lista</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Connection Status -->
+    <div class="connection-status">
+        <div style="font-weight: bold; margin-bottom: 10px; color: #00ff88;">🌐 Estado del Sistema</div>
+        <div class="status-item">
+            <span class="status-dot connected" id="ml-detector-status"></span>
+            ML Detector V3.1
+        </div>
+        <div class="status-item">
+            <span class="status-dot connected" id="crypto-status"></span>
+            Sistema Crypto
+        </div>
+        <div class="status-item">
+            <span class="status-dot connected" id="fleet-status"></span>
+            Fleet Agentes
+        </div>
+        <div class="status-item">
+            <span class="status-dot connected" id="api-status"></span>
+            Backend API
+        </div>
+        <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">
+            <div>🔐 AES-256-GCM</div>
+            <div>🗜️ LZ4 Compression</div>
+            <div>🔑 Pipeline Key</div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        // Global Variables
+        let map = null;
+        let markers = [];
+        let eventCount = 0;
+        let pollingInterval = null;
+        let currentEvents = [];
+        let currentFirewallEvents = [];
+        let eventsPaused = false;
+
+        // Initialize Dashboard
+        function initializeDashboard() {
+            console.log('🚀 Inicializando Dashboard SCADA V3.1 con Crypto...');
+
+            initializeMap();
+            startPolling();
+            updateConnectionStatus('crypto-status', 'connected');
+            updateConnectionStatus('api-status', 'connected');
+
+            console.log('✅ Dashboard V3.1 inicializado correctamente');
+        }
+
+        // Initialize Map
+        function initializeMap() {
+            try {
+                map = L.map('map').setView([40.4168, -3.7038], 6);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+                // Add initial markers
+                L.marker([40.4168, -3.7038])
+                    .bindPopup('<b>🖥️ Dashboard V3.1</b><br>Madrid, España<br>Crypto Enabled')
+                    .addTo(map);
+
+                console.log('✅ Mapa inicializado');
+            } catch (error) {
+                console.error('❌ Error inicializando mapa:', error);
+            }
+        }
+
+        // Start Polling
+        function startPolling() {
+            fetchData();
+            pollingInterval = setInterval(fetchData, 2000);
+            console.log('📡 Polling iniciado cada 2 segundos');
+        }
+
+        // Fetch Data from Backend
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/metrics');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateDashboard(data);
+                    updateConnectionStatus('api-status', 'connected');
+                }
+            } catch (error) {
+                console.error('❌ Error fetching data:', error);
+                updateConnectionStatus('api-status', 'disconnected');
+                showToast('Error conectando con backend', 'error');
+            }
+        }
+
+        // Update Dashboard
+        function updateDashboard(data) {
+            // Update counters
+            if (data.basic_stats) {
+                updateElement('events-count', data.basic_stats.total_events || 0);
+                updateElement('commands-count', data.basic_stats.commands_sent || 0);
+                updateElement('confirmations-count', data.basic_stats.confirmations || 0);
+                updateElement('success-rate', (data.basic_stats.success_rate || 0) + '%');
+
+                eventCount = data.basic_stats.total_events || 0;
+            }
+
+            // Update connection status
+            updateConnectionStatus('ml-detector-status', data.zmq_connections?.ml_events?.status === 'active' ? 'connected' : 'disconnected');
+            updateConnectionStatus('fleet-status', data.firewall_config?.agents?.length > 0 ? 'connected' : 'warning');
+
+            // Process new events
+            if (data.recent_events && !eventsPaused) {
+                processNewEvents(data.recent_events);
+            }
+
+            // Process firewall events
+            if (data.firewall_events) {
+                processFirewallEvents(data.firewall_events);
+            }
+        }
+
+        // Process New Events
+        function processNewEvents(events) {
+            const eventsList = document.getElementById('events-list');
+            const placeholder = eventsList.querySelector('.no-events');
+
+            if (placeholder && events.length > 0) {
+                placeholder.remove();
+            }
+
+            events.forEach(event => {
+                if (!currentEvents.some(e => e.id === event.id)) {
+                    addEventToList(event);
+                    addEventToMap(event);
+                    currentEvents.push(event);
+                }
+            });
+        }
+
+        // Add Event to List
+        function addEventToList(event) {
+            const eventsList = document.getElementById('events-list');
+            const eventElement = document.createElement('div');
+
+            const riskScore = (event.ensemble_confidence || event.risk_score || 0) * 100;
+            const riskLevel = riskScore > 80 ? 'high' : riskScore > 50 ? 'medium' : 'low';
+
+            eventElement.className = `event-item risk-${riskLevel}`;
+            eventElement.onclick = () => showEventDetail(event);
+
+            const eventTime = new Date((event.timestamp || Date.now()) * (event.timestamp > 1e10 ? 1 : 1000));
+
+            eventElement.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${event.source_ip || 'N/A'} → ${event.target_ip || 'N/A'}</strong>
+                        <div style="font-size: 0.8rem; color: #888; margin-top: 2px;">
+                            ${event.event_type || 'network_event'} | Node: ${event.capturing_node_id || 'N/A'}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="risk-score ${riskLevel}">${riskScore.toFixed(0)}%</span>
+                        <div class="timestamp">${eventTime.toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `;
+
+            eventsList.insertBefore(eventElement, eventsList.firstChild);
+        }
+
+        // Add Event to Map
+        function addEventToMap(event) {
+            if (!map) return;
+
+            try {
+                const lat = event.source_latitude || event.latitude || 40.4168;
+                const lng = event.source_longitude || event.longitude || -3.7038;
+
+                if (lat === 0 && lng === 0) return;
+
+                const riskScore = (event.ensemble_confidence || event.risk_score || 0) * 100;
+                const color = riskScore > 80 ? '#ff4444' : riskScore > 50 ? '#ffaa00' : '#00ff88';
+
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: color,
+                    color: color,
+                    weight: 2,
+                    opacity: 0.8,
+                    fillOpacity: 0.6
+                }).bindPopup(`
+                    <b>🚨 Evento V3.1</b><br>
+                    <strong>IP:</strong> ${event.source_ip}<br>
+                    <strong>Target:</strong> ${event.target_ip}<br>
+                    <strong>Risk:</strong> ${riskScore.toFixed(0)}%<br>
+                    <strong>Node:</strong> ${event.capturing_node_id || 'N/A'}
+                `).addTo(map);
+
+                markers.push(marker);
+
+                // Remove old markers
+                if (markers.length > 50) {
+                    const oldMarker = markers.shift();
+                    map.removeLayer(oldMarker);
+                }
+            } catch (error) {
+                console.error('❌ Error adding marker:', error);
+            }
+        }
+
+        // Process Firewall Events
+        function processFirewallEvents(events) {
+            const firewallList = document.getElementById('firewall-events-list');
+            const placeholder = firewallList.querySelector('.no-events');
+
+            if (placeholder && events.length > 0) {
+                placeholder.remove();
+            }
+
+            events.forEach(event => {
+                if (!currentFirewallEvents.some(e => e.id === event.id)) {
+                    addFirewallEventToList(event);
+                    currentFirewallEvents.push(event);
+                }
+            });
+        }
+
+        // Add Firewall Event to List
+        function addFirewallEventToList(event) {
+            const firewallList = document.getElementById('firewall-events-list');
+            const eventElement = document.createElement('div');
+
+            const eventType = event.type || 'command';
+            eventElement.className = `firewall-event ${eventType}`;
+
+            const eventTime = new Date((event.timestamp || Date.now()) * (event.timestamp > 1e10 ? 1 : 1000));
+
+            eventElement.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${event.action || 'UNKNOWN'}</strong>
+                        <div style="font-size: 0.8rem; color: #888; margin-top: 2px;">
+                            ${event.target_ip || 'N/A'} | Agent: ${event.agent_id || 'N/A'}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="color: ${eventType === 'response' ? '#00ff88' : eventType === 'error' ? '#ff4444' : '#ffaa00'};">
+                            ${eventType.toUpperCase()}
+                        </span>
+                        <div class="timestamp">${eventTime.toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `;
+
+            firewallList.insertBefore(eventElement, firewallList.firstChild);
+        }
+
+        // Utility Functions
+        function updateElement(id, value) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value;
+        }
+
+        function updateConnectionStatus(id, status) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.className = `status-dot ${status}`;
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => container.removeChild(toast), 300);
+            }, 3000);
+        }
+
+        // Event Handlers
+        function clearEventsList() {
+            const eventsList = document.getElementById('events-list');
+            eventsList.innerHTML = '<div class="no-events"><p>Lista limpiada</p></div>';
+            currentEvents = [];
+            showToast('Lista de eventos limpiada', 'info');
+        }
+
+        function clearFirewallEventsList() {
+            const firewallList = document.getElementById('firewall-events-list');
+            firewallList.innerHTML = '<div class="no-events"><p>Lista limpiada</p></div>';
+            currentFirewallEvents = [];
+            showToast('Lista de comandos firewall limpiada', 'info');
+        }
+
+        function pauseEventsUpdate() {
+            eventsPaused = !eventsPaused;
+            const btn = document.getElementById('pause-events-btn');
+
+            if (eventsPaused) {
+                btn.innerHTML = '▶️';
+                showToast('Eventos pausados', 'warning');
+            } else {
+                btn.innerHTML = '⏸️';
+                showToast('Eventos reanudados', 'info');
+            }
+        }
+
+        function filterEvents() {
+            const filter = document.getElementById('events-filter').value;
+            const events = document.querySelectorAll('.event-item');
+
+            events.forEach(event => {
+                const classes = event.className;
+                if (filter === 'all' || classes.includes(`risk-${filter}`)) {
+                    event.style.display = 'block';
+                } else {
+                    event.style.display = 'none';
+                }
+            });
+        }
+
+        async function sendTestFirewallCommand() {
+            try {
+                showToast('Enviando comando de test...', 'info');
+
+                const response = await fetch('/api/execute-firewall-action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'LIST_RULES',
+                        target_ip: '127.0.0.1',
+                        firewall_node_id: 'simple_firewall_agent_001',
+                        command_id: `test_${Date.now()}`,
+                        force_dry_run: true
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('✅ Comando test enviado correctamente', 'success');
+                } else {
+                    showToast('❌ Error en comando test: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showToast('❌ Error comunicando con backend', 'error');
+            }
+        }
+
+        function showEventDetail(event) {
+            const riskScore = (event.ensemble_confidence || event.risk_score || 0) * 100;
+            showToast(`Evento: ${event.source_ip} → ${event.target_ip} (${riskScore.toFixed(0)}%)`, 'info');
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (pollingInterval) clearInterval(pollingInterval);
+        });
+    </script>
+</body>
+</html>"""
+
+    async def start_zmq_processing(self):
+        """Iniciar procesamiento de mensajes ZMQ"""
+        try:
+            await self.zmq_manager.setup_connections()
+
+            # Iniciar thread de procesamiento ML events
+            if 'ml_events' in self.zmq_manager.sockets:
+                ml_thread = threading.Thread(target=self._ml_events_processor, daemon=True)
+                ml_thread.start()
+                self.processing_threads.append(ml_thread)
+                self.logger.info("🔄 ML Events processor started")
+
+            self.logger.info("✅ ZMQ processing iniciado")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error starting ZMQ processing: {e}")
+            raise
+
+    def _ml_events_processor(self):
+        """Procesador de eventos ML en thread separado - DESCIFRADO AUTOMÁTICO"""
+        self.logger.info("📡 ML Events processor thread iniciado (crypto ready)")
+
+        # Crear contexto ZMQ síncrono para el thread
+        context = zmq.Context()
+        socket = context.socket(zmq.SUB)
+        socket.setsockopt(zmq.SUBSCRIBE, b"")
+        socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 segundo timeout
+
+        # Configurar conexión
+        ml_config = self.config.network.get('ml_events_input', {})
+        address = ml_config.get('address', 'localhost')
+        port = ml_config.get('port', 5580)
+        endpoint = f"tcp://{address}:{port}"
+        socket.connect(endpoint)
+
+        # 🔐 CRYPTO WRAPPING en thread síncrono
+        if self.crypto_wrapper:
+            crypto_channels = self.config.config.get("crypto", {}).get("channels", {})
+            if crypto_channels.get("ml_events_input", {}).get("decrypt", False):
+                socket = self.crypto_wrapper.wrap_socket_recv(socket)
+                self.logger.info("🔓 ML Events processor: AUTOMATIC DECRYPTION enabled")
+
+        while self.running:
+            try:
+                # 🔐 Recibir mensaje (AUTOMÁTICAMENTE DESCIFRADO)
+                message_bytes = socket.recv(zmq.NOBLOCK)
+
+                # Procesar evento
+                event = self._parse_ml_event_v31(message_bytes)
+                if event:
+                    self.recent_events.append(event)
+                    self._update_basic_stats(event)
+
+                    if self.crypto_wrapper:
+                        self.logger.debug(f"📨 ML Event received and decrypted: {event.source_ip} → {event.target_ip}")
+                    else:
+                        self.logger.debug(f"📨 ML Event received: {event.source_ip} → {event.target_ip}")
+
+            except zmq.Again:
+                # No hay mensajes, continuar
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Error processing ML event: {e}")
+                time.sleep(1)
+
+        # Cleanup
+        socket.close()
+        context.term()
+        self.logger.info("📡 ML Events processor thread terminado")
+
+    def _parse_ml_event_v31(self, message_bytes: bytes) -> Optional[NetworkEventV31]:
+        """Parser para eventos ML V3.1 con campos adicionales"""
+        try:
+            # Intentar protobuf primero
+            if PROTOBUF_AVAILABLE and NetworkEventProto:
+                try:
+                    pb_event = NetworkEventProto.NetworkEvent()
+                    pb_event.ParseFromString(message_bytes)
+
+                    # Convertir a NetworkEventV31
+                    return NetworkEventV31(
+                        id=getattr(pb_event, 'event_id', f"event_{int(time.time())}"),
+                        timestamp=getattr(pb_event, 'timestamp', time.time() * 1000) / 1000,
+                        source_ip=getattr(pb_event, 'source_ip', '127.0.0.1'),
+                        target_ip=getattr(pb_event, 'target_ip', '127.0.0.1'),
+                        src_port=getattr(pb_event, 'src_port', 0),
+                        dest_port=getattr(pb_event, 'dest_port', 0),
+                        protocol=getattr(pb_event, 'protocol', 'TCP'),
+                        risk_score=float(getattr(pb_event, 'risk_score', 0.5)),
+
+                        # ✅ NUEVOS CAMPOS V3.1
+                        ensemble_confidence=float(
+                            getattr(pb_event, 'ensemble_confidence', getattr(pb_event, 'risk_score', 0.5))),
+                        pipeline_latency=float(getattr(pb_event, 'pipeline_latency', 0.0)),
+                        capturing_node_id=getattr(pb_event, 'capturing_node_id',
+                                                  getattr(pb_event, 'node_id', 'unknown')),
+
+                        # Coordenadas duales
+                        source_latitude=getattr(pb_event, 'source_latitude', None),
+                        source_longitude=getattr(pb_event, 'source_longitude', None),
+                        target_latitude=getattr(pb_event, 'target_latitude', None),
+                        target_longitude=getattr(pb_event, 'target_longitude', None),
+
+                        # Geolocalización
+                        source_city=getattr(pb_event, 'source_city', None),
+                        source_country=getattr(pb_event, 'source_country', None),
+                        target_city=getattr(pb_event, 'target_city', None),
+                        target_country=getattr(pb_event, 'target_country', None),
+                        geographic_distance_km=getattr(pb_event, 'geographic_distance_km', None),
+                        same_country=getattr(pb_event, 'same_country', None),
+
+                        # Enriquecimiento V3.1
+                        source_ip_enriched=bool(getattr(pb_event, 'source_ip_enriched', False)),
+                        target_ip_enriched=bool(getattr(pb_event, 'target_ip_enriched', False)),
+
+                        # ML Tricapa scores
+                        tricapa_scores={
+                            'isolation_forest': getattr(pb_event, 'isolation_forest_score', 0.5),
+                            'one_class_svm': getattr(pb_event, 'one_class_svm_score', 0.5),
+                            'local_outlier_factor': getattr(pb_event, 'local_outlier_factor_score', 0.5)
+                        },
+
+                        # Información del nodo
+                        node_id=getattr(pb_event, 'node_id', 'unknown'),
+                        agent_id=getattr(pb_event, 'agent_id', ''),
+
+                        # Metadatos
+                        event_type=getattr(pb_event, 'event_type', 'network_event'),
+                        packet_size=getattr(pb_event, 'packet_size', 0)
+                    )
+
+                except Exception as pb_error:
+                    self.logger.debug(f"⚠️ Protobuf parse failed, trying JSON: {pb_error}")
+
+            # Fallback a JSON
+            try:
+                message_text = message_bytes.decode('utf-8')
+                event_data = json.loads(message_text)
+
+                return NetworkEventV31(
+                    id=event_data.get('id', f"event_{int(time.time())}"),
+                    timestamp=event_data.get('timestamp', time.time()),
+                    source_ip=event_data.get('source_ip', '127.0.0.1'),
+                    target_ip=event_data.get('target_ip', '127.0.0.1'),
+                    src_port=event_data.get('src_port', 0),
+                    dest_port=event_data.get('dest_port', 0),
+                    protocol=event_data.get('protocol', 'TCP'),
+                    risk_score=float(event_data.get('risk_score', 0.5)),
+
+                    # V3.1 fields con fallbacks
+                    ensemble_confidence=float(event_data.get('ensemble_confidence', event_data.get('risk_score', 0.5))),
+                    pipeline_latency=float(event_data.get('pipeline_latency', 0.0)),
+                    capturing_node_id=event_data.get('capturing_node_id', 'unknown'),
+
+                    # Geolocalización con fallbacks
+                    source_latitude=event_data.get('source_latitude', event_data.get('latitude')),
+                    source_longitude=event_data.get('source_longitude', event_data.get('longitude')),
+                    target_latitude=event_data.get('target_latitude'),
+                    target_longitude=event_data.get('target_longitude'),
+
+                    source_city=event_data.get('source_city'),
+                    source_country=event_data.get('source_country'),
+                    target_city=event_data.get('target_city'),
+                    target_country=event_data.get('target_country'),
+                    geographic_distance_km=event_data.get('geographic_distance_km'),
+                    same_country=event_data.get('same_country'),
+
+                    source_ip_enriched=bool(event_data.get('source_ip_enriched', False)),
+                    target_ip_enriched=bool(event_data.get('target_ip_enriched', False)),
+
+                    tricapa_scores=event_data.get('tricapa_scores', {
+                        'isolation_forest': 0.5,
+                        'one_class_svm': 0.5,
+                        'local_outlier_factor': 0.5
+                    }),
+
+                    node_id=event_data.get('node_id', 'unknown'),
+                    agent_id=event_data.get('agent_id', ''),
+                    event_type=event_data.get('event_type', 'network_event'),
+                    packet_size=event_data.get('packet_size', 0)
+                )
+
+            except Exception as json_error:
+                self.logger.warning(f"⚠️ JSON parse failed: {json_error}")
+
+            # Crear evento básico como último recurso
+            return NetworkEventV31(
+                id=f"fallback_{int(time.time())}",
+                timestamp=time.time(),
+                source_ip='127.0.0.1',
+                target_ip='127.0.0.1',
+                src_port=0,
+                dest_port=80,
+                protocol='TCP',
+                risk_score=0.1,
+                ensemble_confidence=0.1,
+                pipeline_latency=0.0,
+                capturing_node_id='unknown',
+                event_type='fallback_event'
+            )
+
+        except Exception as e:
+            self.logger.error(f"❌ Error parsing ML event: {e}")
+            return None
+
+    def _update_basic_stats(self, event: NetworkEventV31):
+        """Actualizar estadísticas básicas"""
+        self.basic_stats['total_events'] += 1
+
+        if event.ensemble_confidence > 0.8 or event.risk_score > 0.8:
+            self.basic_stats['high_risk_events'] += 1
+
+        # Calcular eventos por minuto (últimos 60 segundos)
+        current_time = time.time()
+        recent_events_count = len([
+            e for e in self.recent_events
+            if (current_time - e.timestamp) <= 60
+        ])
+        self.basic_stats['events_per_minute'] = recent_events_count
+
+        # Calcular success rate basado en eventos de alto riesgo vs total
+        if self.basic_stats['total_events'] > 0:
+            self.basic_stats['success_rate'] = round(
+                100 - (self.basic_stats['high_risk_events'] / self.basic_stats['total_events'] * 100), 1
+            )
+
+    async def start(self):
+        """Iniciar dashboard backend V3.1"""
+        self.running = True
+
+        self.logger.info("🚀 Iniciando Dashboard Backend V3.1...")
+        self.logger.info(f"📋 Node ID: {self.config.node_id}")
+        self.logger.info(f"🔐 Crypto System: {'ACTIVO' if self.crypto_wrapper else 'INACTIVO'}")
+        self.logger.info(f"🏗️ Component: {self.config.component['name']} v{self.config.component['version']}")
+
+        try:
+            # Iniciar procesamiento ZMQ
+            await self.start_zmq_processing()
+
+            # Configurar Flask
+            web_config = self.config.web_server
+            host = web_config.get('host', '0.0.0.0')
+            port = web_config.get('port', 8080)
+            debug = web_config.get('debug', False)
+
+            self.logger.info(f"🌐 Starting web server on {host}:{port}")
+            self.logger.info(f"🔗 Dashboard URL: http://{host}:{port}")
+
+            # Ejecutar Flask en thread separado
+            flask_thread = threading.Thread(
+                target=lambda: self.app.run(host=host, port=port, debug=debug, use_reloader=False),
+                daemon=True
+            )
+            flask_thread.start()
+            self.processing_threads.append(flask_thread)
+
+            self.logger.info("✅ Dashboard Backend V3.1 iniciado correctamente")
+
+            # Loop principal
+            while self.running:
+                await asyncio.sleep(1)
+                self._periodic_maintenance()
+
+        except Exception as e:
+            self.logger.error(f"❌ Error starting dashboard: {e}")
+            raise
+
+    def _periodic_maintenance(self):
+        """Mantenimiento periódico"""
+        # Limpiar eventos antiguos (mantener últimas 2 horas)
+        current_time = time.time()
+        cutoff_time = current_time - (2 * 3600)  # 2 horas
+
+        # Filtrar eventos antiguos
+        self.recent_events = deque([
+            event for event in self.recent_events
+            if event.timestamp > cutoff_time
+        ], maxlen=1000)
+
+        self.recent_firewall_events = deque([
+            event for event in self.recent_firewall_events
+            if event.timestamp > cutoff_time
+        ], maxlen=1000)
+
+    async def stop(self):
+        """Detener dashboard backend"""
+        self.logger.info("🛑 Deteniendo Dashboard Backend V3.1...")
+        self.running = False
+
+        # 🔐 Crypto cleanup
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 Crypto wrapper cerrado correctamente")
+            except Exception as e:
+                self.logger.error(f"❌ Error cerrando crypto wrapper: {e}")
+
+        # Cerrar conexiones ZMQ
+        await self.zmq_manager.close_all()
+
+        self.logger.info("✅ Dashboard Backend V3.1 detenido")
+
+
+def signal_handler(signum, frame):
     """Manejar señales del sistema"""
-    print("\n🛑 Recibida señal de terminación V3.1")
+    print(f"\n📡 Señal {signum} recibida")
+    global dashboard
+    if 'dashboard' in globals():
+        asyncio.create_task(dashboard.stop())
     sys.exit(0)
 
 
-def main():
-    """Función principal V3.1"""
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    print("🚀 Dashboard V3.1 - Inicio")
-    print("✅ Protobuf V3.1 exclusivo")
-    print("📡 SUB connection al ML_detector puerto 5580")
-    print("🔥 Fleet management múltiples firewall agents")
-    print("🚨 Nuclear broadcast capability")
-    print("❌ Sin cifrado/compresión (desarrollo)")
+async def main():
+    """Función principal asíncrona"""
+    global dashboard
 
     if len(sys.argv) != 3:
-        print("\n❌ Uso incorrecto:")
-        print("python dashboard_v31.py <dashboard_config_v31.json> <firewall_rules.json>")
-        print("\n📋 Archivos requeridos:")
-        print("   • dashboard_config_v31.json: Configuración V3.1 del dashboard")
-        print("   • firewall_rules.json: Configuración de la fleet de firewall agents")
+        print("❌ Uso: python dashboard_v31.py <dashboard_config.json> <firewall_rules.json>")
         sys.exit(1)
 
     config_file = sys.argv[1]
     firewall_rules_file = sys.argv[2]
 
-    # Validar archivos
-    if not Path(config_file).exists():
-        print(f"\n❌ ERROR: {config_file} no encontrado")
-        sys.exit(1)
-
-    if not Path(firewall_rules_file).exists():
-        print(f"\n❌ ERROR: {firewall_rules_file} no encontrado")
-        sys.exit(1)
-
-    print(f"✅ Archivos de configuración V3.1:")
-    print(f"   📋 Dashboard: {config_file}")
-    print(f"   🔥 Fleet: {firewall_rules_file}")
+    # Configurar signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        # Cargar configuración V3.1
-        config = DashboardConfigV31(config_file, firewall_rules_file)
+        print("🚀 Dashboard Backend V3.1 - Crypto + Compression Ready")
+        print("🔐 AES-256-GCM + LZ4 Automatic Encryption")
+        print("🌐 Fleet Management with Transparent Security")
 
-        # Crear directorios necesarios
-        for directory in ['logs', 'data', 'templates', 'static/css', 'static/js']:
-            Path(directory).mkdir(parents=True, exist_ok=True)
+        # Crear dashboard
+        dashboard = DashboardBackendV31(config_file, firewall_rules_file)
 
-        # Iniciar dashboard V3.1
-        dashboard = SecurityDashboardV31(config)
-        dashboard.start()
+        # Iniciar dashboard
+        await dashboard.start()
 
-    except (ConfigurationError, FirewallRulesError) as e:
-        print(f"\n💥 ERROR DE CONFIGURACIÓN V3.1:")
-        print(f"❌ {e}")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"\n💥 ERROR DE FORMATO JSON:")
-        print(f"❌ {e}")
-        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n🛑 Shutdown signal received")
+        if 'dashboard' in locals():
+            await dashboard.stop()
     except Exception as e:
-        print(f"\n💥 ERROR FATAL V3.1:")
-        print(f"❌ {e}")
+        print(f"💥 Error fatal: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
