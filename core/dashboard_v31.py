@@ -1760,12 +1760,14 @@ class DashboardBackendV31:
                 self.logger.info(f"🔍 First 20 bytes: {message_bytes[:20]}")
                 self.logger.info(f"🔐 Crypto wrapper: {bool(self.crypto_wrapper)}")
 
-                # Test UTF-8 validity
                 try:
-                    test_decode = message_bytes.decode('utf-8')
-                    self.logger.info(f"✅ UTF-8 valid")
-                except UnicodeDecodeError as e:
-                    self.logger.warning(f"❌ UTF-8 invalid: {e}")
+                    # Test si es protobuf válido
+                    if message_bytes.startswith(b'\n'):  # Protobuf típico
+                        self.logger.info(f"✅ Protobuf format detected")
+                    else:
+                        self.logger.warning(f"⚠️ Unexpected data format")
+                except Exception as e:
+                    self.logger.warning(f"❌ Data validation failed: {e}")
                 # Procesar evento
                 event = self._parse_ml_event_v31(message_bytes)
                 if event:
