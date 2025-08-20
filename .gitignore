@@ -3,7 +3,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+default.etcd
+default.etcd/
+default.etcd/*.*
 # C extensions
 *.so
 
