@@ -3,24 +3,13 @@
 🚀 UPGRADED HAPPINESS - EVOLUTIONARY SNIFFER v3.1
 evolutionary_sniffer_v31.py
 
-FILOSOFÍA: Evolución del promiscuous_agent + complete_ml_pipeline
-✅ Captura REAL de paquetes con Scapy (del promiscuous_agent)
-✅ Extracción de 83+ features ML (del complete_ml_pipeline)
-✅ Time windows configurables por modelo
-✅ Protobuf v3.1 LIMPIO (sin compatibilidad hacia atrás)
-✅ ZeroMQ distribuido avanzado
-✅ JSON configuration completamente flexible
-✅ Pipeline tracking de primera clase
-✅ TODO O NADA - cero legacy
+CAMBIOS PARA ETCD CRYPTO INTEGRATION:
+✅ Main async para setup_sniffer_crypto
+✅ Pipeline key desde ETCD (no config file)
+✅ Constructor modificado para recibir pipeline_key
+✅ Eliminadas referencias hardcodeadas
 
-ARQUITECTURA:
-- Time windows flexibles: DDOS (83 features), RF (23), Internal (4-5), Future models
-- Pipeline distribuido: Primer nodo que asigna IDs y nombres
-- Features ML: Todas las features de red necesarias extraídas con Scapy
-- Protobuf v3.1: NetworkSecurityEvent limpio y eficiente
-
-Autor: Alonso Isidoro, Claude
-Fecha: Agosto 9, 2025
+Resto del código igual...
 """
 
 import zmq
@@ -44,6 +33,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import math
 import statistics
+import asyncio
+
+# ✅ IMPORTS ETCD CRYPTO
+from etcd_crypto_client_sniffer import (
+    setup_sniffer_crypto,
+    get_sniffer_pipeline_key
+)
+from evolutionary_sniffer_v31_etcd import TimeWindowManager, NetworkFeaturesExtractor
 
 # 📦 Dependencias para captura de paquetes - REQUERIDAS
 try:
@@ -132,6 +129,7 @@ def import_protobuf_v31():
 import_protobuf_v31()
 
 
+# [RESTO DE CLASES DATACLASS - IGUALES]
 @dataclass
 class TimeWindowConfig:
     """Configuración de ventana de tiempo para modelos ML"""
@@ -174,7 +172,6 @@ class FlowInfo:
     backward_packets: List[PacketInfo]
     total_forward_bytes: int = 0
     total_backward_bytes: int = 0
-
 
 class NetworkFeaturesExtractor:
     """Extractor de features de red para modelos ML - TODAS las features necesarias"""
@@ -733,26 +730,28 @@ class TimeWindowManager:
         if flows_to_remove:
             self.logger.debug(f"Limpiados {len(flows_to_remove)} flujos antiguos")
 
-
 class EvolutionarySniffer:
     """
-    Sniffer evolutivo v3.1 - Combinación de promiscuous_agent + complete_ml_pipeline
-
-    CARACTERÍSTICAS:
-    ✅ Captura REAL de paquetes con Scapy
-    ✅ Extracción de 83+ features ML
-    ✅ Time windows configurables por modelo
-    ✅ Protobuf v3.1 LIMPIO exclusivo
-    ✅ ZeroMQ distribuido
-    ✅ JSON configuration flexible
-    ✅ Pipeline tracking avanzado
-    ✅ TODO O NADA - sin legacy
+    Sniffer evolutivo v3.1 - MODIFICADO para ETCD crypto integration
     """
 
-    def __init__(self, config_file: str):
+    def __init__(self, config_file: str, pipeline_key: Optional[str] = None):
+        """
+        Constructor modificado para recibir pipeline_key de ETCD
+
+        Args:
+            config_file: Ruta al JSON de configuración
+            pipeline_key: Key obtenida de ETCD (reemplaza environment variable)
+        """
         # 📄 Cargar configuración JSON
         self.config = self._load_config_strict(config_file)
         self.config_file = config_file
+
+        # 🔑 Pipeline key desde ETCD (NO desde environment)
+        self.pipeline_key = pipeline_key
+
+        # 🔐 Crypto wrapper (inicializado después)
+        self.crypto_wrapper = None
 
         # 🏷️ Identidad distribuida
         self.node_id = self.config["node_id"]
@@ -765,6 +764,7 @@ class EvolutionarySniffer:
 
         # 📝 Setup logging
         self.setup_logging()
+        self.logger.info(f"🔑 Pipeline key: {'✅ ETCD' if self.pipeline_key else '❌ Missing'}")
 
         # ✅ Verificar dependencias críticas PRIMERO
         self._verify_dependencies()
@@ -810,75 +810,8 @@ class EvolutionarySniffer:
         self.logger.info(f"   🏷️ Node ID: {self.node_id}")
         self.logger.info(f"   🔢 PID: {self.process_id}")
         self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
+        self.logger.info(f"   🔑 Pipeline key: {'✅ ETCD' if self.pipeline_key else '❌ Missing'}")
         self.logger.info(f"   ⏰ Time windows: {len(self.time_window_manager.window_configs)}")
-
-    def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
-        """Carga configuración sin defaults hardcodeados"""
-        try:
-            with open(config_file, 'r') as f:
-                config = json.load(f)
-        except FileNotFoundError:
-            raise RuntimeError(f"❌ Archivo de configuración no encontrado: {config_file}")
-        except json.JSONDecodeError as e:
-            raise RuntimeError(f"❌ Error parseando JSON: {e}")
-
-        # Validar campos críticos
-        required_fields = [
-            "node_id", "network", "capture", "processing",
-            "time_windows", "logging", "monitoring"
-        ]
-
-        for field in required_fields:
-            if field not in config:
-                raise RuntimeError(f"❌ Campo requerido faltante: {field}")
-
-        return config
-
-    def _parse_time_window_configs(self) -> Dict[str, TimeWindowConfig]:
-        """Parsea configuraciones de ventanas de tiempo desde JSON"""
-        configs = {}
-
-        for window_type, window_data in self.config["time_windows"].items():
-            configs[window_type] = TimeWindowConfig(
-                window_size_seconds=window_data["window_size_seconds"],
-                slide_interval_seconds=window_data["slide_interval_seconds"],
-                max_flows_per_window=window_data["max_flows_per_window"],
-                features_required=window_data["features_required"],
-                model_types=window_data["model_types"],
-                description=window_data.get("description", "")
-            )
-
-        self.logger.info(f"⏰ Configuradas {len(configs)} ventanas de tiempo:")
-        for window_type, config in configs.items():
-            self.logger.info(f"   📊 {window_type}: {config.window_size_seconds}s window, "
-                             f"{len(config.features_required)} features, "
-                             f"models: {config.model_types}")
-
-        return configs
-
-    def _get_container_id(self) -> Optional[str]:
-        """Obtiene ID del contenedor si está disponible"""
-        try:
-            with open('/proc/self/cgroup', 'r') as f:
-                content = f.read()
-                for line in content.split('\n'):
-                    if 'docker' in line:
-                        return line.split('/')[-1][:12]
-            return None
-        except:
-            return None
-
-    def _gather_system_info(self) -> Dict[str, Any]:
-        """Recolecta información del sistema"""
-        return {
-            'hostname': socket.gethostname(),
-            'os_name': platform.system(),
-            'os_version': platform.release(),
-            'architecture': platform.machine(),
-            'python_version': platform.python_version(),
-            'cpu_count': psutil.cpu_count(),
-            'memory_total_gb': round(psutil.virtual_memory().total / (1024 ** 3), 2)
-        }
 
     def _verify_dependencies(self):
         """Verifica dependencias críticas - FALLA si no están"""
@@ -943,8 +876,32 @@ class EvolutionarySniffer:
             except Exception as e:
                 self.logger.error(f"❌ Error configurando file logging: {e}")
 
+    def _get_container_id(self) -> Optional[str]:
+        """Obtiene ID del contenedor si está disponible"""
+        try:
+            with open('/proc/self/cgroup', 'r') as f:
+                content = f.read()
+                for line in content.split('\n'):
+                    if 'docker' in line:
+                        return line.split('/')[-1][:12]
+            return None
+        except:
+            return None
+
+    def _gather_system_info(self) -> Dict[str, Any]:
+        """Recolecta información del sistema"""
+        return {
+            'hostname': socket.gethostname(),
+            'os_name': platform.system(),
+            'os_version': platform.release(),
+            'architecture': platform.machine(),
+            'python_version': platform.python_version(),
+            'cpu_count': psutil.cpu_count(),
+            'memory_total_gb': round(psutil.virtual_memory().total / (1024 ** 3), 2)
+        }
+
     def setup_socket(self):
-        """Configuración ZeroMQ desde network config"""
+        """Configuración ZeroMQ desde network config - MODIFICADO para ETCD crypto"""
         network_config = self.config["network"]
         output_config = network_config["output_socket"]
 
@@ -974,9 +931,82 @@ class EvolutionarySniffer:
         else:
             raise ValueError(f"❌ Modo desconocido: {mode}")
 
+        # ✅ CRYPTO SETUP MODIFICADO - USA PIPELINE KEY DE ETCD
+        if self.config.get("crypto", {}).get("enabled", False):
+            if not self.pipeline_key:
+                raise RuntimeError("❌ Crypto enabled but no pipeline key available from ETCD")
+
+            # ✅ IMPORTAR CryptoZMQV31
+            try:
+                from core.crypto.crypto_zmq_v31 import CryptoZMQV31
+            except ImportError:
+                # Fallback path
+                from crypto.crypto_zmq_v31 import CryptoZMQV31
+
+            # ✅ USAR PIPELINE KEY EN LUGAR DE CONFIG FILE
+            self.crypto_wrapper = CryptoZMQV31(
+                pipeline_key=self.pipeline_key,
+                component_name=self.node_id
+            )
+
+            # ✅ WRAP SOCKET
+            self.socket = self.crypto_wrapper.wrap_socket_send(self.socket)
+
+            self.logger.info("🔐 Crypto wrapper enabled with ETCD pipeline key")
+        else:
+            self.logger.info("🔓 Crypto disabled in config")
+
         self.logger.info(f"🔌 ZeroMQ configurado: {connection_info}")
         self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
 
+    def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
+        """Carga configuración sin defaults hardcodeados"""
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(f"❌ Archivo de configuración no encontrado: {config_file}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"❌ Error parseando JSON: {e}")
+
+        # Validar campos críticos (incluyendo etcd_crypto)
+        required_fields = [
+            "node_id", "network", "capture", "processing",
+            "time_windows", "logging", "monitoring", "etcd_crypto"
+        ]
+
+        for field in required_fields:
+            if field not in config:
+                raise RuntimeError(f"❌ Campo requerido faltante: {field}")
+
+        return config
+
+    def _parse_time_window_configs(self) -> Dict[str, TimeWindowConfig]:
+        """Parsea configuraciones de ventanas de tiempo desde JSON"""
+        configs = {}
+
+        for window_type, window_data in self.config["time_windows"].items():
+            configs[window_type] = TimeWindowConfig(
+                window_size_seconds=window_data["window_size_seconds"],
+                slide_interval_seconds=window_data["slide_interval_seconds"],
+                max_flows_per_window=window_data["max_flows_per_window"],
+                features_required=window_data["features_required"],
+                model_types=window_data["model_types"],
+                description=window_data.get("description", "")
+            )
+
+        self.logger.info(f"⏰ Configuradas {len(configs)} ventanas de tiempo:")
+        for window_type, config in configs.items():
+            self.logger.info(f"   📊 {window_type}: {config.window_size_seconds}s window, "
+                             f"{len(config.features_required)} features, "
+                             f"models: {config.model_types}")
+
+        return configs
+
+    # [RESTO DE MÉTODOS SIN CAMBIOS - packet_capture_callback, _extract_packet_info,
+    # start_packet_capture, process_packets, process_time_windows, etc.]
+
+    # ... (resto del código igual al original)
     def packet_capture_callback(self, packet):
         """Callback para captura de paquetes con Scapy"""
         try:
@@ -1053,26 +1083,6 @@ class EvolutionarySniffer:
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo info de paquete: {e}")
             return None
-
-    def _should_process_packet(self, packet_info: PacketInfo) -> bool:
-        """Determina si el paquete debe ser procesado"""
-        capture_config = self.config["capture"]
-
-        # Filtro por tamaño
-        if packet_info.packet_size < capture_config.get("min_packet_size", 0):
-            return False
-
-        # Filtro por puertos excluidos
-        excluded_ports = capture_config.get("excluded_ports", [])
-        if packet_info.src_port in excluded_ports or packet_info.dst_port in excluded_ports:
-            return False
-
-        # Filtro por protocolos incluidos
-        included_protocols = capture_config.get("included_protocols", [])
-        if included_protocols and packet_info.protocol_name.lower() not in [p.lower() for p in included_protocols]:
-            return False
-
-        return True
 
     def start_packet_capture(self):
         """Inicia captura REAL de paquetes con Scapy"""
@@ -1414,50 +1424,19 @@ class EvolutionarySniffer:
             self.stats[key] = 0
 
         self.stats['last_stats_time'] = now
-
-    def run(self):
-        """Ejecutar el sniffer evolutivo v3.1"""
-        self.logger.info("🚀 Iniciando Evolutionary Sniffer v3.1...")
-
-        # Enviar handshake inicial
-        self.send_handshake()
-
-        # Iniciar threads
-        threads = []
-
-        # Thread de monitoreo
-        monitor_thread = threading.Thread(target=self.monitor_performance, name="Monitor")
-        monitor_thread.start()
-        threads.append(monitor_thread)
-
-        # Thread de procesamiento de paquetes
-        packet_thread = threading.Thread(target=self.process_packets, name="PacketProcessor")
-        packet_thread.start()
-        threads.append(packet_thread)
-
-        # Thread de procesamiento de ventanas de tiempo
-        window_thread = threading.Thread(target=self.process_time_windows, name="WindowProcessor")
-        window_thread.start()
-        threads.append(window_thread)
-
-        # Thread de captura (bloquea en el hilo principal)
-        self.logger.info(f"✅ Sniffer v3.1 iniciado con {len(threads)} threads")
-        self.logger.info(f"   📦 Protobuf: {PROTOBUF_VERSION}")
-        self.logger.info(f"   🏷️ Node ID: {self.node_id}")
-
-        try:
-            # Iniciar captura (bloquea hasta Ctrl+C)
-            self.start_packet_capture()
-        except KeyboardInterrupt:
-            self.logger.info("🛑 Deteniendo Sniffer v3.1...")
-
-        # Shutdown graceful
-        self.shutdown(threads)
-
+        
     def shutdown(self, threads):
-        """Cierre graceful del sniffer v3.1"""
+        """Cierre graceful del sniffer v3.1 - MODIFICADO"""
         self.running = False
         self.stop_event.set()
+
+        # 🔐 Close crypto wrapper ETCD
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 ETCD crypto wrapper closed")
+            except Exception as e:
+                self.logger.error(f"❌ Error closing crypto wrapper: {e}")
 
         # Stats finales
         runtime = time.time() - self.stats['start_time']
@@ -1475,21 +1454,50 @@ class EvolutionarySniffer:
         self.logger.info("✅ Evolutionary Sniffer v3.1 cerrado correctamente")
 
 
-# 🚀 Main
-if __name__ == "__main__":
+# ✅ MAIN MODIFICADO - ASYNC PARA ETCD INTEGRATION
+async def main():
+    """Main async para integración ETCD crypto"""
     if len(sys.argv) != 2:
         print("❌ Uso: python evolutionary_sniffer_v31.py <config.json>")
-        print("💡 Ejemplo: python evolutionary_sniffer_v31.py evolutionary_sniffer_config_v31.json")
+        print("💡 Ejemplo: python evolutionary_sniffer_v31.py config/json/evolutionary_sniffer_config_v31.json")
         sys.exit(1)
 
     config_file = sys.argv[1]
 
+    print("🔍 Starting Evolutionary Sniffer v3.1 with ETCD crypto...")
+
+    # ✅ SETUP CRYPTO ETCD (reemplaza environment variable setup)
+    if not await setup_sniffer_crypto(config_file):
+        print("❌ Failed to setup sniffer crypto")
+        sys.exit(1)
+
+    print("✅ Sniffer crypto ready!")
+
+    # ✅ OBTENER PIPELINE KEY (reemplaza os.environ.get)
+    pipeline_key = get_sniffer_pipeline_key()
+    if not pipeline_key:
+        print("❌ No pipeline key available")
+        sys.exit(1)
+
+    print(f"🔑 Pipeline key obtained: {pipeline_key[:32]}...")
+
     try:
-        sniffer = EvolutionarySniffer(config_file)
+        # ✅ CREAR SNIFFER CON PIPELINE KEY
+        sniffer = EvolutionarySniffer(config_file, pipeline_key)
+
+        print("🚀 Starting sniffer...")
+
+        # ✅ EJECUTAR SNIFFER (función sync)
         sniffer.run()
+
     except Exception as e:
         print(f"❌ Error fatal: {e}")
         import traceback
-
         traceback.print_exc()
         sys.exit(1)
+
+
+# 🚀 ENTRY POINT
+if __name__ == "__main__":
+    # ✅ EJECUTAR MAIN ASYNC
+    asyncio.run(main())
