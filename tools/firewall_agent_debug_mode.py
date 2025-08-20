@@ -27,7 +27,7 @@ def try_import_protobuf():
     """Intentar importar todos los protobuf posibles"""
     strategies = [
         ("firewall_commands_v31_pb2", "Directo V3.1"),
-        ("protocols.v3.1.firewall_commands_v31_pb2", "Package V3.1"),
+        ("protocols.v3_1.firewall_commands_v31_pb2", "Package V3.1"),
         ("firewall_commands_pb2", "Directo legacy"),
         ("protocols.firewall_commands_pb2", "Package legacy"),
     ]

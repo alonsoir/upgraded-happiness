@@ -47,7 +47,7 @@ def import_scheduler_protobuf_v31():
     firewall_imported = False
     firewall_strategies = [
         ("firewall_commands_v31_pb2", "Importación directa"),
-        ("protocols.v3.1.firewall_commands_v31_pb2", "Paquete protocols.v3.1"),
+        ("protocols.v3_1.firewall_commands_v31_pb2", "Paquete protocols.v3_1"),
     ]
 
     for import_path, description in firewall_strategies:
@@ -63,9 +63,9 @@ def import_scheduler_protobuf_v31():
     network_imported = False
     network_strategies = [
         ("network_security_clean_v31_pb2", "Importación directa v3.1"),
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
         ("network_event_extended_v3_pb2", "Importación directa v3.0"),
-        ("protocols.v3.1.network_event_extended_v3_pb2", "Paquete protocols.v3.1 v3.0"),
+        ("protocols.v3_1.network_event_extended_v3_pb2", "Paquete protocols.v3_1 v3.0"),
     ]
 
     for import_path, description in network_strategies:

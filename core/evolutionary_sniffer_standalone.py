@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-🚀 EVOLUTIONARY SNIFFER STANDALONE v3.1
-evolutionary_sniffer_standalone.py
+🚀 EVOLUTIONARY SNIFFER ZMQ OPTIMIZED v3.1
+evolutionary_sniffer_zmq_optimized.py
 
-VERSIÓN STANDALONE SIN IMPORTS CIRCULARES:
-✅ Sin imports circulares
-✅ Usa sniffer_components.py
-✅ Usa etcd_crypto_client_sniffer_fixed.py
-✅ Manejo robusto de errores
-✅ Soporte para modo desarrollo
+VERSIÓN OPTIMIZADA PARA ZMQ:
+✅ Manejo inteligente de backpressure
+✅ Rate limiting adaptativo
+✅ Circuit breaker para ZMQ
+✅ Batching de eventos
+✅ Métricas avanzadas de rendimiento
 """
 
 import zmq
@@ -23,22 +23,77 @@ import sys
 import platform
 import psutil
 import asyncio
-# Fix missing import
 from queue import Queue, Empty
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
+from collections import deque
+import statistics
 
 # 🔧 SETUP ENVIRONMENT
 if 'PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION' not in os.environ:
     os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
 
-# ✅ IMPORTS ETCD CRYPTO FIJO
+# 📦 Protobuf v3.1.0 - REQUERIDO - Importación robusta
+PROTOBUF_AVAILABLE = False
+PROTOBUF_VERSION = "unavailable"
+NetworkSecurityEventProto = None
+
+
+def import_protobuf_module():
+    """Importa el módulo protobuf v3.1.0 con múltiples estrategias"""
+    global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+
+    import_strategies = [
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
+        ("protocols.network_security_clean_v31_pb2", "Paquete protocols"),
+        ("network_security_clean_v31_pb2", "Importación directa"),
+    ]
+
+    for import_path, description in import_strategies:
+        try:
+            NetworkSecurityEventProto = __import__(import_path, fromlist=[''])
+            PROTOBUF_AVAILABLE = True
+            PROTOBUF_VERSION = "v3.1.0"
+            print(f"✅ Protobuf v3.1 cargado: {description} ({import_path})")
+            return True
+        except ImportError:
+            continue
+
+    # Estrategia 2: Path dinámico
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    possible_paths = [
+        os.path.join(current_dir, '..', 'protocols', 'v3_1'),
+        os.path.join(current_dir, 'protocols', 'v3_1'),
+        os.path.join(os.getcwd(), 'protocols', 'v3_1'),
+    ]
+
+    for protocols_path in possible_paths:
+        protocols_path = os.path.abspath(protocols_path)
+        pb2_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
+
+        if os.path.exists(pb2_file):
+            try:
+                sys.path.insert(0, protocols_path)
+                import network_security_clean_v31_pb2 as NetworkSecurityEventProto
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.1.0"
+                print(f"✅ Protobuf v3.1 cargado desde path: {protocols_path}")
+                return True
+            except ImportError as e:
+                sys.path.remove(protocols_path)
+                continue
+
+    return False
+
+
+import_protobuf_module()
+
+# ✅ IMPORTS COMPONENTES
 from etcd_crypto_client_sniffer_fixed import (
     setup_sniffer_crypto,
     get_sniffer_pipeline_key
 )
 
-# ✅ IMPORTS COMPONENTES SEPARADOS
 from sniffer_components import (
     TimeWindowConfig,
     PacketInfo,
@@ -47,7 +102,7 @@ from sniffer_components import (
     TimeWindowManager
 )
 
-# 📦 Dependencias para captura de paquetes
+# 📦 Scapy
 try:
     from scapy.all import sniff, Ether, IP, TCP, UDP, ICMP
 
@@ -56,173 +111,210 @@ except ImportError:
     SCAPY_AVAILABLE = False
     print("❌ Scapy REQUERIDO - pip install scapy")
 
-# 📦 Protobuf v3.1
-PROTOBUF_AVAILABLE = False
-PROTOBUF_VERSION = "unavailable"
-NetworkSecurityEventProto = None
 
+class CircuitBreaker:
+    """Circuit breaker para ZMQ sends"""
 
-def import_protobuf_v31():
-    """Import protobuf with fallback for development"""
-    global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+    def __init__(self, failure_threshold: int = 50, recovery_timeout: int = 30, half_open_max_calls: int = 5):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.half_open_max_calls = half_open_max_calls
 
-    # Try multiple strategies
-    strategies = [
-        ("network_security_clean_v31_pb2", "Direct import"),
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Package import"),
-    ]
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        self.half_open_calls = 0
 
-    for import_path, description in strategies:
+    def call(self, func, *args, **kwargs):
+        """Execute function with circuit breaker protection"""
+        if self.state == "OPEN":
+            if self._should_attempt_reset():
+                self.state = "HALF_OPEN"
+                self.half_open_calls = 0
+            else:
+                raise Exception("Circuit breaker is OPEN")
+
         try:
-            NetworkSecurityEventProto = __import__(import_path, fromlist=[''])
-            PROTOBUF_AVAILABLE = True
-            PROTOBUF_VERSION = "v3.1.0-clean"
-            print(f"✅ Protobuf v3.1 loaded: {description}")
-            return True
-        except ImportError:
-            continue
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception as e:
+            self._on_failure()
+            raise e
 
-    # Development fallback
-    if os.environ.get("UPGRADED_HAPPINESS_DEV_MODE"):
-        print("🧪 Dev mode: Creating mock protobuf...")
-        create_mock_protobuf()
+    def _on_success(self):
+        """Handle successful call"""
+        if self.state == "HALF_OPEN":
+            self.half_open_calls += 1
+            if self.half_open_calls >= self.half_open_max_calls:
+                self.state = "CLOSED"
+                self.failure_count = 0
+        else:
+            self.failure_count = 0
+
+    def _on_failure(self):
+        """Handle failed call"""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+
+    def _should_attempt_reset(self) -> bool:
+        """Check if should attempt to reset circuit"""
+        return (self.last_failure_time and
+                time.time() - self.last_failure_time >= self.recovery_timeout)
+
+
+class AdaptiveRateLimiter:
+    """Rate limiter adaptativo basado en éxito/fallo de ZMQ"""
+
+    def __init__(self, initial_rate: float = 1000.0, min_rate: float = 10.0, max_rate: float = 10000.0):
+        self.current_rate = initial_rate
+        self.min_rate = min_rate
+        self.max_rate = max_rate
+        self.last_check = time.time()
+        self.success_window = deque(maxlen=100)  # Last 100 attempts
+        self.adjustment_factor = 1.1
+
+    def should_allow(self) -> bool:
+        """Check if current request should be allowed"""
+        now = time.time()
+        time_since_last = now - self.last_check
+
+        if time_since_last < (1.0 / self.current_rate):
+            return False
+
+        self.last_check = now
         return True
 
-    print("❌ Protobuf v3.1 not found and not in dev mode")
-    return False
+    def record_attempt(self, success: bool):
+        """Record attempt result"""
+        self.success_window.append(success)
+        self._adjust_rate()
+
+    def _adjust_rate(self):
+        """Adjust rate based on recent success rate"""
+        if len(self.success_window) < 10:
+            return
+
+        recent_success_rate = sum(self.success_window) / len(self.success_window)
+
+        if recent_success_rate > 0.95:  # >95% success -> increase rate
+            self.current_rate = min(self.max_rate, self.current_rate * self.adjustment_factor)
+        elif recent_success_rate < 0.80:  # <80% success -> decrease rate
+            self.current_rate = max(self.min_rate, self.current_rate / self.adjustment_factor)
+
+    def get_stats(self) -> Dict[str, float]:
+        """Get rate limiter statistics"""
+        if not self.success_window:
+            return {"current_rate": self.current_rate, "success_rate": 0.0}
+
+        return {
+            "current_rate": self.current_rate,
+            "success_rate": sum(self.success_window) / len(self.success_window),
+            "attempts_tracked": len(self.success_window)
+        }
 
 
-def create_mock_protobuf():
-    """Create mock protobuf for development"""
-    global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+class EventBatcher:
+    """Batching de eventos para mejorar throughput ZMQ"""
 
-    class MockTimestamp:
-        def FromDatetime(self, dt):
-            pass
+    def __init__(self, max_batch_size: int = 10, max_wait_time: float = 0.1):
+        self.max_batch_size = max_batch_size
+        self.max_wait_time = max_wait_time
+        self.events_buffer = []
+        self.last_flush = time.time()
 
-    class MockDuration:
-        def FromTimedelta(self, td):
-            pass
+    def add_event(self, event_data: bytes) -> Optional[List[bytes]]:
+        """Add event to batch, return batch if ready to send"""
+        self.events_buffer.append(event_data)
 
-    class MockDistributedNode:
-        def __init__(self):
-            self.node_id = ""
-            self.node_hostname = ""
-            self.node_ip_address = ""
-            self.physical_location = ""
-            self.node_role = "PACKET_SNIFFER"
-            self.node_status = "ACTIVE"
-            self.last_heartbeat = MockTimestamp()
-            self.operating_system = ""
-            self.os_version = ""
-            self.agent_version = ""
-            self.process_id = 0
-            self.container_id = ""
-            self.cluster_name = ""
-            self.cpu_usage_percent = 0.0
-            self.memory_usage_mb = 0.0
-            self.queue_depth = 0
-            self.uptime = MockDuration()
+        # Check if should flush
+        if (len(self.events_buffer) >= self.max_batch_size or
+                time.time() - self.last_flush >= self.max_wait_time):
+            return self.flush()
 
-        class NodeRole:
-            PACKET_SNIFFER = "PACKET_SNIFFER"
+        return None
 
-        class NodeStatus:
-            ACTIVE = "ACTIVE"
-            STARTING = "STARTING"
+    def flush(self) -> List[bytes]:
+        """Flush current batch"""
+        if not self.events_buffer:
+            return []
 
-    class MockNetworkFeatures:
-        def __init__(self):
-            self.source_ip = ""
-            self.destination_ip = ""
-            self.source_port = 0
-            self.destination_port = 0
-            self.protocol_number = 0
-            self.protocol_name = ""
-            self.flow_start_time = MockTimestamp()
-            self.flow_duration = MockDuration()
-            self.flow_duration_microseconds = 0
-            self.total_forward_packets = 0
-            self.total_backward_packets = 0
-            self.total_forward_bytes = 0
-            self.total_backward_bytes = 0
-            self.ddos_features = []
-            self.general_attack_features = []
-            self.internal_traffic_features = []
-            self.custom_features = {}
+        batch = self.events_buffer.copy()
+        self.events_buffer.clear()
+        self.last_flush = time.time()
+        return batch
 
-    class MockTimeWindow:
-        def __init__(self):
-            self.window_start = MockTimestamp()
-            self.window_end = MockTimestamp()
-            self.window_duration = MockDuration()
-            self.sequence_number = 0
-            self.window_type = "SLIDING"
-
-        class WindowType:
-            SLIDING = "SLIDING"
-
-    class MockPipelineTracking:
-        def __init__(self):
-            self.pipeline_id = ""
-            self.pipeline_start = MockTimestamp()
-            self.sniffer_process_id = 0
-            self.packet_captured_at = MockTimestamp()
-            self.total_processing_latency = MockDuration()
-            self.pipeline_hops_count = 0
-            self.processing_path = ""
-            self.retry_attempts = 0
-            self.requires_reprocessing = False
-            self.component_metadata = {}
-            self.processing_tags = []
-
-    class MockNetworkSecurityEvent:
-        def __init__(self):
-            self.event_id = ""
-            self.originating_node_id = ""
-            self.final_classification = ""
-            self.schema_version = 31
-            self.network_features = MockNetworkFeatures()
-            self.capturing_node = MockDistributedNode()
-            self.time_window = MockTimeWindow()
-            self.pipeline_tracking = MockPipelineTracking()
-            self.overall_threat_score = 0.0
-            self.threat_category = ""
-            self.correlation_id = ""
-            self.event_chain_id = ""
-            self.custom_metadata = {}
-            self.event_tags = []
-            self.protobuf_version = "3.1.0-mock"
-            self.event_timestamp = MockTimestamp()
-
-        def SerializeToString(self):
-            return b"mock_protobuf_data_v2"
-
-    class MockProtobuf:
-        NetworkSecurityEvent = MockNetworkSecurityEvent
-        DistributedNode = MockDistributedNode  # Add this at module level
-        TimeWindow = MockTimeWindow
-        PipelineTracking = MockPipelineTracking
-
-    NetworkSecurityEventProto = MockProtobuf()
-    # Also set the classes directly for access
-    NetworkSecurityEventProto.DistributedNode = MockDistributedNode
-    NetworkSecurityEventProto.TimeWindow = MockTimeWindow
-
-    PROTOBUF_AVAILABLE = True
-    PROTOBUF_VERSION = "v3.1.0-mock"
-
-# Import protobuf
-import_protobuf_v31()
+    def force_flush(self) -> List[bytes]:
+        """Force flush remaining events"""
+        return self.flush()
 
 
-class EvolutionarySnifferStandalone:
+class ProtobufEnumHelper:
+    """Helper para manejar enums de protobuf correctamente"""
+
+    @staticmethod
+    def get_window_type_enum(window_type_str: str) -> int:
+        if not PROTOBUF_AVAILABLE:
+            return 0
+        try:
+            window_type_mapping = {
+                "SLIDING": NetworkSecurityEventProto.TimeWindow.WindowType.SLIDING,
+                "TUMBLING": NetworkSecurityEventProto.TimeWindow.WindowType.TUMBLING,
+                "SESSION_BASED": NetworkSecurityEventProto.TimeWindow.WindowType.SESSION_BASED,
+                "ADAPTIVE": NetworkSecurityEventProto.TimeWindow.WindowType.ADAPTIVE,
+            }
+            return window_type_mapping.get(window_type_str.upper(), 0)
+        except AttributeError:
+            return 0
+
+    @staticmethod
+    def get_node_role_enum(role_str: str) -> int:
+        if not PROTOBUF_AVAILABLE:
+            return 0
+        try:
+            role_mapping = {
+                "PACKET_SNIFFER": NetworkSecurityEventProto.DistributedNode.NodeRole.PACKET_SNIFFER,
+                "FEATURE_PROCESSOR": NetworkSecurityEventProto.DistributedNode.NodeRole.FEATURE_PROCESSOR,
+                "GEOIP_ENRICHER": NetworkSecurityEventProto.DistributedNode.NodeRole.GEOIP_ENRICHER,
+                "ML_ANALYZER": NetworkSecurityEventProto.DistributedNode.NodeRole.ML_ANALYZER,
+                "THREAT_DETECTOR": NetworkSecurityEventProto.DistributedNode.NodeRole.THREAT_DETECTOR,
+                "FIREWALL_CONTROLLER": NetworkSecurityEventProto.DistributedNode.NodeRole.FIREWALL_CONTROLLER,
+                "DATA_AGGREGATOR": NetworkSecurityEventProto.DistributedNode.NodeRole.DATA_AGGREGATOR,
+                "DASHBOARD_VISUALIZER": NetworkSecurityEventProto.DistributedNode.NodeRole.DASHBOARD_VISUALIZER,
+                "CLUSTER_COORDINATOR": NetworkSecurityEventProto.DistributedNode.NodeRole.CLUSTER_COORDINATOR,
+            }
+            return role_mapping.get(role_str.upper(), 0)
+        except AttributeError:
+            return 0
+
+    @staticmethod
+    def get_node_status_enum(status_str: str) -> int:
+        if not PROTOBUF_AVAILABLE:
+            return 0
+        try:
+            status_mapping = {
+                "ACTIVE": NetworkSecurityEventProto.DistributedNode.NodeStatus.ACTIVE,
+                "STARTING": NetworkSecurityEventProto.DistributedNode.NodeStatus.STARTING,
+                "STOPPING": NetworkSecurityEventProto.DistributedNode.NodeStatus.STOPPING,
+                "ERROR": NetworkSecurityEventProto.DistributedNode.NodeStatus.ERROR,
+                "MAINTENANCE": NetworkSecurityEventProto.DistributedNode.NodeStatus.MAINTENANCE,
+                "OVERLOADED": NetworkSecurityEventProto.DistributedNode.NodeStatus.OVERLOADED,
+            }
+            return status_mapping.get(status_str.upper(), 0)
+        except AttributeError:
+            return 0
+
+
+class EvolutionarySnifferZMQOptimized:
     """
-    Evolutionary Sniffer Standalone - Sin imports circulares
+    Evolutionary Sniffer con optimizaciones ZMQ avanzadas
     """
 
     def __init__(self, config_file: str, pipeline_key: Optional[str] = None):
-        """Initialize sniffer"""
+        """Initialize optimized sniffer"""
 
         # Load config
         self.config = self._load_config_strict(config_file)
@@ -236,19 +328,44 @@ class EvolutionarySnifferStandalone:
         self.container_id = self._get_container_id()
         self.system_info = self._gather_system_info()
 
+        # Helpers
+        self.enum_helper = ProtobufEnumHelper()
+
         # Setup logging
         self.setup_logging()
-        self.logger.info(f"🚀 Evolutionary Sniffer Standalone v3.1 initializing...")
+        self.logger.info(f"🚀 Evolutionary Sniffer ZMQ OPTIMIZED v3.1 initializing...")
         self.logger.info(f"   🔑 Pipeline key: {'✅' if pipeline_key else '❌'}")
+        self.logger.info(f"   📦 Protobuf available: {'✅' if PROTOBUF_AVAILABLE else '❌'}")
 
         # Verify dependencies
         self._verify_dependencies()
 
-        # Setup ZMQ
+        # Setup ZMQ optimizado
         self.context = zmq.Context()
         self.socket = None
         self.crypto_wrapper = None
-        self.setup_socket()
+
+        # ZMQ Performance components
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=self.config.get("backpressure", {}).get("circuit_breaker", {}).get("failure_threshold",
+                                                                                                 50),
+            recovery_timeout=self.config.get("backpressure", {}).get("circuit_breaker", {}).get("recovery_timeout", 30),
+            half_open_max_calls=self.config.get("backpressure", {}).get("circuit_breaker", {}).get(
+                "half_open_max_calls", 5)
+        )
+
+        self.rate_limiter = AdaptiveRateLimiter(
+            initial_rate=1000.0,
+            min_rate=10.0,
+            max_rate=10000.0
+        )
+
+        self.event_batcher = EventBatcher(
+            max_batch_size=self.config.get("processing", {}).get("batch_size", 10),
+            max_wait_time=0.1
+        )
+
+        self.setup_socket_optimized()
 
         # Setup components
         self.features_extractor = NetworkFeaturesExtractor()
@@ -257,28 +374,34 @@ class EvolutionarySnifferStandalone:
             self.logger
         )
 
-        # Queues
+        # Queues optimizados
         queue_size = self.config["processing"]["internal_queue_size"]
         self.packet_queue = Queue(maxsize=queue_size)
 
-        # Stats
+        # Stats avanzadas
         self.stats = {
             'packets_captured': 0,
             'flows_created': 0,
             'windows_completed': 0,
             'events_sent': 0,
+            'events_batched': 0,
             'features_extracted': 0,
             'drops': 0,
             'errors': 0,
+            'protobuf_errors': 0,
+            'zmq_buffer_full': 0,
+            'circuit_breaker_open': 0,
+            'rate_limited': 0,
             'start_time': time.time(),
-            'last_stats_time': time.time()
+            'last_stats_time': time.time(),
+            'send_latencies': deque(maxlen=1000),  # Track send performance
         }
 
         # Control
         self.running = True
         self.handshake_sent = False
 
-        self.logger.info("✅ Evolutionary Sniffer Standalone initialized")
+        self.logger.info("✅ Evolutionary Sniffer ZMQ Optimized initialized")
 
     def _load_config_strict(self, config_file: str) -> Dict[str, Any]:
         """Load config with validation"""
@@ -290,7 +413,6 @@ class EvolutionarySnifferStandalone:
         except json.JSONDecodeError as e:
             raise RuntimeError(f"❌ Invalid JSON: {e}")
 
-        # Validate required fields
         required = ["node_id", "network", "capture", "processing", "time_windows", "etcd_crypto"]
         for field in required:
             if field not in config:
@@ -348,13 +470,13 @@ class EvolutionarySnifferStandalone:
 
         formatter = logging.Formatter(
             "%(asctime)s - %(name)-20s - %(levelname)-8s - "
-            "[node_id:{node_id}] [pid:{pid}] [STANDALONE] - %(message)s".format(
+            "[node_id:{node_id}] [pid:{pid}] [ZMQ-OPT] - %(message)s".format(
                 node_id=self.node_id,
                 pid=self.process_id
             )
         )
 
-        self.logger = logging.getLogger(f"sniffer_standalone_{self.node_id}")
+        self.logger = logging.getLogger(f"sniffer_zmq_opt_{self.node_id}")
         self.logger.setLevel(level)
         self.logger.handlers.clear()
 
@@ -377,8 +499,8 @@ class EvolutionarySnifferStandalone:
             except Exception as e:
                 self.logger.error(f"❌ Error setting up file logging: {e}")
 
-    def setup_socket(self):
-        """Setup ZMQ socket"""
+    def setup_socket_optimized(self):
+        """Setup ZMQ socket with optimizations"""
         network_config = self.config["network"]
         output_config = network_config["output_socket"]
 
@@ -386,11 +508,42 @@ class EvolutionarySnifferStandalone:
         socket_type = getattr(zmq, output_config["socket_type"])
         self.socket = self.context.socket(socket_type)
 
-        # Configure
+        # Apply ZMQ optimizations from config
         zmq_config = self.config.get("zmq", {})
-        self.socket.setsockopt(zmq.SNDHWM, zmq_config.get("sndhwm", 2000))
-        self.socket.setsockopt(zmq.LINGER, zmq_config.get("linger_ms", 5000))
-        self.socket.setsockopt(zmq.SNDTIMEO, zmq_config.get("send_timeout_ms", 100))
+
+        optimizations = {
+            zmq.SNDHWM: zmq_config.get("sndhwm", 10000),
+            zmq.RCVHWM: zmq_config.get("rcvhwm", 10000),
+            zmq.LINGER: zmq_config.get("linger_ms", 0),
+            zmq.SNDTIMEO: zmq_config.get("send_timeout_ms", 1),
+            zmq.RCVTIMEO: zmq_config.get("recv_timeout_ms", 1),
+            zmq.IMMEDIATE: zmq_config.get("immediate", 1),
+            zmq.SNDBUF: zmq_config.get("sndbuf", 1048576),
+            zmq.RCVBUF: zmq_config.get("rcvbuf", 1048576),
+        }
+
+        # Apply TCP-specific optimizations if available
+        tcp_opts = {
+            zmq.TCP_KEEPALIVE: zmq_config.get("tcp_keepalive", 1),
+            zmq.TCP_KEEPALIVE_IDLE: zmq_config.get("tcp_keepalive_idle", 600),
+            zmq.TCP_KEEPALIVE_CNT: zmq_config.get("tcp_keepalive_cnt", 3),
+            zmq.TCP_KEEPALIVE_INTVL: zmq_config.get("tcp_keepalive_intvl", 60),
+        }
+
+        # Apply optimizations
+        for opt, value in optimizations.items():
+            try:
+                self.socket.setsockopt(opt, value)
+                self.logger.debug(f"✅ ZMQ option {opt} = {value}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not set ZMQ option {opt}: {e}")
+
+        for opt, value in tcp_opts.items():
+            try:
+                self.socket.setsockopt(opt, value)
+                self.logger.debug(f"✅ TCP option {opt} = {value}")
+            except Exception as e:
+                self.logger.debug(f"📝 TCP option {opt} not available: {e}")
 
         # Connect/Bind
         address = output_config["address"]
@@ -406,15 +559,12 @@ class EvolutionarySnifferStandalone:
             self.socket.connect(connect_address)
             connection_info = f"CONNECT to {connect_address}"
 
-        # Crypto setup
-        if self.config.get("crypto", {}).get("enabled", False):
-            if self.pipeline_key:
-                self.logger.info("🔐 Crypto enabled with pipeline key")
-                # TODO: Setup crypto wrapper
-            else:
-                self.logger.warning("⚠️ Crypto enabled but no pipeline key")
-
-        self.logger.info(f"🔌 ZMQ configured: {connection_info}")
+        self.logger.info(f"🔌 ZMQ optimized socket configured: {connection_info}")
+        self.logger.info(f"   📊 SNDHWM: {zmq_config.get('sndhwm', 10000)}")
+        self.logger.info(f"   ⏱️ SNDTIMEO: {zmq_config.get('send_timeout_ms', 1)}ms")
+        self.logger.info(f"   🔧 Circuit breaker enabled")
+        self.logger.info(f"   🎛️ Adaptive rate limiting enabled")
+        self.logger.info(f"   📦 Event batching enabled")
 
     def _parse_time_window_configs(self) -> Dict[str, TimeWindowConfig]:
         """Parse time window configs"""
@@ -516,7 +666,6 @@ class EvolutionarySnifferStandalone:
 
     def _should_process_packet(self, packet_info: PacketInfo) -> bool:
         """Determine if packet should be processed"""
-        # Basic filtering logic
         return True
 
     def start_packet_capture(self):
@@ -526,7 +675,7 @@ class EvolutionarySnifferStandalone:
         interface = capture_config["interface"]
         filter_expr = capture_config.get("filter_expression", "")
 
-        self.logger.info(f"🎯 Starting packet capture:")
+        self.logger.info(f"🎯 Starting optimized packet capture:")
         self.logger.info(f"   📡 Interface: {interface}")
         self.logger.info(f"   🔍 Filter: {filter_expr or 'no filter'}")
 
@@ -545,7 +694,7 @@ class EvolutionarySnifferStandalone:
 
     def process_packets(self):
         """Process packets from queue"""
-        self.logger.info("⚙️ Starting packet processing thread")
+        self.logger.info("⚙️ Starting optimized packet processing thread")
 
         while self.running:
             try:
@@ -560,7 +709,7 @@ class EvolutionarySnifferStandalone:
 
     def process_time_windows(self):
         """Process time windows"""
-        self.logger.info("⏰ Starting time window processing thread")
+        self.logger.info("⏰ Starting optimized time window processing thread")
 
         while self.running:
             try:
@@ -568,6 +717,9 @@ class EvolutionarySnifferStandalone:
 
                 for window_data in completed_windows:
                     self._process_completed_window(window_data)
+
+                # Force flush batched events periodically
+                self._flush_batched_events()
 
                 time.sleep(0.1)
 
@@ -596,11 +748,7 @@ class EvolutionarySnifferStandalone:
                     )
 
                     if event_data:
-                        success = self._send_event(event_data)
-                        if success:
-                            self.stats['events_sent'] += 1
-                        else:
-                            self.stats['drops'] += 1
+                        self._send_event_optimized(event_data)
 
             self.stats['windows_completed'] += 1
 
@@ -610,200 +758,176 @@ class EvolutionarySnifferStandalone:
 
     def _create_network_security_event(self, flow: FlowInfo, all_features: Dict[str, float],
                                        window_data: Dict[str, Any], model_type: str) -> Optional[bytes]:
-        """Create NetworkSecurityEvent with extensive debugging"""
-        try:
-            self.logger.debug(f"🔄 Creating event for flow {flow.flow_id}, model {model_type}")
+        """Create NetworkSecurityEvent con manejo correcto de enums"""
 
-            from datetime import datetime, timedelta
-
-            # Step 1: Create protobuf event
-            self.logger.debug("📦 Step 1: Creating protobuf event...")
-            try:
-                event = NetworkSecurityEventProto.NetworkSecurityEvent()
-                self.logger.debug("✅ Event instance created")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to create event instance: {e}")
-                return None
-
-            # Step 2: Basic identification
-            self.logger.debug("🆔 Step 2: Setting basic identification...")
-            try:
-                event.event_id = str(uuid.uuid4())
-                event.event_timestamp.FromDatetime(datetime.fromtimestamp(time.time()))
-                event.originating_node_id = self.node_id
-                self.logger.debug("✅ Basic identification set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set basic identification: {e}")
-                return None
-
-            # Step 3: Network features
-            self.logger.debug("🌐 Step 3: Setting network features...")
-            try:
-                network_features = event.network_features
-                network_features.source_ip = flow.src_ip
-                network_features.destination_ip = flow.dst_ip
-                network_features.source_port = flow.src_port
-                network_features.destination_port = flow.dst_port
-                network_features.protocol_number = flow.forward_packets[0].protocol_number if flow.forward_packets else 0
-                network_features.protocol_name = flow.protocol
-                self.logger.debug("✅ Network features set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set network features: {e}")
-                return None
-
-            # Step 4: Timing features
-            self.logger.debug("⏰ Step 4: Setting timing features...")
-            try:
-                network_features.flow_start_time.FromDatetime(datetime.fromtimestamp(flow.start_time))
-                duration_seconds = flow.last_seen - flow.start_time
-                network_features.flow_duration.FromTimedelta(timedelta(seconds=duration_seconds))
-                network_features.flow_duration_microseconds = int(duration_seconds * 1_000_000)
-                self.logger.debug("✅ Timing features set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set timing features: {e}")
-                return None
-
-            # Step 5: Basic packet/byte counts
-            self.logger.debug("📊 Step 5: Setting packet/byte counts...")
-            try:
-                network_features.total_forward_packets = len(flow.forward_packets)
-                network_features.total_backward_packets = len(flow.backward_packets)
-                network_features.total_forward_bytes = flow.total_forward_bytes
-                network_features.total_backward_bytes = flow.total_backward_bytes
-                self.logger.debug("✅ Packet/byte counts set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set packet/byte counts: {e}")
-                return None
-
-            # Step 6: Model-specific features
-            self.logger.debug(f"🎯 Step 6: Setting model-specific features for {model_type}...")
-            try:
-                model_features = self.features_extractor.get_features_for_model(all_features, model_type)
-                self.logger.debug(f"📊 Got {len(model_features)} features for {model_type}")
-
-                if model_type == "ddos_83":
-                    network_features.ddos_features[:] = model_features
-                    self.logger.debug("✅ DDOS features set")
-                elif model_type == "rf_23":
-                    network_features.general_attack_features[:] = model_features
-                    self.logger.debug("✅ RF features set")
-                elif model_type == "internal_4":
-                    network_features.internal_traffic_features[:] = model_features
-                    self.logger.debug("✅ Internal features set")
-                else:
-                    for i, feature_value in enumerate(model_features[:10]):
-                        network_features.custom_features[f"feature_{i}"] = feature_value
-                    self.logger.debug("✅ Custom features set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set model features: {e}")
-                return None
-
-            # Step 7: Capturing node info (simplified for debugging)
-            self.logger.debug("🖥️ Step 7: Setting capturing node info...")
-            try:
-                capturing_node = event.capturing_node
-                capturing_node.node_id = self.node_id
-                capturing_node.node_hostname = self.system_info.get('hostname', 'unknown')
-                capturing_node.node_role = "PACKET_SNIFFER"
-                capturing_node.node_status = "ACTIVE"
-                capturing_node.agent_version = self.config.get("version", "3.1.0")
-                capturing_node.process_id = self.process_id
-                self.logger.debug("✅ Capturing node info set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set capturing node: {e}")
-                return None
-
-            # Step 8: Time window (simplified)
-            self.logger.debug("⏰ Step 8: Setting time window...")
-            try:
-                time_window = event.time_window
-                time_window.window_start.FromDatetime(datetime.fromtimestamp(window_data['start_time']))
-                time_window.window_end.FromDatetime(datetime.fromtimestamp(window_data['end_time']))
-                time_window.sequence_number = int(time.time())
-                time_window.window_type = "SLIDING"
-                self.logger.debug("✅ Time window set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set time window: {e}")
-                return None
-
-            # Step 9: Pipeline tracking (simplified)
-            self.logger.debug("🔄 Step 9: Setting pipeline tracking...")
-            try:
-                pipeline_tracking = event.pipeline_tracking
-                pipeline_tracking.pipeline_id = str(uuid.uuid4())
-                pipeline_tracking.sniffer_process_id = self.process_id
-                pipeline_tracking.pipeline_hops_count = 1
-                pipeline_tracking.processing_path = f"sniffer[{self.node_id}]"
-                pipeline_tracking.retry_attempts = 0
-                pipeline_tracking.requires_reprocessing = False
-                self.logger.debug("✅ Pipeline tracking set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set pipeline tracking: {e}")
-                return None
-
-            # Step 10: Final event metadata
-            self.logger.debug("📋 Step 10: Setting final metadata...")
-            try:
-                event.overall_threat_score = 0.0
-                event.final_classification = "CAPTURED"
-                event.threat_category = "UNKNOWN"
-                event.correlation_id = flow.flow_id
-                event.event_chain_id = f"chain_{flow.flow_id}_{int(time.time())}"
-                event.schema_version = 31
-                event.protobuf_version = "3.1.0"
-                self.logger.debug("✅ Final metadata set")
-            except Exception as e:
-                self.logger.error(f"❌ Failed to set final metadata: {e}")
-                return None
-
-            # Step 11: Serialize
-            self.logger.debug("📦 Step 11: Serializing event...")
-            try:
-                serialized_data = event.SerializeToString()
-                self.logger.debug(f"✅ Event serialized successfully: {len(serialized_data)} bytes")
-                return serialized_data
-            except Exception as e:
-                self.logger.error(f"❌ Failed to serialize event: {e}")
-                import traceback
-                self.logger.error(f"❌ Serialization traceback: {traceback.format_exc()}")
-                return None
-
-        except Exception as e:
-            self.logger.error(f"❌ Top-level event creation error: {e}")
-            import traceback
-            self.logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+        if not PROTOBUF_AVAILABLE:
+            self.logger.warning("⚠️ Protobuf not available - skipping event creation")
             return None
 
-    def _send_event(self, event_data: bytes) -> bool:
-        """Send event via ZMQ with detailed debugging"""
         try:
-            self.logger.debug(f"📤 Attempting to send event: {len(event_data)} bytes")
+            from datetime import datetime, timedelta
 
-            # Check socket state
-            if not self.socket:
-                self.logger.error("❌ Socket is None - cannot send")
-                return False
+            # Create protobuf event
+            event = NetworkSecurityEventProto.NetworkSecurityEvent()
 
-            # Try to send
-            self.socket.send(event_data, zmq.NOBLOCK)
-            self.logger.debug(f"✅ Event sent successfully: {len(event_data)} bytes")
+            # Basic identification
+            event.event_id = str(uuid.uuid4())
+            event.event_timestamp.FromDatetime(datetime.fromtimestamp(time.time()))
+            event.originating_node_id = self.node_id
+
+            # Network features
+            network_features = event.network_features
+            network_features.source_ip = flow.src_ip
+            network_features.destination_ip = flow.dst_ip
+            network_features.source_port = flow.src_port
+            network_features.destination_port = flow.dst_port
+            network_features.protocol_number = flow.forward_packets[0].protocol_number if flow.forward_packets else 0
+            network_features.protocol_name = flow.protocol
+
+            # Timing features
+            network_features.flow_start_time.FromDatetime(datetime.fromtimestamp(flow.start_time))
+            duration_seconds = flow.last_seen - flow.start_time
+            network_features.flow_duration.FromTimedelta(timedelta(seconds=duration_seconds))
+            network_features.flow_duration_microseconds = int(duration_seconds * 1_000_000)
+
+            # Basic packet/byte counts
+            network_features.total_forward_packets = len(flow.forward_packets)
+            network_features.total_backward_packets = len(flow.backward_packets)
+            network_features.total_forward_bytes = flow.total_forward_bytes
+            network_features.total_backward_bytes = flow.total_backward_bytes
+
+            # Model-specific features
+            model_features = self.features_extractor.get_features_for_model(all_features, model_type)
+
+            if model_type == "ddos_83":
+                network_features.ddos_features[:] = model_features
+            elif model_type == "rf_23":
+                network_features.general_attack_features[:] = model_features
+            elif model_type == "internal_4":
+                network_features.internal_traffic_features[:] = model_features
+            else:
+                for i, feature_value in enumerate(model_features[:10]):
+                    network_features.custom_features[f"feature_{i}"] = feature_value
+
+            # Capturing node info
+            capturing_node = event.capturing_node
+            capturing_node.node_id = self.node_id
+            capturing_node.node_hostname = self.system_info.get('hostname', 'unknown')
+            capturing_node.node_role = self.enum_helper.get_node_role_enum("PACKET_SNIFFER")
+            capturing_node.node_status = self.enum_helper.get_node_status_enum("ACTIVE")
+            capturing_node.agent_version = self.config.get("version", "3.1.0")
+            capturing_node.process_id = self.process_id
+
+            # Time window
+            time_window = event.time_window
+            time_window.window_start.FromDatetime(datetime.fromtimestamp(window_data['start_time']))
+            time_window.window_end.FromDatetime(datetime.fromtimestamp(window_data['end_time']))
+            time_window.sequence_number = int(time.time())
+            time_window.window_type = self.enum_helper.get_window_type_enum("SLIDING")
+
+            # Pipeline tracking
+            pipeline_tracking = event.pipeline_tracking
+            pipeline_tracking.pipeline_id = str(uuid.uuid4())
+            pipeline_tracking.sniffer_process_id = self.process_id
+            pipeline_tracking.pipeline_hops_count = 1
+            pipeline_tracking.processing_path = f"sniffer[{self.node_id}]"
+            pipeline_tracking.retry_attempts = 0
+            pipeline_tracking.requires_reprocessing = False
+
+            # Final metadata
+            event.overall_threat_score = 0.0
+            event.final_classification = "CAPTURED"
+            event.threat_category = "UNKNOWN"
+            event.correlation_id = flow.flow_id
+            event.event_chain_id = f"chain_{flow.flow_id}_{int(time.time())}"
+            event.schema_version = 31
+            event.protobuf_version = "3.1.0"
+
+            # Serialize
+            serialized_data = event.SerializeToString()
+            return serialized_data
+
+        except Exception as e:
+            self.logger.error(f"❌ Event creation error: {e}")
+            self.stats['protobuf_errors'] += 1
+            return None
+
+    def _send_event_optimized(self, event_data: bytes):
+        """Send event with optimizations (batching, rate limiting, circuit breaker)"""
+        try:
+            # Check rate limiter
+            if not self.rate_limiter.should_allow():
+                self.stats['rate_limited'] += 1
+                return
+
+            # Add to batch
+            batch = self.event_batcher.add_event(event_data)
+
+            if batch:
+                self._send_batch(batch)
+
+        except Exception as e:
+            self.logger.error(f"❌ Send optimization error: {e}")
+            self.stats['errors'] += 1
+
+    def _send_batch(self, batch: List[bytes]):
+        """Send batch of events"""
+        if not batch:
+            return
+
+        try:
+            # Use circuit breaker
+            send_start = time.time()
+
+            success = self.circuit_breaker.call(self._send_batch_zmq, batch)
+
+            send_latency = time.time() - send_start
+            self.stats['send_latencies'].append(send_latency)
+
+            if success:
+                self.stats['events_sent'] += len(batch)
+                self.stats['events_batched'] += 1
+                self.rate_limiter.record_attempt(True)
+            else:
+                self.stats['drops'] += len(batch)
+                self.rate_limiter.record_attempt(False)
+
+        except Exception as e:
+            if "Circuit breaker is OPEN" in str(e):
+                self.stats['circuit_breaker_open'] += 1
+                self.logger.warning("⚠️ Circuit breaker is OPEN - dropping batch")
+            else:
+                self.logger.error(f"❌ Batch send error: {e}")
+
+            self.stats['drops'] += len(batch)
+            self.rate_limiter.record_attempt(False)
+
+    def _send_batch_zmq(self, batch: List[bytes]) -> bool:
+        """Send batch via ZMQ"""
+        try:
+            # For simplicity, send events individually but track as batch
+            for event_data in batch:
+                self.socket.send(event_data, zmq.NOBLOCK)
             return True
 
         except zmq.Again:
-            self.logger.warning("⚠️  ZMQ buffer full - event dropped")
-            return False
+            self.stats['zmq_buffer_full'] += len(batch)
+            raise Exception("ZMQ buffer full")
         except zmq.ZMQError as e:
-            self.logger.error(f"❌ ZMQ error sending event: {e}")
-            return False
+            raise Exception(f"ZMQ error: {e}")
+
+    def _flush_batched_events(self):
+        """Flush any remaining batched events"""
+        try:
+            remaining_batch = self.event_batcher.force_flush()
+            if remaining_batch:
+                self._send_batch(remaining_batch)
         except Exception as e:
-            self.logger.error(f"❌ Unexpected error sending event: {e}")
-            import traceback
-            self.logger.error(f"❌ Send traceback: {traceback.format_exc()}")
-            return False
+            self.logger.error(f"❌ Flush error: {e}")
 
     def send_handshake(self):
         """Send initial handshake"""
-        if self.handshake_sent:
+        if self.handshake_sent or not PROTOBUF_AVAILABLE:
             return
 
         try:
@@ -818,8 +942,8 @@ class EvolutionarySnifferStandalone:
             capturing_node = event.capturing_node
             capturing_node.node_id = self.node_id
             capturing_node.node_hostname = self.system_info['hostname']
-            capturing_node.node_role = "PACKET_SNIFFER"
-            capturing_node.node_status = "STARTING"
+            capturing_node.node_role = self.enum_helper.get_node_role_enum("PACKET_SNIFFER")
+            capturing_node.node_status = self.enum_helper.get_node_status_enum("STARTING")
             capturing_node.agent_version = self.config.get("version", "3.1.0")
             capturing_node.process_id = self.process_id
 
@@ -828,15 +952,17 @@ class EvolutionarySnifferStandalone:
             event.schema_version = 31
             event.protobuf_version = "3.1.0"
             event.custom_metadata["handshake"] = "initial"
-            event.custom_metadata["capabilities"] = "packet_capture,feature_extraction,time_windows"
-            event.event_tags.extend(["handshake", "sniffer_v31", "startup"])
+            event.custom_metadata["capabilities"] = "packet_capture,feature_extraction,time_windows,zmq_optimized"
+            event.event_tags.extend(["handshake", "sniffer_v31", "startup", "zmq_optimized"])
 
             event_data = event.SerializeToString()
-            success = self._send_event(event_data)
+
+            # Send handshake directly (bypass rate limiting)
+            success = self._send_batch_zmq([event_data])
 
             if success:
                 self.handshake_sent = True
-                self.logger.info("🤝 Handshake sent successfully")
+                self.logger.info("🤝 Optimized handshake sent successfully")
             else:
                 self.logger.warning("⚠️ Error sending handshake")
 
@@ -844,7 +970,7 @@ class EvolutionarySnifferStandalone:
             self.logger.error(f"❌ Handshake error: {e}")
 
     def monitor_performance(self):
-        """Monitor performance"""
+        """Monitor performance with advanced metrics"""
         monitoring_config = self.config["monitoring"]
         interval = monitoring_config["stats_interval_seconds"]
 
@@ -853,40 +979,67 @@ class EvolutionarySnifferStandalone:
             if not self.running:
                 break
 
-            self._log_performance_stats()
+            self._log_advanced_performance_stats()
 
-    def _log_performance_stats(self):
-        """Log performance statistics"""
+    def _log_advanced_performance_stats(self):
+        """Log advanced performance statistics"""
         now = time.time()
         interval = now - self.stats['last_stats_time']
 
         if interval > 0:
             packet_rate = self.stats['packets_captured'] / interval
             event_rate = self.stats['events_sent'] / interval
+            batch_rate = self.stats['events_batched'] / interval
         else:
-            packet_rate = 0
-            event_rate = 0
+            packet_rate = event_rate = batch_rate = 0
 
-        self.logger.info(f"📊 Performance Stats v3.1:")
+        # Calculate send latency stats
+        latency_stats = {}
+        if self.stats['send_latencies']:
+            latencies = list(self.stats['send_latencies'])
+            latency_stats = {
+                'avg_ms': statistics.mean(latencies) * 1000,
+                'p95_ms': statistics.quantiles(latencies, n=20)[18] * 1000 if len(latencies) > 5 else 0,
+                'max_ms': max(latencies) * 1000,
+            }
+
+        # Get rate limiter stats
+        rate_limiter_stats = self.rate_limiter.get_stats()
+
+        self.logger.info(f"📊 Advanced Performance Stats v3.1:")
         self.logger.info(f"   📦 Packets: {self.stats['packets_captured']} ({packet_rate:.1f}/s)")
         self.logger.info(f"   📊 Features: {self.stats['features_extracted']}")
         self.logger.info(f"   ⏰ Windows: {self.stats['windows_completed']}")
         self.logger.info(f"   📤 Events: {self.stats['events_sent']} ({event_rate:.1f}/s)")
+        self.logger.info(f"   📦 Batches: {self.stats['events_batched']} ({batch_rate:.1f}/s)")
         self.logger.info(f"   🗑️ Drops: {self.stats['drops']}")
         self.logger.info(f"   ❌ Errors: {self.stats['errors']}")
+        self.logger.info(f"   🐛 Protobuf errors: {self.stats['protobuf_errors']}")
+        self.logger.info(f"   ⚡ ZMQ buffer full: {self.stats['zmq_buffer_full']}")
+        self.logger.info(f"   🔴 Circuit breaker open: {self.stats['circuit_breaker_open']}")
+        self.logger.info(f"   🎛️ Rate limited: {self.stats['rate_limited']}")
         self.logger.info(f"   📋 Queue: {self.packet_queue.qsize()}")
         self.logger.info(f"   🏃 Flows: {len(self.time_window_manager.active_flows)}")
 
+        if latency_stats:
+            self.logger.info(f"   ⏱️ Send latency - Avg: {latency_stats['avg_ms']:.2f}ms, "
+                             f"P95: {latency_stats['p95_ms']:.2f}ms, Max: {latency_stats['max_ms']:.2f}ms")
+
+        self.logger.info(f"   🎛️ Rate limiter - Current: {rate_limiter_stats['current_rate']:.1f}/s, "
+                         f"Success: {rate_limiter_stats['success_rate'] * 100:.1f}%")
+
         # Reset stats
         for key in ['packets_captured', 'features_extracted', 'windows_completed',
-                    'events_sent', 'drops', 'errors']:
+                    'events_sent', 'events_batched', 'drops', 'errors', 'protobuf_errors',
+                    'zmq_buffer_full', 'circuit_breaker_open', 'rate_limited']:
             self.stats[key] = 0
 
+        self.stats['send_latencies'].clear()
         self.stats['last_stats_time'] = now
 
     def run(self):
-        """Run the sniffer"""
-        self.logger.info("🚀 Starting Evolutionary Sniffer Standalone")
+        """Run the optimized sniffer"""
+        self.logger.info("🚀 Starting Evolutionary Sniffer ZMQ OPTIMIZED")
 
         try:
             # Send handshake
@@ -924,6 +1077,13 @@ class EvolutionarySnifferStandalone:
         """Shutdown gracefully"""
         self.running = False
 
+        # Flush remaining events
+        try:
+            self._flush_batched_events()
+            self.logger.info("📦 Flushed remaining batched events")
+        except Exception as e:
+            self.logger.error(f"❌ Error flushing events: {e}")
+
         # Close crypto wrapper
         if self.crypto_wrapper:
             try:
@@ -945,19 +1105,19 @@ class EvolutionarySnifferStandalone:
             self.socket.close()
         self.context.term()
 
-        self.logger.info("✅ Sniffer shut down")
+        self.logger.info("✅ Optimized sniffer shut down")
 
 
 # ✅ MAIN ASYNC
 async def main():
     """Main async function"""
     if len(sys.argv) != 2:
-        print("❌ Usage: python evolutionary_sniffer_standalone.py <config.json>")
+        print("❌ Usage: python evolutionary_sniffer_zmq_optimized.py <config.json>")
         sys.exit(1)
 
     config_file = sys.argv[1]
 
-    print("🔍 Starting Evolutionary Sniffer Standalone v3.1...")
+    print("🔍 Starting Evolutionary Sniffer ZMQ OPTIMIZED v3.1...")
 
     # Check config file exists
     if not os.path.exists(config_file):
@@ -984,7 +1144,7 @@ async def main():
         print(f"🔑 Pipeline key ready: {pipeline_key[:16] if pipeline_key else 'None'}...")
 
         # Create and run sniffer
-        sniffer = EvolutionarySnifferStandalone(config_file, pipeline_key)
+        sniffer = EvolutionarySnifferZMQOptimized(config_file, pipeline_key)
         sniffer.run()
 
     except Exception as e:
