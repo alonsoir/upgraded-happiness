@@ -69,8 +69,8 @@ def import_protobuf_v31():
         # Estrategia 1: Importación directa (si está en el mismo directorio)
         ("network_security_clean_v31_pb2", "Importación directa"),
 
-        # Estrategia 2: Desde protocols.v3.1
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
+        # Estrategia 2: Desde protocols.v3_1
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
     ]
 
     for import_path, description in import_strategies:

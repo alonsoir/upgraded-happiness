@@ -41,9 +41,9 @@ def import_protobuf_module():
     """Importa el módulo protobuf v3.1.0 con múltiples estrategias"""
     global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
-    # Estrategia 1: Importación relativa desde protocols.v3.1
+    # Estrategia 1: Importación relativa desde protocols.v3_1
     import_strategies = [
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
         ("protocols.network_security_clean_v31_pb2", "Paquete protocols"),
         ("network_security_clean_v31_pb2", "Importación directa"),
     ]

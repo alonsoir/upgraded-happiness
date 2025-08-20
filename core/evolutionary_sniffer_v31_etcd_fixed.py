@@ -76,7 +76,7 @@ def import_protobuf_v31():
     # Try multiple strategies
     strategies = [
         ("network_security_clean_v31_pb2", "Direct import"),
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Package import"),
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Package import"),
     ]
 
     for import_path, description in strategies:

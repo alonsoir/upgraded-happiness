@@ -34,7 +34,7 @@ def import_consumer_protobuf_v31():
     # Estrategias de importación múltiples
     import_strategies = [
         ("firewall_commands_v31_pb2", "Importación directa"),
-        ("protocols.v3.1.firewall_commands_v31_pb2", "Paquete protocols.v3.1"),
+        ("protocols.v3_1.firewall_commands_v31_pb2", "Paquete protocols.v3_1"),
     ]
 
     for import_path, description in import_strategies:

@@ -38,62 +38,265 @@ from etcd_crypto_client_geoip_fixed import (
     get_geoip_pipeline_key
 )
 
-# 📦 Protobuf v3.1.0 - REQUERIDO - Importación robusta
+# 📦 Protobuf v3.1
 PROTOBUF_AVAILABLE = False
 PROTOBUF_VERSION = "unavailable"
 NetworkSecurityEventProto = None
 
 
-def import_protobuf_module():
-    """Importa el módulo protobuf v3.1.0 con múltiples estrategias"""
+def import_protobuf_v31():
+    """Import protobuf compatible with 3.20.3 and runtime_version issues - COMPLETE VERSION"""
     global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
-    # Estrategia 1: Importación relativa desde protocols.v3.1
-    import_strategies = [
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
-        ("protocols.network_security_clean_v31_pb2", "Paquete protocols"),
-        ("network_security_clean_v31_pb2", "Importación directa"),
+    import importlib
+    import importlib.util
+
+    # Get current directory and project root
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+
+    # Add paths
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    v31_dir = os.path.join(project_root, 'protocols', 'v3.1')
+    if v31_dir not in sys.path:
+        sys.path.insert(0, v31_dir)
+
+    # Strategy 1: Try manual file loading (bypasses import issues)
+    pb2_file = os.path.join(v31_dir, 'network_security_clean_v31_pb2.py')
+    if os.path.exists(pb2_file):
+        try:
+            # Read and modify the file content to handle runtime_version issues
+            with open(pb2_file, 'r') as f:
+                content = f.read()
+
+            # Check if runtime_version import is causing issues
+            if 'runtime_version' in content and 'google.protobuf' in content:
+                print("🔧 Detected runtime_version import - applying compatibility patch...")
+
+                # Create a temporary patched version
+                patched_content = content.replace(
+                    'from google.protobuf import runtime_version as _runtime_version',
+                    '# from google.protobuf import runtime_version as _runtime_version  # Patched for 3.20.3'
+                )
+                patched_content = patched_content.replace(
+                    'from google.protobuf import runtime_version',
+                    '# from google.protobuf import runtime_version  # Patched for 3.20.3'
+                )
+
+                # Write patched version to temp file
+                temp_file = os.path.join(v31_dir, 'network_security_clean_v31_pb2_patched.py')
+                with open(temp_file, 'w') as f:
+                    f.write(patched_content)
+
+                # Load the patched version
+                spec = importlib.util.spec_from_file_location(
+                    "network_security_clean_v31_pb2_patched", temp_file
+                )
+                NetworkSecurityEventProto = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(NetworkSecurityEventProto)
+
+                # Clean up temp file
+                os.remove(temp_file)
+
+                if hasattr(NetworkSecurityEventProto, 'NetworkSecurityEvent'):
+                    PROTOBUF_AVAILABLE = True
+                    PROTOBUF_VERSION = "v3.1.0-patched-3.20.3"
+                    print(f"✅ Protobuf v3.1 loaded with compatibility patch for 3.20.3")
+                    return True
+
+        except Exception as e:
+            print(f"❌ Patching strategy failed: {e}")
+
+    # Strategy 2: Try direct imports with error handling
+    strategies = [
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Package import"),
+        ("network_security_clean_v31_pb2", "Direct import"),
     ]
 
-    for import_path, description in import_strategies:
+    for import_path, description in strategies:
         try:
-            NetworkSecurityEventProto = __import__(import_path, fromlist=[''])
-            PROTOBUF_AVAILABLE = True
-            PROTOBUF_VERSION = "v3.1.0"
-            print(f"✅ Protobuf v3.1 cargado: {description} ({import_path})")
-            return True
-        except ImportError:
+            # Temporarily monkey-patch the missing runtime_version
+            import google.protobuf
+            if not hasattr(google.protobuf, 'runtime_version'):
+                # Create a dummy runtime_version for compatibility
+                class DummyRuntimeVersion:
+                    @staticmethod
+                    def ValidateProtobufRuntimeVersion(*args, **kwargs):
+                        pass
+
+                google.protobuf.runtime_version = DummyRuntimeVersion()
+
+            NetworkSecurityEventProto = importlib.import_module(import_path)
+            if hasattr(NetworkSecurityEventProto, 'NetworkSecurityEvent'):
+                PROTOBUF_AVAILABLE = True
+                PROTOBUF_VERSION = "v3.1.0-monkey-patched"
+                print(f"✅ Protobuf v3.1 loaded: {description} (monkey-patched)")
+                return True
+
+        except ImportError as e:
+            print(f"❌ {description} failed: {e}")
+            continue
+        except Exception as e:
+            print(f"❌ {description} error: {e}")
             continue
 
-    # Estrategia 2: Añadir path dinámico y importar
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_paths = [
-        os.path.join(current_dir, '..', 'protocols', 'v3.1'),
-        os.path.join(current_dir, 'protocols', 'v3.1'),
-        os.path.join(os.getcwd(), 'protocols', 'v3.1'),
-    ]
+    # Strategy 3: Development mode check - COMPLETE MOCK
+    dev_mode = os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true"
+    if dev_mode:
+        print("🧪 Dev mode enabled - creating complete mock protobuf")
 
-    for protocols_path in possible_paths:
-        protocols_path = os.path.abspath(protocols_path)
-        pb2_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
+        # Create complete mock classes matching the real protobuf structure
 
-        if os.path.exists(pb2_file):
-            try:
-                sys.path.insert(0, protocols_path)
-                import network_security_clean_v31_pb2 as NetworkSecurityEventProto
-                PROTOBUF_AVAILABLE = True
-                PROTOBUF_VERSION = "v3.1.0"
-                print(f"✅ Protobuf v3.1 cargado desde path: {protocols_path}")
-                return True
-            except ImportError as e:
-                sys.path.remove(protocols_path)
-                continue
+        class MockThreatLevel:
+            UNKNOWN = 0
+            LOW = 1
+            MEDIUM = 2
+            HIGH = 3
+            CRITICAL = 4
 
+        class MockGeoLocationInfo:
+            """Mock GeoLocationInfo with all required attributes"""
+            ThreatLevel = MockThreatLevel
+
+            def __init__(self):
+                self.latitude = 0.0
+                self.longitude = 0.0
+                self.country_name = ""
+                self.country_code = ""
+                self.region_name = ""
+                self.city_name = ""
+                self.timezone = ""
+                self.isp_name = ""
+                self.organization_name = ""
+                self.threat_level = MockThreatLevel.UNKNOWN
+
+            def CopyFrom(self, other):
+                """Mock CopyFrom method"""
+                if hasattr(other, 'latitude'):
+                    self.latitude = other.latitude
+                if hasattr(other, 'longitude'):
+                    self.longitude = other.longitude
+                if hasattr(other, 'country_name'):
+                    self.country_name = other.country_name
+                if hasattr(other, 'country_code'):
+                    self.country_code = other.country_code
+                if hasattr(other, 'region_name'):
+                    self.region_name = other.region_name
+                if hasattr(other, 'city_name'):
+                    self.city_name = other.city_name
+                if hasattr(other, 'timezone'):
+                    self.timezone = other.timezone
+                if hasattr(other, 'isp_name'):
+                    self.isp_name = other.isp_name
+                if hasattr(other, 'organization_name'):
+                    self.organization_name = other.organization_name
+                if hasattr(other, 'threat_level'):
+                    self.threat_level = other.threat_level
+
+        class MockTimestamp:
+            """Mock protobuf Timestamp"""
+
+            def __init__(self):
+                self.seconds = 0
+                self.nanos = 0
+
+            def FromMilliseconds(self, milliseconds):
+                self.seconds = int(milliseconds // 1000)
+                self.nanos = int((milliseconds % 1000) * 1000000)
+
+        class MockGeoEnrichment:
+            """Mock GeoEnrichment with all required attributes"""
+
+            def __init__(self):
+                self.sniffer_node_geo = MockGeoLocationInfo()
+                self.source_ip_geo = MockGeoLocationInfo()
+                self.destination_ip_geo = MockGeoLocationInfo()
+                self.sniffer_node_enriched = False
+                self.source_ip_enriched = False
+                self.destination_ip_enriched = False
+                self.enrichment_complete = False
+                self.enricher_version = "dev-mode-mock"
+                self.geoip_method = "mock"
+                self.enrichment_timestamp = MockTimestamp()
+                self.total_lookup_latency_ms = 0.0
+                self.cache_hits = 0
+                self.cache_misses = 0
+
+            def CopyFrom(self, other):
+                """Mock CopyFrom method"""
+                if hasattr(other, 'sniffer_node_geo'):
+                    self.sniffer_node_geo = other.sniffer_node_geo
+                if hasattr(other, 'source_ip_geo'):
+                    self.source_ip_geo = other.source_ip_geo
+                if hasattr(other, 'destination_ip_geo'):
+                    self.destination_ip_geo = other.destination_ip_geo
+
+        class MockNetworkFeatures:
+            """Mock NetworkFeatures with required attributes"""
+
+            def __init__(self):
+                self.source_ip = "192.168.1.100"
+                self.destination_ip = "10.0.0.50"
+                self.source_port = 12345
+                self.destination_port = 80
+                self.protocol = "TCP"
+
+        class MockNetworkSecurityEvent:
+            """Mock NetworkSecurityEvent with all required attributes"""
+
+            def __init__(self):
+                self.network_features = MockNetworkFeatures()
+                self.geo_enrichment = MockGeoEnrichment()
+                self.event_id = "mock_event_001"
+                self.timestamp = MockTimestamp()
+
+            def ParseFromString(self, data):
+                """Mock parsing - just return success"""
+                pass
+
+            def SerializeToString(self):
+                """Mock serialization - return mock bytes"""
+                return b"mock_enriched_event_data"
+
+            def HasField(self, field_name):
+                """Mock HasField method"""
+                return hasattr(self, field_name)
+
+        # Create complete mock module with all classes
+        class MockProtobufModule:
+            NetworkSecurityEvent = MockNetworkSecurityEvent
+            GeoLocationInfo = MockGeoLocationInfo
+            GeoEnrichment = MockGeoEnrichment
+            NetworkFeatures = MockNetworkFeatures
+
+            # Add Timestamp class at module level
+            class Timestamp:
+                def __init__(self):
+                    self.seconds = 0
+                    self.nanos = 0
+
+                def FromMilliseconds(self, milliseconds):
+                    self.seconds = int(milliseconds // 1000)
+                    self.nanos = int((milliseconds % 1000) * 1000000)
+
+        NetworkSecurityEventProto = MockProtobufModule()
+        PROTOBUF_AVAILABLE = True
+        PROTOBUF_VERSION = "dev-mode-complete-mock"
+        print("✅ Development mode: Complete mock protobuf created")
+        print("   📦 Includes: NetworkSecurityEvent, GeoLocationInfo, GeoEnrichment")
+        print("   🎯 ThreatLevel enum: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL")
+        print("   🔧 All required methods: CopyFrom, ParseFromString, SerializeToString")
+        return True
+
+    print("❌ All protobuf import strategies failed")
     return False
 
 
+
 # Ejecutar importación al inicio
-import_protobuf_module()
+import_protobuf_v31()
 
 # 🌍 MaxMind GeoIP2 para lookup real
 try:
@@ -337,6 +540,8 @@ class DistributedGeoIPEnricherVerticalV31ETCD:
         # 🔐 NUEVO: Crypto wrapper setup usando ETCD pipeline key
         self.crypto_wrapper = None
 
+        # 📊 Estadísticas - ✅ FIXED: Asignación correcta a self.stats
+        self.stats = {
             'received': 0,
             'enriched': 0,
             'sent': 0,

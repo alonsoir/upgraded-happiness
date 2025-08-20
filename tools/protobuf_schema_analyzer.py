@@ -168,7 +168,7 @@ def try_parse_with_corrected_import(data: bytes, fields: Dict[str, Any]):
         "firewall_command_pb2",
         "protocols.firewall_commands_v31_pb2",
         "protocols.firewall_commands_pb2",
-        "protocols.v3.1.firewall_commands_v31_pb2",
+        "protocols.v3_1.firewall_commands_v31_pb2",
         "protocols.v3.firewall_commands_pb2",
     ]
 
