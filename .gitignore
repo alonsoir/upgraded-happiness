@@ -6,6 +6,15 @@ __pycache__/
 default.etcd
 default.etcd/
 default.etcd/*.*
+# ETCD runtime files
+*.etcd/
+member/
+wal/
+snap/
+
+# Common ETCD patterns
+etcd-data/
+etcd.log
 # C extensions
 *.so
 
