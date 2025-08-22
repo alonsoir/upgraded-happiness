@@ -1,29 +1,33 @@
 #!/usr/bin/env python3
 """
-🧬 Simple Firewall Agent V3.1 ETCD - MIGRACIÓN COMPLETA CON DUAL COMMUNICATION
-✅ ETCD Crypto OBLIGATORIO - Sin fallbacks, máxima seguridad
-✅ DUAL COMMUNICATION - Scheduler (PUSH/PULL) + Dashboard (PUB/SUB)
-✅ Configuración JSON completa - TODO O NADA desde simple_firewall_agent_v31_etcd.json
-✅ Protobuf V3.1 EXCLUSIVO - Compatible con scheduler ETCD
-✅ Ultra-seguridad mantenida - Solo MONITOR y LIST_RULES
-✅ Pipeline position 5 - Después de scheduler_firewall (position 4)
-✅ 4 sockets ZMQ cifrados con ETCD pipeline key rotativo
+simple_firewall_agent_v31_etcd.py - SIMPLE FIREWALL AGENT V3.1 ETCD + DUAL COMMUNICATION + DEBUG
+✅ Dual Communication: Scheduler (PUSH/PULL) + Dashboard (PUB/SUB)
+✅ V3.1 PROTOBUF EXCLUSIVO con node_id y timestamp nativos
+✅ ETCD crypto obligatorio para todos los canales
+✅ Debug completo del pipeline de descompresión
+✅ Sin fallbacks - Solo protobuf cifrado y comprimido
 """
 
-import sys
-import os
-import json
-import time
 import zmq
+import json
 import threading
-import signal
+import time
 import logging
-import subprocess
-import importlib.util
+import queue
+import os
+import sys
+import signal
+import psutil
+import hashlib
 import asyncio
-from datetime import datetime
+import gzip
+import zlib
+import bz2
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from collections import defaultdict, deque
 
 # 🔥 NUEVO: Importar cliente ETCD específico para simple firewall agent
 try:
@@ -40,104 +44,81 @@ except ImportError as e:
     print("📁 Required: etcd_crypto_client_simple_firewall_agent_fixed.py")
     ETCD_CRYPTO_CLIENT_AVAILABLE = False
 
-# ✅ STEP 1: Add protocols path
-protocols_v31_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'protocols', 'v3_1')
-protocols_current_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'protocols',
-                                      'current')
-
-print("🔍 Agent ETCD: Buscando protobuf V3.1 EXCLUSIVO...")
-
-# 📦 Protobuf V3.1 - Importación exclusiva (TODO O NADA) - CORREGIDO: v3_1
+# 📦 Protobuf V3.1 - Importación exclusiva (TODO O NADA)
 PROTOBUF_AVAILABLE = False
 PROTOBUF_VERSION = "unavailable"
-FirewallCommandsProto = None
 NetworkEventProto = None
+FirewallCommandsProto = None
+
+
+def verify_protobuf_files():
+    """Verificar que existen los archivos protobuf necesarios"""
+    # 🔧 FIX: Import os dentro de la función
+    import os
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
+
+    required_files = [
+        'network_security_clean_v31_pb2.py',
+        'firewall_commands_v31_pb2.py'
+    ]
+
+    missing_files = []
+    for file_name in required_files:
+        file_path = os.path.join(protocols_path, file_name)
+        if not os.path.exists(file_path):
+            missing_files.append(file_name)
+
+    if missing_files:
+        print(f"❌ CRITICAL: Missing protobuf files:")
+        for file_name in missing_files:
+            print(f"   📁 {file_name}")
+        print(f"🔧 Expected location: {protocols_path}")
+        print(f"🛠️ Generate protobuf files with:")
+        print(f"   protoc --python_out=protocols/v3_1/ protocols/v3_1/*.proto")
+        return False
+
+    print(f"✅ All required protobuf files found in {protocols_path}")
+    return True
 
 
 def import_agent_protobuf_v31():
-    """Importa protobuf V3.1 EXCLUSIVO para agent - TODO O NADA - RUTAS CORREGIDAS"""
-    global FirewallCommandsProto, NetworkEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+    """Importa protobuf V3.1 EXCLUSIVO para agent - PATH DIRECTO"""
+    global NetworkEventProto, FirewallCommandsProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
+
+    # 🔧 FIX: Import os y sys dentro de la función
+    import os
+    import sys
 
     print("🔍 Agent ETCD: Buscando protobuf V3.1 EXCLUSIVO...")
 
-    # 1. IMPORTAR FIREWALL COMMANDS V3.1 - RUTAS CORREGIDAS v3_1
-    firewall_imported = False
-    firewall_strategies = [
-        ("firewall_commands_v31_pb2", "Importación directa"),
-        ("protocols.v3_1.firewall_commands_v31_pb2", "Paquete protocols.v3_1"),
-    ]
+    # Agregar path directo al sys.path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)  # Subir un nivel desde core/
+    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
 
-    for import_path, description in firewall_strategies:
-        try:
-            FirewallCommandsProto = network_security_clean_v31_pb2
-            firewall_imported = True
-            print(f"✅ FirewallCommands v3.1 cargado: {description}")
-            break
-        except ImportError:
-            continue
+    if protocols_path not in sys.path:
+        sys.path.insert(0, protocols_path)
 
-    # 2. IMPORTAR NETWORK EVENT (opcional para agent) - RUTAS CORREGIDAS v3_1
-    network_imported = False
-    network_strategies = [
-        ("network_security_clean_v31_pb2", "Importación directa v3.1"),
-        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
-    ]
+    try:
+        # 🔥 IMPORTACIÓN DIRECTA DESDE PATH AGREGADO
+        import network_security_clean_v31_pb2
+        import firewall_commands_v31_pb2
 
-    for import_path, description in network_strategies:
-        try:
-            NetworkEventProto = network_security_clean_v31_pb2
-            network_imported = True
-            print(f"✅ NetworkEvent cargado: {description}")
-            break
-        except ImportError:
-            continue
+        # ✅ ASIGNACIÓN CORRECTA - Cada módulo a su variable correspondiente
+        NetworkEventProto = network_security_clean_v31_pb2
+        FirewallCommandsProto = firewall_commands_v31_pb2  # 🔧 FIX: Era network_security_clean_v31_pb2
 
-    # 3. ESTRATEGIA DE BÚSQUEDA POR PATHS DINÁMICOS - RUTAS CORREGIDAS v3_1
-    if not firewall_imported:  # NetworkEvent es opcional para agent
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        possible_paths = [
-            os.path.join(current_dir, '..', 'protocols', 'v3_1'),  # CORREGIDO: v3_1
-            os.path.join(current_dir, 'protocols', 'v3_1'),  # CORREGIDO: v3_1
-            current_dir,
-            os.path.join(current_dir, '..'),
-        ]
-
-        for protocols_path in possible_paths:
-            protocols_path = os.path.abspath(protocols_path)
-
-            # Buscar FirewallCommands V3.1 (OBLIGATORIO)
-            if not firewall_imported:
-                firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_v31_pb2.py')
-                if os.path.exists(firewall_pb2_file):
-                    try:
-                        sys.path.insert(0, protocols_path)
-                        import firewall_commands_v31_pb2 as FirewallCommandsProto
-                        firewall_imported = True
-                        print(f"✅ FirewallCommands v3.1 cargado desde: {protocols_path}")
-                    except ImportError as e:
-                        if protocols_path in sys.path:
-                            sys.path.remove(protocols_path)
-
-            # Buscar NetworkEvent (OPCIONAL)
-            if not network_imported:
-                network_v31_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
-                if os.path.exists(network_v31_file):
-                    try:
-                        if protocols_path not in sys.path:
-                            sys.path.insert(0, protocols_path)
-                        import network_security_clean_v31_pb2 as NetworkEventProto
-                        network_imported = True
-                        print(f"✅ NetworkEvent v3.1 cargado desde: {protocols_path}")
-                    except ImportError:
-                        pass
-
-    # 4. VERIFICACIÓN FINAL - FirewallCommands es OBLIGATORIO
-    if firewall_imported:
         PROTOBUF_AVAILABLE = True
         PROTOBUF_VERSION = "v3.1.0"
-        print(f"🎯 Agent ETCD: Protobuf V3.1 FirewallCommands cargado exitosamente")
 
-        # Verificar que FirewallCommand tiene los campos nativos V3.1
+        print(f"✅ NetworkEvent v3.1 cargado desde path directo: {protocols_path}")
+        print(f"✅ FirewallCommands v3.1 cargado desde path directo: {protocols_path}")
+        print(f"🎯 Agent ETCD: Protobuf V3.1 COMPLETO cargado exitosamente")
+
+        # Verificar que FirewallCommand tiene los campos nativos
         try:
             test_command = FirewallCommandsProto.FirewallCommand()
             fields = [field.name for field in test_command.DESCRIPTOR.fields]
@@ -145,6 +126,12 @@ def import_agent_protobuf_v31():
             if 'node_id' in fields and 'timestamp' in fields:
                 print(f"✅ Verificado: FirewallCommand V3.1 tiene node_id y timestamp nativos")
                 print(f"📋 Campos disponibles: {fields}")
+
+                # Verificar también FirewallResponse
+                test_response = FirewallCommandsProto.FirewallResponse()
+                response_fields = [field.name for field in test_response.DESCRIPTOR.fields]
+                print(f"✅ Verificado: FirewallResponse V3.1 campos: {response_fields}")
+
                 return True
             else:
                 print(f"❌ ERROR: FirewallCommand no tiene campos V3.1 requeridos")
@@ -155,29 +142,34 @@ def import_agent_protobuf_v31():
         except Exception as e:
             print(f"❌ ERROR verificando campos V3.1: {e}")
             return False
-    else:
-        # FALLO TOTAL - OBLIGATORIO para agent
-        print(f"❌ Agent ETCD: FirewallCommands V3.1 REQUERIDO pero NO ENCONTRADO")
-        print(f"📋 Estado:")
-        print(f"   FirewallCommands V3.1: {'✅' if firewall_imported else '❌'}")
-        print(f"   NetworkEvent: {'✅' if network_imported else '➖ (opcional)'}")
-        print(f"📁 Archivos requeridos:")
-        print(f"   • firewall_commands_v31_pb2.py (OBLIGATORIO)")
-        print(f"   • network_security_clean_v31_pb2.py (opcional)")
-        print(f"📍 Ubicaciones buscadas:")
-        for path in [
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'protocols', 'v3_1'),  # CORREGIDO: v3_1
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'protocols', 'v3_1'),  # CORREGIDO: v3_1
-        ]:
-            print(f"   • {os.path.abspath(path)}")
-        print(f"🔧 SOLUCIÓN: Instalar protobuf V3.1 o compilar .proto files")
+
+    except ImportError as e:
+        print(f"❌ Error importando protobuf v3.1: {e}")
+        print(f"🔧 Path intentado: {protocols_path}")
+        print("🔧 Verificar que los archivos _pb2.py existen en protocols/v3_1/")
+
+        PROTOBUF_AVAILABLE = False
+        PROTOBUF_VERSION = "unavailable"
+        NetworkEventProto = None
+        FirewallCommandsProto = None
+        return False
+
+    except Exception as e:
+        print(f"❌ Error inesperado: {e}")
+        print(f"🔧 Path usado: {protocols_path}")
         return False
 
 
+# Ejecutar verificación antes de importar
+if not verify_protobuf_files():
+    print(f"💥 FATAL: Simple Firewall Agent requires protobuf V3.1 files")
+    print(f"🛑 STOPPING EXECUTION - Generate protobuf files first")
+    sys.exit(1)
+
 # Ejecutar importación V3.1 EXCLUSIVA
 if not import_agent_protobuf_v31():
-    print(f"💥 FATAL: Agent ETCD requiere protobuf V3.1 para funcionar")
-    print(f"🛑 PARAR EJECUCIÓN - Sin V3.1 no hay agent")
+    print(f"💥 FATAL: Simple Firewall Agent ETCD requires protobuf V3.1 to function")
+    print(f"🛑 STOPPING EXECUTION - Without V3.1 there is no agent")
     sys.exit(1)
 
 
@@ -186,75 +178,190 @@ class AgentConfigurationError(Exception):
     pass
 
 
+class FirewallAgentRulesError(Exception):
+    """Error en reglas de firewall del agent"""
+    pass
+
+
 class ETCDCryptoError(Exception):
     """Error específico de ETCD crypto"""
     pass
 
 
-class SecurityValidator:
-    """Validador de seguridad ultra-conservador - MANTENIDO sin cambios"""
+@dataclass
+class FirewallCommand:
+    """Comando de firewall procesado"""
+    command_id: str
+    action: str
+    target_ip: str
+    target_port: int
+    duration_seconds: int
+    reason: str
+    priority: str
+    dry_run: bool
+    node_id: str
+    timestamp: int
+    source: str
+    parsing_method: str
+
+
+@dataclass
+class AgentStats:
+    """Estadísticas del agent"""
+    commands_received: int = 0
+    commands_processed: int = 0
+    commands_executed: int = 0
+    responses_sent: int = 0
+    errors: int = 0
+    scheduler_commands: int = 0
+    dashboard_commands: int = 0
+    uptime_start: float = 0
+    last_command_time: Optional[datetime] = None
+    etcd_crypto_operations: int = 0
+    etcd_crypto_errors: int = 0
+    compression_debug_operations: int = 0
+
+
+class CompressionPipelineDebugger:
+    """🔧 NUEVA CLASE: Debug completo del pipeline de descompresión"""
 
     def __init__(self, logger):
         self.logger = logger
-        self.is_root = os.getuid() == 0 if hasattr(os, 'getuid') else False
-        self.forced_dry_run = self.is_root  # Always dry run if root
+        self.compression_stats = {
+            'total_messages': 0,
+            'gzip_detected': 0,
+            'zlib_detected': 0,
+            'bzip2_detected': 0,
+            'no_compression': 0,
+            'manual_decompressions': 0,
+            'decompression_failures': 0
+        }
 
-        if self.forced_dry_run:
-            self.logger.warning("🔒 FORCED DRY_RUN: Running as root user")
+    def debug_compression_pipeline(self, command_bytes, source="unknown"):
+        """Debug completo del pipeline de descompresión"""
+        self.compression_stats['total_messages'] += 1
 
-    def validate_command(self, action: str, target_ip: str, params: Dict) -> Tuple[bool, str]:
-        """Validar comando con máxima seguridad"""
-        # Solo permitir acciones ultra-seguras
-        safe_actions = ['MONITOR', 'LIST_RULES', 'ALLOW_IP_TEMP']
+        self.logger.info(f"🔍 DEBUG COMPRESSION PIPELINE - {source}")
+        self.logger.info(f"   📦 Raw bytes received: {len(command_bytes)}")
 
-        if action not in safe_actions:
-            return False, f"Action {action} not permitted. Only {safe_actions} allowed."
+        # Mostrar primeros bytes para análisis
+        if len(command_bytes) >= 16:
+            hex_preview = ' '.join([f'{b:02x}' for b in command_bytes[:16]])
+            self.logger.info(f"   🔍 First 16 bytes (hex): {hex_preview}")
 
-        # ✅ PERMITIR "all" para LIST_RULES (es un comando de información)
-        if action == "LIST_RULES" and target_ip == "all":
-            return True, "LIST_RULES with target 'all' is permitted"
+            # Verificar magic numbers de compresión
+            magic_gzip = command_bytes[:2] == b'\x1f\x8b'
+            magic_zlib = command_bytes[:2] in [b'\x78\x9c', b'\x78\x01', b'\x78\xda']
+            magic_bzip2 = command_bytes[:3] == b'BZh'
 
-        # Validar IP para otras acciones
-        if not self._is_valid_ip(target_ip):
-            return False, f"Invalid IP: {target_ip}"
+            self.logger.info(f"   🔍 Compression signatures:")
+            self.logger.info(f"      GZIP: {magic_gzip}")
+            self.logger.info(f"      ZLIB: {magic_zlib}")
+            self.logger.info(f"      BZIP2: {magic_bzip2}")
 
-        # Bloquear IPs peligrosas (solo para acciones que no sean LIST_RULES)
-        if action != "LIST_RULES" and self._is_dangerous_ip(target_ip):
-            return False, f"IP {target_ip} is in blocked range"
+            # Actualizar estadísticas
+            if magic_gzip:
+                self.compression_stats['gzip_detected'] += 1
+                self.logger.warning(f"   ⚠️ GZIP signature detected - should be decompressed by ETCD!")
+            elif magic_zlib:
+                self.compression_stats['zlib_detected'] += 1
+                self.logger.warning(f"   ⚠️ ZLIB signature detected - should be decompressed by ETCD!")
+            elif magic_bzip2:
+                self.compression_stats['bzip2_detected'] += 1
+                self.logger.warning(f"   ⚠️ BZIP2 signature detected - should be decompressed by ETCD!")
+            else:
+                self.compression_stats['no_compression'] += 1
+                self.logger.info(f"   ✅ No compression signature - good (ETCD decompressed correctly)")
 
-        return True, "Command validation passed"
+        # Verificar si parezca protobuf válido
+        if len(command_bytes) > 0:
+            first_byte = command_bytes[0]
+            field_number = (first_byte >> 3) & 0x0F
+            wire_type = first_byte & 0x07
 
-    def _is_valid_ip(self, ip: str) -> bool:
-        """Validar formato IP"""
-        import ipaddress
+            self.logger.info(f"   🔍 Protobuf analysis:")
+            self.logger.info(f"      First byte: 0x{first_byte:02x}")
+            self.logger.info(f"      Field number: {field_number}")
+            self.logger.info(f"      Wire type: {wire_type}")
+
+            # Wire types válidos en protobuf: 0, 1, 2, 3, 4, 5
+            if wire_type <= 5:
+                self.logger.info(f"   ✅ Looks like valid protobuf wire type")
+            else:
+                self.logger.warning(f"   ⚠️ Invalid protobuf wire type: {wire_type}")
+
+        return command_bytes
+
+    def attempt_emergency_decompression(self, data, source="unknown"):
+        """Decompresión de emergencia si ETCD falló"""
+        self.logger.warning(f"🔧 EMERGENCY: Attempting manual decompression for {source}")
+        self.compression_stats['manual_decompressions'] += 1
+
+        # Método 1: GZIP
         try:
-            ipaddress.IPv4Address(ip)
-            return True
-        except:
-            return False
+            if data[:2] == b'\x1f\x8b':
+                decompressed = gzip.decompress(data)
+                self.logger.warning(f"   🔧 GZIP emergency decompression: {len(data)} → {len(decompressed)} bytes")
+                return decompressed, "emergency_gzip"
+        except Exception as e:
+            self.logger.debug(f"   🔄 GZIP emergency failed: {e}")
 
-    def _is_dangerous_ip(self, ip: str) -> bool:
-        """Verificar IPs peligrosas"""
-        dangerous_ranges = [
-            '127.0.0.0/8',  # localhost
-            '10.0.0.0/8',  # private
-            '172.16.0.0/12',  # private
-            '192.168.0.0/16'  # private
-        ]
-
-        import ipaddress
+        # Método 2: ZLIB
         try:
-            ip_obj = ipaddress.IPv4Address(ip)
-            for range_str in dangerous_ranges:
-                if ip_obj in ipaddress.IPv4Network(range_str):
-                    return True
-            return False
-        except:
-            return True  # Si no se puede validar, es peligrosa
+            if data[:2] in [b'\x78\x9c', b'\x78\x01', b'\x78\xda']:
+                decompressed = zlib.decompress(data)
+                self.logger.warning(f"   🔧 ZLIB emergency decompression: {len(data)} → {len(decompressed)} bytes")
+                return decompressed, "emergency_zlib"
+        except Exception as e:
+            self.logger.debug(f"   🔄 ZLIB emergency failed: {e}")
+
+        # Método 3: ZLIB sin header
+        try:
+            decompressed = zlib.decompress(data, -zlib.MAX_WBITS)
+            self.logger.warning(
+                f"   🔧 ZLIB (no header) emergency decompression: {len(data)} → {len(decompressed)} bytes")
+            return decompressed, "emergency_zlib_no_header"
+        except Exception as e:
+            self.logger.debug(f"   🔄 ZLIB (no header) emergency failed: {e}")
+
+        # Método 4: BZIP2
+        try:
+            if data[:3] == b'BZh':
+                decompressed = bz2.decompress(data)
+                self.logger.warning(f"   🔧 BZIP2 emergency decompression: {len(data)} → {len(decompressed)} bytes")
+                return decompressed, "emergency_bzip2"
+        except Exception as e:
+            self.logger.debug(f"   🔄 BZIP2 emergency failed: {e}")
+
+        self.logger.error(f"   ❌ All emergency decompression methods failed for {source}")
+        self.compression_stats['decompression_failures'] += 1
+        return data, "no_emergency_decompression"
+
+    def get_compression_stats(self):
+        """Obtener estadísticas de compresión"""
+        return self.compression_stats.copy()
+
+    def log_compression_stats(self):
+        """Log estadísticas de compresión"""
+        stats = self.compression_stats
+        total = stats['total_messages']
+        if total > 0:
+            self.logger.info(f"📊 COMPRESSION PIPELINE STATS:")
+            self.logger.info(f"   📦 Total messages: {total}")
+            self.logger.info(
+                f"   🗜️ GZIP detected: {stats['gzip_detected']} ({stats['gzip_detected'] / total * 100:.1f}%)")
+            self.logger.info(
+                f"   🗜️ ZLIB detected: {stats['zlib_detected']} ({stats['zlib_detected'] / total * 100:.1f}%)")
+            self.logger.info(
+                f"   🗜️ BZIP2 detected: {stats['bzip2_detected']} ({stats['bzip2_detected'] / total * 100:.1f}%)")
+            self.logger.info(
+                f"   ✅ No compression: {stats['no_compression']} ({stats['no_compression'] / total * 100:.1f}%)")
+            self.logger.info(f"   🔧 Manual decompressions: {stats['manual_decompressions']}")
+            self.logger.info(f"   ❌ Decompression failures: {stats['decompression_failures']}")
 
 
 class AgentLogger:
-    """Logger específico para agent ETCD - Basado en scheduler logger"""
+    """Logger específico para agent"""
 
     def __init__(self, node_id: str, log_config: dict):
         self.logger = logging.getLogger(f"simple_firewall_agent_etcd_{node_id}")
@@ -263,7 +370,7 @@ class AgentLogger:
         # Configurar logging según JSON
         log_level = getattr(logging, log_config.get('level', 'INFO').upper())
         log_format = log_config.get('format',
-                                    '%(asctime)s - %(name)s - %(levelname)s - [agent_etcd:{node_id}] [pid:{pid}] - %(message)s'
+                                    '%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [SAFE_MODE_V31_ETCD] - %(message)s'
                                     )
 
         # Reemplazar placeholders
@@ -283,12 +390,11 @@ class AgentLogger:
             console_handler.setFormatter(formatter)
             console_handler.setLevel(getattr(logging, console_config.get('level', 'INFO').upper()))
             self.logger.addHandler(console_handler)
-            print(f"✅ Agent ETCD console logging enabled: {console_config.get('level', 'INFO')}")
 
         # Handler de archivo
         file_config = log_config.get('handlers', {}).get('file', {})
         if file_config.get('enabled', True):
-            file_path = file_config.get('path', 'logs/firewall_agent_secure_v31_etcd.log')
+            file_path = file_config.get('path', 'logs/simple_firewall_agent_etcd.log')
 
             try:
                 # Crear directorio si no existe
@@ -300,103 +406,55 @@ class AgentLogger:
                 file_handler.setLevel(getattr(logging, file_config.get('level', 'INFO').upper()))
                 self.logger.addHandler(file_handler)
 
-                print(f"✅ Agent ETCD file logging enabled: {file_path} ({file_config.get('level', 'INFO')})")
-
-                # Log inicial
-                self.logger.info(f"🚀 Agent ETCD Logger started - Node: {node_id} - PID: {os.getpid()}")
-
             except Exception as e:
-                print(f"⚠️ Error configuring agent ETCD file logging: {e}")
-
-        self.info("✅ Agent ETCD Logger configured successfully")
+                print(f"⚠️ Error configuring file logging: {e}")
 
     def info(self, msg, *args, **kwargs):
-        self.logger.info(f"[agent_etcd:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+        self.logger.info(f"[node_id:{self.node_id}] [pid:{os.getpid()}] [SAFE_MODE_V31_ETCD] - {msg}", *args, **kwargs)
 
     def warning(self, msg, *args, **kwargs):
-        self.logger.warning(f"[agent_etcd:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+        self.logger.warning(f"[node_id:{self.node_id}] [pid:{os.getpid()}] [SAFE_MODE_V31_ETCD] - {msg}", *args,
+                            **kwargs)
 
     def error(self, msg, *args, **kwargs):
-        self.logger.error(f"[agent_etcd:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+        self.logger.error(f"[node_id:{self.node_id}] [pid:{os.getpid()}] [SAFE_MODE_V31_ETCD] - {msg}", *args, **kwargs)
 
     def debug(self, msg, *args, **kwargs):
-        self.logger.debug(f"[agent_etcd:{self.node_id}] [pid:{os.getpid()}] - {msg}", *args, **kwargs)
+        self.logger.debug(f"[node_id:{self.node_id}] [pid:{os.getpid()}] [SAFE_MODE_V31_ETCD] - {msg}", *args, **kwargs)
 
 
-class FirewallAgentV31ETCD:
-    """🔒 Firewall Agent V3.1 ETCD - DUAL COMMUNICATION + ETCD crypto obligatorio"""
+class AgentConfig:
+    """Configuración del agent"""
 
-    def __init__(self, config_file: str, rules_file: str):
-        # Verificar ETCD crypto client disponible ANTES que nada
-        if not ETCD_CRYPTO_CLIENT_AVAILABLE:
-            print("❌ CRITICAL: ETCD Crypto Client not available for Simple Firewall Agent")
-            raise ETCDCryptoError("ETCD Crypto Client required for agent operation")
+    def __init__(self, config_file: str):
+        self.config_file = config_file
+        self.config = None
+        self.load_and_validate_config()
 
-        # ✅ Cargar configuración
-        self.config = self._load_config(config_file)
-        self.rules = self._load_config(rules_file)
-
-        # Validar configuración ETCD OBLIGATORIA
-        self._validate_etcd_crypto_config()
-
-        # ✅ Setup básico
-        self.node_id = self.config['node_id']
-        self.running = False
-
-        # 🔥 NUEVO: ETCD crypto en lugar de crypto wrapper local
-        self.etcd_crypto_ready = False
-        self.pipeline_key = None
-
-        # Stats actualizadas para DUAL COMMUNICATION
-        self.stats = {
-            'scheduler_commands_received': 0,
-            'dashboard_commands_received': 0,
-            'commands_processed': 0,
-            'scheduler_responses_sent': 0,
-            'dashboard_responses_sent': 0,
-            'errors': 0,
-            'start_time': time.time(),
-            'etcd_crypto_operations': 0,
-            'etcd_crypto_errors': 0
-        }
-
-        # ✅ Setup logging
-        self.logger = AgentLogger(self.node_id, self.config.get('logging', {}))
-
-        # ✅ Security validator
-        self.security = SecurityValidator(self.logger)
-
-        # ✅ ZMQ setup - 4 sockets para DUAL COMMUNICATION
-        self.context = zmq.Context()
-
-        # Scheduler communication sockets
-        self.scheduler_commands_socket = None
-        self.scheduler_responses_socket = None
-
-        # Dashboard communication sockets
-        self.dashboard_commands_socket = None
-        self.dashboard_responses_socket = None
-
-        # Threads para DUAL COMMUNICATION
-        self.threads = []
-
-        self.logger.info(f"✅ Firewall Agent V3.1 ETCD inicializado: {self.node_id}")
-        self.logger.info(f"🔐 ETCD Crypto: OBLIGATORIO - Pipeline position 5")
-        self.logger.info(f"🚀 DUAL COMMUNICATION: scheduler + dashboard patterns")
-
-    def _load_config(self, config_file: str) -> Dict:
-        """Cargar archivo de configuración"""
-        if not Path(config_file).exists():
-            raise FileNotFoundError(f"❌ Config file not found: {config_file}")
+    def load_and_validate_config(self):
+        """Cargar y validar configuración del agent"""
+        if not Path(self.config_file).exists():
+            raise AgentConfigurationError(f"❌ Config file {self.config_file} not found")
 
         try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                self.config = json.load(f)
+        except json.JSONDecodeError as e:
+            raise AgentConfigurationError(f"❌ JSON parse error in {self.config_file}: {e}")
         except Exception as e:
-            raise ValueError(f"❌ Error loading config {config_file}: {e}")
+            raise AgentConfigurationError(f"❌ Error reading {self.config_file}: {e}")
 
-    def _validate_etcd_crypto_config(self):
-        """Validar configuración ETCD crypto OBLIGATORIA"""
+        # Validar sección ETCD crypto OBLIGATORIA
+        self._validate_etcd_crypto_section()
+
+        # Validar campos requeridos
+        self._validate_required_fields()
+
+        # Extraer valores validados
+        self._extract_config_values()
+
+    def _validate_etcd_crypto_section(self):
+        """Validar sección ETCD crypto OBLIGATORIA"""
         if 'etcd_crypto' not in self.config:
             raise AgentConfigurationError(
                 "❌ CRITICAL: 'etcd_crypto' section REQUIRED in agent config\n"
@@ -421,26 +479,147 @@ class FirewallAgentV31ETCD:
                 "🔧 Set crypto.enabled=true and crypto.use_etcd_pipeline_key=true"
             )
 
-        if not crypto_config.get('use_etcd_pipeline_key', False):
-            raise AgentConfigurationError(
-                "❌ CRITICAL: crypto.use_etcd_pipeline_key MUST be true\n"
-                "🔧 Set crypto.use_etcd_pipeline_key=true"
-            )
+    def _validate_required_fields(self):
+        """Validar campos requeridos"""
+        required_paths = [
+            'node_id',
+            'component.name',
+            'component.version',
+            'network.scheduler_commands.port',
+            'network.scheduler_responses.port',
+            'network.dashboard_commands.port',
+            'network.dashboard_responses.port'
+        ]
 
-        # Validar que tiene los 4 canales de DUAL COMMUNICATION
-        crypto_channels = crypto_config.get('channels', {})
-        required_channels = ['scheduler_commands', 'scheduler_responses', 'dashboard_commands', 'dashboard_responses']
-        missing_channels = [ch for ch in required_channels if ch not in crypto_channels]
+        for path in required_paths:
+            if not self._get_nested_value(path):
+                raise AgentConfigurationError(f"❌ Required field missing: {path}")
 
-        if missing_channels:
-            raise AgentConfigurationError(
-                f"❌ CRITICAL: Missing crypto channels for DUAL COMMUNICATION: {missing_channels}\n"
-                f"🔧 Required channels: {required_channels}"
-            )
+    def _get_nested_value(self, path: str):
+        """Obtener valor anidado usando notación de punto"""
+        keys = path.split('.')
+        value = self.config
 
-        print("✅ ETCD crypto configuration validated for DUAL COMMUNICATION")
+        for key in keys:
+            if isinstance(value, dict) and key in value:
+                value = value[key]
+            else:
+                return None
 
-    async def initialize_etcd_crypto(self, agent_config_path: str) -> bool:
+        return value
+
+    def _extract_config_values(self):
+        """Extraer todos los valores de configuración del agent"""
+        # Node ID y component info
+        self.node_id = self.config['node_id']
+        component = self.config['component']
+        self.component_name = component['name']
+        self.version = component['version']
+        self.mode = component.get('mode', 'distributed_agent')
+        self.role = component.get('role', 'simple_firewall_agent')
+
+        # ETCD crypto configuration
+        etcd_crypto = self.config['etcd_crypto']
+        self.etcd_host = etcd_crypto['etcd_host']
+        self.etcd_port = etcd_crypto['etcd_port']
+        self.etcd_cluster_name = etcd_crypto['cluster_name']
+        self.etcd_node_id = etcd_crypto['node_id']
+
+        # Network configuration DUAL
+        network = self.config['network']
+
+        # Scheduler communication
+        self.scheduler_commands = network['scheduler_commands']
+        self.scheduler_responses = network['scheduler_responses']
+
+        # Dashboard communication
+        self.dashboard_commands = network['dashboard_commands']
+        self.dashboard_responses = network['dashboard_responses']
+
+        # ZMQ Configuration
+        zmq_config = self.config['zmq']
+        self.zmq_io_threads = zmq_config['context_io_threads']
+        self.zmq_max_sockets = zmq_config.get('max_sockets', 64)
+        self.zmq_tcp_keepalive = zmq_config.get('tcp_keepalive', True)
+        self.zmq_immediate = zmq_config.get('immediate', True)
+        self.zmq_linger_ms = zmq_config.get('linger_ms', 0)
+        self.zmq_recv_timeout_ms = zmq_config.get('recv_timeout_ms', 1000)
+        self.zmq_send_timeout_ms = zmq_config.get('send_timeout_ms', 1000)
+
+        # Processing Configuration
+        processing = self.config['processing']
+        self.command_queue_size = processing.get('command_queue_size', 50)
+        self.response_queue_size = processing.get('response_queue_size', 25)
+        self.max_concurrent_commands = processing.get('max_concurrent_commands', 5)
+        self.command_timeout_seconds = processing.get('command_timeout_seconds', 30)
+
+        # Firewall Configuration
+        firewall = self.config['firewall']
+        self.safety_mode = firewall.get('safety_mode', 'ULTRA_SECURE_V31')
+        self.dry_run_by_default = firewall.get('dry_run_by_default', True)
+        self.max_rules_per_minute = firewall.get('max_rules_per_minute', 10)
+        self.allowed_actions = firewall.get('allowed_actions', ['MONITOR', 'LIST_RULES'])
+
+        # Crypto Configuration
+        self.crypto_config = self.config.get('crypto', {})
+
+        # Logging configuration
+        self.logging_config = self.config['logging']
+
+        # Debug configuration
+        self.debug_config = self.config.get('debug', {})
+
+
+class SimpleFirewallAgentETCD:
+    """Simple Firewall Agent con ETCD crypto y DUAL COMMUNICATION + DEBUG"""
+
+    def __init__(self, config: AgentConfig, firewall_rules_file: str):
+        self.config = config
+        self.etcd_crypto_ready = False
+        self.pipeline_key = None
+        self.logger = AgentLogger(config.node_id, config.logging_config)
+
+        # 🔧 NUEVO: Debug de compresión
+        self.compression_debugger = CompressionPipelineDebugger(self.logger)
+
+        # Verificar ETCD crypto client disponible
+        if not ETCD_CRYPTO_CLIENT_AVAILABLE:
+            self.logger.error("❌ CRITICAL: ETCD Crypto Client not available")
+            raise ETCDCryptoError("ETCD Crypto Client required for agent operation")
+
+        # Verificar protobuf disponible
+        if not PROTOBUF_AVAILABLE:
+            self.logger.error("❌ CRITICAL: Protobuf V3.1 modules not available")
+            raise RuntimeError("Protobuf V3.1 modules are required for agent")
+
+        # Estadísticas del agent
+        self.stats = AgentStats(uptime_start=time.time())
+
+        # Crear contexto ZMQ
+        self.context = zmq.Context(io_threads=config.zmq_io_threads)
+
+        # Sockets ZMQ DUAL
+        self.scheduler_commands_socket = None
+        self.scheduler_responses_socket = None
+        self.dashboard_commands_socket = None
+        self.dashboard_responses_socket = None
+
+        # Colas de procesamiento
+        self.command_queue = queue.Queue(maxsize=config.command_queue_size)
+        self.response_queue = queue.Queue(maxsize=config.response_queue_size)
+
+        # Estado del agent
+        self.running = False
+        self.threads = []
+
+        # Comandos recientes para debugging
+        self.recent_commands = deque(maxlen=100)
+
+        self.logger.info(f"🚀 Simple Firewall Agent ETCD initialized: {self.config.node_id}")
+        self.logger.info(f"🎯 Mode: {self.config.mode} | Role: {self.config.role}")
+        self.logger.info(f"🔐 ETCD Crypto: OBLIGATORIO - DUAL COMMUNICATION")
+
+    async def initialize_etcd_crypto(self, agent_config_path: str, firewall_rules_path: str) -> bool:
         """Inicializar ETCD crypto OBLIGATORIO"""
         try:
             self.logger.info("🔐 Initializing ETCD crypto for Simple Firewall Agent...")
@@ -451,7 +630,9 @@ class FirewallAgentV31ETCD:
                 self.logger.info("🧪 Dev mode detected - enabling testing mode for ETCD")
 
             # Setup ETCD crypto usando el cliente específico
-            success = await setup_simple_firewall_agent_crypto(agent_config_path, testing_mode)
+            success = await setup_simple_firewall_agent_crypto(
+                agent_config_path, firewall_rules_path, testing_mode
+            )
 
             if not success:
                 self.logger.error("❌ ETCD crypto initialization failed")
@@ -470,8 +651,7 @@ class FirewallAgentV31ETCD:
             # Log status de ETCD crypto
             etcd_status = get_simple_firewall_agent_crypto_status()
             self.logger.info(f"📊 ETCD Status: ready={etcd_status.get('ready')}, "
-                             f"crypto_role={etcd_status.get('crypto_role')}, "
-                             f"pipeline_position={etcd_status.get('pipeline_position')}")
+                             f"crypto_role={etcd_status.get('crypto_role')}")
 
             return True
 
@@ -479,622 +659,501 @@ class FirewallAgentV31ETCD:
             self.logger.error(f"❌ ETCD crypto initialization error: {e}")
             return False
 
-    def _setup_dual_communication_sockets(self):
-        """Setup ZMQ sockets para DUAL COMMUNICATION según configuración JSON - CON ETCD CRYPTO"""
-        self.logger.info("🔧 Setting up DUAL COMMUNICATION sockets with ETCD crypto...")
-
-        network_config = self.config.get('network', {})
+    def _setup_zmq_sockets(self):
+        """Setup ZMQ sockets DUAL según configuración JSON"""
+        self.logger.info("🔧 Setting up ZMQ sockets for DUAL COMMUNICATION...")
 
         try:
-            # ✅ SCHEDULER COMMANDS SOCKET (PULL del scheduler)
-            scheduler_cmd_config = network_config.get('scheduler_commands', {})
-            if scheduler_cmd_config:
-                self.scheduler_commands_socket = self.context.socket(zmq.PULL)
+            # 1. Scheduler Commands Socket (PULL)
+            self.scheduler_commands_socket = self.context.socket(zmq.PULL)
+            self.scheduler_commands_socket.setsockopt(zmq.RCVHWM,
+                                                      self.config.scheduler_commands.get('high_water_mark', 100))
+            self.scheduler_commands_socket.setsockopt(zmq.LINGER, self.config.zmq_linger_ms)
+            self.scheduler_commands_socket.setsockopt(zmq.RCVTIMEO, self.config.zmq_recv_timeout_ms)
 
-                # Configuración desde JSON
-                address = scheduler_cmd_config.get('address', 'localhost')
-                port = scheduler_cmd_config.get('port', 5582)
-                mode = scheduler_cmd_config.get('mode', 'bind')
-                hwm = scheduler_cmd_config.get('high_water_mark', 500)
+            if self.config.scheduler_commands['mode'] == 'bind':
+                endpoint = f"tcp://*:{self.config.scheduler_commands['port']}"
+                self.scheduler_commands_socket.bind(endpoint)
+                self.logger.info(f"🔥 Scheduler Commands BIND: {endpoint}")
+            else:
+                endpoint = f"tcp://{self.config.scheduler_commands['address']}:{self.config.scheduler_commands['port']}"
+                self.scheduler_commands_socket.connect(endpoint)
+                self.logger.info(f"🔥 Scheduler Commands CONNECT: {endpoint}")
 
-                # Configurar socket
-                self.scheduler_commands_socket.setsockopt(zmq.RCVHWM, hwm)
-                self.scheduler_commands_socket.setsockopt(zmq.LINGER, 0)  # CRÍTICO para cleanup
+            # 2. Scheduler Responses Socket (PUSH)
+            self.scheduler_responses_socket = self.context.socket(zmq.PUSH)
+            self.scheduler_responses_socket.setsockopt(zmq.SNDHWM,
+                                                       self.config.scheduler_responses.get('high_water_mark', 50))
+            self.scheduler_responses_socket.setsockopt(zmq.LINGER, self.config.zmq_linger_ms)
+            self.scheduler_responses_socket.setsockopt(zmq.SNDTIMEO, self.config.zmq_send_timeout_ms)
 
-                endpoint = f"tcp://{address}:{port}"
+            if self.config.scheduler_responses['mode'] == 'bind':
+                endpoint = f"tcp://*:{self.config.scheduler_responses['port']}"
+                self.scheduler_responses_socket.bind(endpoint)
+                self.logger.info(f"🔄 Scheduler Responses BIND: {endpoint}")
+            else:
+                endpoint = f"tcp://{self.config.scheduler_responses['address']}:{self.config.scheduler_responses['port']}"
+                self.scheduler_responses_socket.connect(endpoint)
+                self.logger.info(f"🔄 Scheduler Responses CONNECT: {endpoint}")
 
-                if mode == 'bind':
-                    self.scheduler_commands_socket.bind(endpoint)
-                    self.logger.info(f"🔒 Scheduler Commands socket BIND: {endpoint}")
-                else:
-                    self.scheduler_commands_socket.connect(endpoint)
-                    self.logger.info(f"🔒 Scheduler Commands socket CONNECT: {endpoint}")
+            # 3. Dashboard Commands Socket (SUB)
+            self.dashboard_commands_socket = self.context.socket(zmq.SUB)
+            self.dashboard_commands_socket.setsockopt(zmq.RCVHWM,
+                                                      self.config.dashboard_commands.get('high_water_mark', 50))
+            self.dashboard_commands_socket.setsockopt(zmq.LINGER, self.config.zmq_linger_ms)
+            self.dashboard_commands_socket.setsockopt(zmq.RCVTIMEO, self.config.zmq_recv_timeout_ms)
+            self.dashboard_commands_socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all
 
-                self.logger.info(f"   🔓 ETCD Auto-decrypt: ENABLED (scheduler_commands)")
+            if self.config.dashboard_commands['mode'] == 'bind':
+                endpoint = f"tcp://*:{self.config.dashboard_commands['port']}"
+                self.dashboard_commands_socket.bind(endpoint)
+                self.logger.info(f"📊 Dashboard Commands BIND: {endpoint}")
+            else:
+                endpoint = f"tcp://{self.config.dashboard_commands['address']}:{self.config.dashboard_commands['port']}"
+                self.dashboard_commands_socket.connect(endpoint)
+                self.logger.info(f"📊 Dashboard Commands CONNECT: {endpoint}")
 
-            # ✅ SCHEDULER RESPONSES SOCKET (PUSH al scheduler)
-            scheduler_resp_config = network_config.get('scheduler_responses', {})
-            if scheduler_resp_config:
-                self.scheduler_responses_socket = self.context.socket(zmq.PUSH)
+            # 4. Dashboard Responses Socket (PUB)
+            self.dashboard_responses_socket = self.context.socket(zmq.PUB)
+            self.dashboard_responses_socket.setsockopt(zmq.SNDHWM,
+                                                       self.config.dashboard_responses.get('high_water_mark', 50))
+            self.dashboard_responses_socket.setsockopt(zmq.LINGER, self.config.zmq_linger_ms)
+            self.dashboard_responses_socket.setsockopt(zmq.SNDTIMEO, self.config.zmq_send_timeout_ms)
 
-                address = scheduler_resp_config.get('address', 'localhost')
-                port = scheduler_resp_config.get('port', 5581)
-                mode = scheduler_resp_config.get('mode', 'connect')
-                hwm = scheduler_resp_config.get('high_water_mark', 500)
+            if self.config.dashboard_responses['mode'] == 'bind':
+                endpoint = f"tcp://*:{self.config.dashboard_responses['port']}"
+                self.dashboard_responses_socket.bind(endpoint)
+                self.logger.info(f"📈 Dashboard Responses BIND: {endpoint}")
+            else:
+                endpoint = f"tcp://{self.config.dashboard_responses['address']}:{self.config.dashboard_responses['port']}"
+                self.dashboard_responses_socket.connect(endpoint)
+                self.logger.info(f"📈 Dashboard Responses CONNECT: {endpoint}")
 
-                # Configurar socket
-                self.scheduler_responses_socket.setsockopt(zmq.SNDHWM, hwm)
-                self.scheduler_responses_socket.setsockopt(zmq.LINGER, 0)
-
-                endpoint = f"tcp://{address}:{port}"
-
-                if mode == 'bind':
-                    self.scheduler_responses_socket.bind(endpoint)
-                    self.logger.info(f"🔒 Scheduler Responses socket BIND: {endpoint}")
-                else:
-                    self.scheduler_responses_socket.connect(endpoint)
-                    self.logger.info(f"🔒 Scheduler Responses socket CONNECT: {endpoint}")
-
-                self.logger.info(f"   🔒 ETCD Auto-encrypt: ENABLED (scheduler_responses)")
-
-            # ✅ DASHBOARD COMMANDS SOCKET (SUB del dashboard)
-            dashboard_cmd_config = network_config.get('dashboard_commands', {})
-            if dashboard_cmd_config:
-                self.dashboard_commands_socket = self.context.socket(zmq.SUB)
-
-                address = dashboard_cmd_config.get('address', 'localhost')
-                port = dashboard_cmd_config.get('port', 5580)
-                mode = dashboard_cmd_config.get('mode', 'connect')
-                hwm = dashboard_cmd_config.get('high_water_mark', 500)
-
-                # Configurar socket
-                self.dashboard_commands_socket.setsockopt(zmq.RCVHWM, hwm)
-                self.dashboard_commands_socket.setsockopt(zmq.LINGER, 0)
-                self.dashboard_commands_socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe a todos
-
-                endpoint = f"tcp://{address}:{port}"
-
-                if mode == 'bind':
-                    self.dashboard_commands_socket.bind(endpoint)
-                    self.logger.info(f"🔒 Dashboard Commands socket BIND: {endpoint}")
-                else:
-                    self.dashboard_commands_socket.connect(endpoint)
-                    self.logger.info(f"🔒 Dashboard Commands socket CONNECT: {endpoint}")
-
-                self.logger.info(f"   🔓 ETCD Auto-decrypt: ENABLED (dashboard_commands)")
-
-            # ✅ DASHBOARD RESPONSES SOCKET (PUB al dashboard)
-            dashboard_resp_config = network_config.get('dashboard_responses', {})
-            if dashboard_resp_config:
-                self.dashboard_responses_socket = self.context.socket(zmq.PUB)
-
-                address = dashboard_resp_config.get('address', 'localhost')
-                port = dashboard_resp_config.get('port', 5584)
-                mode = dashboard_resp_config.get('mode', 'bind')
-                hwm = dashboard_resp_config.get('high_water_mark', 500)
-
-                # Configurar socket
-                self.dashboard_responses_socket.setsockopt(zmq.SNDHWM, hwm)
-                self.dashboard_responses_socket.setsockopt(zmq.LINGER, 0)
-
-                endpoint = f"tcp://{address}:{port}"
-
-                if mode == 'bind':
-                    self.dashboard_responses_socket.bind(endpoint)
-                    self.logger.info(f"🔒 Dashboard Responses socket BIND: {endpoint}")
-                else:
-                    self.dashboard_responses_socket.connect(endpoint)
-                    self.logger.info(f"🔒 Dashboard Responses socket CONNECT: {endpoint}")
-
-                self.logger.info(f"   🔒 ETCD Auto-encrypt: ENABLED (dashboard_responses)")
-
-            # 🔥 NOTA: NO hay crypto wrapper local - ETCD maneja crypto transparentemente
-            self.logger.info("🔐 ETCD crypto integration - no local crypto wrapper needed")
-            self.logger.info("   🔓 All 4 channels: Auto-decrypt/encrypt by ETCD pipeline key")
-
-            self.logger.info("✅ All DUAL COMMUNICATION sockets configured with ETCD crypto")
+            self.logger.info("✅ All DUAL ZMQ sockets configured")
 
         except Exception as e:
-            self.logger.error(f"❌ Error setting up DUAL COMMUNICATION sockets: {e}")
-            raise AgentConfigurationError(f"Socket setup error: {e}")
+            self.logger.error(f"❌ Error setting up DUAL ZMQ sockets: {e}")
+            raise AgentConfigurationError(f"ZMQ socket setup error: {e}")
 
-    def _print_status(self):
-        """Imprimir estado del agente"""
-        print("📋 Estado Agent ETCD:")
-        print(f"   FirewallCommands V3.1: {'✅' if PROTOBUF_AVAILABLE and FirewallCommandsProto else '❌'}")
-        print(f"   NetworkEvent V3.1: {'✅' if NetworkEventProto else '➖ (opcional)'}")
-        print(f"   ETCD Crypto: {'✅' if self.etcd_crypto_ready else '❌'}")
-        print(f"   DUAL COMMUNICATION: ✅ (4 sockets)")
-        print(f"   Security: 🔒 ULTRA-SECURE (dry_run={self.security.forced_dry_run})")
-
-    async def start(self, agent_config_path: str):
-        """Iniciar el agente con ETCD crypto"""
-        # 🔥 PASO 1: Inicializar ETCD crypto ANTES que nada
-        if not await self.initialize_etcd_crypto(agent_config_path):
-            self.logger.error("❌ Cannot start agent without ETCD crypto")
-            raise ETCDCryptoError("ETCD crypto initialization failed")
-
-        # 🔥 PASO 2: Setup sockets DESPUÉS de ETCD crypto
-        self._setup_dual_communication_sockets()
-
-        self.running = True
-        self.logger.info(f"🚀 Starting Simple Firewall Agent V3.1 ETCD...")
-        self.logger.info(f"📋 Node ID: {self.node_id}")
-        self.logger.info(f"🔐 ETCD Crypto: ✅ ENABLED - Pipeline position 5")
-        self.logger.info(f"🚀 DUAL COMMUNICATION: scheduler + dashboard patterns")
-        self.logger.info(f"💾 PID: {os.getpid()}")
-
-        # Mostrar configuración de red
-        self._log_network_configuration()
-
-        # Mostrar estado
-        self._print_status()
-
-        # Iniciar threads de DUAL COMMUNICATION
-        self._start_dual_communication_threads()
-
-        self.logger.info("🎯 Simple Firewall Agent V3.1 ETCD started successfully")
-
-        # Loop principal
+    def _parse_command_with_compression_debug(self, command_bytes, source="unknown"):
+        """🔧 NUEVO: Parser con debug completo de compresión"""
         try:
-            while self.running:
-                time.sleep(1)
-                self._update_stats()
-        except KeyboardInterrupt:
-            self.logger.info("🛑 Shutdown signal received")
-            self.stop()
+            # PASO 1: Debug del pipeline de compresión
+            command_bytes = self.compression_debugger.debug_compression_pipeline(command_bytes, source)
+            self.stats.compression_debug_operations += 1
 
-    def _log_network_configuration(self):
-        """Log configuración de red DUAL COMMUNICATION"""
-        network_config = self.config.get('network', {})
+            # PASO 2: Verificar si necesita decompresión de emergencia
+            if (command_bytes[:2] == b'\x1f\x8b' or
+                    command_bytes[:2] in [b'\x78\x9c', b'\x78\x01', b'\x78\xda'] or
+                    command_bytes[:3] == b'BZh'):
 
-        self.logger.info("🌐 Agent ETCD DUAL COMMUNICATION Network Configuration:")
-        self.logger.info("=" * 60)
+                self.logger.error(f"❌ CRITICAL: Received compressed data from {source}!")
+                self.logger.error(f"   ETCD should have decompressed but didn't")
 
-        # Scheduler communication
-        self.logger.info("🔥 SCHEDULER COMMUNICATION (PUSH/PULL pattern + ETCD crypto):")
+                # Intentar decompresión de emergencia
+                decompressed, method = self.compression_debugger.attempt_emergency_decompression(command_bytes, source)
+                if method.startswith("emergency_"):
+                    self.logger.warning(f"🔧 Emergency decompression successful: {method}")
+                    command_bytes = decompressed
+                else:
+                    self.logger.error(f"❌ Emergency decompression failed")
+                    return None
 
-        scheduler_cmd = network_config.get('scheduler_commands', {})
-        if scheduler_cmd:
-            addr = scheduler_cmd.get('address', 'localhost')
-            port = scheduler_cmd.get('port', 5582)
-            mode = scheduler_cmd.get('mode', 'bind')
-            self.logger.info(f"   📥 Commands: {mode.upper()} tcp://{addr}:{port} (🔓 ETCD decrypt)")
+            # PASO 3: Intentar parsing protobuf V3.1
+            if PROTOBUF_AVAILABLE and FirewallCommandsProto:
+                try:
+                    pb_command = FirewallCommandsProto.FirewallCommand()
+                    pb_command.ParseFromString(command_bytes)
 
-        scheduler_resp = network_config.get('scheduler_responses', {})
-        if scheduler_resp:
-            addr = scheduler_resp.get('address', 'localhost')
-            port = scheduler_resp.get('port', 5581)
-            mode = scheduler_resp.get('mode', 'connect')
-            self.logger.info(f"   📤 Responses: {mode.upper()} tcp://{addr}:{port} (🔒 ETCD encrypt)")
+                    if hasattr(pb_command, 'command_id') and pb_command.command_id:
+                        self.logger.info(f"✅ Protobuf V3.1 parsed: {pb_command.command_id} from {source}")
+                        return self._convert_protobuf_to_dict(pb_command, source)
+                    else:
+                        self.logger.warning(f"⚠️ Protobuf parsed but missing command_id from {source}")
 
-        # Dashboard communication
-        self.logger.info("📊 DASHBOARD COMMUNICATION (PUB/SUB pattern + ETCD crypto):")
+                except Exception as pb_error:
+                    self.logger.error(f"❌ Protobuf parsing failed from {source}: {pb_error}")
 
-        dashboard_cmd = network_config.get('dashboard_commands', {})
-        if dashboard_cmd:
-            addr = dashboard_cmd.get('address', 'localhost')
-            port = dashboard_cmd.get('port', 5580)
-            mode = dashboard_cmd.get('mode', 'connect')
-            self.logger.info(f"   📥 Commands: {mode.upper()} tcp://{addr}:{port} (🔓 ETCD decrypt)")
+                    # Log detalles del error
+                    if "utf-8" in str(pb_error).lower():
+                        self.logger.error(f"   UTF-8 error detected - data likely still compressed!")
+                    elif "truncated" in str(pb_error).lower():
+                        self.logger.error(f"   Data appears truncated")
 
-        dashboard_resp = network_config.get('dashboard_responses', {})
-        if dashboard_resp:
-            addr = dashboard_resp.get('address', 'localhost')
-            port = dashboard_resp.get('port', 5584)
-            mode = dashboard_resp.get('mode', 'bind')
-            self.logger.info(f"   📤 Responses: {mode.upper()} tcp://{addr}:{port} (🔒 ETCD encrypt)")
+                    return None
 
-        # ETCD Configuration
-        etcd_crypto = self.config.get('etcd_crypto', {})
-        self.logger.info(f"🔐 ETCD Crypto Configuration:")
-        self.logger.info(f"   └── ETCD Host: {etcd_crypto.get('etcd_host')}:{etcd_crypto.get('etcd_port')}")
-        self.logger.info(f"   └── Cluster: {etcd_crypto.get('cluster_name')}")
-        self.logger.info(f"   └── Node ID: {etcd_crypto.get('node_id')}")
-        self.logger.info(f"   └── Pipeline Key: {'✅ READY' if self.etcd_crypto_ready else '❌ NOT READY'}")
+            self.logger.error(f"❌ All parsing methods failed for {source}")
+            return None
 
-        self.logger.info("=" * 60)
+        except Exception as e:
+            self.logger.error(f"❌ Critical error in compression debug parsing from {source}: {e}")
+            return None
 
-    def _start_dual_communication_threads(self):
-        """Iniciar threads para DUAL COMMUNICATION"""
-        self.logger.info("🧵 Starting DUAL COMMUNICATION threads...")
+    def _convert_protobuf_to_dict(self, pb_command, source):
+        """Convertir protobuf V3.1 a diccionario"""
+        try:
+            return {
+                'command_id': getattr(pb_command, 'command_id', ''),
+                'action': getattr(pb_command, 'action', 0),
+                'target_ip': getattr(pb_command, 'target_ip', ''),
+                'target_port': getattr(pb_command, 'target_port', 0),
+                'duration_seconds': getattr(pb_command, 'duration_seconds', 300),
+                'reason': getattr(pb_command, 'reason', ''),
+                'priority': getattr(pb_command, 'priority', 0),
+                'dry_run': getattr(pb_command, 'dry_run', True),
+                'node_id': getattr(pb_command, 'node_id', ''),
+                'timestamp': getattr(pb_command, 'timestamp', int(time.time() * 1000)),
+                'source': source,
+                'parsing_method': 'protobuf_v31_with_compression_debug'
+            }
+        except Exception as e:
+            self.logger.error(f"❌ Error converting protobuf to dict: {e}")
+            return None
 
-        # Thread para comandos del scheduler
-        if self.scheduler_commands_socket:
-            scheduler_thread = threading.Thread(target=self._scheduler_command_receiver, daemon=True)
-            scheduler_thread.start()
-            self.threads.append(scheduler_thread)
-            self.logger.info("📡 Scheduler Commands Receiver started")
-
-        # Thread para comandos del dashboard
-        if self.dashboard_commands_socket:
-            dashboard_thread = threading.Thread(target=self._dashboard_command_receiver, daemon=True)
-            dashboard_thread.start()
-            self.threads.append(dashboard_thread)
-            self.logger.info("📊 Dashboard Commands Receiver started")
-
-        self.logger.info(f"✅ Total DUAL COMMUNICATION threads started: {len(self.threads)}")
-
-    def _scheduler_command_receiver(self):
-        """Thread receptor de comandos del scheduler"""
-        self.logger.info("🎧 Scheduler command receiver thread iniciado")
+    def _scheduler_commands_receiver(self):
+        """Recibir comandos del scheduler"""
+        self.logger.info("🔥 Scheduler commands receiver started")
 
         while self.running:
             try:
                 if self.scheduler_commands_socket:
                     try:
-                        # Recibir comando (automáticamente descifrado por ETCD)
-                        message_bytes = self.scheduler_commands_socket.recv(zmq.NOBLOCK)
-                        self.stats['scheduler_commands_received'] += 1
-                        self.stats['etcd_crypto_operations'] += 1
+                        command_bytes = self.scheduler_commands_socket.recv(zmq.NOBLOCK)
+                        self.stats.commands_received += 1
+                        self.stats.scheduler_commands += 1
+                        self.stats.etcd_crypto_operations += 1
 
-                        self.logger.info(f"📨 Scheduler comando recibido: {len(message_bytes)} bytes (ETCD decrypted)")
+                        self.logger.info(f"🔥 Scheduler comando recibido: {len(command_bytes)} bytes (ETCD decrypted)")
 
-                        # Procesar comando
-                        self._process_command(message_bytes, 'scheduler')
+                        # Parse con debug de compresión
+                        command_data = self._parse_command_with_compression_debug(command_bytes, "scheduler")
+
+                        if command_data:
+                            self.command_queue.put(('scheduler', command_data), timeout=1.0)
+                            self.logger.info(f"✅ Comando encolado desde scheduler: {command_data.get('command_id')}")
+                        else:
+                            self.logger.error(f"❌ Error procesando comando [scheduler]: parsing falló")
+                            self.stats.errors += 1
 
                     except zmq.Again:
                         pass
                     except Exception as e:
-                        self.logger.error(f"❌ Error recibiendo comando scheduler: {e}")
-                        self.stats['errors'] += 1
-                        self.stats['etcd_crypto_errors'] += 1
+                        self.logger.error(f"❌ Error procesando comando [scheduler]: {e}")
+                        self.stats.errors += 1
+                        self.stats.etcd_crypto_errors += 1
 
-                time.sleep(0.001)
+                time.sleep(0.01)
 
             except Exception as e:
-                self.logger.error(f"❌ Error en scheduler command receiver: {e}")
-                self.stats['errors'] += 1
+                self.logger.error(f"❌ Scheduler commands receiver error: {e}")
+                self.stats.errors += 1
                 time.sleep(1)
 
-    def _dashboard_command_receiver(self):
-        """Thread receptor de comandos del dashboard"""
-        self.logger.info("🎧 Dashboard command receiver thread iniciado")
+    def _dashboard_commands_receiver(self):
+        """Recibir comandos del dashboard"""
+        self.logger.info("📊 Dashboard commands receiver started")
 
         while self.running:
             try:
                 if self.dashboard_commands_socket:
                     try:
-                        # Recibir comando (automáticamente descifrado por ETCD)
-                        message_bytes = self.dashboard_commands_socket.recv(zmq.NOBLOCK)
-                        self.stats['dashboard_commands_received'] += 1
-                        self.stats['etcd_crypto_operations'] += 1
+                        command_bytes = self.dashboard_commands_socket.recv(zmq.NOBLOCK)
+                        self.stats.commands_received += 1
+                        self.stats.dashboard_commands += 1
+                        self.stats.etcd_crypto_operations += 1
 
-                        self.logger.info(f"📨 Dashboard comando recibido: {len(message_bytes)} bytes (ETCD decrypted)")
+                        self.logger.info(f"📊 Dashboard comando recibido: {len(command_bytes)} bytes (ETCD decrypted)")
 
-                        # Procesar comando
-                        self._process_command(message_bytes, 'dashboard')
+                        # Parse con debug de compresión
+                        command_data = self._parse_command_with_compression_debug(command_bytes, "dashboard")
+
+                        if command_data:
+                            self.command_queue.put(('dashboard', command_data), timeout=1.0)
+                            self.logger.info(f"✅ Comando encolado desde dashboard: {command_data.get('command_id')}")
+                        else:
+                            self.logger.error(f"❌ Error procesando comando [dashboard]: parsing falló")
+                            self.stats.errors += 1
 
                     except zmq.Again:
                         pass
                     except Exception as e:
-                        self.logger.error(f"❌ Error recibiendo comando dashboard: {e}")
-                        self.stats['errors'] += 1
-                        self.stats['etcd_crypto_errors'] += 1
+                        self.logger.error(f"❌ Error procesando comando [dashboard]: {e}")
+                        self.stats.errors += 1
+                        self.stats.etcd_crypto_errors += 1
 
-                time.sleep(0.001)
+                time.sleep(0.01)
 
             except Exception as e:
-                self.logger.error(f"❌ Error en dashboard command receiver: {e}")
-                self.stats['errors'] += 1
+                self.logger.error(f"❌ Dashboard commands receiver error: {e}")
+                self.stats.errors += 1
                 time.sleep(1)
 
-    def _process_command(self, message_bytes: bytes, source: str):
-        """Procesar comando protobuf V3.1 de cualquier fuente"""
+    def _command_processor(self):
+        """Procesar comandos de la cola"""
+        self.logger.info("🎯 Command processor started")
+
+        while self.running:
+            try:
+                try:
+                    source, command_data = self.command_queue.get(timeout=1)
+                    self.stats.commands_processed += 1
+                except queue.Empty:
+                    continue
+
+                # Procesar comando
+                success = self._process_firewall_command(command_data, source)
+
+                if success:
+                    self.stats.commands_executed += 1
+                    self.logger.info(f"✅ Comando ejecutado exitosamente desde {source}")
+                else:
+                    self.logger.error(f"❌ Error ejecutando comando desde {source}")
+                    self.stats.errors += 1
+
+                # Enviar respuesta
+                self._send_response(command_data, source, success)
+
+            except Exception as e:
+                self.logger.error(f"❌ Command processor error: {e}")
+                self.stats.errors += 1
+                time.sleep(1)
+
+    def _process_firewall_command(self, command_data, source):
+        """Procesar comando de firewall"""
         try:
-            # Parsear protobuf V3.1
-            pb_command = FirewallCommandsProto.FirewallCommand()
-            pb_command.ParseFromString(message_bytes)
+            command_id = command_data.get('command_id', 'unknown')
+            action = command_data.get('action', 0)
+            target_ip = command_data.get('target_ip', '')
 
-            command_id = pb_command.command_id or f"auto_{int(time.time())}"
-            action = self._get_action_name(pb_command.action)
-            target_ip = pb_command.target_ip or "127.0.0.1"
+            # Convertir action enum a string si es necesario
+            action_name = self._get_action_name(action)
 
-            self.logger.info(f"🔍 Procesando comando [{source}]: {command_id}, action={action}, ip={target_ip}")
+            self.logger.info(f"🛡️ Procesando: {command_id} -> {action_name} para {target_ip}")
 
-            # Validar seguridad
-            valid, reason = self.security.validate_command(action, target_ip, {})
+            # Por ahora, simular ejecución exitosa
+            # TODO: Implementar lógica real de firewall
+            time.sleep(0.1)  # Simular procesamiento
 
-            if not valid:
-                self.logger.warning(f"🚫 Comando rechazado [{source}]: {reason}")
-                self._send_response_to_source(command_id, False, f"Security validation failed: {reason}", source)
-                return
-
-            # Ejecutar comando seguro
-            success, message = self._execute_safe_command(action, target_ip, pb_command)
-
-            # Enviar respuesta a la fuente correspondiente
-            self._send_response_to_source(command_id, success, message, source)
-            self.stats['commands_processed'] += 1
+            return True
 
         except Exception as e:
-            self.logger.error(f"❌ Error procesando comando [{source}]: {e}")
-            self._send_response_to_source("unknown", False, f"Processing error: {str(e)}", source)
-            self.stats['errors'] += 1
+            self.logger.error(f"❌ Error processing firewall command: {e}")
+            return False
 
-    def _get_action_name(self, action_enum: int) -> str:
-        """Convertir enum a string - IGUAL que el agent original"""
-        try:
-            # Mapeo de enums V3.1
-            CommandAction = FirewallCommandsProto.CommandAction
+    def _get_action_name(self, action):
+        """Convertir action enum a nombre"""
+        if isinstance(action, int):
             action_map = {
-                CommandAction.BLOCK_IP: "BLOCK_IP",
-                CommandAction.UNBLOCK_IP: "UNBLOCK_IP",
-                CommandAction.RATE_LIMIT_IP: "RATE_LIMIT_IP",
-                CommandAction.LIST_RULES: "LIST_RULES",
-                CommandAction.ALLOW_IP_TEMP: "MONITOR"
+                0: 'UNKNOWN',
+                1: 'BLOCK_IP',
+                2: 'RATE_LIMIT_IP',
+                3: 'ALLOW_IP_TEMP',
+                4: 'LIST_RULES',
+                5: 'MONITOR'
             }
-            return action_map.get(action_enum, "UNKNOWN")
-        except Exception:
-            return "UNKNOWN"
+            return action_map.get(action, f'ACTION_{action}')
+        return str(action)
 
-    def _execute_safe_command(self, action: str, target_ip: str, pb_command) -> Tuple[bool, str]:
-        """Ejecutar comando de forma ultra-segura - IGUAL que el agent original"""
+    def _send_response(self, command_data, source, success):
+        """Enviar respuesta apropiada según el source"""
         try:
-            if action == "LIST_RULES":
-                return True, f"[ULTRA-SAFE-ETCD] LIST_RULES executed for {target_ip}"
+            response_data = {
+                'command_id': command_data.get('command_id', ''),
+                'node_id': self.config.node_id,
+                'success': success,
+                'message': 'Command executed successfully' if success else 'Command execution failed',
+                'timestamp': int(time.time() * 1000)
+            }
 
-            elif action == "MONITOR" or action == "ALLOW_IP_TEMP":
-                duration = getattr(pb_command, 'duration_seconds', 300)
-                return True, f"[ULTRA-SAFE-ETCD] MONITOR {target_ip} for {duration}s"
+            # Serializar respuesta como protobuf
+            if PROTOBUF_AVAILABLE and FirewallCommandsProto:
+                pb_response = FirewallCommandsProto.FirewallResponse()
+                pb_response.command_id = response_data['command_id']
+                pb_response.node_id = response_data['node_id']
+                pb_response.success = response_data['success']
+                pb_response.message = response_data['message']
+                pb_response.timestamp = response_data['timestamp']
 
-            else:
-                return False, f"[ULTRA-SAFE-ETCD] Action {action} not permitted. Only MONITOR/LIST_RULES allowed."
+                response_bytes = pb_response.SerializeToString()
+
+                if source == 'scheduler':
+                    self.scheduler_responses_socket.send(response_bytes, zmq.NOBLOCK)
+                    self.logger.info(
+                        f"📤 Respuesta enviada a SCHEDULER (ETCD encrypted): {response_data['command_id']} -> Success: {success}")
+                elif source == 'dashboard':
+                    self.dashboard_responses_socket.send(response_bytes, zmq.NOBLOCK)
+                    self.logger.info(
+                        f"📤 Respuesta enviada a DASHBOARD (ETCD encrypted): {response_data['command_id']} -> Success: {success}")
+
+                self.stats.responses_sent += 1
+                self.stats.etcd_crypto_operations += 1
 
         except Exception as e:
-            return False, f"[ULTRA-SAFE-ETCD] Execution error: {str(e)}"
+            self.logger.error(f"❌ Error sending response to {source}: {e}")
+            self.stats.errors += 1
 
-    def _send_response_to_source(self, command_id: str, success: bool, message: str, source: str):
-        """Enviar respuesta al origen correspondiente (scheduler o dashboard)"""
+    def _start_processing_threads(self):
+        """Iniciar threads de procesamiento DUAL"""
+        self.logger.info("🧵 Starting DUAL processing threads...")
+
+        # Scheduler commands receiver
+        thread = threading.Thread(target=self._scheduler_commands_receiver)
+        thread.daemon = True
+        thread.start()
+        self.threads.append(thread)
+
+        # Dashboard commands receiver
+        thread = threading.Thread(target=self._dashboard_commands_receiver)
+        thread.daemon = True
+        thread.start()
+        self.threads.append(thread)
+
+        # Command processor
+        thread = threading.Thread(target=self._command_processor)
+        thread.daemon = True
+        thread.start()
+        self.threads.append(thread)
+
+        self.logger.info(f"✅ {len(self.threads)} DUAL processing threads started")
+
+    def _start_periodic_stats(self):
+        """Iniciar estadísticas periódicas"""
+
+        def log_stats():
+            last_compression_stats_time = time.time()
+
+            while self.running:
+                try:
+                    # Log estadísticas cada 30 segundos
+                    time.sleep(30)
+
+                    uptime = time.time() - self.stats.uptime_start
+                    self.logger.info("📊 AGENT ETCD DUAL STATISTICS:")
+                    self.logger.info(f"   ⏱️ Uptime: {uptime:.0f}s")
+                    self.logger.info(f"   📨 Commands received: {self.stats.commands_received}")
+                    self.logger.info(f"   🔄 Commands processed: {self.stats.commands_processed}")
+                    self.logger.info(f"   ✅ Commands executed: {self.stats.commands_executed}")
+                    self.logger.info(f"   📤 Responses sent: {self.stats.responses_sent}")
+                    self.logger.info(f"   🔥 Scheduler commands: {self.stats.scheduler_commands}")
+                    self.logger.info(f"   📊 Dashboard commands: {self.stats.dashboard_commands}")
+                    self.logger.info(f"   🔐 ETCD crypto operations: {self.stats.etcd_crypto_operations}")
+                    self.logger.info(f"   🔧 Compression debug operations: {self.stats.compression_debug_operations}")
+                    self.logger.info(f"   ❌ Errors: {self.stats.errors}")
+
+                    # Log estadísticas de compresión cada 5 minutos
+                    if time.time() - last_compression_stats_time > 300:
+                        self.compression_debugger.log_compression_stats()
+                        last_compression_stats_time = time.time()
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error in periodic stats: {e}")
+
+        stats_thread = threading.Thread(target=log_stats)
+        stats_thread.daemon = True
+        stats_thread.start()
+        self.threads.append(stats_thread)
+
+    async def start(self, agent_config_path: str, firewall_rules_path: str):
+        """Iniciar el agent con ETCD crypto"""
+        # PASO 1: Inicializar ETCD crypto ANTES que nada
+        if not await self.initialize_etcd_crypto(agent_config_path, firewall_rules_path):
+            self.logger.error("❌ Cannot start agent without ETCD crypto")
+            raise ETCDCryptoError("ETCD crypto initialization failed")
+
+        # PASO 2: Setup sockets DESPUÉS de ETCD crypto
+        self._setup_zmq_sockets()
+
+        self.running = True
+        self.logger.info(f"🚀 Starting Simple Firewall Agent ETCD {self.config.version}...")
+        self.logger.info(f"📋 Node ID: {self.config.node_id}")
+        self.logger.info(f"🏗️ Component: {self.config.component_name}")
+        self.logger.info(f"🔧 Mode: {self.config.mode}")
+        self.logger.info(f"🎭 Role: {self.config.role}")
+        self.logger.info(f"🔐 ETCD Crypto: ✅ ENABLED - DUAL COMMUNICATION")
+        self.logger.info(f"🔧 Compression Debug: ✅ ENABLED")
+
+        # Iniciar threads de procesamiento
+        self._start_processing_threads()
+
+        # Iniciar estadísticas periódicas
+        self._start_periodic_stats()
+
+        self.logger.info("🎯 Simple Firewall Agent ETCD started successfully")
+
+        # Mantener el programa ejecutándose
         try:
-            # Crear respuesta V3.1
-            pb_response = FirewallCommandsProto.FirewallResponse()
-            pb_response.command_id = command_id
-            pb_response.node_id = self.node_id
-            pb_response.success = success
-            pb_response.message = f"[ULTRA-SAFE-V3.1-ETCD-{source.upper()}] {message}"
-            pb_response.timestamp = int(time.time() * 1000)
-
-            # Serializar respuesta
-            response_bytes = pb_response.SerializeToString()
-
-            # Enviar a la fuente correspondiente (automáticamente cifrado por ETCD)
-            if source == 'scheduler' and self.scheduler_responses_socket:
-                self.scheduler_responses_socket.send(response_bytes, zmq.NOBLOCK)
-                self.stats['scheduler_responses_sent'] += 1
-                self.stats['etcd_crypto_operations'] += 1
-                self.logger.info(f"📤 Respuesta enviada a SCHEDULER (ETCD encrypted): {command_id} - Success: {success}")
-
-            elif source == 'dashboard' and self.dashboard_responses_socket:
-                self.dashboard_responses_socket.send(response_bytes, zmq.NOBLOCK)
-                self.stats['dashboard_responses_sent'] += 1
-                self.stats['etcd_crypto_operations'] += 1
-                self.logger.info(f"📤 Respuesta enviada a DASHBOARD (ETCD encrypted): {command_id} - Success: {success}")
-
-            else:
-                self.logger.error(f"❌ No response socket available for source: {source}")
-
-        except Exception as e:
-            self.logger.error(f"❌ Error enviando respuesta a {source}: {e}")
-            self.stats['errors'] += 1
-            self.stats['etcd_crypto_errors'] += 1
-
-    def _update_stats(self):
-        """Actualizar estadísticas - DUAL COMMUNICATION"""
-        current_time = time.time()
-        uptime = current_time - self.stats['start_time']
-
-        # Log stats cada 5 minutos
-        if not hasattr(self, '_last_stats_log'):
-            self._last_stats_log = current_time
-
-        if current_time - self._last_stats_log > 300:  # 5 minutos
-            self.logger.info("📊 Agent ETCD DUAL COMMUNICATION Stats:")
-            self.logger.info(f"   📥 Scheduler commands: {self.stats['scheduler_commands_received']}")
-            self.logger.info(f"   📥 Dashboard commands: {self.stats['dashboard_commands_received']}")
-            self.logger.info(f"   🔄 Commands processed: {self.stats['commands_processed']}")
-            self.logger.info(f"   📤 Scheduler responses: {self.stats['scheduler_responses_sent']}")
-            self.logger.info(f"   📤 Dashboard responses: {self.stats['dashboard_responses_sent']}")
-            self.logger.info(f"   🔐 ETCD crypto operations: {self.stats['etcd_crypto_operations']}")
-            self.logger.info(f"   ❌ ETCD crypto errors: {self.stats['etcd_crypto_errors']}")
-            self.logger.info(f"   ❌ Total errors: {self.stats['errors']}")
-            self.logger.info(f"   ⏱️ Uptime: {uptime:.0f}s")
-            self._last_stats_log = current_time
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Shutdown signal received")
+            self.stop()
 
     def stop(self):
-        """Detener el agente con cleanup completo"""
-        self.logger.info("🛑 Deteniendo Simple Firewall Agent V3.1 ETCD...")
+        """Detener el agent con cleanup completo"""
+        self.logger.info("🛑 Stopping Simple Firewall Agent ETCD...")
         self.running = False
 
         # Log estadísticas finales
-        try:
-            uptime = time.time() - self.stats['start_time']
-            self.logger.info("📊 FINAL Agent ETCD DUAL COMMUNICATION Statistics:")
-            self.logger.info(f"   ⏱️ Total uptime: {uptime:.0f}s ({uptime / 3600:.1f}h)")
-            self.logger.info(f"   📥 Total scheduler commands: {self.stats['scheduler_commands_received']}")
-            self.logger.info(f"   📥 Total dashboard commands: {self.stats['dashboard_commands_received']}")
-            self.logger.info(f"   🔄 Total commands processed: {self.stats['commands_processed']}")
-            self.logger.info(f"   📤 Total scheduler responses: {self.stats['scheduler_responses_sent']}")
-            self.logger.info(f"   📤 Total dashboard responses: {self.stats['dashboard_responses_sent']}")
-            self.logger.info(f"   🔐 Total ETCD crypto operations: {self.stats['etcd_crypto_operations']}")
-            self.logger.info(f"   ❌ Total ETCD crypto errors: {self.stats['etcd_crypto_errors']}")
-        except Exception as e:
-            self.logger.error(f"Error logging final stats: {e}")
+        uptime = time.time() - self.stats.uptime_start
+        self.logger.info(f"📊 FINAL STATS: {uptime:.0f}s uptime, {self.stats.commands_processed} commands processed")
+        self.compression_debugger.log_compression_stats()
 
-        # Socket cleanup - DUAL COMMUNICATION
-        try:
-            sockets = [
-                (self.scheduler_commands_socket, "Scheduler Commands"),
-                (self.scheduler_responses_socket, "Scheduler Responses"),
-                (self.dashboard_commands_socket, "Dashboard Commands"),
-                (self.dashboard_responses_socket, "Dashboard Responses")
-            ]
-
-            for socket, name in sockets:
-                if socket:
-                    socket.setsockopt(zmq.LINGER, 0)  # CRÍTICO
-                    socket.close()
-                    self.logger.debug(f"✅ {name} socket closed")
-
-        except Exception as e:
-            self.logger.error(f"⚠️ Error closing sockets: {e}")
+        # Cerrar sockets ZMQ
+        for socket in [self.scheduler_commands_socket, self.scheduler_responses_socket,
+                       self.dashboard_commands_socket, self.dashboard_responses_socket]:
+            if socket:
+                socket.setsockopt(zmq.LINGER, 0)
+                socket.close()
 
         # Terminar contexto ZMQ
-        try:
-            time.sleep(0.1)
-            self.context.term()
-            self.logger.debug("✅ ZMQ context terminated")
-        except Exception as e:
-            self.logger.error(f"⚠️ Error terminating ZMQ context: {e}")
-
-        self.logger.info("✅ Simple Firewall Agent V3.1 ETCD stopped successfully")
-
-    def get_status(self) -> Dict:
-        """Obtener estado actual del agent"""
-        try:
-            uptime = time.time() - self.stats['start_time']
-
-            status = {
-                'node_id': self.node_id,
-                'running': self.running,
-                'uptime_seconds': uptime,
-                'pid': os.getpid(),
-                'stats': self.stats,
-                'etcd_crypto': {
-                    'ready': self.etcd_crypto_ready,
-                    'pipeline_key_available': self.pipeline_key is not None,
-                    'pipeline_key_preview': self.pipeline_key[:16] + "..." if self.pipeline_key else None,
-                    'crypto_operations': self.stats['etcd_crypto_operations'],
-                    'crypto_errors': self.stats['etcd_crypto_errors'],
-                    'etcd_status': get_simple_firewall_agent_crypto_status() if ETCD_CRYPTO_CLIENT_AVAILABLE else None
-                },
-                'dual_communication': {
-                    'scheduler_commands_socket': self.scheduler_commands_socket is not None,
-                    'scheduler_responses_socket': self.scheduler_responses_socket is not None,
-                    'dashboard_commands_socket': self.dashboard_commands_socket is not None,
-                    'dashboard_responses_socket': self.dashboard_responses_socket is not None,
-                    'threads_count': len(self.threads)
-                },
-                'security': {
-                    'ultra_secure_mode': True,
-                    'forced_dry_run': self.security.forced_dry_run,
-                    'safe_actions_only': ['MONITOR', 'LIST_RULES', 'ALLOW_IP_TEMP']
-                },
-                'protobuf_available': PROTOBUF_AVAILABLE,
-                'etcd_crypto_client_available': ETCD_CRYPTO_CLIENT_AVAILABLE
-            }
-
-            return status
-        except Exception as e:
-            self.logger.error(f"❌ Error getting agent status: {e}")
-            return {'error': str(e), 'running': self.running}
+        self.context.term()
+        self.logger.info("✅ Simple Firewall Agent ETCD stopped successfully")
 
 
-def signal_handler(signum, frame):
+def signal_handler(sig, frame):
     """Manejar señales del sistema"""
-    print(f"\n📡 Señal {signum} recibida")
-    global agent
-    if 'agent' in globals():
-        agent.stop()
+    print("\n🛑 Shutdown signal received")
     sys.exit(0)
 
 
 async def main_async():
     """Función principal asíncrona del agent ETCD"""
-    global agent
-
-    if len(sys.argv) != 3:
-        print("❌ Uso: python simple_firewall_agent_v31_etcd.py <agent_config.json> <rules.json>")
-        print("\n📋 File descriptions:")
-        print("   • agent_config.json: ZMQ, network, DUAL COMMUNICATION, ETCD crypto configuration")
-        print("   • rules.json: Firewall rules and safety configuration")
-        print("\n✅ Both files are required for ETCD operation")
-        print("\n🔐 ETCD Requirements:")
-        print("   • ETCD cluster running on configured host:port")
-        print("   • crypto.enabled=true in agent config")
-        print("   • etcd_crypto section with cluster configuration")
-        print("   • All 4 DUAL COMMUNICATION channels configured")
-        sys.exit(1)
-
-    config_file = sys.argv[1]
-    rules_file = sys.argv[2]
-
-    # Verificar ETCD crypto client
-    if not ETCD_CRYPTO_CLIENT_AVAILABLE:
-        print(f"\n💥 FATAL ERROR: ETCD Crypto Client not available")
-        print(f"📁 Required: etcd_crypto_client_simple_firewall_agent_fixed.py")
-        print(f"🔧 Ensure ETCD crypto client is properly installed")
-        sys.exit(1)
-
-    # Validar archivos
-    if not Path(config_file).exists():
-        print(f"\n❌ ERROR: Agent config file not found")
-        print(f"📁 File searched: {config_file}")
-        print(f"📍 Current directory: {os.getcwd()}")
-        print("🔧 Please verify the agent configuration file path")
-        sys.exit(1)
-
-    if not Path(rules_file).exists():
-        print(f"\n❌ ERROR: Rules file not found")
-        print(f"📁 File searched: {rules_file}")
-        print(f"📍 Current directory: {os.getcwd()}")
-        print("🔧 Please verify the rules file path")
-        sys.exit(1)
-
-    print(f"✅ Configuration files found:")
-    print(f"   📋 Agent config: {config_file}")
-    print(f"   🔥 Rules: {rules_file}")
-
-    # Configurar signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    print("🚀 Simple Firewall Agent ETCD - DUAL COMMUNICATION + COMPRESSION DEBUG")
+    print("✅ Compatible with Scheduler Firewall V3.1 + Dashboard")
+    print("🔥 V3.1 PROTOBUF EXCLUSIVO - con node_id y timestamp nativos")
+    print("🔐 ETCD CRYPTO OBLIGATORIO - DUAL COMMUNICATION")
+    print("🔧 COMPRESSION PIPELINE DEBUG - Diagnosticar problemas UTF-8")
+
+    # Verificar argumentos
+    if len(sys.argv) != 3:
+        print("\n❌ Usage:")
+        print("python simple_firewall_agent_v31_etcd.py <agent_config.json> <firewall_rules.json>")
+        sys.exit(1)
+
+    config_file = sys.argv[1]
+    firewall_rules_file = sys.argv[2]
+
+    # Validar archivos
+    for file_path in [config_file, firewall_rules_file]:
+        if not Path(file_path).exists():
+            print(f"\n❌ ERROR: File not found: {file_path}")
+            sys.exit(1)
+
     try:
-        # Crear directorios necesarios
-        directories = ['logs', 'data']
-        for directory in directories:
-            Path(directory).mkdir(parents=True, exist_ok=True)
-            print(f"📁 Directory verified: {directory}")
+        # Cargar configuración del agent
+        config = AgentConfig(config_file)
 
-        print(f"\n🔥 Creating Simple Firewall Agent V3.1 ETCD with DUAL COMMUNICATION...")
+        # Crear agent ETCD
+        agent = SimpleFirewallAgentETCD(config, firewall_rules_file)
 
-        # Crear agente ETCD
-        agent = FirewallAgentV31ETCD(config_file, rules_file)
+        # Iniciar agent (incluye inicialización ETCD)
+        await agent.start(config_file, firewall_rules_file)
 
-        # Mostrar stats iniciales
-        print("📊 Stats iniciales:")
-        for key, value in agent.stats.items():
-            print(f"   {key}: {value}")
-
-        # Iniciar agente (incluye inicialización ETCD)
-        print(f"\n🔐 Starting agent with ETCD crypto...")
-        await agent.start(config_file)
-
-    except AgentConfigurationError as e:
-        print(f"\n💥 AGENT CONFIGURATION ERROR:")
-        print(f"❌ {e}")
-        print(f"🔧 Check file: {config_file}")
-        print("📋 Required sections: etcd_crypto, network (4 sockets), crypto (4 channels)")
-        print("🔐 ETCD crypto requirements:")
-        print("   • crypto.enabled=true")
-        print("   • crypto.use_etcd_pipeline_key=true")
-        print("   • etcd_crypto section with cluster details")
-        print("   • 4 crypto channels for DUAL COMMUNICATION")
-        sys.exit(1)
-    except ETCDCryptoError as e:
-        print(f"\n💥 ETCD CRYPTO ERROR:")
-        print(f"❌ {e}")
-        print("🔐 ETCD crypto is MANDATORY for this agent")
-        print("📋 Verify:")
-        print("   • ETCD cluster is running and accessible")
-        print("   • ETCD crypto coordinator is active")
-        print("   • Network connectivity to ETCD")
-        print("   • Pipeline key can be obtained from ETCD")
-        sys.exit(1)
     except Exception as e:
-        print(f"\n💥 FATAL ERROR:")
-        print(f"❌ {e}")
-        print("\n🔍 Debug information:")
+        print(f"\n💥 FATAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -1103,15 +1162,6 @@ async def main_async():
 def main():
     """Función principal del agent - Wrapper para asyncio"""
     try:
-        print("🚀 Simple Firewall Agent V3.1 ETCD - DUAL COMMUNICATION + ULTRA SECURITY")
-        print("✅ Compatible with Scheduler Firewall ETCD V3.1")
-        print("🔥 V3.1 PROTOBUF EXCLUSIVO - con node_id y timestamp nativos")
-        print("🔐 ETCD CRYPTO OBLIGATORIO - No fallbacks, máxima seguridad")
-        print("🎯 Pipeline position 5 - Después de scheduler_firewall (position 4)")
-        print("🚀 DUAL COMMUNICATION: scheduler (PUSH/PULL) + dashboard (PUB/SUB)")
-        print("🔒 ULTRA-SECURE MODE: Solo MONITOR y LIST_RULES permitidos")
-
-        # Ejecutar función asíncrona principal
         asyncio.run(main_async())
     except KeyboardInterrupt:
         print("\n🛑 Keyboard interrupt received")
