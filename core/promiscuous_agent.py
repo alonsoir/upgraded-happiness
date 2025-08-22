@@ -43,14 +43,14 @@ def import_protobuf_module():
 
     # Estrategia 1: Importación relativa desde protocols.current
     import_strategies = [
-        ("protocols.current.network_event_extended_v3_pb2", "Paquete protocols.current"),
-        ("protocols.network_event_extended_v3_pb2", "Paquete protocols"),
-        ("network_event_extended_v3_pb2", "Importación directa"),
+        ("protocols.current.network_security_clean_v31_pb2", "Paquete protocols.current"),
+        ("protocols.network_security_clean_v31_pb2", "Paquete protocols"),
+        ("network_security_clean_v31_pb2", "Importación directa"),
     ]
 
     for import_path, description in import_strategies:
         try:
-            NetworkEventProto = __import__(import_path, fromlist=[''])
+            NetworkEventProto = network_security_clean_v31_pb2
             PROTOBUF_AVAILABLE = True
             PROTOBUF_VERSION = "v3.0.0"
             print(f"✅ Protobuf v3 cargado: {description} ({import_path})")
@@ -68,12 +68,12 @@ def import_protobuf_module():
 
     for protocols_path in possible_paths:
         protocols_path = os.path.abspath(protocols_path)
-        pb2_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+        pb2_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
 
         if os.path.exists(pb2_file):
             try:
                 sys.path.insert(0, protocols_path)
-                import network_event_extended_v3_pb2 as NetworkEventProto
+                import network_security_clean_v31_pb2 as NetworkEventProto
                 PROTOBUF_AVAILABLE = True
                 PROTOBUF_VERSION = "v3.0.0"
                 print(f"✅ Protobuf v3 cargado desde path: {protocols_path}")
@@ -270,7 +270,7 @@ class DistributedPromiscuousAgent:
             issues.append("❌ Protobuf v3 REQUERIDO - generar con:")
             issues.append("   cd protocols/current/")
             issues.append("   protoc --python_out=. --proto_path=. network_event_extended_v3.proto")
-            issues.append("   Verificar que existe: network_event_extended_v3_pb2.py")
+            issues.append("   Verificar que existe: network_security_clean_v31_pb2.py")
 
         # 🚨 FALLAR INMEDIATAMENTE si faltan dependencias críticas
         if issues:

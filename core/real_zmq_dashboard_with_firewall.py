@@ -55,8 +55,8 @@ def import_dashboard_protobuf_modules():
     for base_path, description in import_strategies:
         try:
             if base_path:
-                # Importar network_event_extended_v3_pb2
-                module_path = f"{base_path}.network_event_extended_v3_pb2"
+                # Importar network_security_clean_v31_pb2
+                module_path = f"{base_path}.network_security_clean_v31_pb2"
                 NetworkEventProto = __import__(module_path, fromlist=[''])
                 network_event_imported = True
 
@@ -66,7 +66,7 @@ def import_dashboard_protobuf_modules():
                 firewall_commands_imported = True
             else:
                 # Importación directa
-                import network_event_extended_v3_pb2 as NetworkEventProto
+                import network_security_clean_v31_pb2 as NetworkEventProto
                 network_event_imported = True
 
                 import firewall_commands_pb2 as FirewallCommandsProto
@@ -91,7 +91,7 @@ def import_dashboard_protobuf_modules():
 
     for protocols_path in possible_paths:
         protocols_path = os.path.abspath(protocols_path)
-        network_pb2_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+        network_pb2_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
         firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_pb2.py')
 
         if os.path.exists(network_pb2_file) and os.path.exists(firewall_pb2_file):
@@ -99,7 +99,7 @@ def import_dashboard_protobuf_modules():
                 sys.path.insert(0, protocols_path)
 
                 # Importar ambos módulos
-                import network_event_extended_v3_pb2 as NetworkEventProto
+                import network_security_clean_v31_pb2 as NetworkEventProto
                 import firewall_commands_pb2 as FirewallCommandsProto
 
                 PROTOBUF_AVAILABLE = True
@@ -114,7 +114,7 @@ def import_dashboard_protobuf_modules():
 
     # Si llegamos aquí, no se pudieron importar los módulos
     print("❌ No se pudieron cargar los módulos protobuf del dashboard")
-    print(f"   Buscados: network_event_extended_v3_pb2.py y firewall_commands_pb2.py")
+    print(f"   Buscados: network_security_clean_v31_pb2.py y firewall_commands_pb2.py")
     return False
 
 

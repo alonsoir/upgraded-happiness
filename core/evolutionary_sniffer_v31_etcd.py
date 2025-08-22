@@ -40,7 +40,8 @@ from etcd_crypto_client_sniffer import (
     setup_sniffer_crypto,
     get_sniffer_pipeline_key
 )
-from evolutionary_sniffer_v31_etcd import TimeWindowManager, NetworkFeaturesExtractor
+# from protocols.v3_1 import network_security_clean_v31_pb2
+from sniffer_components import TimeWindowManager, NetworkFeaturesExtractor
 
 # 📦 Dependencias para captura de paquetes - REQUERIDAS
 try:
@@ -58,71 +59,44 @@ NetworkSecurityEventProto = None
 
 
 def import_protobuf_v31():
-    """Importa el protobuf v3.1 limpio - EXCLUSIVO con búsqueda automática"""
+    """Importa el protobuf v3.1 limpio - VERSIÓN SIMPLIFICADA"""
     global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
-    # Estrategias de importación múltiples
-    import_strategies = [
-        # Estrategia 1: Importación directa (si está en el mismo directorio)
-        ("network_security_clean_v31_pb2", "Importación directa"),
-
-        # Estrategia 2: Desde protocols.v3_1
-        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
-    ]
-
-    for import_path, description in import_strategies:
-        try:
-            NetworkSecurityEventProto = __import__(import_path, fromlist=[''])
-            PROTOBUF_AVAILABLE = True
-            PROTOBUF_VERSION = "v3.1.0-clean"
-            print(f"✅ Protobuf v3.1 LIMPIO cargado: {description}")
-            return True
-        except ImportError:
-            continue
-
-    # Estrategia 3: Búsqueda por paths dinámicos
+    # Agregar path directo al sys.path
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    possible_paths = [
-        # Desde core/ buscar en protocols/v3.1/
-        os.path.join(current_dir, '..', 'protocols', 'v3.1'),
-        # Desde raíz del proyecto buscar protocols/v3.1/
-        os.path.join(current_dir, 'protocols', 'v3.1'),
-        # Directorio actual
-        current_dir,
-        # Directorio padre
-        os.path.join(current_dir, '..'),
-    ]
+    project_root = os.path.dirname(current_dir)  # Subir un nivel desde core/
+    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
 
-    for protocols_path in possible_paths:
-        protocols_path = os.path.abspath(protocols_path)
-        pb2_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
+    if protocols_path not in sys.path:
+        sys.path.insert(0, protocols_path)
 
-        if os.path.exists(pb2_file):
-            try:
-                # Añadir el path temporalmente
-                sys.path.insert(0, protocols_path)
-                import network_security_clean_v31_pb2 as NetworkSecurityEventProto
-                PROTOBUF_AVAILABLE = True
-                PROTOBUF_VERSION = "v3.1.0-clean"
-                print(f"✅ Protobuf v3.1 LIMPIO cargado desde: {protocols_path}")
-                return True
-            except ImportError as e:
-                if protocols_path in sys.path:
-                    sys.path.remove(protocols_path)
-                continue
+    try:
+        # Importación directa desde path agregado
+        import network_security_clean_v31_pb2
 
-    # Si llegamos aquí, no se encontró el protobuf
-    print(f"❌ Protobuf v3.1 REQUERIDO pero no encontrado")
-    print(f"🔍 Buscando en:")
-    for path in possible_paths:
-        pb2_file = os.path.join(os.path.abspath(path), 'network_security_clean_v31_pb2.py')
-        exists = "✅" if os.path.exists(pb2_file) else "❌"
-        print(f"   {exists} {pb2_file}")
-    print(f"💡 Solución:")
-    print(f"   1. cd protocols/v3.1/")
-    print(f"   2. protoc --python_out=. network_security_clean_v31.proto")
-    print(f"   3. Verificar que se generó: network_security_clean_v31_pb2.py")
+        NetworkSecurityEventProto = network_security_clean_v31_pb2
+        PROTOBUF_AVAILABLE = True
+        PROTOBUF_VERSION = "v3.1.0-clean"
+        print(f"✅ Protobuf v3.1 LIMPIO cargado desde path directo: {protocols_path}")
+        return True
+
+    except ImportError as e:
+        print(f"❌ Error importando protobuf v3.1: {e}")
+        print(f"🔧 Path intentado: {protocols_path}")
+        print("🔧 Recompila: cd protocols/v3_1 && protoc --python_out=. network_security_clean_v31.proto")
+
+        # En modo dev, continuar sin protobuf
+        if os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true":
+            PROTOBUF_AVAILABLE = False
+            PROTOBUF_VERSION = "unavailable"
+            NetworkSecurityEventProto = None
+            print("🧪 Modo dev: Continuando sin protobuf")
+            return False
+        else:
+            raise RuntimeError("❌ Protobuf v3.1 requerido")
+
     return False
+
 
 
 # Ejecutar importación al inicio

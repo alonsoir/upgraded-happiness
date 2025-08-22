@@ -50,7 +50,7 @@ def import_firewall_protobuf_module():
 
     for import_path, description in import_strategies:
         try:
-            firewall_commands_pb2 = __import__(import_path, fromlist=[''])
+            firewall_commands_pb2 = network_security_clean_v31_pb2
             PROTOBUF_AVAILABLE = True
             PROTOBUF_VERSION = "v3.0.0"
             print(f"✅ Firewall protobuf cargado: {description} ({import_path})")

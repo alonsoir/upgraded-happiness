@@ -1,0 +1,512 @@
+{
+  "node_id": "simple_firewall_agent_001",
+  "component": {
+    "name": "simple_firewall_agent_v31_etcd",
+    "version": "3.1.0-DUAL-COMMUNICATION-ETCD",
+    "mode": "distributed_safe_dual_etcd",
+    "description": "Distributed firewall agent V3.1 with DUAL COMMUNICATION + ETCD crypto - Scheduler + Dashboard with human control"
+  },
+  "version": "3.1.0-DUAL-ETCD",
+  "component_type": "firewall_agent_v31_etcd",
+
+  "_comment_etcd_crypto": "🔥 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA - Sin token = NO ARRANCA",
+  "etcd_crypto": {
+    "etcd_host": "localhost",
+    "etcd_port": 2379,
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "node_id": "simple_firewall_agent_001"
+  },
+
+  "_security_notice": "🔒 CONFIGURACIÓN ULTRA-SEGURA V3.1 - Dual communication for human oversight + ETCD crypto",
+
+  "network": {
+    "_comment_dual": "🚀 DUAL COMMUNICATION: Scheduler (PUSH/PULL) + Dashboard (PUB/SUB) + ETCD crypto",
+
+    "scheduler_commands": {
+      "address": "localhost",
+      "port": 5582,
+      "_comment_fix": "🔧 CORRECTO: 5582 para recibir comandos cifrados del scheduler",
+      "mode": "bind",
+      "socket_type": "PULL",
+      "description": "Receives encrypted firewall commands from scheduler_firewall (PUSH/PULL pattern) with ETCD crypto",
+      "high_water_mark": 500,
+      "connection_timeout": 3000,
+      "_comment": "📥 SCHEDULER → AGENT: Compatible with scheduler_firewall.py:5582 + ETCD crypto"
+    },
+    "scheduler_responses": {
+      "address": "localhost",
+      "port": 5581,
+      "_comment_fix": "🔧 CORRECTO: 5581 para enviar respuestas cifradas al scheduler",
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "description": "Sends encrypted firewall responses to scheduler_firewall (PUSH/PULL pattern) with ETCD crypto",
+      "high_water_mark": 500,
+      "connection_timeout": 3000,
+      "_comment": "📤 AGENT → SCHEDULER: Compatible with scheduler_firewall.py:5581 + ETCD crypto"
+    },
+
+    "dashboard_commands": {
+      "address": "localhost",
+      "port": 5580,
+      "_comment_fix": "🔧 MANTENER: 5580 para recibir comandos cifrados del dashboard",
+      "mode": "connect",
+      "socket_type": "SUB",
+      "description": "Receives encrypted firewall commands from dashboard (PUB/SUB pattern) with ETCD crypto",
+      "high_water_mark": 500,
+      "connection_timeout": 3000,
+      "topic_filter": "",
+      "_comment": "📥 DASHBOARD → AGENT: New PUB/SUB pattern for human control + ETCD crypto"
+    },
+    "dashboard_responses": {
+      "address": "localhost",
+      "port": 5584,
+      "_comment_fix": "🔧 MANTENER: 5584 para enviar respuestas cifradas al dashboard",
+      "mode": "bind",
+      "socket_type": "PUB",
+      "description": "Sends encrypted firewall responses to dashboard (PUB/SUB pattern) with ETCD crypto",
+      "high_water_mark": 500,
+      "connection_timeout": 3000,
+      "_comment": "📤 AGENT → DASHBOARD: New port 5584 for human oversight responses + ETCD crypto"
+    }
+  },
+
+  "_port_flow_etcd": {
+    "step_1": "scheduler:5582(PUSH+ENCRYPT) → agent:5582(PULL+DECRYPT)",
+    "step_2": "agent:5581(PUSH+ENCRYPT) → scheduler:5581(PULL+DECRYPT)",
+    "step_3": "dashboard:5580(PUB+ENCRYPT) → agent:5580(SUB+DECRYPT)",
+    "step_4": "agent:5584(PUB+ENCRYPT) → dashboard:5584(SUB+DECRYPT)",
+    "status": "✅ ALL PORTS ALIGNED WITH ETCD CRYPTO DUAL COMMUNICATION"
+  },
+
+  "_architecture_flow_etcd": {
+    "scheduler_flow": {
+      "in": "scheduler:5582(PUSH+ENCRYPT) → agent:5582(PULL+DECRYPT)",
+      "out": "agent:5581(PUSH+ENCRYPT) → scheduler:5581(PULL+DECRYPT)",
+      "pattern": "PUSH/PULL - Traditional reliable messaging + ETCD crypto",
+      "purpose": "Automated firewall decisions from AI scheduler with encryption"
+    },
+    "dashboard_flow": {
+      "in": "dashboard:5580(PUB+ENCRYPT) → agent:5580(SUB+DECRYPT)",
+      "out": "agent:5584(PUB+ENCRYPT) → dashboard:5584(SUB+DECRYPT)",
+      "pattern": "PUB/SUB - Scalable multi-subscriber pattern + ETCD crypto",
+      "purpose": "Human oversight and manual firewall control with encryption"
+    },
+    "human_control": {
+      "independent_responses": "Agent sends encrypted responses to both scheduler AND dashboard separately",
+      "oversight_capability": "Human can see all scheduler actions and override when needed",
+      "security_benefit": "No single point of failure + end-to-end encryption with ETCD keys"
+    }
+  },
+
+  "zmq": {
+    "context_io_threads": 2,
+    "_comment_threads": "🔄 Increased to 2 for dual communication patterns + ETCD crypto overhead",
+    "max_sockets": 64,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 60,
+    "immediate": true,
+    "linger_ms": 500,
+    "recv_timeout_ms": 1000,
+    "send_timeout_ms": 1000,
+    "_optimization_dual_etcd": {
+      "scheduler_pattern": "PUSH/PULL optimized for reliability + crypto",
+      "dashboard_pattern": "PUB/SUB optimized for scalability + crypto",
+      "dual_socket_management": "Separate socket handling for each communication type + ETCD crypto",
+      "crypto_buffer_optimization": "Optimized for encrypted message processing"
+    }
+  },
+
+  "compression": {
+    "enabled": false,
+    "algorithm": "lz4",
+    "compression_level": 1,
+    "min_size_threshold": 1000,
+    "max_size_threshold": 10240,
+    "adaptive_algorithm": false,
+    "_comment_etcd": "Compression before ETCD encryption if needed"
+  },
+
+  "encryption": {
+    "_deprecated": "🔄 DEPRECATED - Replaced by ETCD crypto system",
+    "enabled": false,
+    "_migration_note": "Using ETCD crypto instead of local encryption"
+  },
+
+  "firewall": {
+    "_security_comment": "🔒 MÁXIMA SEGURIDAD V3.1 + ETCD - Nunca puede dañar el firewall real",
+    "auto_detect_type": true,
+    "preferred_type": "iptables",
+
+    "sudo_enabled": false,
+    "dry_run": true,
+    "backup_rules": true,
+    "rule_timeout_default": 300,
+    "max_rules_per_ip": 3,
+    "max_total_rules": 50,
+
+    "_safety_overrides": {
+      "force_dry_run_if_root": true,
+      "force_dry_run_if_sudo": true,
+      "force_dry_run_if_container": false,
+      "auto_detect_permissions": true,
+      "never_flush_existing_rules": true,
+      "max_command_duration": 300,
+      "_v31_enhancements": "Environment safety detection with dual communication logging + ETCD crypto"
+    },
+
+    "supported_actions": ["MONITOR", "LIST_RULES"],
+    "blocked_actions": ["FLUSH_RULES", "BACKUP_RULES"],
+
+    "platform_specific": {
+      "linux": {
+        "firewall_type": "iptables",
+        "check_commands": ["iptables --version"],
+        "flush_on_startup": false,
+        "require_explicit_confirmation": true
+      },
+      "darwin": {
+        "firewall_type": "pfctl",
+        "check_commands": ["pfctl -s info"],
+        "flush_on_startup": false,
+        "require_explicit_confirmation": true
+      },
+      "windows": {
+        "firewall_type": "netsh",
+        "check_commands": ["netsh advfirewall show allprofiles"],
+        "flush_on_startup": false,
+        "require_explicit_confirmation": true
+      }
+    }
+  },
+
+  "processing": {
+    "_comment_dual": "🔄 DUAL PROCESSING: Separate threads for scheduler and dashboard + ETCD crypto overhead",
+    "threads": {
+      "scheduler_commands_consumer": 1,
+      "dashboard_commands_consumer": 1,
+      "command_processor": 1,
+      "cleanup_thread": 1,
+      "_crypto_overhead": "Additional CPU for ETCD crypto operations"
+    },
+    "command_queue_size": 200,
+    "_comment_queue": "Increased queue size for dual input sources + crypto processing",
+
+    "batch_processing": {
+      "enabled": false,
+      "batch_size": 1,
+      "max_wait_time_ms": 1000
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "max_commands_per_minute": 20,
+      "_comment_rate": "Increased for dual sources + crypto overhead",
+      "burst_capacity": 5
+    },
+    "command_timeout_seconds": 10,
+    "max_concurrent_commands": 2,
+    "_comment_concurrent": "Increased for dual processing + crypto operations"
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 60,
+    "detailed_metrics": true,
+    "health_check": {
+      "enabled": true,
+      "check_interval_seconds": 120,
+      "firewall_connectivity_test": false,
+      "rule_application_test": false
+    },
+    "alerts": {
+      "max_error_rate_percent": 5.0,
+      "max_response_time_ms": 3000.0,
+      "max_queue_usage_percent": 50.0,
+      "min_success_rate_percent": 98.0
+    },
+    "log_applied_rules": true,
+    "log_failed_commands": true,
+    "log_security_events": true,
+    "_dual_monitoring": {
+      "track_scheduler_commands": true,
+      "track_dashboard_commands": true,
+      "track_response_routing": true,
+      "track_dual_communication_health": true
+    },
+    "_comment_etcd_monitoring": "🔥 NUEVO: Monitoreo específico ETCD",
+    "etcd_crypto_monitoring": {
+      "track_pipeline_key_usage": true,
+      "track_crypto_operations": true,
+      "alert_on_etcd_failures": true,
+      "max_crypto_failures_per_minute": 5,
+      "etcd_connectivity_check_interval": 30,
+      "track_dual_channel_crypto": true
+    }
+  },
+
+  "persistence": {
+    "enabled": true,
+    "rules_history_file": "data/firewall_rules_history_v31_etcd.jsonl",
+    "max_history_entries": 1000,
+    "backup_interval_seconds": 600,
+    "state_file": "data/firewall_agent_state_v31_etcd.json",
+    "security_log_file": "data/security_events_v31_etcd.jsonl",
+    "_dual_persistence": {
+      "track_command_origin": true,
+      "separate_scheduler_dashboard_logs": true,
+      "human_oversight_audit_trail": true,
+      "track_etcd_crypto_operations": true
+    }
+  },
+
+  "security": {
+    "_comment": "🔒 VALIDACIÓN EXHAUSTIVA V3.1 + ETCD - Protege contra comandos peligrosos",
+    "input_validation": {
+      "enabled": true,
+      "validate_ip_addresses": true,
+      "validate_port_ranges": true,
+      "max_rule_duration_seconds": 300,
+      "min_rule_duration_seconds": 60,
+      "blocked_ip_ranges": [
+        "127.0.0.0/8",
+        "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16"
+      ],
+      "allowed_actions": ["MONITOR", "LIST_RULES"],
+      "max_ip_length": 15,
+      "require_valid_ipv4": true,
+      "block_private_ips": true,
+      "_v31_validation": "Enhanced validation with command origin tracking + ETCD crypto"
+    },
+    "command_authentication": {
+      "enabled": false,
+      "require_signed_commands": false,
+      "trusted_scheduler_ids": ["scheduler_firewall_001"],
+      "trusted_dashboard_ids": ["dashboard_main_001"],
+      "_dual_auth": "Future: separate authentication for scheduler vs dashboard + ETCD crypto"
+    },
+    "auto_safety": {
+      "enabled": true,
+      "detect_privilege_escalation": true,
+      "detect_container_environment": true,
+      "force_safe_mode_conditions": [
+        "running_as_root",
+        "sudo_available",
+        "unknown_environment",
+        "high_privilege_context"
+      ],
+      "_v31_auto_safety": {
+        "track_command_origin": true,
+        "enhanced_environment_detection": true,
+        "dual_communication_safety_checks": true,
+        "etcd_crypto_safety_validation": true
+      }
+    },
+    "_comment_etcd_security": "🔥 NUEVO: Seguridad específica ETCD",
+    "etcd_crypto_security": {
+      "validate_pipeline_keys": true,
+      "rotate_keys_on_error": false,
+      "secure_key_storage": true,
+      "crypto_failure_threshold": 10,
+      "dual_channel_security": true
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [node_id:{node_id}] [pid:{pid}] [SAFE_MODE_V31_ETCD] - %(message)s",
+    "handlers": {
+      "file": {
+        "enabled": true,
+        "path": "./logs/firewall_agent_secure_v31_etcd.log",
+        "max_size_mb": 50,
+        "backup_count": 10,
+        "rotation": "size"
+      },
+      "console": {
+        "enabled": true,
+        "colored": true,
+        "include_security_markers": true
+      },
+      "security_log": {
+        "enabled": true,
+        "path": "./logs/firewall_security_events_v31_etcd.log",
+        "log_all_commands": true,
+        "log_rejected_commands": true,
+        "log_privilege_changes": true,
+        "_dual_logging": {
+          "log_scheduler_commands": true,
+          "log_dashboard_commands": true,
+          "log_response_routing": true,
+          "log_human_oversight_events": true,
+          "log_etcd_crypto_operations": true
+        }
+      },
+      "syslog": {
+        "enabled": false,
+        "facility": "authpriv",
+        "address": "/dev/log"
+      }
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "firewall_agent_safe_dual_v31_etcd",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "enable_privilege_detection": true,
+    "enable_safety_overrides": true,
+    "_dual_distributed": {
+      "scheduler_integration": true,
+      "dashboard_integration": true,
+      "human_oversight_capability": true,
+      "independent_response_channels": true
+    },
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 6,
+      "track_etcd_crypto_operations": true,
+      "track_dual_communication": true
+    }
+  },
+
+  "debug": {
+    "enabled": true,
+    "sample_commands": false,
+    "sample_rate_percent": 0.0,
+    "log_protobuf_details": true,
+    "simulate_command_failures": false,
+    "failure_rate_percent": 0.0,
+    "log_security_decisions": true,
+    "log_environment_detection": true,
+    "_v31_debug": {
+      "log_dual_communication": true,
+      "log_command_origin_tracking": true,
+      "log_response_routing": true,
+      "log_protobuf_v31_fields": true
+    },
+    "_comment_etcd_debug": "🔥 Debug específico ETCD (solo para desarrollo)",
+    "log_etcd_operations": false,
+    "trace_pipeline_key_operations": false,
+    "validate_crypto_tokens": true
+  },
+
+  "_protobuf_v31_config": {
+    "version": "3.1.0",
+    "import_strategy": "TODO_O_NADA",
+    "required_modules": [
+      "firewall_commands_v31_pb2",
+      "network_security_clean_v31_pb2"
+    ],
+    "native_fields": ["node_id", "timestamp"],
+    "verification_enabled": true,
+    "compatibility_mode": false
+  },
+
+  "_dual_communication_config": {
+    "scheduler_pattern": "PUSH/PULL",
+    "dashboard_pattern": "PUB/SUB",
+    "response_independence": true,
+    "human_oversight": {
+      "enabled": true,
+      "see_scheduler_actions": true,
+      "override_capability": true,
+      "audit_trail": true
+    },
+    "port_allocation": {
+      "scheduler_commands": 5582,
+      "scheduler_responses": 5581,
+      "dashboard_commands": 5580,
+      "dashboard_responses": 5584
+    },
+    "_etcd_crypto_integration": {
+      "all_channels_encrypted": true,
+      "shared_pipeline_key": true,
+      "independent_crypto_validation": true
+    }
+  },
+
+  "_comment_crypto": "🔐 CRYPTO ETCD - Dual communication cifrada (MÁXIMA SEGURIDAD)",
+  "crypto": {
+    "enabled": true,
+    "role": "receiver_sender",
+    "use_etcd_pipeline_key": true,
+    "_comment_mandatory": "❌ Sin token ETCD = componente NO ARRANCA",
+    "channels": {
+      "scheduler_commands": {
+        "decrypt": true,
+        "description": "Descifrar comandos del scheduler (CRÍTICO) con ETCD pipeline key"
+      },
+      "scheduler_responses": {
+        "encrypt": true,
+        "description": "Cifrar respuestas hacia scheduler con ETCD pipeline key"
+      },
+      "dashboard_commands": {
+        "decrypt": true,
+        "description": "Descifrar comandos del dashboard (oversight humano) con ETCD pipeline key"
+      },
+      "dashboard_responses": {
+        "encrypt": true,
+        "description": "Cifrar respuestas hacia dashboard con ETCD pipeline key"
+      }
+    },
+    "component_crypto_id": "simple_firewall_agent_001",
+    "_comment_etcd": "Token rotativo distribuido automáticamente por ETCD - mucho más seguro que config files"
+  },
+
+  "_safety_guarantees_v31_etcd": {
+    "never_runs_as_root": "Detected automatically and forces dry_run",
+    "never_modifies_real_firewall": "All commands are dry_run by default",
+    "never_accepts_dangerous_commands": "Input validation blocks risky operations",
+    "auto_detects_environment": "Adapts safety level based on detected environment",
+    "comprehensive_logging": "All operations logged for audit trail + ETCD crypto tracking",
+    "fail_safe_design": "Defaults to most secure option when in doubt",
+    "dual_communication_safety": "Independent response channels prevent single point of failure",
+    "human_oversight_guaranteed": "Dashboard always receives copies of all actions",
+    "command_origin_tracking": "Every action tracked to scheduler or dashboard origin",
+    "protobuf_v31_native": "Native node_id and timestamp fields for full traceability",
+    "end_to_end_encryption": "All 4 communication channels encrypted with ETCD keys",
+    "crypto_mandatory": "Component MUST shutdown if no ETCD pipeline key available"
+  },
+
+  "_etcd_integration_requirements": {
+    "mandatory_dependencies": [
+      "ETCD cluster running on localhost:2379",
+      "ETCD Crypto Coordinator active",
+      "Scheduler Firewall running on ports 5582/5581 (encrypted)",
+      "Dashboard running on ports 5580/5584 (encrypted)",
+      "etcd3-py with compatible protobuf version"
+    ],
+    "startup_sequence": [
+      "1. ETCD cluster UP",
+      "2. ETCD Crypto Coordinator UP",
+      "3. Scheduler Firewall UP (with ETCD crypto)",
+      "4. Dashboard UP (with ETCD crypto)",
+      "5. Simple Firewall Agent connects to ETCD",
+      "6. Obtiene pipeline key rotativo",
+      "7. Si NO obtiene key → SHUTDOWN",
+      "8. Si obtiene key → INICIA con crypto en 4 canales",
+      "9. DUAL COMMUNICATION ready (scheduler + dashboard encrypted)"
+    ],
+    "failure_modes": {
+      "no_etcd_connection": "SHUTDOWN - no fallback",
+      "no_pipeline_key": "SHUTDOWN - no hardcoded keys",
+      "crypto_disabled_in_json": "SHUTDOWN - crypto es obligatorio para firewall agent",
+      "partial_crypto_failure": "SHUTDOWN - all 4 channels must be encrypted"
+    }
+  },
+
+  "_config_metadata": {
+    "config_version": "3.1.0-DUAL-COMMUNICATION-ETCD",
+    "created_for": "HW Actual - Simple Firewall Agent con ETCD crypto obligatorio + dual communication",
+    "optimization_level": "CONSERVATIVE_AGENT_DUAL_ETCD",
+    "crypto_integration": "ETCD_MANDATORY_DUAL_CHANNELS",
+    "socket_pattern": "PULL/PUSH/SUB/PUB",
+    "firewall_integration": "Ultra-secure dual communication + ETCD crypto",
+    "performance_target": "STABLE_FIREWALL_AGENT_WITH_ETCD_CRYPTO_DUAL"
+  }
+}
