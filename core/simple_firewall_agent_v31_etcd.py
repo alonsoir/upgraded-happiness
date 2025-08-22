@@ -631,7 +631,7 @@ class SimpleFirewallAgentETCD:
 
             # Setup ETCD crypto usando el cliente específico
             success = await setup_simple_firewall_agent_crypto(
-                agent_config_path, firewall_rules_path, testing_mode
+                agent_config_path,  testing_mode
             )
 
             if not success:
