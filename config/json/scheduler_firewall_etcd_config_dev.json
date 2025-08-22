@@ -7,121 +7,149 @@
     "role": "firewall_scheduler_nogui_etcd",
     "description": "JSON-controlled Firewall Decision Engine - No GUI + ETCD crypto"
   },
-  "_comment_etcd_crypto": "\ud83d\udd10 ETCD CRYPTO - NUEVA SECCI\u00d3N OBLIGATORIA - Sin token = NO ARRANCA",
+  "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA - Sin token = NO ARRANCA",
   "etcd_crypto": {
     "etcd_host": "localhost",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster-v31",
     "node_id": "scheduler_firewall_001"
   },
-  "_comment_architecture": "\ud83c\udfaf ARQUITECTURA: ml_detector:5580(PUB) \u2192 scheduler:5580(SUB) \u2192 firewall_agent:5582(PUSH) \u2190 \u2192 scheduler:5581(PULL)",
+  "_comment_architecture": "🎯 ARQUITECTURA: ml_detector:5580(PUB) → scheduler:5580(SUB) → firewall_agent:5582(PUSH) ↔ scheduler:5581(PULL)",
   "network": {
     "ml_events_input": {
       "address": "localhost",
       "port": 5580,
+      "_comment_fix": "🔧 CORRECTO: 5580 para recibir de ml_detector PUB con ETCD crypto",
       "mode": "connect",
       "socket_type": "SUB",
-      "high_water_mark": 100,
-      "_comment_fix": "🔧 HWM reducido de 1000 a 100 para evitar overflow"
+      "high_water_mark": 200,
+      "_comment_hwm": "🔧 INCREMENTADO: De 1000 a 200 (menos agresivo)",
+      "expected_publishers": 1,
+      "description": "Receives encrypted ML events from ML Detector V3.1.2 tricapa (4 models) with ETCD crypto"
     },
     "firewall_commands_output": {
       "address": "localhost",
       "port": 5582,
+      "_comment_fix": "🔧 MANTENER: Puerto 5582 para enviar comandos cifrados al firewall agent",
       "mode": "connect",
       "socket_type": "PUSH",
-      "high_water_mark": 50,
-      "_comment_fix": "🔧 HWM reducido de 500 a 50 para control de flujo"
+      "high_water_mark": 100,
+      "_comment_hwm": "🔧 INCREMENTADO: De 500 a 100 (menos agresivo)",
+      "expected_subscribers": 1,
+      "description": "Sends encrypted firewall commands to simple_firewall_agent with ETCD crypto"
     },
     "firewall_responses_input": {
       "address": "localhost",
       "port": 5581,
+      "_comment": "✅ CORRECTO: Recibe respuestas cifradas del firewall agent",
       "mode": "bind",
       "socket_type": "PULL",
-      "high_water_mark": 100,
-      "_comment_fix": "🔧 HWM reducido de 300 a 100"
+      "high_water_mark": 150,
+      "_comment_hwm": "🔧 INCREMENTADO: De 300 a 150 (menos agresivo)",
+      "expected_publishers": 1,
+      "description": "Receives encrypted responses from simple_firewall_agent with ETCD crypto"
     }
   },
   "_port_flow_etcd": {
-    "step_1": "ml_detector:5580(PUB+ENCRYPT) \u2192 scheduler:5580(SUB+DECRYPT)",
-    "step_2": "scheduler:5582(PUSH+ENCRYPT) \u2192 firewall_agent:5582(PULL+DECRYPT)",
-    "step_3": "firewall_agent:5581(PUSH+ENCRYPT) \u2192 scheduler:5581(PULL+DECRYPT)",
-    "status": "\u2705 ALL PORTS ALIGNED WITH ETCD CRYPTO"
+    "step_1": "ml_detector:5580(PUB+ENCRYPT) → scheduler:5580(SUB+DECRYPT)",
+    "step_2": "scheduler:5582(PUSH+ENCRYPT) → firewall_agent:5582(PULL+DECRYPT)",
+    "step_3": "firewall_agent:5581(PUSH+ENCRYPT) → scheduler:5581(PULL+DECRYPT)",
+    "status": "✅ ALL PORTS ALIGNED WITH ETCD CRYPTO"
   },
   "zmq": {
+    "_comment_conservative": "🔧 CONFIGURACIÓN MENOS AGRESIVA basada en ml_detector con 4 modelos + ETCD crypto",
     "context_io_threads": 2,
     "max_sockets": 32,
     "tcp_keepalive": true,
     "tcp_keepalive_idle": 300,
     "immediate": false,
     "linger_ms": 0,
-    "recv_timeout_ms": 1000,
-    "send_timeout_ms": 500,
+    "recv_timeout_ms": 2000,
+    "_comment_timeout1": "🔧 INCREMENTADO: De 100ms a 2000ms (menos agresivo)",
+    "send_timeout_ms": 1000,
+    "_comment_timeout2": "🔧 INCREMENTADO: De 50ms a 1000ms (menos agresivo)",
     "recv_buffer_size": 131072,
     "send_buffer_size": 262144,
-    "_comment_fix": "🔧 Timeouts incrementados para evitar saturación"
+    "max_message_size": 50000,
+    "scheduler_optimizations": {
+      "_comment": "🎯 OPTIMIZACIONES ESPECÍFICAS DEL SCHEDULER + ETCD",
+      "conflate": false,
+      "recovery_ivl": 10000,
+      "sndbuf": 131072,
+      "rcvbuf": 65536
+    }
   },
   "processing": {
-    "_comment_threads": "\ud83e\uddf5 ULTRA CONSERVADOR: 1 thread por funci\u00f3n + ETCD overhead",
+    "_comment_threads": "🔧 MENOS AGRESIVO: Threads reducidos pero colas más grandes",
     "threads": {
       "ml_events_consumers": 1,
       "firewall_command_producers": 1,
-      "firewall_response_consumers": 1,
-      "_comment_fix": "🔧 Reducido a 1 thread cada uno para evitar saturación"
+      "firewall_response_consumers": 1
     },
     "internal_queues": {
-      "ml_events_queue_size": 50,
-      "firewall_commands_queue_size": 25,
-      "firewall_responses_queue_size": 50,
-      "_comment_fix": "🔧 Colas reducidas para evitar backlog"
-    },
-    "_comment_new_rate_limiting": "🚀 NUEVO: Rate limiting a nivel de procesamiento",
-    "rate_limiting": {
-      "enabled": true,
-      "max_events_per_second": 5,
-      "max_decisions_per_second": 3,
-      "max_commands_per_second": 2,
-      "burst_allowance": 2,
-      "backpressure_threshold": 0.8
+      "ml_events_queue_size": 100,
+      "_comment_queue1": "🔧 INCREMENTADO: De 500 a 100 (más grande que antes)",
+      "firewall_commands_queue_size": 50,
+      "_comment_queue2": "🔧 INCREMENTADO: De 1000 a 50 (más grande que antes)",
+      "firewall_responses_queue_size": 75,
+      "_comment_queue3": "🔧 INCREMENTADO: De 200 a 75 (más grande que antes)"
     },
     "queue_management": {
       "enabled": true,
       "overflow_strategy": "drop_oldest",
-      "max_wait_ms": 100,
-      "emergency_drop_threshold": 80.0
+      "max_wait_ms": 200,
+      "_comment_wait": "🔧 INCREMENTADO: De 100ms a 200ms",
+      "emergency_drop_threshold": 90.0,
+      "_comment_threshold": "🔧 INCREMENTADO: De 80% a 90%"
     },
     "decision_engine": {
-      "max_decisions_per_second": 100,
-      "decision_timeout_ms": 50,
+      "max_decisions_per_second": 10,
+      "_comment_decisions": "🔧 REDUCIDO: De 100 a 10 (más realista)",
+      "decision_timeout_ms": 100,
+      "_comment_timeout": "🔧 INCREMENTADO: De 50ms a 100ms",
       "batch_processing": false,
       "cache_decisions": false
     },
     "backpressure": {
       "enabled": true,
-      "max_retries": 1,
-      "retry_delays_ms": [10],
-      "drop_threshold_percent": 5.0,
-      "activation_threshold": 5,
+      "max_retries": 3,
+      "_comment_retries": "🔧 INCREMENTADO: De 2 a 3",
+      "retry_delays_ms": [10, 25, 50],
+      "_comment_delays": "🔧 INCREMENTADO: Delays más graduales",
+      "drop_threshold_percent": 15.0,
+      "_comment_drop": "🔧 INCREMENTADO: De 10% a 15%",
+      "activation_threshold": 25,
+      "_comment_activation": "🔧 INCREMENTADO: De 15 a 25",
       "queue_full_strategy": "drop_oldest"
     }
   },
   "monitoring": {
     "stats_interval_seconds": 30,
-    "_comment_fix": "🔧 Stats más frecuentes para detectar problemas",
+    "_comment_stats": "🔧 REDUCIDO: De 60s a 30s para mejor monitoring",
+    "detailed_metrics": true,
+    "health_check_interval": 120,
     "alerts": {
-      "max_queue_usage_percent": 50.0,
-      "max_processing_latency_ms": 200.0,
-      "max_error_rate_percent": 10.0,
-      "_comment_fix": "🔧 Umbrales más permisivos durante testing"
-    }
-  },
-    "_comment_etcd_monitoring": "\ud83d\udd10 NUEVO: Monitoreo espec\u00edfico ETCD",
+      "max_queue_usage_percent": 80.0,
+      "_comment_queue_alert": "🔧 INCREMENTADO: De 70% a 80%",
+      "max_processing_latency_ms": 150.0,
+      "_comment_latency_alert": "🔧 INCREMENTADO: De 100ms a 150ms",
+      "max_error_rate_percent": 8.0,
+      "_comment_error_alert": "🔧 INCREMENTADO: De 5% a 8%",
+      "max_memory_usage_mb": 256,
+      "max_cpu_usage_percent": 40.0,
+      "max_decision_latency_ms": 50.0,
+      "min_decisions_per_minute": 1,
+      "max_consecutive_errors": 5
+    },
+    "_comment_etcd_monitoring": "🔐 NUEVO: Monitoreo específico ETCD",
     "etcd_crypto_monitoring": {
       "track_pipeline_key_usage": true,
       "track_crypto_operations": true,
       "alert_on_etcd_failures": true,
       "max_crypto_failures_per_minute": 5,
       "etcd_connectivity_check_interval": 30
-    },
+    }
+  },
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [scheduler_etcd:{node_id}] [pid:{pid}] - %(message)s",
@@ -165,7 +193,7 @@
       "max_block_decisions_per_minute": 10,
       "force_dry_run_above_rate": 20
     },
-    "_comment_etcd_security": "\ud83d\udd10 NUEVO: Seguridad espec\u00edfica ETCD",
+    "_comment_etcd_security": "🔐 NUEVO: Seguridad específica ETCD",
     "etcd_crypto_security": {
       "validate_pipeline_keys": true,
       "rotate_keys_on_error": false,
@@ -214,19 +242,20 @@
     "log_decision_details": false,
     "log_protobuf_parsing": false,
     "performance_profiling": false,
-    "_comment_etcd_debug": "\ud83d\udd10 Debug espec\u00edfico ETCD (solo para desarrollo)",
+    "_comment_etcd_debug": "🔐 Debug específico ETCD (solo para desarrollo)",
     "log_etcd_operations": false,
     "trace_pipeline_key_operations": false,
     "validate_crypto_tokens": true
   },
   "_config_metadata": {
-    "config_version": "1.0.0-etcd-integration",
-    "created_for": "HW Actual - Scheduler con ETCD crypto obligatorio",
-    "optimization_level": "CONSERVATIVE_SCHEDULER_ETCD",
+    "config_version": "1.0.0-etcd-integration-less-aggressive",
+    "created_for": "HW Actual - Scheduler con ETCD crypto obligatorio - MENOS AGRESIVO",
+    "optimization_level": "BALANCED_SCHEDULER_ETCD",
     "crypto_integration": "ETCD_MANDATORY",
     "socket_pattern": "SUB/PUSH/PULL",
     "firewall_integration": "Ultra-secure JSON-controlled + ETCD crypto",
-    "performance_target": "STABLE_DECISION_ENGINE_WITH_ETCD_CRYPTO"
+    "performance_target": "STABLE_DECISION_ENGINE_WITH_ETCD_CRYPTO_LESS_AGGRESSIVE",
+    "last_modified": "2025-08-22T15:00:00Z"
   },
   "protobuf_storage": {
     "enabled": true,
@@ -255,28 +284,34 @@
       "min_confidence_threshold": 0.1
     }
   },
-  "_comment_crypto": "\ud83d\udd10 CRYPTO ETCD - OBLIGATORIO: ML events + Firewall commands (CR\u00cdTICO)",
+  "_comment_crypto": "🔐 CRYPTO ETCD - OBLIGATORIO: ML events + Firewall commands (CRÍTICO)",
   "crypto": {
     "enabled": true,
     "role": "receiver_sender",
     "use_etcd_pipeline_key": true,
-    "_comment_mandatory": "\u274c Sin token ETCD = componente NO ARRANCA",
+    "_comment_mandatory": "❌ Sin token ETCD = componente NO ARRANCA",
     "channels": {
       "ml_events_input": {
         "decrypt": true,
-        "description": "Descifrar eventos ML para an\u00e1lisis de decisiones con ETCD pipeline key"
+        "decompress": true,
+        "_comment_decompress": "🔧 CRÍTICO: ETCD debe descomprimir ANTES de parsing protobuf",
+        "description": "Descifrar y descomprimir eventos ML para análisis de decisiones con ETCD pipeline key"
       },
       "firewall_commands_output": {
         "encrypt": true,
-        "description": "Cifrar comandos firewall hacia agente (CR\u00cdTICO) con ETCD pipeline key"
+        "compress": true,
+        "_comment_compress": "🔧 CRÍTICO: ETCD debe comprimir DESPUÉS de serializar protobuf",
+        "description": "Cifrar y comprimir comandos firewall hacia agente (CRÍTICO) con ETCD pipeline key"
       },
       "firewall_responses_input": {
         "decrypt": true,
-        "description": "Descifrar respuestas del agente firewall con ETCD pipeline key"
+        "decompress": true,
+        "_comment_decompress": "🔧 CRÍTICO: ETCD debe descomprimir ANTES de parsing protobuf",
+        "description": "Descifrar y descomprimir respuestas del agente firewall con ETCD pipeline key"
       }
     },
     "component_crypto_id": "scheduler_firewall_001",
-    "_comment_etcd": "Token rotativo distribuido autom\u00e1ticamente por ETCD - mucho m\u00e1s seguro que config files"
+    "_comment_etcd": "Token rotativo distribuido automáticamente por ETCD - mucho más seguro que config files"
   },
   "_etcd_integration_requirements": {
     "mandatory_dependencies": [
@@ -292,8 +327,8 @@
       "3. ML Detector UP (publishing encrypted events)",
       "4. scheduler connects to ETCD",
       "5. Obtiene pipeline key rotativo",
-      "6. Si NO obtiene key \u2192 SHUTDOWN",
-      "7. Si obtiene key \u2192 INICIA con crypto en 3 canales",
+      "6. Si NO obtiene key → SHUTDOWN",
+      "7. Si obtiene key → INICIA con crypto en 3 canales",
       "8. Simple Firewall Agent UP (waiting for encrypted commands)"
     ],
     "failure_modes": {

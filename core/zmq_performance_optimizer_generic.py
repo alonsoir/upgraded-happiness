@@ -381,32 +381,59 @@ class ComponentJSONAnalyzer:
         return configs
 
     def _get_scheduler_firewall_config(self) -> List[Tuple[int, str, str, str]]:
-        """Configuración para scheduler_firewall_etcd"""
+        """🔧 CONFIGURACIÓN CORREGIDA para scheduler_firewall_etcd - LÓGICA OPUESTA"""
         configs = []
 
-        # Producer para ML events (simular ml_detector)
+        # 1. ML Events Input (puerto 5580)
+        # Scheduler: SUB CONNECT → Consumer: PUB BIND (para que scheduler se conecte)
         ml_events = self.network_config.get("ml_events_input", {})
         if ml_events:
             port = ml_events.get("port")
-            if port:
-                configs.append((port, "PUB_PRODUCER", "bind",
-                                f"🧠 Publishing ML events TO scheduler (port {port})"))
+            scheduler_mode = ml_events.get("mode", "connect")
 
-        # Consumer para firewall commands (drenar comandos del scheduler)
+            if port:
+                # LÓGICA CORREGIDA: Hacemos lo OPUESTO al scheduler
+                if scheduler_mode == "connect":
+                    our_mode = "bind"  # Scheduler se conecta, nosotros hacemos bind
+                else:
+                    our_mode = "connect"  # Scheduler hace bind, nosotros nos conectamos
+
+                configs.append((port, "PUB_PRODUCER", our_mode,
+                                f"🧠 ML Simulator - PUB {our_mode.upper()} to scheduler SUB {scheduler_mode.upper()} (port {port})"))
+
+        # 2. Firewall Commands Output (puerto 5582)
+        # Scheduler: PUSH CONNECT → Consumer: PULL BIND (para que scheduler se conecte)
         fw_commands = self.network_config.get("firewall_commands_output", {})
         if fw_commands:
             port = fw_commands.get("port")
-            if port:
-                configs.append((port, "PULL", "bind",
-                                f"🛡️ Draining firewall commands FROM scheduler (port {port})"))
+            scheduler_mode = fw_commands.get("mode", "connect")
 
-        # Producer para firewall responses (simular firewall agent)
+            if port:
+                # LÓGICA CORREGIDA: Hacemos lo OPUESTO al scheduler
+                if scheduler_mode == "connect":
+                    our_mode = "bind"  # Scheduler se conecta, nosotros hacemos bind
+                else:
+                    our_mode = "connect"  # Scheduler hace bind, nosotros nos conectamos
+
+                configs.append((port, "PULL", our_mode,
+                                f"🛡️ Firewall Simulator - PULL {our_mode.upper()} from scheduler PUSH {scheduler_mode.upper()} (port {port})"))
+
+        # 3. Firewall Responses Input (puerto 5581)
+        # Scheduler: PULL BIND → Consumer: PUSH CONNECT (para conectarnos al scheduler)
         fw_responses = self.network_config.get("firewall_responses_input", {})
         if fw_responses:
             port = fw_responses.get("port")
+            scheduler_mode = fw_responses.get("mode", "bind")
+
             if port:
-                configs.append((port, "PUSH_PRODUCER", "connect",
-                                f"🔄 Producing firewall responses TO scheduler (port {port})"))
+                # LÓGICA CORREGIDA: Hacemos lo OPUESTO al scheduler
+                if scheduler_mode == "bind":
+                    our_mode = "connect"  # Scheduler hace bind, nosotros nos conectamos
+                else:
+                    our_mode = "bind"  # Scheduler se conecta, nosotros hacemos bind
+
+                configs.append((port, "PUSH_PRODUCER", our_mode,
+                                f"🔄 Response Simulator - PUSH {our_mode.upper()} to scheduler PULL {scheduler_mode.upper()} (port {port})"))
 
         return configs
 
@@ -627,60 +654,62 @@ class GenericZMQConsumerProducer:
         }
 
     def setup_socket(self):
-        """🔧 CONFIGURACIÓN CORREGIDA - Respeta topología desde JSON"""
+        """🔧 CONFIGURACIÓN CORREGIDA - Debug mejorado"""
         self.context = zmq.Context()
+
+        print(f"🔍 Setting up {self.socket_type} socket on port {self.port} with mode {self.mode}")
 
         if self.socket_type == "PULL":
             self.socket = self.context.socket(zmq.PULL)
             if self.mode == "bind":
                 self.socket.bind(f"tcp://*:{self.port}")
-                print(f"🔌 PULL consumer BIND en puerto {self.port}")
+                print(f"✅ PULL consumer BIND en puerto {self.port}")
             else:
                 self.socket.connect(f"tcp://localhost:{self.port}")
-                print(f"🔌 PULL consumer CONNECT a puerto {self.port}")
+                print(f"✅ PULL consumer CONNECT a puerto {self.port}")
 
         elif self.socket_type == "SUB":
             self.socket = self.context.socket(zmq.SUB)
             if self.mode == "bind":
                 self.socket.bind(f"tcp://*:{self.port}")
-                print(f"🔌 SUB consumer BIND en puerto {self.port}")
+                print(f"✅ SUB consumer BIND en puerto {self.port}")
             else:
                 self.socket.connect(f"tcp://localhost:{self.port}")
-                print(f"🔌 SUB consumer CONNECT a puerto {self.port}")
+                print(f"✅ SUB consumer CONNECT a puerto {self.port}")
             self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all
 
         elif self.socket_type == "PUSH_PRODUCER":
             self.socket = self.context.socket(zmq.PUSH)
             if self.mode == "bind":
                 self.socket.bind(f"tcp://*:{self.port}")
-                print(f"🔌 PUSH producer BIND en puerto {self.port}")
+                print(f"✅ PUSH producer BIND en puerto {self.port}")
             else:
                 self.socket.connect(f"tcp://localhost:{self.port}")
-                print(f"🔌 PUSH producer CONNECT a puerto {self.port}")
+                print(f"✅ PUSH producer CONNECT a puerto {self.port}")
 
         elif self.socket_type == "PUB_PRODUCER":
             self.socket = self.context.socket(zmq.PUB)
             if self.mode == "bind":
                 self.socket.bind(f"tcp://*:{self.port}")
-                print(f"🔌 PUB producer BIND en puerto {self.port}")
+                print(f"✅ PUB producer BIND en puerto {self.port}")
             else:
                 self.socket.connect(f"tcp://localhost:{self.port}")
-                print(f"🔌 PUB producer CONNECT a puerto {self.port}")
+                print(f"✅ PUB producer CONNECT a puerto {self.port}")
 
         else:
             raise ValueError(f"❌ Unsupported socket type: {self.socket_type}")
 
         # Configuración común optimizada
         if "PRODUCER" in self.socket_type:
-            self.socket.setsockopt(zmq.SNDHWM, 10000)
-            self.socket.setsockopt(zmq.SNDTIMEO, 100)
+            self.socket.setsockopt(zmq.SNDHWM, 1000)
+            self.socket.setsockopt(zmq.SNDTIMEO, 1000)
         else:
-            self.socket.setsockopt(zmq.RCVHWM, 10000)
-            self.socket.setsockopt(zmq.RCVTIMEO, 100)
+            self.socket.setsockopt(zmq.RCVHWM, 1000)
+            self.socket.setsockopt(zmq.RCVTIMEO, 1000)
 
         self.socket.setsockopt(zmq.LINGER, 0)  # CRÍTICO para evitar conflictos
 
-        print(f"✅ {self.socket_type} {'producer' if 'PRODUCER' in self.socket_type else 'consumer'} configurado")
+        print(f"✅ {self.socket_type} configurado correctamente")
 
     def run(self):
         """Ejecutar consumer o producer"""
