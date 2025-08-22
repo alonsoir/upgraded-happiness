@@ -75,7 +75,7 @@ def import_protobuf_v31():
 
     for import_path, description in import_strategies:
         try:
-            NetworkSecurityEventProto = __import__(import_path, fromlist=[''])
+            NetworkSecurityEventProto = network_security_clean_v31_pb2
             PROTOBUF_AVAILABLE = True
             PROTOBUF_VERSION = "v3.1.0-clean"
             print(f"✅ Protobuf v3.1 LIMPIO cargado: {description}")

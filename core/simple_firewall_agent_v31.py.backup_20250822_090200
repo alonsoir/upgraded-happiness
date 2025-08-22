@@ -1,0 +1,623 @@
+#!/usr/bin/env python3
+"""
+🧬 Simple Firewall Agent V3.1 - FIXED VERSION
+✅ Configuración JSON correcta - Lee puertos desde config
+✅ Protobuf V3.1 EXCLUSIVO - Compatible con scheduler
+✅ Crypto V31 integrado - Cifrado/descifrado automático
+✅ Ultra-seguridad mantenida - Solo MONITOR y LIST_RULES
+✅ Arquitectura simple - Sin over-engineering
+"""
+
+import sys
+import os
+import json
+import time
+import zmq
+import threading
+import signal
+import logging
+import subprocess
+import importlib.util
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple
+
+# ✅ STEP 1: Add protocols path
+protocols_v31_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'protocols', 'v3.1')
+protocols_current_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'protocols',
+                                      'current')
+
+print("🔍 Agent: Buscando protobuf V3.1 EXCLUSIVO...")
+
+
+class ProtobufV31Loader:
+    """Cargador EXCLUSIVO de protobuf V3.1"""
+
+    def __init__(self):
+        self.firewall_commands = None
+        self.network_event = None
+        self.loaded = False
+
+    def load_v31_exclusive(self):
+        """Carga SOLO protobuf V3.1"""
+        try:
+            # 1. Intentar desde protocols/v3.1/
+            v31_firewall_path = os.path.join(protocols_v31_path, 'firewall_commands_v31_pb2.py')
+            v31_network_path = os.path.join(protocols_v31_path, 'network_security_clean_v31_pb2.py')
+
+            if os.path.exists(v31_firewall_path):
+                print("✅ Cargando desde protocols/v3.1/")
+                sys.path.insert(0, protocols_v31_path)
+
+                # Import directo
+                firewall_spec = importlib.util.spec_from_file_location(
+                    "firewall_commands_v31_pb2", v31_firewall_path
+                )
+                firewall_module = importlib.util.module_from_spec(firewall_spec)
+                firewall_spec.loader.exec_module(firewall_module)
+                self.firewall_commands = firewall_module
+
+                if os.path.exists(v31_network_path):
+                    network_spec = importlib.util.spec_from_file_location(
+                        "network_security_clean_v31_pb2", v31_network_path
+                    )
+                    network_module = importlib.util.module_from_spec(network_spec)
+                    network_spec.loader.exec_module(network_module)
+                    self.network_event = network_module
+
+                self.loaded = True
+                print("✅ V3.1 cargado desde protocols/v3.1/")
+                return True
+
+            # 2. Fallback a protocols/current/
+            current_firewall_v31_path = os.path.join(protocols_current_path, 'firewall_commands_v31_pb2.py')
+            current_network_v31_path = os.path.join(protocols_current_path, 'network_security_clean_v31_pb2.py')
+
+            if os.path.exists(current_firewall_v31_path):
+                print("⚠️  Fallback a protocols/current/")
+                sys.path.insert(0, protocols_current_path)
+
+                firewall_spec = importlib.util.spec_from_file_location(
+                    "firewall_commands_v31_pb2_current", current_firewall_v31_path
+                )
+                firewall_module = importlib.util.module_from_spec(firewall_spec)
+                firewall_spec.loader.exec_module(firewall_module)
+                self.firewall_commands = firewall_module
+
+                if os.path.exists(current_network_v31_path):
+                    network_spec = importlib.util.spec_from_file_location(
+                        "network_security_clean_v31_pb2_current", current_network_v31_path
+                    )
+                    network_module = importlib.util.module_from_spec(network_spec)
+                    network_spec.loader.exec_module(network_module)
+                    self.network_event = network_module
+
+                self.loaded = True
+                print("✅ V3.1 cargado desde protocols/current/")
+                return True
+
+            print("❌ No se encontraron archivos protobuf V3.1")
+            return False
+
+        except Exception as e:
+            print(f"❌ Error cargando protobuf V3.1: {e}")
+            return False
+
+
+# 🔄 STEP 2: Load protobuf
+protobuf_loader = ProtobufV31Loader()
+if not protobuf_loader.load_v31_exclusive():
+    print("💥 FATAL: Agent requiere protobuf V3.1 para funcionar")
+    print("🛑 PARAR EJECUCIÓN - Sin V3.1 no hay agent")
+    sys.exit(1)
+
+# ✅ STEP 3: Try to load crypto V31
+crypto_wrapper_class = None
+try:
+    from crypto.crypto_zmq_v31 import CryptoZMQV31
+
+    crypto_wrapper_class = CryptoZMQV31
+    print("✅ CryptoZMQV31 disponible")
+except ImportError as e:
+    print(f"⚠️  CryptoZMQV31 NO disponible: {e}")
+
+
+class SecurityValidator:
+    """Validador de seguridad ultra-conservador"""
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.is_root = os.getuid() == 0 if hasattr(os, 'getuid') else False
+        self.forced_dry_run = self.is_root  # Always dry run if root
+
+        if self.forced_dry_run:
+            self.logger.warning("🔒 FORCED DRY_RUN: Running as root user")
+
+    # 🔧 FIX RÁPIDO: Actualizar el método validate_command en SecurityValidator
+
+    def validate_command(self, action: str, target_ip: str, params: Dict) -> Tuple[bool, str]:
+        """Validar comando con máxima seguridad"""
+        # Solo permitir acciones ultra-seguras
+        safe_actions = ['MONITOR', 'LIST_RULES', 'ALLOW_IP_TEMP']
+
+        if action not in safe_actions:
+            return False, f"Action {action} not permitted. Only {safe_actions} allowed."
+
+        # ✅ PERMITIR "all" para LIST_RULES (es un comando de información)
+        if action == "LIST_RULES" and target_ip == "all":
+            return True, "LIST_RULES with target 'all' is permitted"
+
+        # Validar IP para otras acciones
+        if not self._is_valid_ip(target_ip):
+            return False, f"Invalid IP: {target_ip}"
+
+        # Bloquear IPs peligrosas (solo para acciones que no sean LIST_RULES)
+        if action != "LIST_RULES" and self._is_dangerous_ip(target_ip):
+            return False, f"IP {target_ip} is in blocked range"
+
+        return True, "Command validation passed"
+
+    def _is_valid_ip(self, ip: str) -> bool:
+        """Validar formato IP"""
+        import ipaddress
+        try:
+            ipaddress.IPv4Address(ip)
+            return True
+        except:
+            return False
+
+    def _is_dangerous_ip(self, ip: str) -> bool:
+        """Verificar IPs peligrosas"""
+        dangerous_ranges = [
+            '127.0.0.0/8',  # localhost
+            '10.0.0.0/8',  # private
+            '172.16.0.0/12',  # private
+            '192.168.0.0/16'  # private
+        ]
+
+        import ipaddress
+        try:
+            ip_obj = ipaddress.IPv4Address(ip)
+            for range_str in dangerous_ranges:
+                if ip_obj in ipaddress.IPv4Network(range_str):
+                    return True
+            return False
+        except:
+            return True  # Si no se puede validar, es peligrosa
+
+
+class FirewallAgentV31:
+    """🔒 Firewall Agent V3.1 - Versión corregida y simplificada"""
+
+    def __init__(self, config_file: str, rules_file: str):
+        # ✅ Cargar configuración
+        self.config = self._load_config(config_file)
+        self.rules = self._load_config(rules_file)
+
+        # ✅ Setup básico
+        self.node_id = self.config['node_id']
+        self.running = False
+        self.stats = {
+            'commands_received': 0,
+            'commands_processed': 0,
+            'responses_sent': 0,
+            'errors': 0,
+            'start_time': time.time()
+        }
+
+        # ✅ Setup logging
+        self._setup_logging()
+
+        # ✅ Security validator
+        self.security = SecurityValidator(self.logger)
+
+        # ✅ Crypto wrapper (opcional)
+        self.crypto_wrapper = None
+        self._init_crypto()
+
+        # ✅ ZMQ setup
+        self.context = zmq.Context()
+        self.command_socket = None
+        self.response_socket = None
+        self._setup_sockets()
+
+        self.logger.info(f"✅ Firewall Agent V3.1 inicializado: {self.node_id}")
+        self._print_status()
+
+    def _load_config(self, config_file: str) -> Dict:
+        """Cargar archivo de configuración"""
+        if not Path(config_file).exists():
+            raise FileNotFoundError(f"❌ Config file not found: {config_file}")
+
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            raise ValueError(f"❌ Error loading config {config_file}: {e}")
+
+    def _setup_logging(self):
+        """Setup logging básico"""
+        log_config = self.config.get('logging', {})
+        level = getattr(logging, log_config.get('level', 'INFO').upper())
+
+        # Configurar logger
+        self.logger = logging.getLogger(f"firewall_agent_{self.node_id}")
+        self.logger.setLevel(level)
+        self.logger.handlers.clear()
+
+        # Console handler
+        console_handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - [V3.1] - %(message)s'
+        )
+        console_handler.setFormatter(formatter)
+        self.logger.addHandler(console_handler)
+
+        # File handler (opcional)
+        file_config = log_config.get('handlers', {}).get('file', {})
+        if file_config.get('enabled', False):
+            file_path = file_config.get('path', 'logs/firewall_agent_v31.log')
+            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+
+            file_handler = logging.FileHandler(file_path)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+
+    def _init_crypto(self):
+        """Inicializar crypto wrapper si está habilitado"""
+        crypto_config = self.config.get('crypto', {})
+
+        if not crypto_config.get('enabled', False):
+            self.logger.info("🔐 Crypto deshabilitado en configuración")
+            return
+
+        if not crypto_wrapper_class:
+            self.logger.warning("⚠️  CryptoZMQV31 no disponible, ejecutando sin cifrado")
+            return
+
+        try:
+            crypto_component_id = crypto_config.get('component_crypto_id', self.node_id)
+            crypto_config_file = crypto_config.get('config_file', 'config/crypto/crypto_config_v31.json')
+
+            self.crypto_wrapper = crypto_wrapper_class(crypto_component_id, crypto_config_file)
+
+            self.logger.info("🔐 Crypto V31 inicializado correctamente")
+            self.logger.info(f"   🔑 Component ID: {crypto_component_id}")
+            self.logger.info(f"   📋 Config file: {crypto_config_file}")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error inicializando crypto: {e}")
+            self.crypto_wrapper = None
+
+    def _setup_sockets(self):
+        """Setup ZMQ sockets desde configuración JSON"""
+        network_config = self.config.get('network', {})
+
+        # ✅ SCHEDULER COMMANDS SOCKET (PULL)
+        scheduler_cmd_config = network_config.get('scheduler_commands', {})
+        if scheduler_cmd_config:
+            self.command_socket = self.context.socket(zmq.PULL)
+
+            # ✅ LEER PUERTO DESDE CONFIG (no hardcoded!)
+            address = scheduler_cmd_config.get('address', 'localhost')
+            port = scheduler_cmd_config.get('port', 5582)  # DEFAULT al puerto correcto
+            mode = scheduler_cmd_config.get('mode', 'bind')
+
+            endpoint = f"tcp://{address}:{port}"
+
+            self.logger.info(f"🔍 DEBUG: Configurando command socket - address={address}, port={port}, mode={mode}")
+            self.logger.info(f"🔍 DEBUG: Endpoint completo: {endpoint}")
+
+            # Configurar socket
+            hwm = scheduler_cmd_config.get('high_water_mark', 500)
+            self.command_socket.setsockopt(zmq.RCVHWM, hwm)
+
+            # ✅ CRYPTO WRAPPING para comandos (decrypt)
+            if self.crypto_wrapper:
+                crypto_channels = self.config.get('crypto', {}).get('channels', {})
+                if crypto_channels.get('scheduler_commands', {}).get('decrypt', False):
+                    self.command_socket = self.crypto_wrapper.wrap_socket_recv(self.command_socket)
+                    self.logger.info("🔓 Command socket wrapped for DECRYPTION")
+
+            # Bind o Connect
+            if mode == 'bind':
+                self.command_socket.bind(endpoint)
+                self.logger.info(f"🔒 Command socket BIND: {endpoint}")
+            else:
+                self.command_socket.connect(endpoint)
+                self.logger.info(f"🔒 Command socket CONNECT: {endpoint}")
+
+        # ✅ SCHEDULER RESPONSES SOCKET (PUSH)
+        scheduler_resp_config = network_config.get('scheduler_responses', {})
+        if scheduler_resp_config:
+            self.response_socket = self.context.socket(zmq.PUSH)
+
+            address = scheduler_resp_config.get('address', 'localhost')
+            port = scheduler_resp_config.get('port', 5581)
+            mode = scheduler_resp_config.get('mode', 'connect')
+
+            endpoint = f"tcp://{address}:{port}"
+
+            # Configurar socket
+            hwm = scheduler_resp_config.get('high_water_mark', 500)
+            self.response_socket.setsockopt(zmq.SNDHWM, hwm)
+
+            # ✅ CRYPTO WRAPPING para respuestas (encrypt)
+            if self.crypto_wrapper:
+                crypto_channels = self.config.get('crypto', {}).get('channels', {})
+                if crypto_channels.get('scheduler_responses', {}).get('encrypt', False):
+                    self.response_socket = self.crypto_wrapper.wrap_socket_send(self.response_socket)
+                    self.logger.info("🔒 Response socket wrapped for ENCRYPTION")
+
+            # Bind o Connect
+            if mode == 'bind':
+                self.response_socket.bind(endpoint)
+                self.logger.info(f"🔒 Response socket BIND: {endpoint}")
+            else:
+                self.response_socket.connect(endpoint)
+                self.logger.info(f"🔒 Response socket CONNECT: {endpoint}")
+
+    def _print_status(self):
+        """Imprimir estado del agente"""
+        print("📋 Estado:")
+        print(f"   FirewallCommands: {'✅' if protobuf_loader.firewall_commands else '❌'}")
+        print(f"   NetworkEvent: {'✅' if protobuf_loader.network_event else '❌'}")
+        print(f"   Crypto V31: {'✅' if self.crypto_wrapper else '❌'}")
+        print(f"   Security: 🔒 ULTRA-SECURE (dry_run={self.security.forced_dry_run})")
+
+    def start(self):
+        """Iniciar el agente"""
+        self.running = True
+        self.logger.info("🚀 Iniciando Firewall Agent V3.1...")
+
+        # Mostrar configuración de red
+        self._log_network_config()
+
+        # Iniciar thread de comandos
+        command_thread = threading.Thread(target=self._command_receiver, daemon=True)
+        command_thread.start()
+
+        self.logger.info("✅ Firewall Agent V3.1 iniciado correctamente")
+
+        # Loop principal
+        try:
+            while self.running:
+                time.sleep(1)
+                self._update_stats()
+        except KeyboardInterrupt:
+            self.logger.info("🛑 Shutdown signal received")
+            self.stop()
+
+    def _log_network_config(self):
+        """Log configuración de red"""
+        network_config = self.config.get('network', {})
+
+        self.logger.info("🌐 Network Configuration:")
+
+        # Scheduler commands
+        scheduler_cmd = network_config.get('scheduler_commands', {})
+        if scheduler_cmd:
+            addr = scheduler_cmd.get('address', 'localhost')
+            port = scheduler_cmd.get('port', 5582)
+            mode = scheduler_cmd.get('mode', 'bind')
+            self.logger.info(f"   📥 Commands: {mode.upper()} tcp://{addr}:{port}")
+
+        # Scheduler responses
+        scheduler_resp = network_config.get('scheduler_responses', {})
+        if scheduler_resp:
+            addr = scheduler_resp.get('address', 'localhost')
+            port = scheduler_resp.get('port', 5581)
+            mode = scheduler_resp.get('mode', 'connect')
+            self.logger.info(f"   📤 Responses: {mode.upper()} tcp://{addr}:{port}")
+
+    def _command_receiver(self):
+        """Thread receptor de comandos"""
+        self.logger.info("🎧 Command receiver thread iniciado")
+
+        while self.running:
+            try:
+                if self.command_socket:
+                    try:
+                        # Recibir comando (automáticamente descifrado si crypto activo)
+                        message_bytes = self.command_socket.recv(zmq.NOBLOCK)
+                        self.stats['commands_received'] += 1
+
+                        self.logger.info(f"📨 Comando recibido: {len(message_bytes)} bytes")
+
+                        # Procesar comando
+                        self._process_command(message_bytes)
+
+                    except zmq.Again:
+                        # No hay mensajes
+                        pass
+                    except Exception as e:
+                        self.logger.error(f"❌ Error recibiendo comando: {e}")
+                        self.stats['errors'] += 1
+
+                time.sleep(0.001)
+
+            except Exception as e:
+                self.logger.error(f"❌ Error en command receiver: {e}")
+                self.stats['errors'] += 1
+                time.sleep(1)
+
+    def _process_command(self, message_bytes: bytes):
+        """Procesar comando protobuf V3.1"""
+        try:
+            # Parsear protobuf V3.1
+            pb_command = protobuf_loader.firewall_commands.FirewallCommand()
+            pb_command.ParseFromString(message_bytes)
+
+            command_id = pb_command.command_id or f"auto_{int(time.time())}"
+            action = self._get_action_name(pb_command.action)
+            target_ip = pb_command.target_ip or "127.0.0.1"
+
+            self.logger.info(f"🔍 Procesando: {command_id}, action={action}, ip={target_ip}")
+
+            # Validar seguridad
+            valid, reason = self.security.validate_command(action, target_ip, {})
+
+            if not valid:
+                self.logger.warning(f"🚫 Comando rechazado: {reason}")
+                self._send_response(command_id, False, f"Security validation failed: {reason}")
+                return
+
+            # Ejecutar comando seguro
+            success, message = self._execute_safe_command(action, target_ip, pb_command)
+
+            # Enviar respuesta
+            self._send_response(command_id, success, message)
+            self.stats['commands_processed'] += 1
+
+        except Exception as e:
+            self.logger.error(f"❌ Error procesando comando: {e}")
+            self._send_response("unknown", False, f"Processing error: {str(e)}")
+            self.stats['errors'] += 1
+
+    def _get_action_name(self, action_enum: int) -> str:
+        """Convertir enum a string"""
+        try:
+            # Mapeo de enums V3.1
+            CommandAction = protobuf_loader.firewall_commands.CommandAction
+            action_map = {
+                CommandAction.BLOCK_IP: "BLOCK_IP",
+                CommandAction.UNBLOCK_IP: "UNBLOCK_IP",
+                CommandAction.RATE_LIMIT_IP: "RATE_LIMIT_IP",
+                CommandAction.LIST_RULES: "LIST_RULES",
+                CommandAction.ALLOW_IP_TEMP: "MONITOR"
+            }
+            return action_map.get(action_enum, "UNKNOWN")
+        except Exception:
+            return "UNKNOWN"
+
+    def _execute_safe_command(self, action: str, target_ip: str, pb_command) -> Tuple[bool, str]:
+        """Ejecutar comando de forma ultra-segura"""
+        try:
+            if action == "LIST_RULES":
+                return True, f"[ULTRA-SAFE] LIST_RULES executed for {target_ip}"
+
+            elif action == "MONITOR" or action == "ALLOW_IP_TEMP":
+                duration = getattr(pb_command, 'duration_seconds', 300)
+                return True, f"[ULTRA-SAFE] MONITOR {target_ip} for {duration}s"
+
+            else:
+                return False, f"[ULTRA-SAFE] Action {action} not permitted. Only MONITOR/LIST_RULES allowed."
+
+        except Exception as e:
+            return False, f"[ULTRA-SAFE] Execution error: {str(e)}"
+
+    def _send_response(self, command_id: str, success: bool, message: str):
+        """Enviar respuesta protobuf V3.1"""
+        try:
+            if not self.response_socket:
+                self.logger.error("❌ Response socket not configured")
+                return
+
+            # Crear respuesta V3.1
+            pb_response = protobuf_loader.firewall_commands.FirewallResponse()
+            pb_response.command_id = command_id
+            pb_response.node_id = self.node_id
+            pb_response.success = success
+            pb_response.message = f"[ULTRA-SAFE-V3.1] {message}"
+            pb_response.timestamp = int(time.time() * 1000)
+
+            # Serializar y enviar (automáticamente cifrado si crypto activo)
+            response_bytes = pb_response.SerializeToString()
+            self.response_socket.send(response_bytes, zmq.NOBLOCK)
+
+            self.stats['responses_sent'] += 1
+            self.logger.info(f"📤 Respuesta enviada: {command_id} - Success: {success}")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error enviando respuesta: {e}")
+            self.stats['errors'] += 1
+
+    def _update_stats(self):
+        """Actualizar estadísticas"""
+        current_time = time.time()
+        uptime = current_time - self.stats['start_time']
+
+        # Log stats cada 5 minutos
+        if not hasattr(self, '_last_stats_log'):
+            self._last_stats_log = current_time
+
+        if current_time - self._last_stats_log > 300:  # 5 minutos
+            self.logger.info(f"📊 Stats: {self.stats['commands_received']} recv, "
+                             f"{self.stats['commands_processed']} proc, "
+                             f"{self.stats['responses_sent']} sent, "
+                             f"{self.stats['errors']} errors, "
+                             f"uptime: {uptime:.0f}s")
+            self._last_stats_log = current_time
+
+    def stop(self):
+        """Detener el agente"""
+        self.logger.info("🛑 Deteniendo Firewall Agent V3.1...")
+        self.running = False
+
+        # Crypto cleanup
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 Crypto wrapper cerrado")
+            except Exception as e:
+                self.logger.error(f"❌ Error cerrando crypto: {e}")
+
+        # Socket cleanup
+        try:
+            if self.command_socket:
+                self.command_socket.close()
+            if self.response_socket:
+                self.response_socket.close()
+            self.context.term()
+            self.logger.info("✅ Sockets cerrados correctamente")
+        except Exception as e:
+            self.logger.error(f"❌ Error cerrando sockets: {e}")
+
+        self.logger.info("✅ Firewall Agent V3.1 detenido")
+
+
+def signal_handler(signum, frame):
+    """Manejar señales del sistema"""
+    print(f"\n📡 Señal {signum} recibida")
+    global agent
+    if 'agent' in globals():
+        agent.stop()
+    sys.exit(0)
+
+
+def main():
+    """Función principal"""
+    global agent
+
+    if len(sys.argv) != 3:
+        print("❌ Uso: python simple_firewall_agent_v31.py <config.json> <rules.json>")
+        sys.exit(1)
+
+    config_file = sys.argv[1]
+    rules_file = sys.argv[2]
+
+    # Configurar signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        # Crear agente
+        agent = FirewallAgentV31(config_file, rules_file)
+
+        # Mostrar stats iniciales
+        print("📊 Stats iniciales:")
+        for key, value in agent.stats.items():
+            print(f"   {key}: {value}")
+
+        # Iniciar agente
+        agent.start()
+
+    except Exception as e:
+        print(f"💥 Error fatal: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -43,7 +43,7 @@ except ImportError as e:
     ETCD_CRYPTO_CLIENT_AVAILABLE = False
 
 # Add protocols path for protobuf imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
+# sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
 
 # 📦 Protobuf V3.1 - Importación exclusiva (TODO O NADA)
 PROTOBUF_AVAILABLE = False
@@ -53,102 +53,33 @@ FirewallCommandsProto = None
 
 
 def import_scheduler_protobuf_v31():
-    """Importa protobuf V3.1 EXCLUSIVO para scheduler - TODO O NADA - FIXED PATHS"""
+    """Importa protobuf V3.1 EXCLUSIVO para scheduler - PATH DIRECTO"""
     global NetworkEventProto, FirewallCommandsProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
     print("🔍 Scheduler ETCD: Buscando protobuf V3.1 EXCLUSIVO...")
 
-    # 1. IMPORTAR FIREWALL COMMANDS V3.1 - RUTAS CORREGIDAS
-    firewall_imported = False
-    firewall_strategies = [
-        ("firewall_commands_v31_pb2", "Importación directa"),
-        ("protocols.v3_1.firewall_commands_v31_pb2", "Paquete protocols.v3_1"),
-    ]
+    # Agregar path directo al sys.path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)  # Subir un nivel desde core/
+    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
 
-    for import_path, description in firewall_strategies:
-        try:
-            FirewallCommandsProto = __import__(import_path, fromlist=[''])
-            firewall_imported = True
-            print(f"✅ FirewallCommands v3.1 cargado: {description}")
-            break
-        except ImportError:
-            continue
+    if protocols_path not in sys.path:
+        sys.path.insert(0, protocols_path)
 
-    # 2. IMPORTAR NETWORK EVENT (ML Detector events) - RUTAS CORREGIDAS
-    network_imported = False
-    network_strategies = [
-        ("network_security_clean_v31_pb2", "Importación directa v3.1"),
-        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
-        ("network_event_extended_v3_pb2", "Importación directa v3.0"),
-        ("protocols.v3_1.network_event_extended_v3_pb2", "Paquete protocols.v3_1 v3.0"),
-    ]
+    try:
+        # 🔥 IMPORTACIÓN DIRECTA DESDE PATH AGREGADO
+        import network_security_clean_v31_pb2
+        import firewall_commands_v31_pb2
 
-    for import_path, description in network_strategies:
-        try:
-            NetworkEventProto = __import__(import_path, fromlist=[''])
-            network_imported = True
-            print(f"✅ NetworkEvent cargado: {description}")
-            break
-        except ImportError:
-            continue
+        # Asignar módulos importados
+        NetworkEventProto = network_security_clean_v31_pb2
+        FirewallCommandsProto = firewall_commands_v31_pb2
 
-    # 3. ESTRATEGIA DE BÚSQUEDA POR PATHS DINÁMICOS - RUTAS CORREGIDAS V3_1
-    if not firewall_imported or not network_imported:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        possible_paths = [
-            os.path.join(current_dir, '..', 'protocols', 'v3_1'),  # CORREGIDO: v3_1
-            os.path.join(current_dir, 'protocols', 'v3_1'),       # CORREGIDO: v3_1
-            current_dir,
-            os.path.join(current_dir, '..'),
-        ]
-
-        for protocols_path in possible_paths:
-            protocols_path = os.path.abspath(protocols_path)
-
-            # Buscar FirewallCommands V3.1
-            if not firewall_imported:
-                firewall_pb2_file = os.path.join(protocols_path, 'firewall_commands_v31_pb2.py')
-                if os.path.exists(firewall_pb2_file):
-                    try:
-                        sys.path.insert(0, protocols_path)
-                        import firewall_commands_v31_pb2 as FirewallCommandsProto
-                        firewall_imported = True
-                        print(f"✅ FirewallCommands v3.1 cargado desde: {protocols_path}")
-                    except ImportError as e:
-                        if protocols_path in sys.path:
-                            sys.path.remove(protocols_path)
-
-            # Buscar NetworkEvent
-            if not network_imported:
-                # Prioridad 1: V3.1 limpio
-                network_v31_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
-                network_v3_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
-
-                if os.path.exists(network_v31_file):
-                    try:
-                        if protocols_path not in sys.path:
-                            sys.path.insert(0, protocols_path)
-                        import network_security_clean_v31_pb2 as NetworkEventProto
-                        network_imported = True
-                        print(f"✅ NetworkEvent v3.1 limpio cargado desde: {protocols_path}")
-                    except ImportError:
-                        pass
-
-                # Fallback: V3.0 compatible
-                elif os.path.exists(network_v3_file):
-                    try:
-                        if protocols_path not in sys.path:
-                            sys.path.insert(0, protocols_path)
-                        import network_event_extended_v3_pb2 as NetworkEventProto
-                        network_imported = True
-                        print(f"✅ NetworkEvent v3.0 cargado desde: {protocols_path}")
-                    except ImportError:
-                        pass
-
-    # 4. VERIFICACIÓN FINAL - TODO O NADA
-    if firewall_imported and network_imported:
         PROTOBUF_AVAILABLE = True
         PROTOBUF_VERSION = "v3.1.0"
+
+        print(f"✅ FirewallCommands v3.1 cargado desde path directo: {protocols_path}")
+        print(f"✅ NetworkEvent v3.1 limpio cargado desde path directo: {protocols_path}")
         print(f"🎯 Scheduler ETCD: Protobuf V3.1 COMPLETO cargado exitosamente")
 
         # Verificar que FirewallCommand tiene los campos nativos
@@ -169,22 +100,21 @@ def import_scheduler_protobuf_v31():
         except Exception as e:
             print(f"❌ ERROR verificando campos V3.1: {e}")
             return False
-    else:
-        # FALLO TOTAL - Mostrar lo que falta
-        print(f"❌ Scheduler ETCD: Protobuf V3.1 REQUERIDO pero NO ENCONTRADO")
-        print(f"📋 Estado:")
-        print(f"   FirewallCommands V3.1: {'✅' if firewall_imported else '❌'}")
-        print(f"   NetworkEvent: {'✅' if network_imported else '❌'}")
-        print(f"📁 Archivos requeridos:")
-        print(f"   • firewall_commands_v31_pb2.py")
-        print(f"   • network_security_clean_v31_pb2.py (o network_event_extended_v3_pb2.py)")
-        print(f"📍 Ubicaciones buscadas:")
-        for path in [
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'protocols', 'v3_1'),  # CORREGIDO: v3_1
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'protocols', 'v3_1'),        # CORREGIDO: v3_1
-        ]:
-            print(f"   • {os.path.abspath(path)}")
-        print(f"🔧 SOLUCIÓN: Instalar protobuf V3.1 o compilar .proto files")
+
+    except ImportError as e:
+        print(f"❌ Error importando protobuf v3.1: {e}")
+        print(f"🔧 Path intentado: {protocols_path}")
+        print("🔧 Verificar que los archivos _pb2.py existen en protocols/v3_1/")
+
+        PROTOBUF_AVAILABLE = False
+        PROTOBUF_VERSION = "unavailable"
+        NetworkEventProto = None
+        FirewallCommandsProto = None
+        return False
+
+    except Exception as e:
+        print(f"❌ Error inesperado: {e}")
+        print(f"🔧 Path usado: {protocols_path}")
         return False
 
 
@@ -1217,7 +1147,7 @@ class FirewallSchedulerETCD:
             # Intentar primero protobuf V3.1.2
             if PROTOBUF_AVAILABLE and NetworkEventProto:
                 try:
-                    event = NetworkEventProto.NetworkEvent()
+                    event = NetworkEventProto.NetworkSecurityEvent()
                     event.ParseFromString(message_bytes)
 
                     # Convertir protobuf a dict

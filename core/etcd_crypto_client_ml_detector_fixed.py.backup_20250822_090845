@@ -1,0 +1,653 @@
+#!/usr/bin/env python3
+"""
+core/etcd_crypto_client_ml_detector_fixed.py
+🧠 Cliente ETCD FIJO para ML Detector Tricapa - Compatible con diferentes versiones de protobuf/etcd
+- Registra el componente ml_detector_tricapa con ETCD
+- Obtiene crypto tokens para descifrar del geoip_enricher y cifrar hacia dashboard
+- Maneja dependencias problemáticas (protobuf v3_1 + etcd)
+- Fallback si etcd no está disponible solo en testing mode
+- Testing mode incluido
+- Usa lightweight_ml_detector_tricapa_v31_etcd_config_dev.json embebido
+"""
+
+import asyncio
+import json
+import logging
+import os
+import sys
+import socket
+from typing import Dict, Optional, Union
+from dataclasses import dataclass
+
+# 🔧 MANEJO DE DEPENDENCIAS PROBLEMÁTICAS
+ETCD_AVAILABLE = False
+ETCD_CLIENT_TYPE = None
+
+
+def setup_etcd_environment():
+    """Setup environment para evitar problemas con protobuf"""
+    # Workaround para etcd3 + protobuf nuevo
+    if 'PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION' not in os.environ:
+        os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
+
+
+setup_etcd_environment()
+
+# Intentar importar etcd con fallbacks
+try:
+    import etcd3
+
+    ETCD_AVAILABLE = True
+    ETCD_CLIENT_TYPE = "etcd3"
+    print("✅ Using etcd3 client")
+except ImportError as e:
+    print(f"⚠️  etcd3 import failed: {e}")
+    try:
+        import etcd3 as etcd3_alt
+
+        ETCD_AVAILABLE = True
+        ETCD_CLIENT_TYPE = "etcd3-alt"
+        etcd3 = etcd3_alt
+        print("✅ Using alternative etcd3 client")
+    except ImportError:
+        print("❌ No etcd client available")
+        print("💡 Install: pip install etcd3-py OR pip install 'protobuf<=3.20.3'")
+
+
+@dataclass
+class MLDetectorETCDConfig:
+    """Configuración ETCD extraída desde ml_detector_config.json"""
+    etcd_host: str
+    etcd_port: int
+    cluster_name: str
+    node_id: str
+
+    # Endpoints extraídos del config del ml_detector
+    input_host: str
+    input_port: int
+    output_host: str
+    output_port: int
+
+    # Opcional: HTTP API si está configurado (futuro)
+    http_api_host: Optional[str] = None
+    http_api_port: Optional[int] = None
+
+
+class ETCDCryptoClientMLDetector:
+    """
+    🧠 Cliente ETCD FIJO para ML Detector Tricapa
+    - Maneja problemas de dependencias protobuf v3_1 + etcd
+    - Modo testing incluido
+    - Fallback solo en testing mode
+    - Registra como receiver_sender (descifra + cifra)
+    - Pipeline position: 3 (después de geoip_enricher)
+    """
+
+    def __init__(self, ml_detector_config_path: str, testing_mode: bool = False):
+        self.ml_detector_config_path = ml_detector_config_path
+        self.testing_mode = testing_mode
+        self.ml_detector_config = None
+        self.etcd_config = None
+        self.pipeline_key = None
+        self.crypto_ready = False
+
+        # Logger específico del ml_detector tricapa
+        self.logger = logging.getLogger("etcd_crypto_ml_detector_fixed")
+        self.logger.setLevel(logging.INFO)
+
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s | 🧠 ML-DETECTOR-CRYPTO-FIXED | %(levelname)s | %(message)s'
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+
+        if testing_mode:
+            self.logger.info("🧪 Testing mode enabled")
+
+    def _load_ml_detector_config(self):
+        """Cargar configuración del ml_detector desde JSON"""
+        self.logger.info(f"📋 Loading ml_detector config from: {self.ml_detector_config_path}")
+
+        if not os.path.exists(self.ml_detector_config_path):
+            raise FileNotFoundError(f"❌ ML Detector config file not found: {self.ml_detector_config_path}")
+
+        try:
+            with open(self.ml_detector_config_path, 'r') as f:
+                self.ml_detector_config = json.load(f)
+
+            self.logger.info("✅ ML Detector config loaded successfully")
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"❌ Invalid JSON in ml_detector config: {e}")
+        except Exception as e:
+            raise RuntimeError(f"❌ Failed to load ml_detector config: {e}")
+
+    def _extract_etcd_config(self):
+        """
+        Extraer configuración ETCD desde config del ml_detector
+        OBLIGATORIO: debe existir sección 'etcd_crypto' en el JSON
+        """
+        self.logger.info("🔍 Extracting ETCD config from ml_detector config...")
+
+        if not self.ml_detector_config:
+            raise RuntimeError("❌ ML Detector config not loaded")
+
+        # OBLIGATORIO: sección etcd_crypto debe existir
+        if 'etcd_crypto' not in self.ml_detector_config:
+            raise KeyError(
+                "❌ REQUIRED section 'etcd_crypto' not found in ml_detector config.\n"
+                "   Add 'etcd_crypto' section to lightweight_ml_detector_tricapa_v31_etcd_config_dev.json"
+            )
+
+        etcd_section = self.ml_detector_config['etcd_crypto']
+
+        # OBLIGATORIO: campos requeridos
+        required_fields = ['etcd_host', 'etcd_port', 'cluster_name', 'node_id']
+        missing_fields = []
+
+        for field in required_fields:
+            if field not in etcd_section:
+                missing_fields.append(field)
+
+        if missing_fields:
+            raise KeyError(
+                f"❌ REQUIRED fields missing in etcd_crypto section: {missing_fields}\n"
+                f"   Add these fields to lightweight_ml_detector_tricapa_v31_etcd_config_dev.json"
+            )
+
+        # Input socket config (CONNECT al geoip_enricher)
+        input_host = "localhost"
+        input_port = 5560
+
+        if 'network' in self.ml_detector_config and 'input_socket' in self.ml_detector_config['network']:
+            input_socket = self.ml_detector_config['network']['input_socket']
+            input_host = input_socket.get('address', 'localhost')
+            input_port = input_socket.get('port', 5560)
+
+        # Output socket config (BIND para dashboard)
+        output_host = "localhost"
+        output_port = 5580
+
+        if 'network' in self.ml_detector_config and 'output_socket' in self.ml_detector_config['network']:
+            output_socket = self.ml_detector_config['network']['output_socket']
+            output_host = output_socket.get('address', 'localhost')
+            output_port = output_socket.get('port', 5580)
+
+        # Extraer HTTP API si existe (futuro - dashboard web)
+        http_api_host = None
+        http_api_port = None
+
+        if 'http' in self.ml_detector_config:
+            http_section = self.ml_detector_config['http']
+            if 'api' in http_section:
+                api_section = http_section['api']
+                http_api_host = api_section.get('host')
+                http_api_port = api_section.get('port')
+
+        # Crear config ETCD
+        self.etcd_config = MLDetectorETCDConfig(
+            etcd_host=etcd_section['etcd_host'],
+            etcd_port=etcd_section['etcd_port'],
+            cluster_name=etcd_section['cluster_name'],
+            node_id=etcd_section['node_id'],
+            input_host=input_host,
+            input_port=input_port,
+            output_host=output_host,
+            output_port=output_port,
+            http_api_host=http_api_host,
+            http_api_port=http_api_port
+        )
+
+        self.logger.info("✅ ETCD config extracted successfully")
+        self.logger.info(f"   📡 ETCD: {self.etcd_config.etcd_host}:{self.etcd_config.etcd_port}")
+        self.logger.info(f"   🏢 Cluster: {self.etcd_config.cluster_name}")
+        self.logger.info(f"   🆔 Node ID: {self.etcd_config.node_id}")
+        self.logger.info(f"   📥 Input: {self.etcd_config.input_host}:{self.etcd_config.input_port}")
+        self.logger.info(f"   📤 Output: {self.etcd_config.output_host}:{self.etcd_config.output_port}")
+
+    def _build_component_info(self) -> Dict:
+        """Construir información del componente ml_detector tricapa para registro ETCD"""
+
+        endpoints = {
+            "zmq_pull": f"tcp://{self.etcd_config.input_host}:{self.etcd_config.input_port}",
+            "zmq_pub": f"tcp://{self.etcd_config.output_host}:{self.etcd_config.output_port}"
+        }
+
+        if self.etcd_config.http_api_host and self.etcd_config.http_api_port:
+            endpoints["http_api"] = f"http://{self.etcd_config.http_api_host}:{self.etcd_config.http_api_port}"
+
+        return {
+            "node_id": self.etcd_config.node_id,
+            "component_type": "ml_detector_tricapa",
+            "version": "3.1.2",
+            "capabilities": [
+                "tricapa_ml_detection",
+                "level1_attack_detection",
+                "level2_ddos_detection",
+                "level2_ransomware_detection",
+                "level3_anomaly_detection",
+                "internal_traffic_analysis",
+                "web_traffic_analysis",
+                "ensemble_threat_classification",
+                "feature_extraction_82_features",
+                "feature_mapping_82_to_23",
+                "feature_mapping_82_to_4",
+                "protobuf_v31_processing",
+                "json_controlled_models",
+                "performance_optimized",
+                "pubsub_distribution",
+                "degraded_mode_operation",
+                "model_failure_recovery"
+            ],
+            "endpoints": endpoints,
+            "host_ip": self._get_component_ip(),
+            "process_id": os.getpid(),
+            "crypto_role": "receiver_sender",  # Descifra del geoip, cifra hacia dashboard
+            "pipeline_position": 3,
+            "input_from": ["geoip_enricher"],
+            "output_to": ["dashboard", "dashboard_nogui", "future_components"]
+        }
+
+    def _get_component_ip(self) -> str:
+        """Obtener IP del componente"""
+        # Intentar obtener IP desde environment (K8s POD_IP)
+        pod_ip = os.environ.get("POD_IP")
+        if pod_ip:
+            return pod_ip
+
+        # Intentar obtener hostname (K8s pod name)
+        hostname = os.environ.get("HOSTNAME")
+        if hostname and hostname != "localhost":
+            return hostname
+
+        # Fallback: obtener IP local
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except Exception:
+            return "127.0.0.1"
+
+    async def initialize_crypto(self) -> bool:
+        """
+        Inicializar crypto para ml_detector tricapa con fallbacks
+        """
+        try:
+            self.logger.info("🚀 Initializing ETCD crypto for ML Detector Tricapa...")
+
+            # 1. Cargar config del ml_detector
+            self._load_ml_detector_config()
+
+            # 2. Extraer config ETCD
+            self._extract_etcd_config()
+
+            # 3. Verificar que crypto esté habilitado en el JSON
+            crypto_config = self.ml_detector_config.get("crypto", {})
+            if not crypto_config.get("enabled", False):
+                raise RuntimeError("❌ Crypto disabled in JSON config - component MUST shutdown")
+
+            # 4. Verificar ETCD disponible
+            if not ETCD_AVAILABLE:
+                if self.testing_mode:
+                    self.logger.warning("⚠️  ETCD not available - using mock token for testing")
+                    self.pipeline_key = "mock_pipeline_key_for_testing_ml_detector_" + "x" * 32
+                    self.crypto_ready = True
+                    return True
+                else:
+                    raise RuntimeError("❌ etcd3 package not available and not in testing mode")
+
+            # 5. Conectar a ETCD
+            self.logger.info(f"📡 Connecting to ETCD at {self.etcd_config.etcd_host}:{self.etcd_config.etcd_port}...")
+
+            try:
+                etcd_client = etcd3.client(
+                    host=self.etcd_config.etcd_host,
+                    port=self.etcd_config.etcd_port,
+                    timeout=5
+                )
+
+                # Test connection
+                etcd_client.status()
+                self.logger.info("✅ ETCD connection successful")
+
+            except Exception as e:
+                if self.testing_mode:
+                    self.logger.warning(f"⚠️  ETCD connection failed - using mock token: {e}")
+                    self.pipeline_key = "mock_pipeline_key_for_testing_ml_detector_" + "x" * 32
+                    self.crypto_ready = True
+                    return True
+                else:
+                    raise ConnectionError(f"❌ Cannot connect to ETCD: {e}")
+
+            # 6. Importar coordinador
+            try:
+                # Intentar importar desde diferentes paths
+                try:
+                    from core.etcd_coordinator import ETCDCryptoCoordinator
+                except ImportError:
+                    from etcd_coordinator import ETCDCryptoCoordinator
+            except ImportError as e:
+                if self.testing_mode:
+                    self.logger.warning(f"⚠️  ETCDCryptoCoordinator not available - using mock: {e}")
+                    self.pipeline_key = "mock_pipeline_key_for_testing_ml_detector_" + "x" * 32
+                    self.crypto_ready = True
+                    return True
+                else:
+                    raise ImportError(f"❌ Cannot import ETCDCryptoCoordinator: {e}")
+
+            # 7. Crear coordinador
+            coordinator = ETCDCryptoCoordinator(
+                etcd_host=self.etcd_config.etcd_host,
+                etcd_port=self.etcd_config.etcd_port,
+                cluster_name=self.etcd_config.cluster_name
+            )
+
+            # 8. Iniciar coordinador
+            self.logger.info("🔄 Starting ETCD coordinator client...")
+            await coordinator.start()
+
+            # 9. Preparar info del componente
+            component_info = self._build_component_info()
+
+            # 10. Registrar componente
+            self.logger.info("📝 Registering ml_detector tricapa component with ETCD...")
+            success, response = await coordinator.register_component(component_info)
+
+            if not success:
+                error_msg = response.get('error', 'unknown error')
+                raise RuntimeError(f"❌ Component registration failed: {error_msg}")
+
+            # 11. Extraer token crypto
+            crypto_token = response["crypto_token"]
+            self.pipeline_key = crypto_token["key_material"]
+            self.crypto_ready = True
+
+            self.logger.info("✅ ML Detector Tricapa crypto initialization successful!")
+            self.logger.info(f"🔑 Token version: {crypto_token['version']}")
+            self.logger.info(f"📋 Registration hash: {response['registration_hash'][:16]}...")
+            self.logger.info(f"🔐 Crypto role: receiver_sender (descifra del geoip, cifra hacia dashboard)")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Crypto initialization failed: {e}")
+
+            # Fallback para development/testing
+            if self.testing_mode or os.environ.get("UPGRADED_HAPPINESS_DEV_MODE"):
+                self.logger.warning("🧪 Using fallback mock token for development")
+                self.pipeline_key = "dev_pipeline_key_ml_detector_" + "x" * 40
+                self.crypto_ready = True
+                return True
+
+            # Si crypto está habilitado en JSON, DEBE fallar
+            crypto_config = self.ml_detector_config.get("crypto", {})
+            if crypto_config.get("enabled", False):
+                self.logger.error("❌ Crypto enabled in JSON but failed to initialize - COMPONENT MUST SHUTDOWN")
+                return False
+
+            return False
+
+    def get_pipeline_key(self) -> Optional[str]:
+        """Obtener UPGRADED_HAPPINESS_PIPELINE_KEY para ml_detector tricapa"""
+        if not self.crypto_ready:
+            self.logger.error("❌ Crypto not ready - call initialize_crypto() first")
+            return None
+
+        return self.pipeline_key
+
+    def is_crypto_ready(self) -> bool:
+        """Verificar si crypto está listo"""
+        return self.crypto_ready and self.pipeline_key is not None
+
+    def get_status(self) -> Dict:
+        """Obtener estado para debugging"""
+        status = {
+            "ready": self.crypto_ready,
+            "testing_mode": self.testing_mode,
+            "config_path": self.ml_detector_config_path,
+            "pipeline_key_available": self.pipeline_key is not None,
+            "etcd_available": ETCD_AVAILABLE,
+            "etcd_client_type": ETCD_CLIENT_TYPE,
+            "component_type": "ml_detector_tricapa",
+            "crypto_role": "receiver_sender",
+            "pipeline_position": 3
+        }
+
+        if self.etcd_config:
+            status.update({
+                "etcd_host": self.etcd_config.etcd_host,
+                "etcd_port": self.etcd_config.etcd_port,
+                "cluster_name": self.etcd_config.cluster_name,
+                "node_id": self.etcd_config.node_id,
+                "input_endpoint": f"{self.etcd_config.input_host}:{self.etcd_config.input_port}",
+                "output_endpoint": f"{self.etcd_config.output_host}:{self.etcd_config.output_port}"
+            })
+
+        # Verificar si crypto está habilitado en JSON
+        if self.ml_detector_config:
+            crypto_config = self.ml_detector_config.get("crypto", {})
+            status["crypto_enabled_in_json"] = crypto_config.get("enabled", False)
+
+        return status
+
+
+# ===============================================================================
+# GLOBAL FUNCTIONS FIJAS para integración en ml_detector_tricapa_v31_etcd.py
+# ===============================================================================
+
+# Global client instance
+_ml_detector_crypto_client = None
+
+
+async def setup_ml_detector_crypto(ml_detector_config_path: str, testing_mode: bool = False) -> bool:
+    """
+    Setup crypto FIJO para ml_detector tricapa
+
+    Args:
+        ml_detector_config_path: Ruta al lightweight_ml_detector_tricapa_v31_etcd_config_dev.json
+        testing_mode: Si True, usa mock tokens si ETCD falla
+
+    Returns:
+        True si exitoso, False si falla
+    """
+    global _ml_detector_crypto_client
+
+    try:
+        # Detect dev mode automatically
+        if os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true":
+            testing_mode = True
+            print("🧪 Dev mode detected - enabling testing mode")
+
+        _ml_detector_crypto_client = ETCDCryptoClientMLDetector(ml_detector_config_path, testing_mode)
+        return await _ml_detector_crypto_client.initialize_crypto()
+    except Exception as e:
+        print(f"❌ Setup ml_detector crypto failed: {e}")
+        return False
+
+
+def get_ml_detector_pipeline_key() -> Optional[str]:
+    """
+    Obtener UPGRADED_HAPPINESS_PIPELINE_KEY para ml_detector tricapa
+    REEMPLAZA: os.environ.get("UPGRADED_HAPPINESS_PIPELINE_KEY")
+    """
+    global _ml_detector_crypto_client
+
+    if _ml_detector_crypto_client is None:
+        print("❌ ML Detector crypto not initialized - call setup_ml_detector_crypto() first")
+        return None
+
+    return _ml_detector_crypto_client.get_pipeline_key()
+
+
+def get_ml_detector_crypto_status() -> Dict:
+    """Obtener estado crypto del ml_detector tricapa"""
+    global _ml_detector_crypto_client
+
+    if _ml_detector_crypto_client is None:
+        return {"error": "not_initialized"}
+
+    return _ml_detector_crypto_client.get_status()
+
+
+# ===============================================================================
+# TESTING Y DESARROLLO
+# ===============================================================================
+
+async def create_test_ml_detector_config(config_path: str):
+    """Crear configuración de test para ml_detector tricapa"""
+    test_config = {
+        "component": {
+            "name": "lightweight_ml_detector_tricapa_v31_etcd",
+            "version": "3.1.2-etcd-pubsub-optimized",
+            "mode": "tricapa_json_controlled_pubsub_etcd"
+        },
+        "node_id": "ml_detector_tricapa_v31_test_001",
+        "etcd_crypto": {
+            "etcd_host": "localhost",
+            "etcd_port": 2379,
+            "cluster_name": "upgraded-happiness-cluster",
+            "node_id": "ml_detector_tricapa_v31_test_001"
+        },
+        "network": {
+            "input_socket": {
+                "address": "localhost",
+                "port": 5560,
+                "mode": "connect",
+                "socket_type": "PULL",
+                "description": "Recibe eventos enriquecidos del geoip_enricher_v31"
+            },
+            "output_socket": {
+                "address": "localhost",
+                "port": 5580,
+                "mode": "bind",
+                "socket_type": "PUB",
+                "description": "Publica eventos con análisis tricapa al dashboard"
+            }
+        },
+        "crypto": {
+            "enabled": True,
+            "role": "receiver_sender",
+            "use_etcd_pipeline_key": True
+        },
+        "ml": {
+            "enabled": True,
+            "models": {
+                "level1_attack_detector": {
+                    "enabled": True,
+                    "model_file": "rf_production_sniffer_compatible.joblib"
+                }
+            }
+        }
+    }
+
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+
+    with open(config_path, 'w') as f:
+        json.dump(test_config, f, indent=2)
+
+    print(f"✅ Test ml_detector config created: {config_path}")
+
+
+async def test_ml_detector_crypto_fixed():
+    """Test completo del cliente crypto fijo para ml_detector tricapa"""
+    print("🧪 Testing ETCD Crypto Client - ML DETECTOR TRICAPA VERSION")
+    print("=" * 70)
+
+    test_config_path = "/tmp/test_ml_detector_config_fixed.json"
+
+    try:
+        # 1. Crear config de test
+        await create_test_ml_detector_config(test_config_path)
+
+        # 2. Test con testing mode enabled
+        print("\n📋 Testing with testing mode enabled...")
+        success = await setup_ml_detector_crypto(test_config_path, testing_mode=True)
+
+        if success:
+            print("✅ ML Detector tricapa crypto setup successful!")
+
+            # 3. Test key retrieval
+            pipeline_key = get_ml_detector_pipeline_key()
+            if pipeline_key:
+                print(f"🔑 Pipeline key: {pipeline_key[:32]}...")
+
+                # 4. Test status
+                status = get_ml_detector_crypto_status()
+                print(f"📊 Status: {json.dumps(status, indent=2)}")
+
+                print("\n🎯 READY FOR ML DETECTOR TRICAPA INTEGRATION!")
+            else:
+                print("❌ Failed to get pipeline key")
+        else:
+            print("❌ ML Detector tricapa crypto setup failed!")
+
+        # 5. Test sin testing mode (para ver diferencia)
+        print("\n📋 Testing without testing mode (may fail)...")
+        success_strict = await setup_ml_detector_crypto(test_config_path, testing_mode=False)
+        print(f"Strict mode result: {'✅ Success' if success_strict else '❌ Failed (expected)'}")
+
+        # 6. Test crypto mandatory (crypto enabled in JSON)
+        print("\n📋 Testing crypto mandatory mode...")
+        with open(test_config_path, 'r') as f:
+            config = json.load(f)
+        config["crypto"]["enabled"] = True
+        with open(test_config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+
+        success_mandatory = await setup_ml_detector_crypto(test_config_path, testing_mode=True)
+        print(f"Crypto mandatory result: {'✅ Success' if success_mandatory else '❌ Failed'}")
+
+    except Exception as e:
+        print(f"❌ Test failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+    finally:
+        # Cleanup
+        if os.path.exists(test_config_path):
+            os.unlink(test_config_path)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        command = sys.argv[1].lower()
+
+        if command == "test":
+            asyncio.run(test_ml_detector_crypto_fixed())
+        elif command == "fix-deps":
+            print("🔧 DEPENDENCY FIX OPTIONS:")
+            print("1. pip install 'protobuf<=3.20.3'")
+            print("2. export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python")
+            print("3. pip install etcd3-py (alternative)")
+            print("4. Ensure protocols folder uses v3_1 (no dots)")
+        else:
+            print(f"❌ Unknown command: {command}")
+            print("💡 Available: test, fix-deps")
+    else:
+        print("🧠 ETCD Crypto Client - ML DETECTOR TRICAPA VERSION")
+        print("=" * 60)
+        print()
+        print("🎯 CAPABILITIES:")
+        print("   ✅ Handles protobuf v3_1 compatibility issues")
+        print("   ✅ Testing mode for development")
+        print("   ✅ NO fallbacks if crypto enabled in JSON")
+        print("   ✅ Better error handling")
+        print("   ✅ Auto-detection of dev mode")
+        print("   ✅ receiver_sender crypto role")
+        print("   ✅ ML Detector tricapa specific registration")
+        print("   ✅ Pipeline position 3 (after geoip_enricher)")
+        print("   ✅ PUB/SUB distribution support")
+        print("   ✅ Mandatory crypto enforcement")
+        print()
+        print("🚀 USAGE:")
+        print("   python3 etcd_crypto_client_ml_detector_fixed.py test")
+        print("   python3 etcd_crypto_client_ml_detector_fixed.py fix-deps")
+        print()
+        print("🧪 DEV MODE:")
+        print("   export UPGRADED_HAPPINESS_DEV_MODE=true")
+        print()
+        print("🔐 CRYPTO MANDATORY:")
+        print("   If crypto.enabled=true in JSON → NO fallbacks")
+        print("   Component MUST shutdown if no ETCD pipeline key")

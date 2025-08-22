@@ -39,7 +39,7 @@ def import_consumer_protobuf_v31():
 
     for import_path, description in import_strategies:
         try:
-            FirewallCommandsProto = __import__(import_path, fromlist=[''])
+            FirewallCommandsProto = network_security_clean_v31_pb2
             PROTOBUF_AVAILABLE = True
             print(f"✅ Consumer: FirewallCommands v3.1 cargado: {description}")
 

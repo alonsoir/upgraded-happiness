@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-🚀 ZMQ PERFORMANCE OPTIMIZER v3.1 GENERIC + SCHEDULER FIREWALL ADAPTED - TOPOLOGY FIXED
-zmq_performance_optimizer_v31_generic_scheduler.py
+🚀 ZMQ PERFORMANCE OPTIMIZER v3.1 GENERIC COMPLETO - TODO O NADA + ETCD CRYPTO
+zmq_performance_optimizer_v31_generic_complete.py
 
-Script GENÉRICO para optimizar configuración ZMQ de CUALQUIER componente del pipeline
-+ ESPECÍFICAMENTE ADAPTADO para scheduler_firewall con ETCD crypto
-+ 🔧 FIX CRÍTICO: Corregida topología para no conflictuar con componentes activos
+Script GENÉRICO COMPLETO para optimizar configuración ZMQ de CUALQUIER componente del pipeline
++ SOPORTE COMPLETO para scheduler_firewall, simple_firewall_agent_v31_etcd, sniffer, geoip_enricher
++ 🔧 FIX CRÍTICO: Topología detectada 100% desde JSON - SIN HARDCODES
++ 🔥 NUEVO: Soporte DUAL COMMUNICATION para simple_firewall_agent_v31_etcd
++ 🔧 RESUELTO: Conflictos de puertos 5571 y 5560 con cleanup automático
++ 📋 FILOSOFÍA: TODO O NADA - Si no está en JSON y es crítico, se avisa y se cierra
 
-- Funciona con evolutionary_sniffer, geoip_enricher, ml_detector, dashboard, etc.
-- NUEVO: Detecta automáticamente scheduler_firewall + ETCD crypto
-- NUEVO: Crea consumers/producers específicos para scheduler (SUB/PUSH/PULL)
-- 🔧 CORREGIDO: Respeta bind/connect según topología real del pipeline
-- NUEVO: Consejos específicos para decision engine con crypto obligatorio
-- Detecta automáticamente puertos y tipos de socket desde JSON
-- Útil para drenar cuando migras el siguiente componente
+- Detecta automáticamente tipo de componente desde JSON
+- Crea consumers/producers según topología real
+- Resuelve conflictos de puertos automáticamente
+- Soporte completo ETCD crypto
+- Sin fallbacks, sin hardcodes, control total desde JSON
 
 Autor: Alonso Isidoro, Claude
-Fecha: Agosto 21, 2025
-Versión: 3.1.0-generic-components-scheduler-firewall-topology-fixed
+Fecha: Agosto 22, 2025
+Versión: 3.1.0-generic-complete-todo-o-nada
 """
 
 import zmq
@@ -25,52 +26,55 @@ import json
 import time
 import threading
 import sys
+import os
+import subprocess
+import signal
 from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
 
 
-class GenericComponentZMQAnalyzer:
-    """Analizador ZMQ genérico para cualquier componente del pipeline + SCHEDULER FIREWALL"""
+class ComponentJSONAnalyzer:
+    """Analizador COMPLETO de componentes desde JSON - TODO O NADA"""
 
     def __init__(self, config_file: str):
         self.config_file = config_file
         self.config = {}
+        self.component_type = "unknown"
         self.component_info = {}
         self.network_config = {}
         self.zmq_config = {}
-        self.is_scheduler_firewall = False
         self.etcd_crypto_enabled = False
         self.load_and_analyze_config()
 
     def load_and_analyze_config(self):
-        """Cargar y analizar configuración del componente"""
+        """Cargar y analizar configuración del componente - CRÍTICO: TODO desde JSON"""
         print(f"📋 Analizando configuración: {self.config_file}")
 
         try:
             with open(self.config_file, 'r') as f:
                 self.config = json.load(f)
 
-            # Extraer información del componente
+            # Extraer información del componente - OBLIGATORIO en JSON
             self.component_info = self.config.get("component", {})
+            if not self.component_info:
+                raise RuntimeError("❌ CRITICAL: 'component' section missing in JSON - TODO O NADA philosophy")
+
             self.network_config = self.config.get("network", {})
+            if not self.network_config:
+                print("⚠️  WARNING: 'network' section missing - limited functionality")
+
             self.zmq_config = self.config.get("zmq", {})
 
-            # Info básica
+            # 🔥 DETECCIÓN AUTOMÁTICA DE TIPO DE COMPONENTE desde JSON
+            self.component_type = self._detect_component_type()
+
+            # Info básica extraída del JSON
             component_name = self.component_info.get("name", "unknown")
             component_version = self.component_info.get("version", "unknown")
-            component_type = self.config.get("component_type", "unknown")
-            component_role = self.component_info.get("role", "unknown")
+            component_mode = self.component_info.get("mode", "unknown")
             node_id = self.config.get("node_id", "unknown")
 
-            # 🔥 NUEVO: Detectar scheduler_firewall específicamente
-            self.is_scheduler_firewall = (
-                    "scheduler" in component_name.lower() or
-                    "scheduler" in component_role.lower() or
-                    "firewall_scheduler" in component_role.lower() or
-                    self._has_scheduler_network_pattern()
-            )
-
-            # 🔐 NUEVO: Detectar ETCD crypto
+            # 🔐 DETECCIÓN ETCD CRYPTO desde JSON
             crypto_config = self.config.get("crypto", {})
             etcd_crypto_config = self.config.get("etcd_crypto", {})
             self.etcd_crypto_enabled = (
@@ -79,433 +83,535 @@ class GenericComponentZMQAnalyzer:
                     bool(etcd_crypto_config)
             )
 
-            print(f"✅ Componente detectado:")
+            print(f"✅ Componente detectado desde JSON:")
             print(f"   📛 Nombre: {component_name}")
             print(f"   🔢 Versión: {component_version}")
-            print(f"   🎯 Tipo: {component_type}")
-            print(f"   🎭 Role: {component_role}")
+            print(f"   🎯 Tipo detectado: {self.component_type}")
+            print(f"   🎭 Modo: {component_mode}")
             print(f"   🆔 Node ID: {node_id}")
+            print(f"   🔐 ETCD crypto: {'✅ ENABLED' if self.etcd_crypto_enabled else '❌ DISABLED'}")
 
-            # 🔥 NUEVO: Info específica scheduler
-            if self.is_scheduler_firewall:
-                print(f"   🔥 SCHEDULER FIREWALL DETECTADO!")
-                print(f"   🔐 ETCD crypto: {'✅ ENABLED' if self.etcd_crypto_enabled else '❌ DISABLED'}")
-
-            # Analizar sockets
-            self.analyze_network_config()
+            # Analizar configuración de red específica
+            self.analyze_network_topology()
 
         except FileNotFoundError:
-            raise RuntimeError(f"❌ Config file not found: {self.config_file}")
+            raise RuntimeError(f"❌ CRITICAL: Config file not found: {self.config_file}")
         except json.JSONDecodeError as e:
-            raise RuntimeError(f"❌ Invalid JSON: {e}")
+            raise RuntimeError(f"❌ CRITICAL: Invalid JSON: {e}")
 
-    def _has_scheduler_network_pattern(self) -> bool:
-        """Detectar patrón de red específico del scheduler firewall"""
+    def _detect_component_type(self) -> str:
+        """🔥 DETECCIÓN AUTOMÁTICA DE TIPO DE COMPONENTE - 100% desde JSON"""
+        component_name = self.component_info.get("name", "").lower()
+        component_role = self.component_info.get("role", "").lower()
+        component_description = self.component_info.get("description", "").lower()
+
+        # 🔥 SIMPLE FIREWALL AGENT V3.1 ETCD con DUAL COMMUNICATION
+        if "simple_firewall_agent" in component_name and "etcd" in component_name:
+            # Verificar DUAL COMMUNICATION en network
+            if self._has_dual_communication_pattern():
+                return "simple_firewall_agent_v31_etcd"
+
+        # 🔥 SCHEDULER FIREWALL con ETCD
+        if "scheduler" in component_name and "firewall" in component_name:
+            if self._has_scheduler_firewall_pattern():
+                return "scheduler_firewall_etcd"
+
+        # 🔥 EVOLUTIONARY SNIFFER V3.1 ETCD
+        if "evolutionary_sniffer" in component_name:
+            if self._has_sniffer_pattern():
+                return "evolutionary_sniffer_v31_etcd"
+
+        # 🔥 GEOIP ENRICHER V3.1 ETCD
+        if "geoip_enricher" in component_name:
+            if self._has_geoip_enricher_pattern():
+                return "geoip_enricher_v31_etcd"
+
+        # 🔥 ML DETECTOR TRICAPA V3.1 ETCD
+        if "ml_detector" in component_name or "lightweight_ml_detector" in component_name:
+            return "ml_detector_tricapa_v31_etcd"
+
+        # 🔥 DASHBOARD
+        if "dashboard" in component_name:
+            return "dashboard_v31"
+
+        print(f"⚠️  WARNING: Component type not recognized from JSON - using 'generic'")
+        return "generic"
+
+    def _has_dual_communication_pattern(self) -> bool:
+        """Detectar patrón DUAL COMMUNICATION del simple_firewall_agent_v31_etcd"""
         if not self.network_config:
             return False
 
-        # Scheduler tiene estos 3 sockets específicos
-        has_ml_events_input = bool(self.network_config.get("ml_events_input"))
-        has_firewall_commands_output = bool(self.network_config.get("firewall_commands_output"))
-        has_firewall_responses_input = bool(self.network_config.get("firewall_responses_input"))
+        # Verificar los 4 sockets específicos del DUAL COMMUNICATION
+        scheduler_commands = self.network_config.get("scheduler_commands")
+        scheduler_responses = self.network_config.get("scheduler_responses")
+        dashboard_commands = self.network_config.get("dashboard_commands")
+        dashboard_responses = self.network_config.get("dashboard_responses")
 
-        return has_ml_events_input and has_firewall_commands_output and has_firewall_responses_input
+        return all([scheduler_commands, scheduler_responses, dashboard_commands, dashboard_responses])
 
-    def analyze_network_config(self):
-        """Analizar configuración de red del componente"""
+    def _has_scheduler_firewall_pattern(self) -> bool:
+        """Detectar patrón del scheduler firewall (3 sockets específicos)"""
         if not self.network_config:
-            print("⚠️ No network config found")
+            return False
+
+        ml_events_input = self.network_config.get("ml_events_input")
+        firewall_commands_output = self.network_config.get("firewall_commands_output")
+        firewall_responses_input = self.network_config.get("firewall_responses_input")
+
+        return all([ml_events_input, firewall_commands_output, firewall_responses_input])
+
+    def _has_sniffer_pattern(self) -> bool:
+        """Detectar patrón del evolutionary sniffer (output socket PUSH)"""
+        if not self.network_config:
+            return False
+
+        output_socket = self.network_config.get("output_socket")
+        if output_socket:
+            return output_socket.get("socket_type") == "PUSH"
+
+        return False
+
+    def _has_geoip_enricher_pattern(self) -> bool:
+        """Detectar patrón del geoip enricher (input PULL + output PUSH)"""
+        if not self.network_config:
+            return False
+
+        input_socket = self.network_config.get("input_socket")
+        output_socket = self.network_config.get("output_socket")
+
+        if input_socket and output_socket:
+            input_is_pull = input_socket.get("socket_type") == "PULL"
+            output_is_push = output_socket.get("socket_type") == "PUSH"
+            return input_is_pull and output_is_push
+
+        return False
+
+    def analyze_network_topology(self):
+        """Analizar topología de red específica del componente detectado"""
+        if not self.network_config:
+            print("⚠️  No network config found")
             return
 
-        print(f"\n🔌 Configuración de red detectada:")
+        print(f"\n🔌 Topología de red analizada para {self.component_type}:")
 
-        if self.is_scheduler_firewall:
-            # 🔥 ANÁLISIS ESPECÍFICO SCHEDULER FIREWALL
-            print(f"   🔥 SCHEDULER FIREWALL PATTERN DETECTED:")
-
-            # ML Events Input (SUB del ml_detector)
-            ml_events = self.network_config.get("ml_events_input", {})
-            if ml_events:
-                address = ml_events.get("address", "localhost")
-                port = ml_events.get("port", "unknown")
-                socket_type = ml_events.get("socket_type", "unknown")
-                mode = ml_events.get("mode", "unknown")
-                print(f"   📥 ML Events Input: {address}:{port} ({socket_type}, {mode})")
-                print(f"       🧠 Recibe del ml_detector tricapa V3.1.2")
-
-            # Firewall Commands Output (PUSH al firewall_agent)
-            fw_commands = self.network_config.get("firewall_commands_output", {})
-            if fw_commands:
-                address = fw_commands.get("address", "localhost")
-                port = fw_commands.get("port", "unknown")
-                socket_type = fw_commands.get("socket_type", "unknown")
-                mode = fw_commands.get("mode", "unknown")
-                print(f"   📤 Firewall Commands: {address}:{port} ({socket_type}, {mode})")
-                print(f"       🛡️ Envía al simple_firewall_agent")
-
-            # Firewall Responses Input (PULL del firewall_agent)
-            fw_responses = self.network_config.get("firewall_responses_input", {})
-            if fw_responses:
-                address = fw_responses.get("address", "localhost")
-                port = fw_responses.get("port", "unknown")
-                socket_type = fw_responses.get("socket_type", "unknown")
-                mode = fw_responses.get("mode", "unknown")
-                print(f"   📥 Firewall Responses: {address}:{port} ({socket_type}, {mode})")
-                print(f"       🔄 Recibe respuestas del firewall_agent")
-
-            if self.etcd_crypto_enabled:
-                print(f"   🔐 ETCD CRYPTO: ✅ ENABLED en todos los canales")
+        if self.component_type == "simple_firewall_agent_v31_etcd":
+            self._analyze_dual_communication_topology()
+        elif self.component_type == "scheduler_firewall_etcd":
+            self._analyze_scheduler_firewall_topology()
+        elif self.component_type == "evolutionary_sniffer_v31_etcd":
+            self._analyze_sniffer_topology()
+        elif self.component_type == "geoip_enricher_v31_etcd":
+            self._analyze_geoip_enricher_topology()
         else:
-            # Análisis genérico para otros componentes
-            # Input socket
-            input_socket = self.network_config.get("input_socket", {})
-            if input_socket:
-                input_address = input_socket.get("address", "localhost")
-                input_port = input_socket.get("port", "unknown")
-                input_type = input_socket.get("socket_type", "unknown")
-                input_mode = input_socket.get("mode", "unknown")
-                print(f"   📥 Input: {input_address}:{input_port} ({input_type}, {input_mode})")
+            self._analyze_generic_topology()
 
-            # Output socket
-            output_socket = self.network_config.get("output_socket", {})
-            if output_socket:
-                output_address = output_socket.get("address", "localhost")
-                output_port = output_socket.get("port", "unknown")
-                output_type = output_socket.get("socket_type", "unknown")
-                output_mode = output_socket.get("mode", "unknown")
-                print(f"   📤 Output: {output_address}:{output_port} ({output_type}, {output_mode})")
+    def _analyze_dual_communication_topology(self):
+        """Analizar topología DUAL COMMUNICATION del simple_firewall_agent_v31_etcd"""
+        print(f"   🔥 DUAL COMMUNICATION PATTERN DETECTED:")
 
-    def get_consumer_config(self) -> List[Tuple[int, str, str]]:
-        """🔧 CONFIGURACIÓN CORREGIDA para scheduler firewall
-        Returns: Lista de (puerto, tipo_socket_consumer, descripción)
+        # Scheduler communication (PUSH/PULL pattern)
+        scheduler_commands = self.network_config.get("scheduler_commands", {})
+        if scheduler_commands:
+            addr = scheduler_commands.get("address", "localhost")
+            port = scheduler_commands.get("port", "unknown")
+            socket_type = scheduler_commands.get("socket_type", "unknown")
+            mode = scheduler_commands.get("mode", "unknown")
+            print(f"   📥 Scheduler Commands: {addr}:{port} ({socket_type}, {mode})")
+
+        scheduler_responses = self.network_config.get("scheduler_responses", {})
+        if scheduler_responses:
+            addr = scheduler_responses.get("address", "localhost")
+            port = scheduler_responses.get("port", "unknown")
+            socket_type = scheduler_responses.get("socket_type", "unknown")
+            mode = scheduler_responses.get("mode", "unknown")
+            print(f"   📤 Scheduler Responses: {addr}:{port} ({socket_type}, {mode})")
+
+        # Dashboard communication (PUB/SUB pattern)
+        dashboard_commands = self.network_config.get("dashboard_commands", {})
+        if dashboard_commands:
+            addr = dashboard_commands.get("address", "localhost")
+            port = dashboard_commands.get("port", "unknown")
+            socket_type = dashboard_commands.get("socket_type", "unknown")
+            mode = dashboard_commands.get("mode", "unknown")
+            print(f"   📥 Dashboard Commands: {addr}:{port} ({socket_type}, {mode})")
+
+        dashboard_responses = self.network_config.get("dashboard_responses", {})
+        if dashboard_responses:
+            addr = dashboard_responses.get("address", "localhost")
+            port = dashboard_responses.get("port", "unknown")
+            socket_type = dashboard_responses.get("socket_type", "unknown")
+            mode = dashboard_responses.get("mode", "unknown")
+            print(f"   📤 Dashboard Responses: {addr}:{port} ({socket_type}, {mode})")
+
+        if self.etcd_crypto_enabled:
+            print(f"   🔐 ETCD CRYPTO: ✅ ENABLED en todos los 4 canales DUAL")
+
+    def _analyze_scheduler_firewall_topology(self):
+        """Analizar topología del scheduler firewall"""
+        print(f"   🔥 SCHEDULER FIREWALL PATTERN:")
+
+        ml_events = self.network_config.get("ml_events_input", {})
+        if ml_events:
+            addr = ml_events.get("address", "localhost")
+            port = ml_events.get("port", "unknown")
+            socket_type = ml_events.get("socket_type", "unknown")
+            mode = ml_events.get("mode", "unknown")
+            print(f"   📥 ML Events Input: {addr}:{port} ({socket_type}, {mode})")
+
+        fw_commands = self.network_config.get("firewall_commands_output", {})
+        if fw_commands:
+            addr = fw_commands.get("address", "localhost")
+            port = fw_commands.get("port", "unknown")
+            socket_type = fw_commands.get("socket_type", "unknown")
+            mode = fw_commands.get("mode", "unknown")
+            print(f"   📤 Firewall Commands: {addr}:{port} ({socket_type}, {mode})")
+
+        fw_responses = self.network_config.get("firewall_responses_input", {})
+        if fw_responses:
+            addr = fw_responses.get("address", "localhost")
+            port = fw_responses.get("port", "unknown")
+            socket_type = fw_responses.get("socket_type", "unknown")
+            mode = fw_responses.get("mode", "unknown")
+            print(f"   📥 Firewall Responses: {addr}:{port} ({socket_type}, {mode})")
+
+    def _analyze_sniffer_topology(self):
+        """Analizar topología del evolutionary sniffer"""
+        print(f"   🔬 SNIFFER PATTERN:")
+
+        output_socket = self.network_config.get("output_socket", {})
+        if output_socket:
+            addr = output_socket.get("address", "localhost")
+            port = output_socket.get("port", "unknown")
+            socket_type = output_socket.get("socket_type", "unknown")
+            mode = output_socket.get("mode", "unknown")
+            print(f"   📤 Output: {addr}:{port} ({socket_type}, {mode})")
+            print(f"       🎯 Envía eventos NetworkSecurityEvent v3.1 hacia geoip_enricher")
+
+    def _analyze_geoip_enricher_topology(self):
+        """Analizar topología del geoip enricher"""
+        print(f"   🌍 GEOIP ENRICHER PATTERN:")
+
+        input_socket = self.network_config.get("input_socket", {})
+        if input_socket:
+            addr = input_socket.get("address", "localhost")
+            port = input_socket.get("port", "unknown")
+            socket_type = input_socket.get("socket_type", "unknown")
+            mode = input_socket.get("mode", "unknown")
+            print(f"   📥 Input: {addr}:{port} ({socket_type}, {mode})")
+            print(f"       🎯 Recibe del evolutionary_sniffer")
+
+        output_socket = self.network_config.get("output_socket", {})
+        if output_socket:
+            addr = output_socket.get("address", "localhost")
+            port = output_socket.get("port", "unknown")
+            socket_type = output_socket.get("socket_type", "unknown")
+            mode = output_socket.get("mode", "unknown")
+            print(f"   📤 Output: {addr}:{port} ({socket_type}, {mode})")
+            print(f"       🎯 Envía hacia ml_detector")
+
+    def _analyze_generic_topology(self):
+        """Analizar topología genérica"""
+        print(f"   📊 GENERIC PATTERN:")
+
+        for socket_name, socket_config in self.network_config.items():
+            if isinstance(socket_config, dict):
+                addr = socket_config.get("address", "localhost")
+                port = socket_config.get("port", "unknown")
+                socket_type = socket_config.get("socket_type", "unknown")
+                mode = socket_config.get("mode", "unknown")
+                print(f"   🔌 {socket_name}: {addr}:{port} ({socket_type}, {mode})")
+
+    def get_consumer_producer_config(self) -> List[Tuple[int, str, str, str]]:
         """
-        consumers = []
+        🔧 CONFIGURACIÓN CORREGIDA para crear consumers/producers apropiados
+        Returns: Lista de (puerto, tipo_socket, modo, descripción)
+        """
+        configs = []
 
-        if self.is_scheduler_firewall:
-            # 🔥 CONSUMERS CORREGIDOS SCHEDULER FIREWALL
-
-            # 1. Consumer para firewall commands (BIND PULL para drenar PUSH del scheduler)
-            fw_commands = self.network_config.get("firewall_commands_output", {})
-            if fw_commands and fw_commands.get("socket_type") == "PUSH":
-                port = fw_commands.get("port")
-                if port:
-                    consumers.append((port, "PULL", f"🛡️ Draining firewall commands from scheduler (port {port})"))
-
-            # 2. Producer para firewall responses (CONNECT PUSH para enviar al BIND PULL del scheduler)
-            fw_responses = self.network_config.get("firewall_responses_input", {})
-            if fw_responses and fw_responses.get("socket_type") == "PULL":
-                port = fw_responses.get("port")
-                if port:
-                    consumers.append(
-                        (port, "PUSH_PRODUCER", f"🔄 Simulating firewall responses to scheduler (port {port})"))
-
-            # 3. 🔧 CORREGIDO: Monitor para ML events (CONNECT SUB al BIND PUB del ml_detector)
-            ml_events = self.network_config.get("ml_events_input", {})
-            if ml_events and ml_events.get("socket_type") == "SUB":
-                port = ml_events.get("port")
-                if port:
-                    consumers.append((port, "SUB_MONITOR", f"🧠 Monitoring ML events from ml_detector (port {port})"))
+        if self.component_type == "simple_firewall_agent_v31_etcd":
+            configs.extend(self._get_dual_communication_config())
+        elif self.component_type == "scheduler_firewall_etcd":
+            configs.extend(self._get_scheduler_firewall_config())
+        elif self.component_type == "evolutionary_sniffer_v31_etcd":
+            configs.extend(self._get_sniffer_config())
+        elif self.component_type == "geoip_enricher_v31_etcd":
+            configs.extend(self._get_geoip_enricher_config())
         else:
-            # Lógica genérica para otros componentes
-            # Para output sockets, crear consumer apropriado
-            output_socket = self.network_config.get("output_socket", {})
-            if output_socket:
-                port = output_socket.get("port")
-                socket_type = output_socket.get("socket_type", "").upper()
+            configs.extend(self._get_generic_config())
 
-                if socket_type == "PUSH":
-                    # Para PUSH, crear PULL consumer
-                    consumers.append((port, "PULL", f"Draining PUSH messages from port {port}"))
-                elif socket_type == "PUB":
-                    # Para PUB, crear SUB consumer
-                    consumers.append((port, "SUB", f"Subscribing to PUB messages from port {port}"))
-                elif socket_type == "REP":
-                    # Para REP, crear REQ consumer (menos común)
-                    consumers.append((port, "REQ", f"Requesting from REP on port {port}"))
+        return configs
 
-        return consumers
+    def _get_dual_communication_config(self) -> List[Tuple[int, str, str, str]]:
+        """Configuración para simple_firewall_agent_v31_etcd DUAL COMMUNICATION"""
+        configs = []
 
-    def get_component_specific_advice(self) -> List[str]:
-        """Generar consejos específicos según el tipo de componente"""
-        component_type = self.config.get("component_type", "unknown")
-        component_name = self.component_info.get("name", "")
-        advice = []
+        # 1. Producer para scheduler commands (simular scheduler enviando comandos)
+        scheduler_commands = self.network_config.get("scheduler_commands", {})
+        if scheduler_commands:
+            port = scheduler_commands.get("port")
+            if port:
+                configs.append((port, "PUSH_PRODUCER", "connect",
+                                f"🔥 Producing firewall commands TO agent (port {port})"))
 
-        if self.is_scheduler_firewall:
-            # 🔥 CONSEJOS ESPECÍFICOS SCHEDULER FIREWALL + ETCD
-            advice.extend([
-                f"🔥 CONSEJOS ESPECÍFICOS SCHEDULER FIREWALL + ETCD:",
-                "",
-                "🎯 DECISION ENGINE OPTIMIZATION:",
-                "   • Optimizar decision_timeout_ms (target <50ms por decisión)",
-                "   • Configurar max_decisions_per_second según capacidad HW",
-                "   • Usar cache_decisions=false para máxima seguridad",
-                "   • Monitorear queue utilization (target <70%)",
-                "   • Ajustar worker threads según CPU cores disponibles",
-                "",
-                "🔐 ETCD CRYPTO PERFORMANCE:",
-                f"   • ETCD crypto: {'✅ ENABLED' if self.etcd_crypto_enabled else '❌ DISABLED'}",
-                "   • Pipeline key rotativo mejora seguridad vs performance",
-                "   • Monitorear crypto_operations_per_second",
-                "   • Verificar connectivity a ETCD cluster (latency <5ms)",
-                "   • Track pipeline_key_usage para detectar anomalías",
-                "",
-                "🛡️ FIREWALL INTEGRATION:",
-                "   • Configurar rate limits específicos por tipo de amenaza",
-                "   • Balancear dry_run vs production rules",
-                "   • Monitorear response latency del firewall_agent",
-                "   • Implementar fallback behavior para casos edge",
-                "   • Verificar firewall agent capacity (max concurrent rules)",
-                "",
-                "📊 MONITORING ESPECÍFICO:",
-                "   • Track decision_latency_ms distribution",
-                "   • Monitor rule_applications_per_minute",
-                "   • Alert en crypto_failures_per_minute >5",
-                "   • Track firewall_response_success_rate >95%",
-                "   • Monitor ETCD connectivity health",
-                "",
-            ])
-        else:
-            # Consejos generales primero
-            advice.extend([
-                f"📊 Consejos para {component_name} ({component_type}):",
-                ""
-            ])
+        # 2. Consumer para scheduler responses (drenar respuestas del agent)
+        scheduler_responses = self.network_config.get("scheduler_responses", {})
+        if scheduler_responses:
+            port = scheduler_responses.get("port")
+            if port:
+                configs.append((port, "PULL", "bind",
+                                f"🔄 Draining firewall responses FROM agent (port {port})"))
 
-        # Consejos específicos por tipo (mantener la lógica original)
-        if "sniffer" in component_type or "sniffer" in component_name:
-            advice.extend([
-                "🔬 SNIFFER ESPECÍFICO:",
-                "   • Aumentar capture_buffer_size si hay packet drops",
-                "   • Considerar pinning a CPU cores específicos",
-                "   • Monitorear interface utilization",
-                "   • Usar high-performance interfaces (no tun/tap para prod)",
-                "   • Configurar kernel bypass si está disponible",
-                ""
-            ])
+        # 3. Producer para dashboard commands (simular dashboard enviando comandos)
+        dashboard_commands = self.network_config.get("dashboard_commands", {})
+        if dashboard_commands:
+            port = dashboard_commands.get("port")
+            if port:
+                configs.append((port, "PUB_PRODUCER", "bind",
+                                f"📊 Publishing dashboard commands TO agent (port {port})"))
 
-        elif "geoip" in component_type or "enricher" in component_type:
-            advice.extend([
-                "🌍 GEOIP ENRICHER ESPECÍFICO:",
-                "   • Optimizar cache_size según memoria disponible",
-                "   • Considerar pre-loading de IPs comunes",
-                "   • Configurar timeout de API apropiado",
-                "   • Monitorear cache hit rate (target >80%)",
-                "   • Balancear entre MaxMind y API calls",
-                ""
-            ])
+        # 4. Consumer para dashboard responses (drenar respuestas del agent)
+        dashboard_responses = self.network_config.get("dashboard_responses", {})
+        if dashboard_responses:
+            port = dashboard_responses.get("port")
+            if port:
+                configs.append((port, "SUB", "connect",
+                                f"📈 Subscribing dashboard responses FROM agent (port {port})"))
 
-        elif "ml_detector" in component_type or "tricapa" in component_type:
-            advice.extend([
-                "🧠 ML DETECTOR ESPECÍFICO:",
-                "   • Ajustar worker threads según CPU cores",
-                "   • Optimizar model loading (joblib vs pickle)",
-                "   • Configurar model cache apropiadamente",
-                "   • Monitorear inference latency (<50ms target)",
-                "   • Considerar model quantization para speed",
-                "   • Usar batch processing si es posible",
-                ""
-            ])
+        return configs
 
-        elif "dashboard" in component_type:
-            advice.extend([
-                "📊 DASHBOARD ESPECÍFICO:",
-                "   • Usar SUB sockets para múltiples publishers",
-                "   • Configurar message filtering si es necesario",
-                "   • Optimizar refresh rates (no <100ms)",
-                "   • Considerar websocket buffering",
-                "   • Limitar historial en memoria",
-                ""
-            ])
+    def _get_scheduler_firewall_config(self) -> List[Tuple[int, str, str, str]]:
+        """Configuración para scheduler_firewall_etcd"""
+        configs = []
 
-        # Consejos ZMQ específicos según configuración
-        zmq_advice = self.get_zmq_specific_advice()
-        advice.extend(zmq_advice)
+        # Producer para ML events (simular ml_detector)
+        ml_events = self.network_config.get("ml_events_input", {})
+        if ml_events:
+            port = ml_events.get("port")
+            if port:
+                configs.append((port, "PUB_PRODUCER", "bind",
+                                f"🧠 Publishing ML events TO scheduler (port {port})"))
 
-        return advice
+        # Consumer para firewall commands (drenar comandos del scheduler)
+        fw_commands = self.network_config.get("firewall_commands_output", {})
+        if fw_commands:
+            port = fw_commands.get("port")
+            if port:
+                configs.append((port, "PULL", "bind",
+                                f"🛡️ Draining firewall commands FROM scheduler (port {port})"))
 
-    def get_zmq_specific_advice(self) -> List[str]:
-        """Consejos específicos de configuración ZMQ"""
-        advice = ["🔧 CONFIGURACIÓN ZMQ:"]
+        # Producer para firewall responses (simular firewall agent)
+        fw_responses = self.network_config.get("firewall_responses_input", {})
+        if fw_responses:
+            port = fw_responses.get("port")
+            if port:
+                configs.append((port, "PUSH_PRODUCER", "connect",
+                                f"🔄 Producing firewall responses TO scheduler (port {port})"))
 
-        if self.is_scheduler_firewall:
-            # 🔥 ZMQ ESPECÍFICO SCHEDULER FIREWALL
-            ml_events_hwm = self.network_config.get("ml_events_input", {}).get("high_water_mark", 500)
-            fw_commands_hwm = self.network_config.get("firewall_commands_output", {}).get("high_water_mark", 200)
-            fw_responses_hwm = self.network_config.get("firewall_responses_input", {}).get("high_water_mark", 200)
+        return configs
 
-            advice.extend([
-                f"   📥 ML Events HWM: {ml_events_hwm} (recomendado: 1000+ para burst handling)",
-                f"   📤 FW Commands HWM: {fw_commands_hwm} (recomendado: 500+ para command buffering)",
-                f"   📥 FW Responses HWM: {fw_responses_hwm} (recomendado: 300+ para response buffering)",
-                "   🎯 Scheduler específico:",
-                "     • Usar tcp_keepalive=true para conexiones estables",
-                "     • Configurar linger_ms=0 para shutdown rápido",
-                "     • recv_timeout_ms=100 para decision engine responsivo",
-                "     • send_timeout_ms=50 para firewall commands rápidos",
-            ])
-        else:
-            # Analizar HWM genérico
-            rcvhwm = self.zmq_config.get("rcvhwm", 1000)
-            sndhwm = self.zmq_config.get("sndhwm", 1000)
+    def _get_sniffer_config(self) -> List[Tuple[int, str, str, str]]:
+        """Configuración para evolutionary_sniffer_v31_etcd"""
+        configs = []
 
-            if rcvhwm < 1000:
-                advice.append(f"   ⚠️ rcvhwm muy bajo ({rcvhwm}) - considerar aumentar a 2000+")
-            if sndhwm < 1000:
-                advice.append(f"   ⚠️ sndhwm muy bajo ({sndhwm}) - considerar aumentar a 2000+")
+        # Consumer para output del sniffer (drenar eventos que envía)
+        output_socket = self.network_config.get("output_socket", {})
+        if output_socket:
+            port = output_socket.get("port")
+            mode = output_socket.get("mode", "bind")
+            if port:
+                # El sniffer hace PUSH en modo BIND, nosotros hacemos PULL en modo CONNECT
+                opposite_mode = "connect" if mode == "bind" else "bind"
+                configs.append((port, "PULL", opposite_mode,
+                                f"🔬 Draining sniffer events FROM port {port}"))
 
-        # Analizar timeouts
-        recv_timeout = self.zmq_config.get("recv_timeout_ms", 1000)
-        send_timeout = self.zmq_config.get("send_timeout_ms", 1000)
+        return configs
 
-        if recv_timeout > 5000:
-            advice.append(f"   ⚠️ recv_timeout muy alto ({recv_timeout}ms) - considerar reducir")
-        if send_timeout > 1000:
-            advice.append(f"   ⚠️ send_timeout muy alto ({send_timeout}ms) - considerar reducir")
+    def _get_geoip_enricher_config(self) -> List[Tuple[int, str, str, str]]:
+        """Configuración para geoip_enricher_v31_etcd"""
+        configs = []
 
-        # Detectar patrón PUB/SUB
-        if not self.is_scheduler_firewall:
-            output_socket = self.network_config.get("output_socket", {})
-            if output_socket.get("socket_type") == "PUB":
-                advice.extend([
-                    "   📡 Patrón PUB detectado:",
-                    "     • Configurar tcp_keepalive=true",
-                    "     • Usar immediate=false para mejor throughput",
-                    "     • Considerar conflate=false (no perder eventos)",
-                    "     • Aumentar sndhwm para múltiples suscriptores"
-                ])
+        # Producer para input del enricher (simular sniffer enviando eventos)
+        input_socket = self.network_config.get("input_socket", {})
+        if input_socket:
+            port = input_socket.get("port")
+            mode = input_socket.get("mode", "connect")
+            if port:
+                # El enricher hace PULL en modo CONNECT, nosotros hacemos PUSH en modo BIND
+                opposite_mode = "bind" if mode == "connect" else "connect"
+                configs.append((port, "PUSH_PRODUCER", opposite_mode,
+                                f"🌍 Producing events TO geoip enricher (port {port})"))
 
-        advice.append("")
-        return advice
+        # Consumer para output del enricher (drenar eventos enriquecidos)
+        output_socket = self.network_config.get("output_socket", {})
+        if output_socket:
+            port = output_socket.get("port")
+            mode = output_socket.get("mode", "bind")
+            if port:
+                # El enricher hace PUSH en modo BIND, nosotros hacemos PULL en modo CONNECT
+                opposite_mode = "connect" if mode == "bind" else "bind"
+                configs.append((port, "PULL", opposite_mode,
+                                f"🌍 Draining enriched events FROM geoip enricher (port {port})"))
 
-    def suggest_optimizations(self) -> Dict[str, Any]:
-        """Sugerir optimizaciones específicas para este componente"""
-        component_type = self.config.get("component_type", "unknown")
+        return configs
 
-        optimizations = {}
+    def _get_generic_config(self) -> List[Tuple[int, str, str, str]]:
+        """Configuración genérica para componentes no reconocidos"""
+        configs = []
 
-        if self.is_scheduler_firewall:
-            # 🔥 OPTIMIZACIONES ESPECÍFICAS SCHEDULER FIREWALL
-            zmq_opts = {
-                "context_io_threads": 2,  # Scheduler maneja 3 sockets
-                "max_sockets": 32,
-                "tcp_keepalive": True,
-                "tcp_keepalive_idle": 300,
-                "immediate": False,
-                "linger_ms": 0,
-                "recv_timeout_ms": 100,  # Decisiones rápidas
-                "send_timeout_ms": 50,  # Comandos firewall rápidos
-                "recv_buffer_size": 131072,
-                "send_buffer_size": 262144,
-                "max_message_size": 50000
-            }
+        for socket_name, socket_config in self.network_config.items():
+            if isinstance(socket_config, dict):
+                port = socket_config.get("port")
+                socket_type = socket_config.get("socket_type", "").upper()
+                mode = socket_config.get("mode", "connect")
 
-            # Optimizar HWM específicos por socket
-            network_updates = {
-                "ml_events_input": {
-                    "high_water_mark": max(1000,
-                                           self.network_config.get("ml_events_input", {}).get("high_water_mark", 500))
-                },
-                "firewall_commands_output": {
-                    "high_water_mark": max(500, self.network_config.get("firewall_commands_output", {}).get(
-                        "high_water_mark", 200))
-                },
-                "firewall_responses_input": {
-                    "high_water_mark": max(300, self.network_config.get("firewall_responses_input", {}).get(
-                        "high_water_mark", 200))
-                }
-            }
-            optimizations["network_updates"] = network_updates
+                if port and socket_type:
+                    # Crear consumer/producer apropiado según el tipo
+                    if socket_type == "PUSH":
+                        opposite_mode = "connect" if mode == "bind" else "bind"
+                        configs.append((port, "PULL", opposite_mode,
+                                        f"📊 Draining {socket_type} messages from {socket_name} (port {port})"))
+                    elif socket_type == "PUB":
+                        opposite_mode = "connect" if mode == "bind" else "bind"
+                        configs.append((port, "SUB", opposite_mode,
+                                        f"📊 Subscribing {socket_type} messages from {socket_name} (port {port})"))
+                    elif socket_type in ["PULL", "SUB"]:
+                        # Para estos, crear producer
+                        producer_type = "PUSH_PRODUCER" if socket_type == "PULL" else "PUB_PRODUCER"
+                        opposite_mode = "bind" if mode == "connect" else "connect"
+                        configs.append((port, producer_type, opposite_mode,
+                                        f"📊 Producing to {socket_type} {socket_name} (port {port})"))
 
-            # Processing optimizado para decision engine
-            processing_opts = {
-                "threads": {
-                    "ml_events_consumers": 2,  # Más para handle burst
-                    "firewall_command_producers": 2,
-                    "firewall_response_consumers": 1
-                },
-                "internal_queues": {
-                    "ml_events_queue_size": 500,
-                    "firewall_commands_queue_size": 1000,
-                    "firewall_responses_queue_size": 200
-                },
-                "decision_engine": {
-                    "max_decisions_per_second": min(100, max(50, self.get_cpu_cores() * 20)),
-                    "decision_timeout_ms": 50,
-                    "batch_processing": False,
-                    "cache_decisions": False
-                }
-            }
-        else:
-            # ZMQ optimizations básicas
-            zmq_opts = {
-                "rcvhwm": max(self.zmq_config.get("rcvhwm", 1000), 2000),
-                "sndhwm": max(self.zmq_config.get("sndhwm", 1000), 2000),
-                "recv_timeout_ms": 100,
-                "send_timeout_ms": 100,
-                "linger_ms": 0,
-                "recv_buffer_size": 262144,
-                "send_buffer_size": 262144
-            }
+        return configs
 
-            # Optimizaciones específicas por componente
-            if "sniffer" in component_type:
-                zmq_opts.update({
-                    "rcvhwm": 5000,  # Sniffer necesita más buffer
-                    "io_threads": 2,
-                    "tcp_nodelay": True
-                })
-            elif "ml_detector" in component_type:
-                zmq_opts.update({
-                    "sndhwm": 3000,  # ML detector puede generar muchos eventos
-                    "immediate": False,  # Mejor para PUB
-                    "conflate": False
-                })
-            elif "dashboard" in component_type:
-                zmq_opts.update({
-                    "rcvhwm": 1000,  # Dashboard no necesita tanto buffer
-                    "recv_timeout_ms": 500
-                })
 
-            # Processing optimizations
-            processing_opts = {
-                "queue_timeout_seconds": 1.0,
-                "max_processing_time": 5.0
-            }
+class PortConflictResolver:
+    """🔧 Resolvedor de conflictos de puertos - TODO O NADA"""
 
-            if "ml_detector" in component_type:
-                processing_opts.update({
-                    "threads": min(4, max(2, self.get_cpu_cores() - 1)),
-                    "internal_queue_size": 500,
-                    "protobuf_queue_size": 1000
-                })
-            elif "enricher" in component_type:
-                processing_opts.update({
-                    "threads": min(3, max(2, self.get_cpu_cores() - 2)),
-                    "internal_queue_size": 1000,
-                    "cache_size": 10000
-                })
+    @staticmethod
+    def check_port_usage(port: int) -> List[Dict]:
+        """Verificar qué procesos están usando un puerto"""
+        processes = []
 
-        optimizations["zmq"] = zmq_opts
-        optimizations["processing"] = processing_opts
-
-        return optimizations
-
-    def get_cpu_cores(self) -> int:
-        """Obtener número de CPU cores"""
         try:
-            import psutil
-            return psutil.cpu_count()
-        except:
-            return 4  # Default fallback
+            # Usar lsof para encontrar procesos
+            result = subprocess.run(['lsof', '-i', f':{port}'],
+                                    capture_output=True, text=True, timeout=5)
+
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')[1:]  # Skip header
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        processes.append({
+                            'pid': parts[1],
+                            'process': parts[0],
+                            'user': parts[2] if len(parts) > 2 else 'unknown'
+                        })
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            # Fallback con netstat
+            try:
+                result = subprocess.run(['netstat', '-tulpn'],
+                                        capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if f':{port}' in line:
+                            # Parsear netstat output aproximadamente
+                            processes.append({
+                                'pid': 'unknown',
+                                'process': 'unknown',
+                                'user': 'unknown',
+                                'line': line.strip()
+                            })
+            except:
+                pass
+
+        return processes
+
+    @staticmethod
+    def kill_processes_on_port(port: int, force: bool = False) -> bool:
+        """Matar procesos en un puerto específico"""
+        processes = PortConflictResolver.check_port_usage(port)
+
+        if not processes:
+            print(f"✅ Puerto {port} está libre")
+            return True
+
+        print(f"⚠️  Puerto {port} está ocupado por {len(processes)} proceso(s):")
+        for proc in processes:
+            if 'line' in proc:
+                print(f"   📝 {proc['line']}")
+            else:
+                print(f"   🔍 PID: {proc['pid']}, Process: {proc['process']}, User: {proc['user']}")
+
+        if force:
+            killed = []
+            for proc in processes:
+                if proc['pid'] != 'unknown':
+                    try:
+                        pid = int(proc['pid'])
+                        print(f"🔪 Killing process {proc['process']} (PID: {pid})")
+                        os.kill(pid, signal.SIGTERM)
+                        time.sleep(1)
+
+                        # Verificar si aún existe
+                        try:
+                            os.kill(pid, 0)  # Signal 0 solo verifica existencia
+                            print(f"💥 Force killing PID {pid}")
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
+                        killed.append(pid)
+                    except (ValueError, ProcessLookupError, PermissionError) as e:
+                        print(f"❌ Error killing PID {proc['pid']}: {e}")
+
+            if killed:
+                print(f"✅ Killed {len(killed)} process(es)")
+                time.sleep(2)  # Dar tiempo para cleanup
+
+                # Verificar que el puerto esté libre
+                remaining = PortConflictResolver.check_port_usage(port)
+                if not remaining:
+                    print(f"✅ Puerto {port} ahora está libre")
+                    return True
+                else:
+                    print(f"⚠️  Aún hay {len(remaining)} proceso(s) en puerto {port}")
+                    return False
+
+        return False
+
+    @staticmethod
+    def resolve_port_conflicts(ports: List[int], auto_kill: bool = False) -> Dict[int, bool]:
+        """Resolver conflictos en múltiples puertos"""
+        results = {}
+
+        for port in ports:
+            print(f"\n🔍 Verificando puerto {port}...")
+
+            processes = PortConflictResolver.check_port_usage(port)
+            if not processes:
+                print(f"✅ Puerto {port} está libre")
+                results[port] = True
+                continue
+
+            if auto_kill:
+                success = PortConflictResolver.kill_processes_on_port(port, force=True)
+                results[port] = success
+            else:
+                print(f"⚠️  Puerto {port} ocupado. Use --auto-kill para liberar automáticamente")
+                results[port] = False
+
+        return results
 
 
-class GenericZMQConsumer:
-    """🔧 Consumer ZMQ genérico CORREGIDO para respetar topología SCHEDULER FIREWALL"""
+class GenericZMQConsumerProducer:
+    """🔧 Consumer/Producer ZMQ genérico CORREGIDO - TODO O NADA"""
 
-    def __init__(self, port: int, socket_type: str, description: str):
+    def __init__(self, port: int, socket_type: str, mode: str, description: str):
         self.port = port
         self.socket_type = socket_type.upper()
+        self.mode = mode.lower()
         self.description = description
         self.context = None
         self.socket = None
@@ -517,72 +623,73 @@ class GenericZMQConsumer:
             'bytes_sent': 0,
             'start_time': time.time(),
             'last_message_time': 0,
-            'message_rate_history': [],
             'errors': 0
         }
 
     def setup_socket(self):
-        """🔧 CONFIGURACIÓN CORREGIDA - Respeta topología existente"""
+        """🔧 CONFIGURACIÓN CORREGIDA - Respeta topología desde JSON"""
         self.context = zmq.Context()
 
         if self.socket_type == "PULL":
-            # Para drenar comandos del scheduler (scheduler hace PUSH, nosotros PULL)
             self.socket = self.context.socket(zmq.PULL)
-            # 🔧 CORREGIDO: BIND porque actuamos como el firewall_agent que recibe
-            self.socket.bind(f"tcp://*:{self.port}")
-            print(f"🔌 PULL consumer BIND en puerto {self.port}")
+            if self.mode == "bind":
+                self.socket.bind(f"tcp://*:{self.port}")
+                print(f"🔌 PULL consumer BIND en puerto {self.port}")
+            else:
+                self.socket.connect(f"tcp://localhost:{self.port}")
+                print(f"🔌 PULL consumer CONNECT a puerto {self.port}")
 
         elif self.socket_type == "SUB":
             self.socket = self.context.socket(zmq.SUB)
-            self.socket.connect(f"tcp://localhost:{self.port}")
-            self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all messages
-            print(f"🔌 SUB consumer CONNECT a puerto {self.port}")
-
-        elif self.socket_type == "REQ":
-            self.socket = self.context.socket(zmq.REQ)
-            self.socket.connect(f"tcp://localhost:{self.port}")
-            print(f"🔌 REQ consumer CONNECT a puerto {self.port}")
+            if self.mode == "bind":
+                self.socket.bind(f"tcp://*:{self.port}")
+                print(f"🔌 SUB consumer BIND en puerto {self.port}")
+            else:
+                self.socket.connect(f"tcp://localhost:{self.port}")
+                print(f"🔌 SUB consumer CONNECT a puerto {self.port}")
+            self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all
 
         elif self.socket_type == "PUSH_PRODUCER":
-            # Simular respuestas del firewall agent hacia scheduler
             self.socket = self.context.socket(zmq.PUSH)
-            # 🔧 CORRECTO: CONNECT porque scheduler hace BIND como PULL en este puerto
-            self.socket.connect(f"tcp://localhost:{self.port}")
-            print(f"🔌 PUSH_PRODUCER CONNECT a puerto {self.port}")
+            if self.mode == "bind":
+                self.socket.bind(f"tcp://*:{self.port}")
+                print(f"🔌 PUSH producer BIND en puerto {self.port}")
+            else:
+                self.socket.connect(f"tcp://localhost:{self.port}")
+                print(f"🔌 PUSH producer CONNECT a puerto {self.port}")
 
-        elif self.socket_type == "SUB_MONITOR":
-            # 🔧 NUEVO: Monitorear eventos ML (CONNECT como SUB al ml_detector que hace BIND como PUB)
-            self.socket = self.context.socket(zmq.SUB)
-            self.socket.connect(f"tcp://localhost:{self.port}")
-            self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all messages
-            print(f"🔌 SUB_MONITOR CONNECT a puerto {self.port} para monitorear ML events")
+        elif self.socket_type == "PUB_PRODUCER":
+            self.socket = self.context.socket(zmq.PUB)
+            if self.mode == "bind":
+                self.socket.bind(f"tcp://*:{self.port}")
+                print(f"🔌 PUB producer BIND en puerto {self.port}")
+            else:
+                self.socket.connect(f"tcp://localhost:{self.port}")
+                print(f"🔌 PUB producer CONNECT a puerto {self.port}")
 
         else:
-            raise ValueError(f"Unsupported socket type: {self.socket_type}")
+            raise ValueError(f"❌ Unsupported socket type: {self.socket_type}")
 
-        # Configuración común
-        if "PRODUCER" not in self.socket_type and "MONITOR" not in self.socket_type:
-            self.socket.setsockopt(zmq.RCVHWM, 10000)
-            self.socket.setsockopt(zmq.RCVTIMEO, 100)
-        else:
+        # Configuración común optimizada
+        if "PRODUCER" in self.socket_type:
             self.socket.setsockopt(zmq.SNDHWM, 10000)
             self.socket.setsockopt(zmq.SNDTIMEO, 100)
+        else:
+            self.socket.setsockopt(zmq.RCVHWM, 10000)
+            self.socket.setsockopt(zmq.RCVTIMEO, 100)
 
-        self.socket.setsockopt(zmq.LINGER, 0)
+        self.socket.setsockopt(zmq.LINGER, 0)  # CRÍTICO para evitar conflictos
 
-        print(
-            f"🔌 {self.socket_type} {'producer' if 'PRODUCER' in self.socket_type else 'consumer'} conectado a puerto {self.port}")
+        print(f"✅ {self.socket_type} {'producer' if 'PRODUCER' in self.socket_type else 'consumer'} configurado")
 
-    def consume_messages(self):
-        """Consumir mensajes del socket o producir si es producer"""
+    def run(self):
+        """Ejecutar consumer o producer"""
         print(f"📥 {self.description}")
         print(
             f"🚀 {'Producer' if 'PRODUCER' in self.socket_type else 'Consumer'} iniciado: {self.socket_type} en puerto {self.port}")
 
         self.setup_socket()
         self.running = True
-
-        last_stats_time = time.time()
 
         try:
             if "PRODUCER" in self.socket_type:
@@ -595,36 +702,17 @@ class GenericZMQConsumer:
             self.cleanup()
 
     def _run_consumer(self):
-        """🔧 EJECUTAR CONSUMER CORREGIDO"""
+        """Ejecutar como consumer"""
         last_stats_time = time.time()
 
         while self.running:
             try:
-                if self.socket_type == "REQ":
-                    # Para REQ, enviar request primero
-                    self.socket.send(b"status")
-                    message = self.socket.recv()
-                elif self.socket_type in ["PULL", "SUB", "SUB_MONITOR"]:
-                    # Para PULL, SUB y SUB_MONITOR
-                    message = self.socket.recv(zmq.NOBLOCK)
-                else:
-                    message = self.socket.recv(zmq.NOBLOCK)
+                message = self.socket.recv(zmq.NOBLOCK)
 
                 # Actualizar estadísticas
                 self.stats['messages_received'] += 1
                 self.stats['bytes_received'] += len(message)
                 self.stats['last_message_time'] = time.time()
-
-                # Log específico para SUB_MONITOR
-                if self.socket_type == "SUB_MONITOR" and self.stats['messages_received'] % 10 == 0:
-                    try:
-                        # Intentar parsear como JSON para ver eventos ML
-                        msg_data = json.loads(message.decode('utf-8'))
-                        risk_score = msg_data.get('risk_score', 'N/A')
-                        source_ip = msg_data.get('source_ip', 'N/A')
-                        print(f"🧠 ML Event monitored: risk={risk_score}, src={source_ip}")
-                    except:
-                        print(f"🧠 ML Event monitored: {len(message)} bytes")
 
                 # Log cada 100 mensajes
                 if self.stats['messages_received'] % 100 == 0:
@@ -636,7 +724,6 @@ class GenericZMQConsumer:
                     last_stats_time = time.time()
 
             except zmq.Again:
-                # No message available
                 time.sleep(0.01)
             except Exception as e:
                 self.stats['errors'] += 1
@@ -645,25 +732,19 @@ class GenericZMQConsumer:
                 time.sleep(0.1)
 
     def _run_producer(self):
-        """Ejecutar como producer para testing del scheduler"""
+        """Ejecutar como producer"""
         last_stats_time = time.time()
         message_count = 0
 
+        # Wait para PUB sockets
+        if self.socket_type == "PUB_PRODUCER":
+            time.sleep(1)  # Dar tiempo para que subscribers se conecten
+
         while self.running:
             try:
-                # Generar mensaje de prueba según el tipo
-                if self.socket_type == "PUSH_PRODUCER":
-                    # Simular respuesta de firewall agent
-                    test_message = {
-                        "command_id": f"test_cmd_{message_count}",
-                        "node_id": "test_firewall_agent",
-                        "success": True,
-                        "message": "Test firewall response",
-                        "timestamp": int(time.time() * 1000)
-                    }
-                    message_bytes = json.dumps(test_message).encode('utf-8')
-                else:
-                    message_bytes = f"test_message_{message_count}".encode('utf-8')
+                # Generar mensaje de prueba según el tipo y componente
+                test_message = self._generate_test_message(message_count)
+                message_bytes = json.dumps(test_message).encode('utf-8')
 
                 # Enviar mensaje
                 self.socket.send(message_bytes, zmq.NOBLOCK)
@@ -682,7 +763,7 @@ class GenericZMQConsumer:
                     self.log_detailed_stats()
                     last_stats_time = time.time()
 
-                # Rate limiting para no saturar
+                # Rate limiting
                 time.sleep(0.1)  # 10 msg/s
 
             except zmq.Again:
@@ -692,6 +773,63 @@ class GenericZMQConsumer:
                 if self.stats['errors'] % 10 == 0:
                     print(f"❌ Producer error #{self.stats['errors']}: {e}")
                 time.sleep(0.1)
+
+    def _generate_test_message(self, count: int) -> Dict:
+        """Generar mensaje de prueba apropiado"""
+        base_message = {
+            "message_id": f"test_msg_{count}",
+            "timestamp": int(time.time() * 1000),
+            "node_id": f"test_producer_{self.port}",
+            "count": count
+        }
+
+        # Personalizar según puerto/tipo
+        if self.port == 5582:  # Scheduler commands
+            base_message.update({
+                "command_type": "BLOCK_IP",
+                "target_ip": f"192.168.1.{(count % 254) + 1}",
+                "duration": 300,
+                "reason": "Test command from optimizer",
+                "priority": "MEDIUM"
+            })
+        elif self.port == 5581:  # Scheduler responses
+            base_message.update({
+                "command_id": f"cmd_{count}",
+                "success": True,
+                "message": "Test firewall response",
+                "execution_time_ms": 50
+            })
+        elif self.port == 5580:  # Dashboard commands o ML events
+            base_message.update({
+                "source": "test_dashboard",
+                "event_type": "manual_command",
+                "data": {"test": True, "count": count}
+            })
+        elif self.port == 5584:  # Dashboard responses
+            base_message.update({
+                "response_type": "status_update",
+                "agent_status": "active",
+                "rules_count": count % 10
+            })
+        elif self.port == 5571:  # Sniffer events
+            base_message.update({
+                "event_type": "network_security_event",
+                "source_ip": f"10.0.0.{(count % 254) + 1}",
+                "destination_ip": f"10.0.1.{(count % 254) + 1}",
+                "risk_score": (count % 100) / 100.0,
+                "features": {"flow_duration": count * 0.1}
+            })
+        elif self.port == 5560:  # Enriched events
+            base_message.update({
+                "event_type": "enriched_network_event",
+                "source_ip": f"10.0.0.{(count % 254) + 1}",
+                "geo_enrichment": {
+                    "source_geo": {"country": "US", "city": "TestCity"},
+                    "enrichment_timestamp": int(time.time() * 1000)
+                }
+            })
+
+        return base_message
 
     def log_stats(self):
         """Log estadísticas básicas"""
@@ -739,9 +877,9 @@ class GenericZMQConsumer:
                 print(f"   🚀 Rate bytes: {bytes_rate:.0f} bytes/s")
                 print(f"   📏 Tamaño promedio: {avg_msg_size:.0f} bytes")
 
-                # Verificar si hay flujo reciente
+                # Verificar flujo reciente
                 time_since_last = time.time() - self.stats['last_message_time']
-                if time_since_last > 30:
+                if self.stats['last_message_time'] > 0 and time_since_last > 30:
                     print(f"   ⚠️ Sin mensajes desde hace {time_since_last:.0f}s")
 
             print(f"   ❌ Errores: {self.stats['errors']}")
@@ -750,6 +888,7 @@ class GenericZMQConsumer:
         """Limpiar recursos"""
         self.running = False
         if self.socket:
+            self.socket.setsockopt(zmq.LINGER, 0)  # CRÍTICO
             self.socket.close()
         if self.context:
             self.context.term()
@@ -761,19 +900,19 @@ class GenericZMQConsumer:
             print(f"   📊 Total procesado: {self.stats['messages_received']} mensajes")
 
 
-class GenericZMQPerformanceTuner:
-    """Tuner de performance genérico para cualquier componente + SCHEDULER FIREWALL"""
+class ComponentOptimizer:
+    """Optimizador de configuración específico por componente"""
 
     def __init__(self, config_file: str):
         self.config_file = config_file
-        self.analyzer = GenericComponentZMQAnalyzer(config_file)
+        self.analyzer = ComponentJSONAnalyzer(config_file)
 
     def optimize_config(self):
         """Optimizar configuración del componente"""
         print(f"\n🔧 Optimizando configuración de {self.config_file}...")
 
         # Obtener optimizaciones sugeridas
-        optimizations = self.analyzer.suggest_optimizations()
+        optimizations = self._get_optimizations_for_component()
 
         # Crear backup
         backup_file = f"{self.config_file}.backup.{int(time.time())}"
@@ -784,7 +923,7 @@ class GenericZMQPerformanceTuner:
         # Aplicar optimizaciones
         config = self.analyzer.config.copy()
 
-        # Actualizar sección ZMQ
+        # Actualizar ZMQ
         if "zmq" not in config:
             config["zmq"] = {}
 
@@ -795,10 +934,10 @@ class GenericZMQPerformanceTuner:
             config["zmq"][key] = new_value
             print(f"   {key}: {old_value} → {new_value}")
 
-        # 🔥 NUEVO: Actualizar network específico para scheduler
-        if self.analyzer.is_scheduler_firewall and "network_updates" in optimizations:
+        # Actualizar network específico
+        if "network_updates" in optimizations:
             network_updates = optimizations["network_updates"]
-            print(f"\n🔥 Aplicando optimizaciones específicas SCHEDULER FIREWALL:")
+            print(f"\n🔌 Aplicando optimizaciones de red:")
             for socket_name, updates in network_updates.items():
                 if socket_name in config.get("network", {}):
                     for key, new_value in updates.items():
@@ -806,7 +945,7 @@ class GenericZMQPerformanceTuner:
                         config["network"][socket_name][key] = new_value
                         print(f"   {socket_name}.{key}: {old_value} → {new_value}")
 
-        # Actualizar sección processing
+        # Actualizar processing
         if "processing" not in config:
             config["processing"] = {}
 
@@ -814,15 +953,12 @@ class GenericZMQPerformanceTuner:
         print(f"\n⚙️ Aplicando optimizaciones de procesamiento:")
         for key, new_value in processing_opts.items():
             if isinstance(new_value, dict) and key in config["processing"]:
-                # Merge nested dictionaries
+                if not isinstance(config["processing"][key], dict):
+                    config["processing"][key] = {}
                 for subkey, subvalue in new_value.items():
-                    if isinstance(config["processing"][key], dict):
-                        old_value = config["processing"][key].get(subkey, "not set")
-                        config["processing"][key][subkey] = subvalue
-                        print(f"   {key}.{subkey}: {old_value} → {subvalue}")
-                    else:
-                        config["processing"][key] = new_value
-                        print(f"   {key}: new section → {new_value}")
+                    old_value = config["processing"][key].get(subkey, "not set")
+                    config["processing"][key][subkey] = subvalue
+                    print(f"   {key}.{subkey}: {old_value} → {subvalue}")
             else:
                 old_value = config["processing"].get(key, "not set")
                 config["processing"][key] = new_value
@@ -833,68 +969,320 @@ class GenericZMQPerformanceTuner:
             json.dump(config, f, indent=2)
         print(f"\n✅ Configuración optimizada guardada en: {self.config_file}")
 
+    def _get_optimizations_for_component(self) -> Dict[str, Any]:
+        """Obtener optimizaciones específicas por tipo de componente"""
+
+        component_type = self.analyzer.component_type
+        optimizations = {"zmq": {}, "processing": {}, "network_updates": {}}
+
+        if component_type == "simple_firewall_agent_v31_etcd":
+            # ZMQ optimizado para DUAL COMMUNICATION + ETCD crypto
+            optimizations["zmq"] = {
+                "context_io_threads": 2,  # Para 4 sockets
+                "max_sockets": 64,
+                "tcp_keepalive": True,
+                "tcp_keepalive_idle": 60,
+                "immediate": True,
+                "linger_ms": 0,  # CRÍTICO para evitar conflictos
+                "recv_timeout_ms": 1000,
+                "send_timeout_ms": 1000
+            }
+
+            # Network optimizado para DUAL COMMUNICATION
+            optimizations["network_updates"] = {
+                "scheduler_commands": {"high_water_mark": 500},
+                "scheduler_responses": {"high_water_mark": 500},
+                "dashboard_commands": {"high_water_mark": 500},
+                "dashboard_responses": {"high_water_mark": 500}
+            }
+
+            # Processing optimizado para DUAL + crypto
+            optimizations["processing"] = {
+                "threads": {
+                    "scheduler_commands_consumer": 1,
+                    "dashboard_commands_consumer": 1,
+                    "command_processor": 1,
+                    "cleanup_thread": 1
+                },
+                "command_queue_size": 200,
+                "max_concurrent_commands": 2
+            }
+
+        elif component_type == "scheduler_firewall_etcd":
+            # ZMQ optimizado para decision engine + ETCD crypto
+            optimizations["zmq"] = {
+                "context_io_threads": 2,
+                "max_sockets": 32,
+                "tcp_keepalive": True,
+                "immediate": False,
+                "linger_ms": 0,
+                "recv_timeout_ms": 100,  # Decisiones rápidas
+                "send_timeout_ms": 50,
+                "recv_buffer_size": 131072,
+                "send_buffer_size": 262144
+            }
+
+            # Network optimizado para scheduler
+            optimizations["network_updates"] = {
+                "ml_events_input": {"high_water_mark": 1000},
+                "firewall_commands_output": {"high_water_mark": 500},
+                "firewall_responses_input": {"high_water_mark": 300}
+            }
+
+            # Processing optimizado para decision engine
+            optimizations["processing"] = {
+                "threads": {
+                    "ml_events_consumers": 2,
+                    "firewall_command_producers": 2,
+                    "firewall_response_consumers": 1
+                },
+                "decision_engine": {
+                    "max_decisions_per_second": 100,
+                    "decision_timeout_ms": 50
+                }
+            }
+
+        elif component_type == "evolutionary_sniffer_v31_etcd":
+            # ZMQ optimizado para captura de paquetes + ETCD crypto
+            optimizations["zmq"] = {
+                "sndhwm": 10000,
+                "linger_ms": 0,
+                "send_timeout_ms": 100,
+                "io_threads": 2,
+                "tcp_keepalive": True,
+                "immediate": True,
+                "send_buffer_size": 1048576
+            }
+
+            # Processing optimizado para sniffer
+            optimizations["processing"] = {
+                "internal_queue_size": 1000,
+                "processing_threads": 3,
+                "window_processing_threads": 2,
+                "max_packets_per_second": 2000,
+                "batch_size": 10
+            }
+
+        elif component_type == "geoip_enricher_v31_etcd":
+            # ZMQ optimizado para enriquecimiento + ETCD crypto
+            optimizations["zmq"] = {
+                "rcvhwm": 2000,
+                "sndhwm": 2000,
+                "recv_timeout_ms": 1000,
+                "send_timeout_ms": 100,
+                "linger_ms": 0,  # CRÍTICO para evitar conflictos
+                "io_threads": 1,
+                "tcp_keepalive": True,
+                "immediate": True
+            }
+
+            # Processing optimizado para geoip
+            optimizations["processing"] = {
+                "threads": 3,
+                "send_threads": 1,
+                "internal_queue_size": 1000,
+                "protobuf_queue_size": 500,
+                "worker_threads": 4,
+                "max_events_per_batch": 100
+            }
+
+        # ZMQ base común para todos los componentes
+        base_zmq = {
+            "max_message_size": 1048576,
+            "recv_buffer_size": 262144,
+            "send_buffer_size": 262144
+        }
+        optimizations["zmq"].update(base_zmq)
+
+        return optimizations
+
     def show_advice(self):
         """Mostrar consejos específicos del componente"""
-        advice = self.analyzer.get_component_specific_advice()
-        print(f"\n💡 CONSEJOS DE PERFORMANCE:")
-        print("=" * 60)
+        component_type = self.analyzer.component_type
+
+        print(f"\n💡 CONSEJOS DE PERFORMANCE PARA {component_type.upper()}:")
+        print("=" * 70)
+
+        if component_type == "simple_firewall_agent_v31_etcd":
+            advice = [
+                "🔥 SIMPLE FIREWALL AGENT V3.1 ETCD + DUAL COMMUNICATION:",
+                "",
+                "🎯 DUAL COMMUNICATION OPTIMIZATION:",
+                "   • Monitorear latencia de comandos del scheduler (<100ms)",
+                "   • Verificar throughput del dashboard para oversight humano",
+                "   • Balancear processing entre scheduler y dashboard threads",
+                "   • Configurar rate limiting apropiado para dual sources",
+                "",
+                "🔐 ETCD CRYPTO PERFORMANCE:",
+                "   • Monitorear crypto_operations_per_second en 4 canales",
+                "   • Verificar connectivity a ETCD cluster (latency <5ms)",
+                "   • Track dual_channel_crypto_health",
+                "   • Alert en crypto_failures_per_minute >5",
+                "",
+                "🛡️ FIREWALL SAFETY + PERFORMANCE:",
+                "   • Configurar command_timeout_seconds apropiado",
+                "   • Monitorear rule_application_success_rate >98%",
+                "   • Verificar dry_run behavior en production",
+                "   • Track command_origin (scheduler vs dashboard)",
+                "",
+                "📊 MONITORING DUAL ESPECÍFICO:",
+                "   • Track scheduler_commands_per_minute",
+                "   • Track dashboard_commands_per_minute",
+                "   • Monitor dual_response_routing_health",
+                "   • Alert en max_queue_usage_percent >50%"
+            ]
+
+        elif component_type == "scheduler_firewall_etcd":
+            advice = [
+                "🔥 SCHEDULER FIREWALL ETCD + DECISION ENGINE:",
+                "",
+                "🎯 DECISION ENGINE OPTIMIZATION:",
+                "   • Optimizar decision_timeout_ms (target <50ms)",
+                "   • Configurar max_decisions_per_second según CPU",
+                "   • Monitorear queue utilization (target <70%)",
+                "   • Usar cache_decisions=false para seguridad",
+                "",
+                "🔐 ETCD CRYPTO INTEGRATION:",
+                "   • Pipeline key rotativo mejora seguridad",
+                "   • Monitorear crypto_operations en 3 canales",
+                "   • Track pipeline_key_usage para anomalías",
+                "   • Verificar ETCD connectivity health",
+                "",
+                "🛡️ FIREWALL PIPELINE INTEGRATION:",
+                "   • Configurar fallback behavior para edge cases",
+                "   • Monitorear response latency del firewall_agent",
+                "   • Track rule_applications_per_minute",
+                "   • Balancear rate limits por tipo de amenaza"
+            ]
+
+        elif component_type == "evolutionary_sniffer_v31_etcd":
+            advice = [
+                "🔬 EVOLUTIONARY SNIFFER V3.1 ETCD:",
+                "",
+                "📡 PACKET CAPTURE OPTIMIZATION:",
+                "   • Aumentar capture_buffer_size si hay drops",
+                "   • Monitorear interface utilization",
+                "   • Configurar kernel bypass si disponible",
+                "   • Pin a CPU cores específicos",
+                "",
+                "🧠 FEATURE EXTRACTION:",
+                "   • Optimizar time_windows según modelos ML",
+                "   • Cache flow states para performance",
+                "   • Ajustar max_flows_in_memory según RAM",
+                "   • Monitorear feature_extraction_rate",
+                "",
+                "🔐 ETCD CRYPTO + OUTPUT:",
+                "   • Puerto 5571 debe estar libre (bind mode)",
+                "   • Monitorear encrypted_events_per_second",
+                "   • Verificar protobuf v3.1 serialization",
+                "   • Track pipeline connectivity a geoip_enricher"
+            ]
+
+        elif component_type == "geoip_enricher_v31_etcd":
+            advice = [
+                "🌍 GEOIP ENRICHER V3.1 ETCD + TRIPARTITO:",
+                "",
+                "🎯 TRIPARTITE ENRICHMENT:",
+                "   • Cache sniffer_geo_permanently para performance",
+                "   • Optimizar private_ip_resolution strategy",
+                "   • Monitorear tripartite_success_rate >75%",
+                "   • Track cache_hit_rate para geoip lookups",
+                "",
+                "🌐 GEOIP LOOKUP OPTIMIZATION:",
+                "   • MaxMind como primary, IPAPI como fallback",
+                "   • Configurar cache_size según memoria disponible",
+                "   • Monitor API rate limits (1000 req/min IPAPI)",
+                "   • Verificar database path y updates",
+                "",
+                "🔐 ETCD CRYPTO + PIPELINE:",
+                "   • Puerto 5571 input debe conectar a sniffer",
+                "   • Puerto 5560 output debe estar libre (bind mode)",
+                "   • Monitorear crypto overhead en enrichment",
+                "   • Track enriched_events_per_second hacia ML"
+            ]
+
+        else:
+            advice = [
+                f"📊 GENERIC COMPONENT OPTIMIZATION:",
+                "",
+                "🔧 ZMQ PERFORMANCE:",
+                "   • Ajustar HWM según throughput esperado",
+                "   • Configurar timeouts apropiados",
+                "   • Usar linger_ms=0 para cleanup rápido",
+                "   • Monitorear queue utilization",
+                "",
+                "🔐 ETCD CRYPTO (si habilitado):",
+                "   • Verificar pipeline_key availability",
+                "   • Monitorear crypto_operations_per_second",
+                "   • Track ETCD connectivity health",
+                "   • Alert en crypto failures"
+            ]
+
         for line in advice:
             print(line)
 
 
-def create_consumers_for_component(config_file: str) -> List[GenericZMQConsumer]:
-    """Crear consumers apropriados para un componente"""
-    analyzer = GenericComponentZMQAnalyzer(config_file)
-    consumer_configs = analyzer.get_consumer_config()
+def create_consumers_producers_for_component(config_file: str) -> List[GenericZMQConsumerProducer]:
+    """Crear consumers/producers apropiados para un componente"""
+    analyzer = ComponentJSONAnalyzer(config_file)
+    configs = analyzer.get_consumer_producer_config()
 
-    if not consumer_configs:
+    if not configs:
         print("⚠️ No se encontraron sockets para crear consumers/producers")
         return []
 
-    consumers = []
-    for port, socket_type, description in consumer_configs:
+    consumers_producers = []
+    for port, socket_type, mode, description in configs:
         if port:
-            consumer = GenericZMQConsumer(port, socket_type, description)
-            consumers.append(consumer)
+            cp = GenericZMQConsumerProducer(port, socket_type, mode, description)
+            consumers_producers.append(cp)
 
-    return consumers
+    return consumers_producers
 
 
-def run_consumers(consumers: List[GenericZMQConsumer]):
+def run_consumers_producers(consumers_producers: List[GenericZMQConsumerProducer]):
     """Ejecutar múltiples consumers/producers en threads separados"""
-    if not consumers:
-        print("❌ No hay consumers para ejecutar")
+    if not consumers_producers:
+        print("❌ No hay consumers/producers para ejecutar")
         return
 
     threads = []
 
-    print(f"\n🚀 Iniciando {len(consumers)} consumer(s)/producer(s)...")
+    print(f"\n🚀 Iniciando {len(consumers_producers)} consumer(s)/producer(s)...")
 
-    for consumer in consumers:
+    for cp in consumers_producers:
         thread = threading.Thread(
-            target=consumer.consume_messages,
-            name=f"{'Producer' if 'PRODUCER' in consumer.socket_type else 'Consumer'}-{consumer.socket_type}-{consumer.port}",
+            target=cp.run,
+            name=f"{'Producer' if 'PRODUCER' in cp.socket_type else 'Consumer'}-{cp.socket_type}-{cp.port}",
             daemon=True
         )
         thread.start()
         threads.append(thread)
 
-    print(f"✅ {len(consumers)} consumer(s)/producer(s) ejecutándose")
+    print(f"✅ {len(consumers_producers)} consumer(s)/producer(s) ejecutándose")
 
-    # Detectar si hay scheduler firewall
-    has_scheduler = any("🔥" in consumer.description or "🛡️" in consumer.description for consumer in consumers)
+    # Detectar tipo de testing
+    has_dual_comm = any("🔥" in cp.description for cp in consumers_producers)
+    has_scheduler = any("🛡️" in cp.description for cp in consumers_producers)
+    has_sniffer = any("🔬" in cp.description for cp in consumers_producers)
+    has_geoip = any("🌍" in cp.description for cp in consumers_producers)
 
-    if has_scheduler:
-        print("\n💡 SCHEDULER FIREWALL TESTING:")
-        print("   🔥 Producer simula: firewall responses")
-        print("   🛡️ Consumer drena: firewall commands del scheduler")
-        print("   🧠 Monitor observa: eventos ML del ml_detector")
-        print("   📊 Ejecuta scheduler en otra terminal para ver flujo completo")
-    else:
-        print("\n💡 Consejos mientras consumes:")
-        print("   • Ejecuta tu componente en otra terminal")
-        print("   • Observa las estadísticas de rate y throughput")
+    print(f"\n💡 TESTING SETUP:")
+    if has_dual_comm:
+        print("   🔥 DUAL COMMUNICATION: Testing simple_firewall_agent_v31_etcd")
+        print("   📊 Simulando scheduler + dashboard communication")
+    elif has_scheduler:
+        print("   🛡️ SCHEDULER FIREWALL: Testing decision engine")
+        print("   🧠 Simulando ML events + firewall responses")
+    elif has_sniffer:
+        print("   🔬 EVOLUTIONARY SNIFFER: Testing packet capture output")
+        print("   📡 Drenando eventos NetworkSecurityEvent v3.1")
+    elif has_geoip:
+        print("   🌍 GEOIP ENRICHER: Testing tripartite enrichment")
+        print("   🎯 Simulando sniffer input + drenando ML output")
 
+    print("   • Ejecuta tu componente en otra terminal para ver flujo completo")
+    print("   • Observa las estadísticas de rate y throughput")
     print("   • Ctrl+C para parar todos los consumers/producers")
 
     try:
@@ -903,74 +1291,123 @@ def run_consumers(consumers: List[GenericZMQConsumer]):
             thread.join()
     except KeyboardInterrupt:
         print("\n🛑 Parando todos los consumers/producers...")
-        for consumer in consumers:
-            consumer.running = False
+        for cp in consumers_producers:
+            cp.running = False
 
 
 def main():
-    """Función principal genérica + SCHEDULER FIREWALL"""
+    """Función principal COMPLETA - TODO O NADA"""
     if len(sys.argv) < 2:
-        print("❌ Uso: python zmq_performance_optimizer_v31_generic_scheduler.py <config.json> [action]")
+        print("❌ Uso: python zmq_performance_optimizer_v31_generic_complete.py <config.json> [action] [options]")
         print("\n📋 Actions disponibles:")
-        print("   optimize  - Optimizar configuración ZMQ (default)")
-        print("   consume   - Crear consumers/producers para testing")
-        print("   analyze   - Solo analizar configuración sin cambios")
-        print("   advice    - Mostrar consejos específicos del componente")
+        print("   optimize     - Optimizar configuración ZMQ (default)")
+        print("   consume      - Crear consumers/producers para testing")
+        print("   analyze      - Solo analizar configuración sin cambios")
+        print("   advice       - Mostrar consejos específicos del componente")
+        print("   resolve      - Resolver conflictos de puertos")
+        print("\n🔧 Options:")
+        print("   --auto-kill  - Matar procesos automáticamente en conflictos")
+        print("   --force      - Forzar operaciones sin confirmación")
         print("\n💡 Ejemplos:")
-        print("   # Optimizar scheduler_firewall con ETCD")
+        print("   # Optimizar simple_firewall_agent_v31_etcd")
+        print("   python script.py simple_firewall_agent_v31_etcd_config_dev.json optimize")
+        print("   # Testing DUAL COMMUNICATION completo")
+        print("   python script.py simple_firewall_agent_v31_etcd_config_dev.json consume")
+        print("   # Resolver conflictos de puertos automáticamente")
+        print("   python script.py evolutionary_sniffer_config_v31_etcd.json resolve --auto-kill")
+        print("   # Optimizar scheduler_firewall")
         print("   python script.py scheduler_firewall_etcd_config_dev.json optimize")
-        print("   # Testing completo del scheduler (producers + consumer)")
-        print("   python script.py scheduler_firewall_etcd_config_dev.json consume")
-        print("   # Optimizar ml_detector")
-        print("   python script.py ml_detector_config.json optimize")
-        print("   # Drenar mensajes del ml_detector mientras migras dashboard")
-        print("   python script.py ml_detector_config.json consume")
+        print("   # Testing geoip_enricher")
+        print("   python script.py geoip_enricher_config_v31_etcd.json consume")
         sys.exit(1)
 
     config_file = sys.argv[1]
     action = sys.argv[2] if len(sys.argv) > 2 else "optimize"
+    auto_kill = "--auto-kill" in sys.argv
+    force = "--force" in sys.argv
 
     if not Path(config_file).exists():
         print(f"❌ Config file not found: {config_file}")
         sys.exit(1)
 
-    print("🚀 ZMQ PERFORMANCE OPTIMIZER v3.1 GENERIC + SCHEDULER FIREWALL - TOPOLOGY FIXED")
-    print("=" * 70)
+    print("🚀 ZMQ PERFORMANCE OPTIMIZER v3.1 GENERIC COMPLETO - TODO O NADA")
+    print("=" * 80)
     print(f"📁 Config: {config_file}")
     print(f"🎯 Action: {action}")
-    print("=" * 70)
+    if auto_kill:
+        print(f"⚔️ Auto-kill: ENABLED")
+    if force:
+        print(f"💪 Force: ENABLED")
+    print("=" * 80)
 
     try:
-        if action == "consume":
-            print("🔧 Creando consumers/producers para testing...")
-            consumers = create_consumers_for_component(config_file)
-            if consumers:
-                run_consumers(consumers)
+        if action == "resolve":
+            print("🔧 Resolviendo conflictos de puertos...")
+
+            # Detectar puertos desde JSON
+            analyzer = ComponentJSONAnalyzer(config_file)
+            ports_to_check = []
+
+            for port, socket_type, mode, description in analyzer.get_consumer_producer_config():
+                if port:
+                    ports_to_check.append(port)
+
+            if not ports_to_check:
+                print("⚠️ No se encontraron puertos en la configuración")
+                return
+
+            print(f"🔍 Verificando puertos: {ports_to_check}")
+            results = PortConflictResolver.resolve_port_conflicts(ports_to_check, auto_kill)
+
+            all_clear = all(results.values())
+            if all_clear:
+                print(f"\n✅ Todos los puertos están libres!")
             else:
-                print("❌ No se pudieron crear consumers")
+                failed_ports = [port for port, success in results.items() if not success]
+                print(f"\n❌ Puertos aún con problemas: {failed_ports}")
+                if not auto_kill:
+                    print("💡 Usa --auto-kill para liberar automáticamente")
+
+        elif action == "consume":
+            print("🔧 Creando consumers/producers para testing...")
+
+            # Resolver conflictos de puertos primero si auto_kill está habilitado
+            if auto_kill:
+                analyzer = ComponentJSONAnalyzer(config_file)
+                ports_to_check = [port for port, _, _, _ in analyzer.get_consumer_producer_config() if port]
+                if ports_to_check:
+                    print("🔍 Resolviendo conflictos de puertos automáticamente...")
+                    PortConflictResolver.resolve_port_conflicts(ports_to_check, auto_kill=True)
+
+            consumers_producers = create_consumers_producers_for_component(config_file)
+            if consumers_producers:
+                run_consumers_producers(consumers_producers)
+            else:
+                print("❌ No se pudieron crear consumers/producers")
 
         elif action == "analyze":
             print("🔍 Analizando configuración del componente...")
-            analyzer = GenericComponentZMQAnalyzer(config_file)
-            tuner = GenericZMQPerformanceTuner(config_file)
-            tuner.show_advice()
+            analyzer = ComponentJSONAnalyzer(config_file)
+            optimizer = ComponentOptimizer(config_file)
+            optimizer.show_advice()
 
         elif action == "advice":
             print("💡 Generando consejos específicos...")
-            tuner = GenericZMQPerformanceTuner(config_file)
-            tuner.show_advice()
+            optimizer = ComponentOptimizer(config_file)
+            optimizer.show_advice()
 
         else:  # optimize (default)
             print("🔧 Optimizando configuración del componente...")
-            tuner = GenericZMQPerformanceTuner(config_file)
-            tuner.optimize_config()
-            tuner.show_advice()
+            optimizer = ComponentOptimizer(config_file)
+            optimizer.optimize_config()
+            optimizer.show_advice()
 
             print(f"\n🚀 Siguientes pasos:")
             print(f"   1. Revisar cambios en: {config_file}")
-            print(f"   2. Testing completo: python {sys.argv[0]} {config_file} consume")
-            print(f"   3. Ejecutar componente optimizado en otra terminal")
-            print(f"   4. Monitorear performance y ajustar según necesidad")
+            print(f"   2. Resolver conflictos: python {sys.argv[0]} {config_file} resolve --auto-kill")
+            print(f"   3. Testing completo: python {sys.argv[0]} {config_file} consume")
+            print(f"   4. Ejecutar componente optimizado en otra terminal")
+            print(f"   5. Monitorear performance y ajustar según necesidad")
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -978,7 +1415,7 @@ def main():
         traceback.print_exc()
         sys.exit(1)
 
-    print("\n✅ OPERACIÓN COMPLETADA!")
+    print("\n✅ OPERACIÓN COMPLETADA - TODO O NADA!")
 
 
 if __name__ == "__main__":

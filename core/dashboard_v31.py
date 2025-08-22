@@ -62,7 +62,7 @@ def import_dashboard_protobuf_v31():
 
     for import_path, description in firewall_strategies:
         try:
-            FirewallCommandsProto = __import__(import_path, fromlist=[''])
+            FirewallCommandsProto = network_security_clean_v31_pb2
             firewall_imported = True
             print(f"✅ FirewallCommands v3.1 cargado: {description}")
             break
@@ -74,13 +74,13 @@ def import_dashboard_protobuf_v31():
     network_strategies = [
         ("network_security_clean_v31_pb2", "Importación directa v3.1"),
         ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
-        ("network_event_extended_v3_pb2", "Importación directa v3.0"),
-        ("protocols.v3_1.network_event_extended_v3_pb2", "Paquete protocols.v3_1 v3.0"),
+        ("network_security_clean_v31_pb2", "Importación directa v3.0"),
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1 v3.0"),
     ]
 
     for import_path, description in network_strategies:
         try:
-            NetworkEventProto = __import__(import_path, fromlist=[''])
+            NetworkEventProto = network_security_clean_v31_pb2
             network_imported = True
             print(f"✅ NetworkEvent cargado: {description}")
             break
@@ -117,7 +117,7 @@ def import_dashboard_protobuf_v31():
             if not network_imported:
                 # Prioridad 1: V3.1 limpio
                 network_v31_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
-                network_v3_file = os.path.join(protocols_path, 'network_event_extended_v3_pb2.py')
+                network_v3_file = os.path.join(protocols_path, 'network_security_clean_v31_pb2.py')
 
                 if os.path.exists(network_v31_file):
                     try:
@@ -134,7 +134,7 @@ def import_dashboard_protobuf_v31():
                     try:
                         if protocols_path not in sys.path:
                             sys.path.insert(0, protocols_path)
-                        import network_event_extended_v3_pb2 as NetworkEventProto
+                        import network_security_clean_v31_pb2 as NetworkEventProto
                         network_imported = True
                         print(f"✅ NetworkEvent v3.0 cargado desde: {protocols_path}")
                     except ImportError:
@@ -172,7 +172,7 @@ def import_dashboard_protobuf_v31():
         print(f"   NetworkEvent: {'✅' if network_imported else '❌'}")
         print(f"📁 Archivos requeridos:")
         print(f"   • firewall_commands_v31_pb2.py")
-        print(f"   • network_security_clean_v31_pb2.py (o network_event_extended_v3_pb2.py)")
+        print(f"   • network_security_clean_v31_pb2.py (o network_security_clean_v31_pb2.py)")
         print(f"📍 Ubicaciones buscadas:")
         for path in [
             os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'protocols', 'v3.1'),
