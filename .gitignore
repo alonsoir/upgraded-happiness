@@ -234,3 +234,8 @@ upgraded-happiness-bitdefender/*.*
 .env
 
 actual_tests_state.txtconfig/crypto/certificates/sniffer.key
+
+# ETCD runtime files
+default.etcd/
+*.etcd/
+member/
