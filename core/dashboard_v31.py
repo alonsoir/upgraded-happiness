@@ -27,6 +27,8 @@ from collections import defaultdict, deque
 import queue
 import uuid
 
+from protocols.v3_1 import firewall_commands_v31_pb2, network_security_clean_v31_pb2
+
 # 🔐 STEP 1: Importar CryptoZMQV31 (mismo patrón que otros componentes)
 crypto_wrapper_class = None
 try:
@@ -62,7 +64,7 @@ def import_dashboard_protobuf_v31():
 
     for import_path, description in firewall_strategies:
         try:
-            FirewallCommandsProto = network_security_clean_v31_pb2
+            FirewallCommandsProto = firewall_commands_v31_pb2
             firewall_imported = True
             print(f"✅ FirewallCommands v3.1 cargado: {description}")
             break
