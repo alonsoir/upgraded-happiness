@@ -56,21 +56,23 @@
         "network_endpoints": {
           "dashboard_commands": {
             "address": "localhost",
-            "port": 5590,
-            "_comment": "📤 DASHBOARD → AGENT: Comandos cifrados automáticamente por ETCD",
+            "port": 5583,
+            "_comment": "📤 CORREGIDO: 5590 → 5583 para alinearse con firewall agent",
             "mode": "connect",
-            "socket_type": "PUSH",
+            "socket_type": "PUB",
+            "_comment_pattern": "📤 CORREGIDO: PUSH → PUB para alinearse con firewall agent SUB",
             "high_water_mark": 200,
-            "description": "Commands to firewall agent (ETCD auto-encrypted)"
+            "description": "Commands to firewall agent (ETCD auto-encrypted) - ALIGNED PORTS"
           },
           "dashboard_responses": {
             "address": "localhost",
-            "port": 5591,
-            "_comment": "📥 AGENT → DASHBOARD: Respuestas descifradas automáticamente por ETCD",
-            "mode": "bind",
-            "socket_type": "PULL",
+            "port": 5584,
+            "_comment": "📥 CORREGIDO: 5591 → 5584 para alinearse con firewall agent",
+            "mode": "connect",
+            "socket_type": "SUB",
+            "_comment_pattern": "📥 CORREGIDO: PULL → SUB para alinearse con firewall agent PUB",
             "high_water_mark": 200,
-            "description": "Responses from firewall agent (ETCD auto-decrypted)"
+            "description": "Responses from firewall agent (ETCD auto-decrypted) - ALIGNED PORTS"
           }
         },
         "capabilities": {
@@ -99,6 +101,13 @@
       "load_balancing": "round_robin",
       "batch_commands": false
     }
+  },
+  "_port_flow_etcd_FIXED": {
+    "step_1": "ml_detector:5580(PUB+ENCRYPT) → dashboard:5580(SUB+DECRYPT)",
+    "step_2": "dashboard:5583(PUB+ENCRYPT) → firewall_agents:5583(SUB+DECRYPT)",
+    "step_3": "firewall_agents:5584(PUB+ENCRYPT) → dashboard:5584(SUB+DECRYPT)",
+    "step_4": "dashboard:8080(HTTP) → web_interface (local only)",
+    "status": "✅ ALL PORTS NOW ALIGNED WITH FIREWALL AGENT"
   },
   "web_server": {
     "host": "0.0.0.0",
@@ -424,13 +433,15 @@
         "encrypt": true,
         "compress": true,
         "_comment_compress": "🔧 CRÍTICO: ETCD debe comprimir DESPUÉS de serializar protobuf",
-        "description": "Cifrar y comprimir comandos hacia fleet de agentes con ETCD pipeline key"
+        "_comment_pattern": "📤 ACTUALIZADO: Ahora usa PUB en puerto 5583",
+        "description": "Cifrar y comprimir comandos hacia fleet de agentes con ETCD pipeline key (PUB:5583)"
       },
       "fleet_responses_input": {
         "decrypt": true,
         "decompress": true,
         "_comment_decompress": "🔧 CRÍTICO: ETCD debe descomprimir ANTES de parsing protobuf",
-        "description": "Descifrar y descomprimir respuestas de fleet con ETCD pipeline key"
+        "_comment_pattern": "📥 ACTUALIZADO: Ahora usa SUB en puerto 5584",
+        "description": "Descifrar y descomprimir respuestas de fleet con ETCD pipeline key (SUB:5584)"
       },
       "scheduler_communication": {
         "encrypt": true,

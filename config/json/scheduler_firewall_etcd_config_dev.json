@@ -30,11 +30,11 @@
     "firewall_commands_output": {
       "address": "localhost",
       "port": 5582,
-      "_comment_fix": "🔧 MANTENER: Puerto 5582 para enviar comandos cifrados al firewall agent",
+      "_comment_fix": "🔧 REDUCIDO: Menos agresivo para no inundar agent",
       "mode": "connect",
       "socket_type": "PUSH",
-      "high_water_mark": 100,
-      "_comment_hwm": "🔧 INCREMENTADO: De 500 a 100 (menos agresivo)",
+      "high_water_mark": 50,
+      "_comment_hwm": "🔧 REDUCIDO: De 100 a 50 para match agent capacity",
       "expected_subscribers": 1,
       "description": "Sends encrypted firewall commands to simple_firewall_agent with ETCD crypto"
     },
@@ -103,23 +103,23 @@
       "_comment_threshold": "🔧 INCREMENTADO: De 80% a 90%"
     },
     "decision_engine": {
-      "max_decisions_per_second": 10,
-      "_comment_decisions": "🔧 REDUCIDO: De 100 a 10 (más realista)",
-      "decision_timeout_ms": 100,
-      "_comment_timeout": "🔧 INCREMENTADO: De 50ms a 100ms",
+      "max_decisions_per_second": 5,
+      "_comment_decisions": "🔧 REDUCIDO: De 10 a 5 (más conservador)",
+      "decision_timeout_ms": 200,
+      "_comment_timeout": "🔧 INCREMENTADO: De 100ms a 200ms - más tiempo",
       "batch_processing": false,
       "cache_decisions": false
     },
     "backpressure": {
       "enabled": true,
-      "max_retries": 3,
-      "_comment_retries": "🔧 INCREMENTADO: De 2 a 3",
-      "retry_delays_ms": [10, 25, 50],
-      "_comment_delays": "🔧 INCREMENTADO: Delays más graduales",
-      "drop_threshold_percent": 15.0,
-      "_comment_drop": "🔧 INCREMENTADO: De 10% a 15%",
-      "activation_threshold": 25,
-      "_comment_activation": "🔧 INCREMENTADO: De 15 a 25",
+      "max_retries": 2,
+      "_comment_retries": "🔧 REDUCIDO: De 3 a 2 - menos agresivo",
+      "retry_delays_ms": [50, 100],
+      "_comment_delays": "🔧 REDUCIDO: Delays más rápidos",
+      "drop_threshold_percent": 20.0,
+      "_comment_drop": "🔧 INCREMENTADO: De 15% a 20%",
+      "activation_threshold": 20,
+      "_comment_activation": "🔧 REDUCIDO: De 25 a 20 - activar antes",
       "queue_full_strategy": "drop_oldest"
     }
   },
