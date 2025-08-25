@@ -28,12 +28,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict, deque
 
-# 🔥 NUEVO: Importar cliente ETCD específico para scheduler firewall - SIN CORE
+# 🔥 INTEGRACIÓN ETCD: Importar cliente específico para scheduler firewall
 try:
     from etcd_crypto_client_scheduler_firewall_fixed import (
         setup_scheduler_firewall_crypto,
         get_scheduler_firewall_pipeline_key,
-        get_scheduler_firewall_crypto_status
+        get_scheduler_firewall_token,
+        get_scheduler_firewall_crypto_status,
+        cleanup_scheduler_firewall_crypto
     )
     ETCD_CRYPTO_CLIENT_AVAILABLE = True
     print("✅ ETCD Crypto Client for Scheduler Firewall loaded successfully")
@@ -41,9 +43,6 @@ except ImportError as e:
     print(f"❌ CRITICAL: ETCD Crypto Client not available: {e}")
     print("📁 Required: etcd_crypto_client_scheduler_firewall_fixed.py")
     ETCD_CRYPTO_CLIENT_AVAILABLE = False
-
-# Add protocols path for protobuf imports
-# sys.path.append(os.path.join(os.path.dirname(__file__), 'protocols', 'current'))
 
 # 📦 Protobuf V3.1 - Importación exclusiva (TODO O NADA)
 PROTOBUF_AVAILABLE = False
@@ -595,7 +594,7 @@ class SchedulerConfig:
         except Exception as e:
             raise SchedulerConfigurationError(f"❌ Error reading {self.config_file}: {e}")
 
-        # 🔥 NUEVO: Validar sección ETCD crypto OBLIGATORIA
+        # 🔥 INTEGRACIÓN ETCD: Validar sección ETCD crypto OBLIGATORIA
         self._validate_etcd_crypto_section()
 
         # Validar campos requeridos
@@ -686,7 +685,7 @@ class SchedulerConfig:
         self.mode = component.get('mode', 'distributed_scheduler')
         self.role = component.get('role', 'firewall_decision_engine')
 
-        # 🔥 NUEVO: ETCD crypto configuration
+        # 🔥 INTEGRACIÓN ETCD: ETCD crypto configuration
         etcd_crypto = self.config['etcd_crypto']
         self.etcd_host = etcd_crypto['etcd_host']
         self.etcd_port = etcd_crypto['etcd_port']
@@ -760,7 +759,7 @@ class SchedulerConfig:
         # Decision engine configuration
         self.decision_config = self.config.get('decision_engine', {})
 
-        # 🔥 NUEVO: ETCD crypto configuration
+        # 🔥 INTEGRACIÓN ETCD: ETCD crypto configuration
         self.etcd_crypto_config = self.config.get('crypto', {})
 
 
@@ -769,9 +768,10 @@ class FirewallSchedulerETCD:
 
     def __init__(self, config: SchedulerConfig, firewall_rules_file: str):
         self.config = config
-        # 🔥 NUEVO: ETCD crypto en lugar de crypto wrapper local
+        # 🔥 INTEGRACIÓN ETCD: ETCD crypto en lugar de crypto wrapper local
         self.etcd_crypto_ready = False
         self.pipeline_key = None
+        self.current_token = None
         self.logger = SchedulerLogger(config.node_id, config.logging_config)
 
         # Verificar ETCD crypto client disponible
@@ -820,39 +820,40 @@ class FirewallSchedulerETCD:
         self.logger.info(f"🔐 ETCD Crypto: OBLIGATORIO - Pipeline position 4")
 
     async def initialize_etcd_crypto(self, scheduler_config_path: str, firewall_rules_path: str) -> bool:
-        """Inicializar ETCD crypto OBLIGATORIO"""
+        """🔥 INTEGRACIÓN ETCD: Inicializar ETCD crypto OBLIGATORIO"""
         try:
             self.logger.info("🔐 Initializing ETCD crypto for Scheduler Firewall...")
 
-            # Detectar testing mode automáticamente
-            testing_mode = os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true"
-            if testing_mode:
-                self.logger.info("🧪 Dev mode detected - enabling testing mode for ETCD")
-
-            # Setup ETCD crypto usando el cliente específico
+            # 🔥 INTEGRACIÓN ETCD: Setup ETCD crypto usando el cliente específico
             success = await setup_scheduler_firewall_crypto(
-                scheduler_config_path, firewall_rules_path, testing_mode
+                scheduler_config_path, firewall_rules_path
             )
 
             if not success:
                 self.logger.error("❌ ETCD crypto initialization failed")
                 return False
 
-            # Obtener pipeline key
+            # 🔥 INTEGRACIÓN ETCD: Obtener pipeline key
             self.pipeline_key = get_scheduler_firewall_pipeline_key()
             if not self.pipeline_key:
                 self.logger.error("❌ Failed to get pipeline key from ETCD")
                 return False
 
+            # 🔥 INTEGRACIÓN ETCD: Obtener token rotativo
+            self.current_token = get_scheduler_firewall_token()
+            if not self.current_token:
+                self.logger.warning("⚠️ No rotative token available (may be normal during initialization)")
+
             self.etcd_crypto_ready = True
             self.logger.info("✅ ETCD crypto initialized successfully")
             self.logger.info(f"🔑 Pipeline key obtained: {self.pipeline_key[:16]}...")
+            if self.current_token:
+                self.logger.info(f"🎫 Token obtained: {self.current_token[:16]}...")
 
-            # Log status de ETCD crypto
+            # 🔥 INTEGRACIÓN ETCD: Log status de ETCD crypto
             etcd_status = get_scheduler_firewall_crypto_status()
-            self.logger.info(f"📊 ETCD Status: ready={etcd_status.get('ready')}, "
-                             f"crypto_role={etcd_status.get('crypto_role')}, "
-                             f"pipeline_position={etcd_status.get('pipeline_position')}")
+            self.logger.info(f"📊 ETCD Status: crypto_ready={etcd_status.get('crypto_ready')}, "
+                             f"rotation_active={etcd_status.get('rotation_active')}")
 
             return True
 
@@ -936,7 +937,7 @@ class FirewallSchedulerETCD:
                 self.firewall_responses_socket.connect(fw_responses_endpoint)
                 self.logger.info(f"🟢 Firewall Responses socket CONNECT to {fw_responses_endpoint}")
 
-            # 🔥 NOTA: NO hay crypto wrapper local - ETCD maneja crypto transparentemente
+            # 🔥 INTEGRACIÓN ETCD: NOTA sobre crypto handling
             self.logger.info("🔐 ETCD crypto integration - no local crypto wrapper needed")
             self.logger.info("   🔓 ML Events: Auto-decryption by ETCD pipeline key")
             self.logger.info("   🔒 Commands: Auto-encryption by ETCD pipeline key")
@@ -950,7 +951,7 @@ class FirewallSchedulerETCD:
 
     async def start(self, scheduler_config_path: str, firewall_rules_path: str):
         """Iniciar el scheduler con ETCD crypto"""
-        # 🔥 PASO 1: Inicializar ETCD crypto ANTES que nada
+        # 🔥 INTEGRACIÓN ETCD: PASO 1 - Inicializar ETCD crypto ANTES que nada
         if not await self.initialize_etcd_crypto(scheduler_config_path, firewall_rules_path):
             self.logger.error("❌ Cannot start scheduler without ETCD crypto")
             raise ETCDCryptoError("ETCD crypto initialization failed")
@@ -1036,12 +1037,13 @@ class FirewallSchedulerETCD:
             f"   └── Endpoint: tcp://{self.config.firewall_responses_address}:{self.config.firewall_responses_port}")
         self.logger.info(f"   └── 🔓 ETCD Auto-decrypt: ENABLED")
 
-        # ETCD Configuration
+        # 🔥 INTEGRACIÓN ETCD: ETCD Configuration
         self.logger.info(f"🔐 ETCD Crypto Configuration:")
         self.logger.info(f"   └── ETCD Host: {self.config.etcd_host}:{self.config.etcd_port}")
         self.logger.info(f"   └── Cluster: {self.config.etcd_cluster_name}")
         self.logger.info(f"   └── Node ID: {self.config.etcd_node_id}")
         self.logger.info(f"   └── Pipeline Key: {'✅ READY' if self.etcd_crypto_ready else '❌ NOT READY'}")
+        self.logger.info(f"   └── Token Rotation: {'✅ ACTIVE' if self.current_token else '⚠️ PENDING'}")
 
         # ZMQ Context
         self.logger.info(f"⚙️ ZMQ Context (Conservative config + ETCD crypto):")
@@ -1102,7 +1104,7 @@ class FirewallSchedulerETCD:
             try:
                 if self.ml_events_socket:
                     try:
-                        # 🔐 ETCD maneja auto-decrypt transparentemente
+                        # 🔐 INTEGRACIÓN ETCD: ETCD maneja auto-decrypt transparentemente
                         message_bytes = self.ml_events_socket.recv(zmq.NOBLOCK)
                         self.stats.events_received += 1
                         self.stats.etcd_crypto_operations += 1
@@ -1487,7 +1489,7 @@ class FirewallSchedulerETCD:
                 except queue.Empty:
                     continue
 
-                # 🔐 ETCD maneja auto-encrypt transparentemente
+                # 🔐 INTEGRACIÓN ETCD: ETCD maneja auto-encrypt transparentemente
                 try:
                     self.firewall_commands_socket.send(command_data['command_bytes'], zmq.NOBLOCK)
                     self.stats.commands_sent += 1
@@ -1519,7 +1521,7 @@ class FirewallSchedulerETCD:
             try:
                 if self.firewall_responses_socket:
                     try:
-                        # 🔐 ETCD maneja auto-decrypt transparentemente
+                        # 🔐 INTEGRACIÓN ETCD: ETCD maneja auto-decrypt transparentemente
                         response_bytes = self.firewall_responses_socket.recv(zmq.NOBLOCK)
                         self.stats.responses_received += 1
                         self.stats.etcd_crypto_operations += 1
@@ -1593,6 +1595,8 @@ class FirewallSchedulerETCD:
                 try:
                     self._update_statistics()
                     self._check_rules_changes()
+                    # 🔥 INTEGRACIÓN ETCD: Actualizar token si es necesario
+                    self._update_etcd_token()
                     time.sleep(self.config.stats_interval)
                 except Exception as e:
                     self.logger.error(f"❌ Error in periodic updates: {e}")
@@ -1604,6 +1608,16 @@ class FirewallSchedulerETCD:
         self.threads.append(stats_thread)
 
         self.logger.info(f"✅ Periodic updates started (interval: {self.config.stats_interval}s)")
+
+    def _update_etcd_token(self):
+        """🔥 INTEGRACIÓN ETCD: Actualizar token rotativo si es necesario"""
+        try:
+            new_token = get_scheduler_firewall_token()
+            if new_token and new_token != self.current_token:
+                self.current_token = new_token
+                self.logger.debug(f"🎫 Token rotated: {new_token[:16]}...")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error updating ETCD token: {e}")
 
     def _update_statistics(self):
         """Actualizar estadísticas del scheduler"""
@@ -1635,7 +1649,7 @@ class FirewallSchedulerETCD:
             self.logger.info(f"   📥 Responses received: {self.stats.responses_received}")
             self.logger.info(f"   ❌ Errors: {self.stats.errors}")
 
-            # ETCD crypto stats
+            # 🔥 INTEGRACIÓN ETCD: ETCD crypto stats
             self.logger.info("🔐 ETCD CRYPTO STATISTICS:")
             self.logger.info(f"   🔐 Crypto operations: {self.stats.etcd_crypto_operations}")
             self.logger.info(f"   ❌ Crypto errors: {self.stats.etcd_crypto_errors}")
@@ -1729,6 +1743,14 @@ class FirewallSchedulerETCD:
         except Exception as e:
             self.logger.error(f"⚠️ Error terminating ZMQ context: {e}")
 
+        # 🔥 INTEGRACIÓN ETCD: Cleanup ETCD crypto
+        try:
+            if ETCD_CRYPTO_CLIENT_AVAILABLE:
+                cleanup_scheduler_firewall_crypto()
+                self.logger.info("✅ ETCD crypto client cleaned up")
+        except Exception as e:
+            self.logger.error(f"⚠️ Error cleaning up ETCD crypto: {e}")
+
         self.logger.info("✅ Firewall Scheduler ETCD stopped successfully")
 
     def get_status(self) -> Dict:
@@ -1746,10 +1768,13 @@ class FirewallSchedulerETCD:
                 'uptime_seconds': uptime,
                 'pid': os.getpid(),
                 'stats': asdict(self.stats),
+                # 🔥 INTEGRACIÓN ETCD: Status completo de ETCD
                 'etcd_crypto': {
                     'ready': self.etcd_crypto_ready,
                     'pipeline_key_available': self.pipeline_key is not None,
                     'pipeline_key_preview': self.pipeline_key[:16] + "..." if self.pipeline_key else None,
+                    'current_token_available': self.current_token is not None,
+                    'current_token_preview': self.current_token[:16] + "..." if self.current_token else None,
                     'crypto_operations': self.stats.etcd_crypto_operations,
                     'crypto_errors': self.stats.etcd_crypto_errors,
                     'etcd_status': get_scheduler_firewall_crypto_status() if ETCD_CRYPTO_CLIENT_AVAILABLE else None

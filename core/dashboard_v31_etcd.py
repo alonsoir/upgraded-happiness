@@ -32,14 +32,11 @@ import uuid
 
 # 🔥 NUEVO: Importar cliente ETCD específico para dashboard - SIN CORE
 try:
-from etcd_crypto_client_dashboard_fixed import (
-    setup_dashboard_crypto,
-    get_dashboard_pipeline_key
-)
+    from etcd_crypto_client_dashboard_fixed import (
         setup_dashboard_crypto,
         get_dashboard_pipeline_key,
         get_dashboard_crypto_status
-    )
+)
 
     ETCD_CRYPTO_CLIENT_AVAILABLE = True
     print("✅ ETCD Crypto Client for Dashboard loaded successfully")

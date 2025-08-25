@@ -29,12 +29,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict, deque
 
+
 # 🔥 NUEVO: Importar cliente ETCD específico para simple firewall agent
 try:
-from etcd_crypto_client_simple_firewall_agent_fixed import (
-    setup_simple_firewall_agent_crypto,
-    get_simple_firewall_agent_pipeline_key
-)
+    from etcd_crypto_client_simple_firewall_agent_fixed import (
         setup_simple_firewall_agent_crypto,
         get_simple_firewall_agent_pipeline_key,
         get_simple_firewall_agent_crypto_status
