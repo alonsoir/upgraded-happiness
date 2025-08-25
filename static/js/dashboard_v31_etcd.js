@@ -134,16 +134,277 @@ function initializeDashboard() {
 // ============================================================================
 
 function startETCDPolling() {
-    console.log('📡 Iniciando polling HTTP V3.1 al backend ETCD...');
+    console.log('📡 Iniciando polling HTTP V3.1 al backend ETCD /api/etcd/dashboard-metrics...');
 
     fetchDataFromETCD();
     pollingInterval = setInterval(fetchDataFromETCD, 2000);
 
-    addDebugLog('info', 'HTTP polling V3.1 ETCD iniciado - puerto 5580 SUB ML_detector');
+    addDebugLog('info', 'HTTP polling V3.1 ETCD iniciado - endpoint: /api/etcd/dashboard-metrics');
+}
+
+/ ============================================================================
+// NUEVA FUNCIÓN: Verificar conectividad con todos los endpoints
+// ============================================================================
+
+async function testAllConnections() {
+    console.log('🔍 Probando conectividad con todos los endpoints ETCD V3.1...');
+
+    const endpoints = [
+        '/api/etcd/dashboard-metrics',
+        '/api/execute-firewall-action',
+        '/api/firewall-agent-info',
+        '/static/css/dashboard.css',
+        '/static/css/dashboard_etcd_v31_additions.css',
+        '/static/js/dashboard_v31_etcd.js'
+    ];
+
+    let results = [];
+
+    for (const endpoint of endpoints) {
+        try {
+            const response = await fetch(endpoint, {
+                method: endpoint.startsWith('/api/') ? 'GET' : 'HEAD',
+                timeout: 5000
+            });
+
+            results.push({
+                endpoint,
+                status: response.status,
+                ok: response.ok,
+                statusText: response.statusText
+            });
+
+            console.log(`${response.ok ? '✅' : '❌'} ${endpoint}: ${response.status} ${response.statusText}`);
+        } catch (error) {
+            results.push({
+                endpoint,
+                status: 'ERROR',
+                ok: false,
+                statusText: error.message
+            });
+            console.log(`❌ ${endpoint}: ERROR - ${error.message}`);
+        }
+    }
+
+    // Mostrar resumen
+    const successful = results.filter(r => r.ok).length;
+    const total = results.length;
+
+    showToast(`Test conectividad: ${successful}/${total} endpoints OK`, successful === total ? 'success' : 'warning');
+
+    return results;
+}
+
+// ============================================================================
+// FUNCIÓN NUEVA: Mostrar información del sistema V3.1
+// ============================================================================
+
+function showSystemInfoV31() {
+    const uptime = window.dashboardStartTime ?
+        Math.floor((Date.now() - window.dashboardStartTime) / 1000) : 0;
+
+    const content = `
+        <div style="font-family: 'Consolas', monospace; color: #ccc;">
+            <h4 style="color: #00aaff; margin-bottom: 15px;">ℹ️ Información del Sistema ETCD V3.1</h4>
+
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 170, 255, 0.05); border-left: 4px solid #00aaff; border-radius: 4px;">
+                <div style="color: #00aaff; font-weight: bold; margin-bottom: 8px;">📊 Estado del Dashboard</div>
+                <div style="font-size: 11px; line-height: 1.4;">
+                    <strong>Versión:</strong> ETCD V3.1 Enhanced<br>
+                    <strong>Uptime:</strong> ${uptime}s (${(uptime / 60).toFixed(1)} min)<br>
+                    <strong>Eventos totales:</strong> <span id="total-events-info">${eventCount}</span><br>
+                    <strong>Alto riesgo:</strong> <span id="high-risk-info">${highRiskCount}</span><br>
+                    <strong>Backend:</strong> Python Flask + ETCD Crypto<br>
+                    <strong>Pipeline:</strong> Posición 5 (Dashboard)
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(255, 170, 0, 0.05); border-left: 4px solid #ffaa00; border-radius: 4px;">
+                <div style="color: #ffaa00; font-weight: bold; margin-bottom: 8px;">🔧 Funcionalidades V3.1</div>
+                <div style="font-size: 11px; color: #ccc;">
+                    ✅ Polling HTTP al backend ETCD<br>
+                    ✅ Selector de agentes firewall en modales<br>
+                    ✅ Lectura de ensemble models desde ETCD<br>
+                    ✅ Sistema de ventanas flotantes avanzado<br>
+                    ✅ Mapa con animaciones misil<br>
+                    ✅ CSS complementario específico ETCD<br>
+                    ✅ Campos V3.1: ensemble_confidence, pipeline_latency<br>
+                    ✅ Campos V3.1: capturing_node_id, tricapa_scores
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="exportDashboardConfigV31()"
+                        style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                    💾 Exportar Config
+                </button>
+                <button onclick="testAllConnections()"
+                        style="background: rgba(0, 170, 255, 0.2); border: 1px solid #00aaff; color: #00aaff; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                    🔍 Test Conexiones
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal('ℹ️ Sistema ETCD V3.1', content);
+}
+
+// ============================================================================
+// FUNCIÓN NUEVA: Mostrar estadísticas en tiempo real V3.1
+// ============================================================================
+
+function showLiveStatsV31() {
+    const content = `
+        <div style="font-family: 'Consolas', monospace; color: #ccc;">
+            <h4 style="color: #00ff88; margin-bottom: 15px;">📊 Estadísticas ETCD V3.1 en Tiempo Real</h4>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 6px; padding: 12px; text-align: center;">
+                    <div style="font-size: 20px; font-weight: bold; color: #00ff88; margin-bottom: 4px;" id="live-events-stat">0</div>
+                    <div style="font-size: 10px; color: #888;">Eventos ETCD</div>
+                </div>
+                <div style="background: rgba(0, 170, 255, 0.1); border: 1px solid rgba(0, 170, 255, 0.3); border-radius: 6px; padding: 12px; text-align: center;">
+                    <div style="font-size: 20px; font-weight: bold; color: #00aaff; margin-bottom: 4px;" id="live-commands-stat">0</div>
+                    <div style="font-size: 10px; color: #888;">Comandos Fleet</div>
+                </div>
+                <div style="background: rgba(255, 170, 0, 0.1); border: 1px solid rgba(255, 170, 0, 0.3); border-radius: 6px; padding: 12px; text-align: center;">
+                    <div style="font-size: 20px; font-weight: bold; color: #ffaa00; margin-bottom: 4px;" id="live-confirmations-stat">0</div>
+                    <div style="font-size: 10px; color: #888;">Confirmaciones</div>
+                </div>
+                <div style="background: rgba(255, 68, 68, 0.1); border: 1px solid rgba(255, 68, 68, 0.3); border-radius: 6px; padding: 12px; text-align: center;">
+                    <div style="font-size: 20px; font-weight: bold; color: #ff4444; margin-bottom: 4px;" id="live-errors-stat">0</div>
+                    <div style="font-size: 10px; color: #888;">Errores</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px; padding: 12px; border-left: 4px solid #00ff88; background: rgba(0, 255, 136, 0.05); border-radius: 4px;">
+                <div style="color: #00ff88; font-weight: bold; margin-bottom: 8px;">🔧 Información de Configuración ETCD</div>
+                <div style="font-size: 11px; line-height: 1.5;">
+                    <strong>Endpoint principal:</strong> /api/etcd/dashboard-metrics<br>
+                    <strong>Polling interval:</strong> 2000ms<br>
+                    <strong>CSS principal:</strong> /static/css/dashboard.css<br>
+                    <strong>CSS complementario:</strong> /static/css/dashboard_etcd_v31_additions.css<br>
+                    <strong>JavaScript:</strong> /static/js/dashboard_v31_etcd.js
+                </div>
+            </div>
+
+            <div style="text-align: center;">
+                <button onclick="refreshDashboard()"
+                        style="background: rgba(0, 255, 136, 0.2); border: 1px solid #00ff88; color: #00ff88; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                    🔄 Refresh ETCD
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal('📊 Stats ETCD V3.1', content);
+
+    // Actualizar stats en tiempo real
+    const updateStats = () => {
+        const liveEvents = document.getElementById('live-events-stat');
+        const liveCommands = document.getElementById('live-commands-stat');
+        const liveConfirmations = document.getElementById('live-confirmations-stat');
+        const liveErrors = document.getElementById('live-errors-stat');
+
+        if (liveEvents) liveEvents.textContent = eventCount || 0;
+        if (liveCommands) liveCommands.textContent = document.getElementById('commands-count')?.textContent || 0;
+        if (liveConfirmations) liveConfirmations.textContent = document.getElementById('confirmations-count')?.textContent || 0;
+        if (liveErrors) liveErrors.textContent = document.getElementById('failure-count')?.textContent || 0;
+    };
+
+    // Actualizar inmediatamente y cada 2 segundos
+    updateStats();
+    const statsInterval = setInterval(updateStats, 2000);
+
+    // Limpiar interval cuando se cierre el modal
+    const originalCloseModal = window.closeModal;
+    window.closeModal = function() {
+        clearInterval(statsInterval);
+        window.closeModal = originalCloseModal;
+        originalCloseModal();
+    };
+}
+
+// ============================================================================
+// FUNCIÓN NUEVA: Exportar configuración V3.1
+// ============================================================================
+
+async function exportDashboardConfigV31() {
+    try {
+        const config = {
+            timestamp: new Date().toISOString(),
+            dashboard_version: "ETCD V3.1",
+            events_count: eventCount,
+            high_risk_count: highRiskCount,
+            current_events: currentEvents.slice(-10), // Últimos 10 eventos
+            endpoints: {
+                dashboard_metrics: "/api/etcd/dashboard-metrics",
+                execute_firewall_action: "/api/execute-firewall-action",
+                firewall_agent_info: "/api/firewall-agent-info"
+            },
+            static_resources: {
+                main_css: "/static/css/dashboard.css",
+                complementary_css: "/static/css/dashboard_etcd_v31_additions.css",
+                javascript: "/static/js/dashboard_v31_etcd.js"
+            },
+            features_v31: [
+                "ETCD crypto integration",
+                "Firewall fleet selector in modals",
+                "Ensemble models from ETCD",
+                "Advanced floating windows",
+                "Missile animations on map",
+                "Real-time polling ETCD backend",
+                "Fields V3.1: ensemble_confidence, pipeline_latency, capturing_node_id"
+            ]
+        };
+
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dashboard_etcd_v31_config_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('✅ Configuración ETCD V3.1 exportada', 'success');
+        addDebugLog('info', 'Configuración dashboard ETCD V3.1 exportada exitosamente');
+
+    } catch (error) {
+        console.error('❌ Error exportando configuración:', error);
+        showToast('❌ Error exportando configuración', 'error');
+    }
+}
+
+// ============================================================================
+// FUNCIÓN MEJORADA: Refresh dashboard con feedback específico
+// ============================================================================
+
+async function refreshDashboard() {
+    console.log('🔄 Refrescando dashboard ETCD V3.1...');
+    showToast('Refrescando datos ETCD...', 'info');
+
+    try {
+        // Forzar actualización inmediata
+        await fetchDataFromETCD();
+
+        // Actualizar indicadores UI
+        updateCurrentTime();
+
+        showToast('✅ Dashboard ETCD V3.1 actualizado', 'success');
+        addDebugLog('info', 'Dashboard refresh ETCD V3.1 completado exitosamente');
+
+    } catch (error) {
+        console.error('❌ Error refrescando dashboard ETCD:', error);
+        showToast('❌ Error refrescando dashboard ETCD', 'error');
+        addDebugLog('error', `Error refresh dashboard ETCD: ${error.message}`);
+    }
 }
 
 async function fetchDataFromETCD() {
     try {
+        // ✅ CORREGIDO: Usar el endpoint ETCD específico del backend
         const response = await fetch('/api/etcd/dashboard-metrics', {
             method: 'GET',
             headers: {
@@ -162,7 +423,7 @@ async function fetchDataFromETCD() {
             updateDashboardFromETCD(data);
             updateConnectionStatus('etcd', 'connected');
 
-            console.log('📊 Datos ETCD V3.1 recibidos:', data.basic_stats);
+            console.log('📊 Datos ETCD V3.1 recibidos desde /api/etcd/dashboard-metrics:', data.basic_stats);
 
         } else {
             throw new Error(data.error || 'Error en respuesta API ETCD V3.1');

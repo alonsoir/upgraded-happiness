@@ -126,7 +126,7 @@ if not import_dashboard_protobuf_v31():
 
 # Flask imports
 try:
-    from flask import Flask, render_template, jsonify, request, send_from_directory
+    from flask import Flask, jsonify, request, render_template_string, send_from_directory
     from flask_cors import CORS
 
     FLASK_AVAILABLE = True
@@ -784,10 +784,10 @@ class DashboardETCD:
         """Setup Flask application"""
         self.app = Flask(__name__)
 
-        # Configurar rutas estáticas y templates
-        self.app.static_folder = 'static'
-        self.app.template_folder = 'templates'
-        self.app.static_url_path = '/static'
+# Configurar rutas estáticas y templates
+app.static_folder = 'static'
+app.template_folder = 'templates'
+app.static_url_path = '/static'
 
         CORS(self.app)
 
@@ -2717,7 +2717,7 @@ def get_metrics():
 @app.route('/api/execute-firewall-action', methods=['POST'])
 def execute_firewall_action():
     """API endpoint para ejecutar acciones de firewall"""
-    from flask import Flask, render_template, jsonify, request, send_from_directory
+    from flask import request
     data = request.json
     action = data.get('action', 'unknown')
     target = data.get('target', 'unknown')
@@ -2731,117 +2731,4 @@ def execute_firewall_action():
         "target": target,
         "message": f"Action {action} executed on {target}",
         "timestamp": "2024-08-25T12:00:00Z"
-    })
-
-
-@app.route('/api/etcd/dashboard-metrics')
-def get_etcd_dashboard_metrics():
-    """API endpoint para métricas específicas de ETCD"""
-    return jsonify({
-        "status": "active",
-        "events_processed": 1600,
-        "ml_models_active": 7,
-        "firewall_rules": 45,
-        "pipeline_latency": "12ms",
-        "ml_confidence": "94%",
-        "active_threats": 3,
-        "blocked_ips": 128,
-        "etcd_nodes": 3,
-        "etcd_status": "healthy",
-        "ensemble_models": {
-            "isolation_forest": {"status": "active", "confidence": 0.94},
-            "one_class_svm": {"status": "active", "confidence": 0.91},
-            "local_outlier": {"status": "active", "confidence": 0.88}
-        }
-    })
-
-
-@app.route('/api/etcd/execute-firewall-action', methods=['POST'])
-def execute_etcd_firewall_action():
-    """API endpoint para ejecutar acciones de firewall via ETCD"""
-    data = request.json if request.json else {}
-    action = data.get('action', 'unknown')
-    target = data.get('target', 'unknown')
-
-    print(f"ETCD Firewall action: {action} on {target}")
-
-    return jsonify({
-        "success": True,
-        "action": action,
-        "target": target,
-        "message": f"ETCD Firewall action {action} executed on {target}",
-        "timestamp": "2024-08-25T12:00:00Z",
-        "etcd_node": "node-1"
-    })
-
-
-@app.route('/api/etcd/activate-ensemble-model', methods=['POST'])
-def activate_etcd_ensemble_model():
-    """API endpoint para activar modelos ensemble via ETCD"""
-    data = request.json if request.json else {}
-    model_type = data.get('model', 'isolation_forest')
-
-    print(f"Activating ensemble model: {model_type}")
-
-    return jsonify({
-        "success": True,
-        "model": model_type,
-        "status": "activated",
-        "message": f"Ensemble model {model_type} activated successfully"
-    })
-
-
-@app.route('/api/etcd/toggle-rag', methods=['POST'])
-def toggle_etcd_rag():
-    """API endpoint para toggle RAG via ETCD"""
-    data = request.json if request.json else {}
-    action = data.get('action', 'toggle')
-
-    return jsonify({
-        "success": True,
-        "rag_status": "enabled" if action == "enable" else "disabled",
-        "message": f"RAG {action} completed successfully"
-    })
-
-
-@app.route('/api/etcd/firewall-agent-info')
-def get_etcd_firewall_agent_info():
-    """API endpoint para información del agente firewall via ETCD"""
-    return jsonify({
-        "agent_id": "firewall-agent-1",
-        "status": "active",
-        "version": "3.1.0",
-        "rules_count": 45,
-        "blocked_ips": 128,
-        "last_update": "2024-08-25T12:00:00Z",
-        "etcd_cluster": "healthy"
-    })
-
-
-@app.route('/')
-def dashboard():
-    """Ruta principal del dashboard"""
-    return render_template('dashboard_v31_etcd.html')
-
-
-@app.route('/api/firewall-agent-info')
-def get_firewall_agent_info_alias():
-    """Alias para firewall agent info (sin etcd prefix)"""
-    return get_etcd_firewall_agent_info()
-
-@app.route('/api/')
-def api_root():
-    """API root endpoint"""
-    return jsonify({
-        "message": "Upgraded Happiness API v3.1",
-        "available_endpoints": [
-            "/api/etcd/dashboard-metrics",
-            "/api/etcd/execute-firewall-action", 
-            "/api/etcd/activate-ensemble-model",
-            "/api/etcd/toggle-rag",
-            "/api/etcd/firewall-agent-info",
-            "/api/metrics",
-            "/api/execute-firewall-action",
-            "/api/firewall-agent-info"
-        ]
     })

@@ -61,12 +61,12 @@ class ETCDCryptoClientMLDetector:
             with open(self.ml_detector_config_path, 'r') as f:
                 self.component_config = json.load(f)
 
-            self.logger.info(f"✅ {'lightweight_ml_detector_tricapa'.title()} config loaded successfully")
+            self.logger.info(f"✅ {config['component_type'].title()} config loaded successfully")
 
         except json.JSONDecodeError as e:
-            raise ValueError(f"❌ Invalid JSON in {'lightweight_ml_detector_tricapa'} config: {e}")
+            raise ValueError(f"❌ Invalid JSON in {config['component_type']} config: {e}")
         except Exception as e:
-            raise RuntimeError(f"❌ Failed to load {'lightweight_ml_detector_tricapa'} config: {e}")
+            raise RuntimeError(f"❌ Failed to load {config['component_type']} config: {e}")
 
     
         
@@ -92,7 +92,7 @@ class ETCDCryptoClientMLDetector:
 
         if 'etcd_crypto' not in self.component_config:
             raise KeyError(
-                f"❌ REQUIRED section 'etcd_crypto' not found in {'lightweight_ml_detector_tricapa'} config.\n"
+                f"❌ REQUIRED section 'etcd_crypto' not found in {config['component_type']} config.\n"
                 f"   Add 'etcd_crypto' section to {self.ml_detector_config_path}"
             )
 
@@ -120,7 +120,7 @@ class ETCDCryptoClientMLDetector:
     async def _register_configs_in_etcd(self):
         """🎯 Registrar configuración(es) en ETCD - PATRÓN DASHBOARD"""
         try:
-            self.logger.info(f"📊 Registering lightweight_ml_detector_tricapa config in ETCD...")
+            self.logger.info(f"📊 Registering {config['component_type']} config in ETCD...")
 
             # Crear cliente ETCD REAL
             etcd_client = etcd3.client(
@@ -141,7 +141,7 @@ class ETCDCryptoClientMLDetector:
 
             # PUT a ETCD
             etcd_client.put(component_config_key, json.dumps(component_config_data, indent=2))
-            self.logger.info(f"✅ Lightweight_Ml_Detector_Tricapa config registered at: {component_config_key}")
+            self.logger.info(f"✅ {config['component_type'].title()} config registered at: {component_config_key}")
 
             
             
@@ -159,12 +159,12 @@ class ETCDCryptoClientMLDetector:
                 
                 
 
-            self.logger.info(f"📊 Lightweight_Ml_Detector_Tricapa config registration completed successfully")
+            self.logger.info(f"📊 {config['component_type'].title()} config registration completed successfully")
 
         except Exception as e:
             self.logger.error(f"❌ Config registration failed: {e}")
             # 🚨 HARD FAIL - NO FALLBACKS
-            raise RuntimeError(f"ETCD config registration failed for {'lightweight_ml_detector_tricapa'}: {e}")
+            raise RuntimeError(f"ETCD config registration failed for {config['component_type']}: {e}")
 
     async def initialize_crypto(self) -> bool:
         """
@@ -172,7 +172,7 @@ class ETCDCryptoClientMLDetector:
         🚨 HARD FAIL si ETCD no está disponible
         """
         try:
-            self.logger.info(f"🚀 Initializing lightweight_ml_detector_tricapa ETCD crypto...")
+            self.logger.info(f"🚀 Initializing {config['component_type']} ETCD crypto...")
 
             # 1. Cargar configuraciones
             self._load_component_config()
@@ -185,12 +185,12 @@ class ETCDCryptoClientMLDetector:
 
             # 4. Generar token crypto (simplificado por ahora)
             self.crypto_token = {
-                'key': f"{'lightweight_ml_detector_tricapa'}_key_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                'key': f"{config['component_type']}_key_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 'version': 'v3.1.0',
                 'timestamp': datetime.now().isoformat()
             }
 
-            self.logger.info(f"✅ Lightweight_Ml_Detector_Tricapa crypto initialization successful!")
+            self.logger.info(f"✅ {config['component_type'].title()} crypto initialization successful!")
             self.logger.info(f"🔑 Token version: {self.crypto_token['version']}")
 
             return True
@@ -198,7 +198,7 @@ class ETCDCryptoClientMLDetector:
         except Exception as e:
             self.logger.error(f"❌ Crypto initialization failed: {e}")
             # 🚨 HARD FAIL - NO FALLBACKS, NO MOCKS
-            raise RuntimeError(f"ETCD initialization failed for lightweight_ml_detector_tricapa: {e}")
+            raise RuntimeError(f"ETCD initialization failed for {config['component_type']}: {e}")
 
     def get_pipeline_key(self) -> Optional[str]:
         """Obtener UPGRADED_HAPPINESS_PIPELINE_KEY para lightweight_ml_detector_tricapa"""
@@ -243,7 +243,7 @@ async def setup_ml_detector_crypto(ml_detector_config_path: str) -> bool:
 
     success = await _etcd_client.initialize_crypto()
     if not success:
-        raise RuntimeError(f"Failed to initialize {'lightweight_ml_detector_tricapa'} ETCD crypto")
+        raise RuntimeError(f"Failed to initialize {config['component_type']} ETCD crypto")
 
     return True
 
@@ -270,7 +270,7 @@ if __name__ == "__main__":
 
     async def test_ml_detector_etcd():
         """Test básico del cliente ETCD"""
-        print(f"🧪 Testing lightweight_ml_detector_tricapa ETCD client...")
+        print(f"🧪 Testing {config['component_type']} ETCD client...")
 
         # Esto requiere que ETCD esté corriendo y config válido
         # python core/etcd_crypto_client_ml_detector_fixed.py
