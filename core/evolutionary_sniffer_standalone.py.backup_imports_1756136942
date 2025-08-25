@@ -1120,16 +1120,21 @@ async def main():
         sys.exit(1)
 
     try:
+        # Setup crypto
+        dev_mode = os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true"
+        print(f"🧪 Dev mode: {dev_mode}")
 
-        if not await setup_sniffer_crypto(config_file):
+        if not await setup_sniffer_crypto(config_file, testing_mode=dev_mode):
             print("❌ Failed to setup sniffer crypto")
-            sys.exit(1)
+            if not dev_mode:
+                sys.exit(1)
 
         # Get pipeline key
         pipeline_key = get_sniffer_pipeline_key()
         if not pipeline_key:
             print("❌ No pipeline key available")
-            sys.exit(1)
+            if not dev_mode:
+                sys.exit(1)
 
         print(f"🔑 Pipeline key ready: {pipeline_key[:16] if pipeline_key else 'None'}...")
 
