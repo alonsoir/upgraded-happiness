@@ -1654,14 +1654,19 @@ if __name__ == "__main__":
             print("🔐 Configurando ETCD crypto para ML Detector Tricapa...")
             dev_mode = os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true"
 
-            if not await setup_ml_detector_crypto(config_file):
+            if not await setup_ml_detector_crypto(config_file, testing_mode=dev_mode):
                 print("❌ Failed to setup ETCD crypto")
-                sys.exit(1)
+                if not dev_mode:
+                    print("❌ ETCD crypto is MANDATORY - component SHUTDOWN")
+                    return
+
             # 🔑 Obtener pipeline key
             pipeline_key = get_ml_detector_pipeline_key()
             if not pipeline_key:
                 print("❌ No pipeline key available")
-                sys.exit(1)
+                if not dev_mode:
+                    print("❌ Pipeline key is MANDATORY - component SHUTDOWN")
+                    return
 
             print(f"🔑 Pipeline key ready: {pipeline_key[:16] if pipeline_key else 'None'}...")
 
