@@ -30,6 +30,7 @@ from collections import deque, defaultdict
 from typing import Dict, Any, Optional, Tuple, List
 from threading import Event
 from crypto.crypto_zmq_v31 import CryptoZMQV31
+from protocols.v3_1 import network_security_clean_v31_pb2
 
 # 📦 Protobuf v3.1.0 - REQUERIDO - Importación robusta
 PROTOBUF_AVAILABLE = False
