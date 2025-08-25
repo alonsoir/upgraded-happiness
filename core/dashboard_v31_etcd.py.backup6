@@ -126,7 +126,7 @@ if not import_dashboard_protobuf_v31():
 
 # Flask imports
 try:
-    from flask import Flask, render_template, jsonify, request, send_from_directory
+    from flask import Flask, render_template, jsonify, request, send_from_directorynder_template, jsonify, request, send_from_directorynify, request, render_template_string, send_from_directory
     from flask_cors import CORS
 
     FLASK_AVAILABLE = True
@@ -2717,7 +2717,7 @@ def get_metrics():
 @app.route('/api/execute-firewall-action', methods=['POST'])
 def execute_firewall_action():
     """API endpoint para ejecutar acciones de firewall"""
-    from flask import Flask, render_template, jsonify, request, send_from_directory
+    from flask import request
     data = request.json
     action = data.get('action', 'unknown')
     target = data.get('target', 'unknown')

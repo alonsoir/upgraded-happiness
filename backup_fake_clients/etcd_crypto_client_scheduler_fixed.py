@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-core/etcd_crypto_client_ml_detector_fixed.py
-🔍 Cliente ETCD REAL - LIGHTWEIGHT_ML_DETECTOR_TRICAPA
+core/etcd_crypto_client_scheduler_fixed.py
+🔍 Cliente ETCD REAL - SCHEDULER_FIREWALL
 ================================================================================
 BASADO EN LA PLANTILLA DEL DASHBOARD - SIN FALLBACKS, SOLO ETCD PURO
 """
@@ -22,34 +22,37 @@ from dataclasses import dataclass
 ETCD_REQUIRED = True
 
 @dataclass
-class LightweightMlDetectorTricapaETCDConfig:
+class SchedulerFirewallETCDConfig:
     """Configuración ETCD extraída desde el config JSON del componente"""
     etcd_host: str
     etcd_port: int
     cluster_name: str
     node_id: str
 
-class ETCDCryptoClientMLDetector:
-    """🔍 Cliente ETCD REAL para LIGHTWEIGHT_ML_DETECTOR_TRICAPA"""
+class ETCDCryptoClientSchedulerFirewall:
+    """🔍 Cliente ETCD REAL para SCHEDULER_FIREWALL"""
 
-    def __init__(self, ml_detector_config_path: str):
+    def __init__(self, scheduler_config_path: str, rules_config_path: str = None):
         """
         Inicializar cliente ETCD REAL
 
         Args:
-            ml_detector_config_path: Ruta al config JSON del componente
+            scheduler_config_path: Ruta al config JSON del componente
+            rules_config_path: Ruta al config JSON de reglas firewall (opcional)
         """
-        self.ml_detector_config_path = ml_detector_config_path
+        self.scheduler_config_path = scheduler_config_path
+        self.rules_config_path = rules_config_path
         self.component_config = None
+        self.rules_config = None
         self.etcd_config = None
         self.crypto_token = None
 
         # Setup logging
-        self.logger = logging.getLogger(f"lightweight_ml_detector_tricapa_etcd_client")
+        self.logger = logging.getLogger(f"scheduler_firewall_etcd_client")
         if not self.logger.handlers:
             handler = logging.StreamHandler()
             formatter = logging.Formatter(
-                '%(asctime)s - LIGHTWEIGHT_ML_DETECTOR_TRICAPA_ETCD - %(levelname)s - %(message)s'
+                '%(asctime)s - SCHEDULER_FIREWALL_ETCD - %(levelname)s - %(message)s'
             )
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
@@ -58,32 +61,32 @@ class ETCDCryptoClientMLDetector:
     def _load_component_config(self):
         """Cargar configuración del componente"""
         try:
-            with open(self.ml_detector_config_path, 'r') as f:
+            with open(self.scheduler_config_path, 'r') as f:
                 self.component_config = json.load(f)
 
-            self.logger.info(f"✅ {'lightweight_ml_detector_tricapa'.title()} config loaded successfully")
+            self.logger.info(f"✅ {config['component_type'].title()} config loaded successfully")
 
         except json.JSONDecodeError as e:
-            raise ValueError(f"❌ Invalid JSON in {'lightweight_ml_detector_tricapa'} config: {e}")
+            raise ValueError(f"❌ Invalid JSON in {config['component_type']} config: {e}")
         except Exception as e:
-            raise RuntimeError(f"❌ Failed to load {'lightweight_ml_detector_tricapa'} config: {e}")
+            raise RuntimeError(f"❌ Failed to load {config['component_type']} config: {e}")
 
-    
+    def _load_rules_config(self):
+        """Cargar configuración de reglas firewall"""
+        if not self.rules_config_path:
+            self.logger.warning("⚠️ No rules config path provided")
+            return
         
-        
+        try:
+            with open(self.rules_config_path, 'r') as f:
+                self.rules_config = json.load(f)
             
+            self.logger.info("✅ Firewall rules config loaded successfully")
             
-        
-        
-            
-                
-            
-            
-            
-        
-            
-        
-            
+        except json.JSONDecodeError as e:
+            raise ValueError(f"❌ Invalid JSON in firewall rules config: {{e}}")
+        except Exception as e:
+            raise RuntimeError(f"❌ Failed to load firewall rules config: {{e}}")
 
     def _extract_etcd_config(self):
         """Extraer configuración ETCD del config del componente"""
@@ -92,8 +95,8 @@ class ETCDCryptoClientMLDetector:
 
         if 'etcd_crypto' not in self.component_config:
             raise KeyError(
-                f"❌ REQUIRED section 'etcd_crypto' not found in {'lightweight_ml_detector_tricapa'} config.\n"
-                f"   Add 'etcd_crypto' section to {self.ml_detector_config_path}"
+                f"❌ REQUIRED section 'etcd_crypto' not found in {config['component_type']} config.\n"
+                f"   Add 'etcd_crypto' section to {self.scheduler_config_path}"
             )
 
         etcd_section = self.component_config['etcd_crypto']
@@ -105,10 +108,10 @@ class ETCDCryptoClientMLDetector:
         if missing_fields:
             raise KeyError(
                 f"❌ REQUIRED fields missing in etcd_crypto section: {missing_fields}\n"
-                f"   Add these fields to {self.ml_detector_config_path}"
+                f"   Add these fields to {self.scheduler_config_path}"
             )
 
-        self.etcd_config = LightweightMlDetectorTricapaETCDConfig(
+        self.etcd_config = SchedulerFirewallETCDConfig(
             etcd_host=etcd_section['etcd_host'],
             etcd_port=etcd_section['etcd_port'],
             cluster_name=etcd_section['cluster_name'],
@@ -120,7 +123,7 @@ class ETCDCryptoClientMLDetector:
     async def _register_configs_in_etcd(self):
         """🎯 Registrar configuración(es) en ETCD - PATRÓN DASHBOARD"""
         try:
-            self.logger.info(f"📊 Registering lightweight_ml_detector_tricapa config in ETCD...")
+            self.logger.info(f"📊 Registering {config['component_type']} configs in ETCD...")
 
             # Crear cliente ETCD REAL
             etcd_client = etcd3.client(
@@ -129,11 +132,11 @@ class ETCDCryptoClientMLDetector:
             )
 
             # Registrar config principal del componente
-            component_config_key = "/upgraded-happiness/v31/components/ml_detector/config"
+            component_config_key = "/upgraded-happiness/v31/components/scheduler/config"
             component_config_data = {
-                "config_type": "ml_detector_config",
+                "config_type": "scheduler_config",
                 "node_id": self.etcd_config.node_id,
-                "component_type": "lightweight_ml_detector_tricapa",
+                "component_type": "scheduler_firewall",
                 "config_data": self.component_config,
                 "timestamp": datetime.now().isoformat(),
                 "config_version": self.component_config.get('_config_metadata', {}).get('config_version', '3.1.0')
@@ -141,30 +144,30 @@ class ETCDCryptoClientMLDetector:
 
             # PUT a ETCD
             etcd_client.put(component_config_key, json.dumps(component_config_data, indent=2))
-            self.logger.info(f"✅ Lightweight_Ml_Detector_Tricapa config registered at: {component_config_key}")
+            self.logger.info(f"✅ {config['component_type'].title()} config registered at: {component_config_key}")
 
-            
-            
+            # Registrar reglas firewall (si aplica)
+            if self.rules_config:
+                rules_config_key = "/upgraded-happiness/v31/components/scheduler/firewall_rules"
+                rules_config_data = {
+                    "config_type": "firewall_rules",
+                    "node_id": self.etcd_config.node_id,
+                    "managed_by": "scheduler_firewall",
+                    "config_data": self.rules_config,
+                    "timestamp": datetime.now().isoformat(),
+                    "rules_summary": "Firewall rules for scheduler_firewall"
+                }
                 
-                
-                    
-                    
-                    
-                    
-                    
-                    
-                
-                
-                
-                
-                
+                # PUT rules a ETCD
+                etcd_client.put(rules_config_key, json.dumps(rules_config_data, indent=2))
+                self.logger.info(f"✅ Firewall rules registered at: {{rules_config_key}}")
 
-            self.logger.info(f"📊 Lightweight_Ml_Detector_Tricapa config registration completed successfully")
+            self.logger.info(f"📊 {config['component_type'].title()} config registration completed successfully")
 
         except Exception as e:
             self.logger.error(f"❌ Config registration failed: {e}")
             # 🚨 HARD FAIL - NO FALLBACKS
-            raise RuntimeError(f"ETCD config registration failed for {'lightweight_ml_detector_tricapa'}: {e}")
+            raise RuntimeError(f"ETCD config registration failed for {config['component_type']}: {e}")
 
     async def initialize_crypto(self) -> bool:
         """
@@ -172,10 +175,12 @@ class ETCDCryptoClientMLDetector:
         🚨 HARD FAIL si ETCD no está disponible
         """
         try:
-            self.logger.info(f"🚀 Initializing lightweight_ml_detector_tricapa ETCD crypto...")
+            self.logger.info(f"🚀 Initializing {config['component_type']} ETCD crypto...")
 
             # 1. Cargar configuraciones
             self._load_component_config()
+            if self.rules_config_path:
+                self._load_rules_config()
 
             # 2. Extraer config ETCD
             self._extract_etcd_config()
@@ -185,12 +190,12 @@ class ETCDCryptoClientMLDetector:
 
             # 4. Generar token crypto (simplificado por ahora)
             self.crypto_token = {
-                'key': f"{'lightweight_ml_detector_tricapa'}_key_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                'key': f"{config['component_type']}_key_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 'version': 'v3.1.0',
                 'timestamp': datetime.now().isoformat()
             }
 
-            self.logger.info(f"✅ Lightweight_Ml_Detector_Tricapa crypto initialization successful!")
+            self.logger.info(f"✅ {config['component_type'].title()} crypto initialization successful!")
             self.logger.info(f"🔑 Token version: {self.crypto_token['version']}")
 
             return True
@@ -198,10 +203,10 @@ class ETCDCryptoClientMLDetector:
         except Exception as e:
             self.logger.error(f"❌ Crypto initialization failed: {e}")
             # 🚨 HARD FAIL - NO FALLBACKS, NO MOCKS
-            raise RuntimeError(f"ETCD initialization failed for lightweight_ml_detector_tricapa: {e}")
+            raise RuntimeError(f"ETCD initialization failed for {config['component_type']}: {e}")
 
     def get_pipeline_key(self) -> Optional[str]:
-        """Obtener UPGRADED_HAPPINESS_PIPELINE_KEY para lightweight_ml_detector_tricapa"""
+        """Obtener UPGRADED_HAPPINESS_PIPELINE_KEY para scheduler_firewall"""
         if not self.crypto_token:
             return None
         return self.crypto_token['key']
@@ -213,7 +218,7 @@ class ETCDCryptoClientMLDetector:
     def get_status(self) -> Dict:
         """Obtener status del cliente ETCD"""
         return {
-            'component': 'lightweight_ml_detector_tricapa',
+            'component': 'scheduler_firewall',
             'crypto_ready': self.is_crypto_ready(),
             'etcd_config': {
                 'host': self.etcd_config.etcd_host if self.etcd_config else None,
@@ -225,12 +230,13 @@ class ETCDCryptoClientMLDetector:
         }
 
 # 🎯 FUNCIONES PÚBLICAS PARA COMPATIBILIDAD
-async def setup_ml_detector_crypto(ml_detector_config_path: str) -> bool:
+async def setup_scheduler_firewall_crypto(scheduler_config_path: str, rules_config_path: str = None) -> bool:
     """
-    Setup crypto para lightweight_ml_detector_tricapa
+    Setup crypto para scheduler_firewall
 
     Args:
-        ml_detector_config_path: Ruta al config JSON del componente
+        scheduler_config_path: Ruta al config JSON del componente
+        rules_config_path: Ruta al config JSON de reglas firewall
 
     Returns:
         True si exitoso
@@ -239,45 +245,45 @@ async def setup_ml_detector_crypto(ml_detector_config_path: str) -> bool:
         RuntimeError si ETCD no está disponible
     """
     global _etcd_client
-    _etcd_client = ETCDCryptoClientMLDetector(ml_detector_config_path)
+    _etcd_client = ETCDCryptoClientSchedulerFirewall(scheduler_config_path, rules_config_path)
 
     success = await _etcd_client.initialize_crypto()
     if not success:
-        raise RuntimeError(f"Failed to initialize {'lightweight_ml_detector_tricapa'} ETCD crypto")
+        raise RuntimeError(f"Failed to initialize {config['component_type']} ETCD crypto")
 
     return True
 
-def get_ml_detector_pipeline_key() -> Optional[str]:
-    """Obtener pipeline key para lightweight_ml_detector_tricapa"""
+def get_scheduler_firewall_pipeline_key() -> Optional[str]:
+    """Obtener pipeline key para scheduler_firewall"""
     global _etcd_client
     if not _etcd_client:
         return None
     return _etcd_client.get_pipeline_key()
 
-def get_ml_detector_crypto_status() -> Dict:
-    """Obtener status crypto para lightweight_ml_detector_tricapa"""
+def get_scheduler_crypto_status() -> Dict:
+    """Obtener status crypto para scheduler_firewall"""
     global _etcd_client
     if not _etcd_client:
         return {'status': 'not_initialized'}
     return _etcd_client.get_status()
 
 # Cliente global
-_etcd_client: Optional[ETCDCryptoClientMLDetector] = None
+_etcd_client: Optional[ETCDCryptoClientSchedulerFirewall] = None
 
 if __name__ == "__main__":
     # Test básico
     import asyncio
 
-    async def test_ml_detector_etcd():
+    async def test_scheduler_etcd():
         """Test básico del cliente ETCD"""
-        print(f"🧪 Testing lightweight_ml_detector_tricapa ETCD client...")
+        print(f"🧪 Testing {config['component_type']} ETCD client...")
 
         # Esto requiere que ETCD esté corriendo y config válido
-        # python core/etcd_crypto_client_ml_detector_fixed.py
+        # python core/etcd_crypto_client_scheduler_fixed.py
 
         print("🚨 Para test real, usa un config válido y ETCD corriendo")
 
     if len(sys.argv) > 1:
-        print(f"🔧 Para integrar: from core.etcd_crypto_client_ml_detector_fixed import setup_ml_detector_crypto, get_ml_detector_pipeline_key")
+        print(f"🔧 Para integrar: from core.etcd_crypto_client_scheduler_fixed import setup_scheduler_firewall_crypto, get_scheduler_firewall_pipeline_key")
     else:
-        asyncio.run(test_ml_detector_etcd())
+        asyncio.run(test_scheduler_etcd())

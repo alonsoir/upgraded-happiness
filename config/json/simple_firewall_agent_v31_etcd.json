@@ -55,6 +55,34 @@
       "high_water_mark": 50,
       "expected_subscribers": 1,
       "description": "Publishes responses to dashboard via PUB/SUB pattern"
+    },
+    "scheduler_commands_input": {
+      "description": "Input for firewall commands from scheduler",
+      "address": "localhost",
+      "port": 5582,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "high_water_mark": 200,
+      "linger_ms": 1000,
+      "recv_timeout_ms": 2000
+    },
+    "scheduler_responses_output": {
+      "description": "Output for firewall responses to scheduler",
+      "address": "localhost",
+      "port": 5581,
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "high_water_mark": 200,
+      "linger_ms": 1000,
+      "send_timeout_ms": 1000
+    },
+    "status_endpoint": {
+      "description": "Status monitoring endpoint",
+      "address": "localhost",
+      "port": 5585,
+      "mode": "bind",
+      "socket_type": "REP",
+      "enabled": true
     }
   },
   "_dual_communication_flow": {
