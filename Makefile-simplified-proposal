@@ -1,0 +1,279 @@
+# =============================================================================
+# 🛡️ Upgraded Happiness - Sistema Autoinmune Digital v3.1 EVOLUTIVO + DISTRIBUTED
+# =============================================================================
+# Branch: feature/distributed-mode
+# Estado: Pipeline V3.1 + etcd simple (desarrollo) + Docker UI
+# Filosofía: Simple en dev, HA en K3s (futuro)
+# =============================================================================
+
+# =============================================================================
+# CONFIGURACIÓN DISTRIBUIDA SIMPLE (DESARROLLO)
+# =============================================================================
+# etcd Configuration (Single node para desarrollo)
+ETCD_ENDPOINT := http://localhost:2379
+ETCD_CONFIG_DIR := config/etcd
+ETCD_DATA_DIR := data/etcd
+ETCD_LOG_DIR := logs
+ETCD_CONFIG_FILE := $(ETCD_CONFIG_DIR)/etcd-dev.yaml
+
+# Service Discovery
+SERVICE_DISCOVERY_SCRIPT := scripts/service-discovery-basic.sh
+ETCD_START_SCRIPT := scripts/start-etcd-basic.sh
+
+# Docker UI
+ETCD_UI_PORT := 8081
+ETCD_UI_CONTAINER := etcd-browser
+
+# =============================================================================
+# MODO DISTRIBUIDO SIMPLE (para desarrollo)
+# =============================================================================
+dist-setup: setup ## Configurar infraestructura distribuida simple
+	@echo "$(BLUE)🔧 Configurando infraestructura distribuida (modo dev)...$(NC)"
+	@mkdir -p $(ETCD_CONFIG_DIR) $(ETCD_DATA_DIR) $(ETCD_LOG_DIR) scripts .pids
+	@chmod +x scripts/*.sh 2>/dev/null || true
+	@echo "$(GREEN)✅ Setup distribuido simple completado$(NC)"
+
+dist-start: dist-setup ## Iniciar etcd single node + service discovery
+	@echo "$(GREEN)🚀 Iniciando backbone distribuido (modo desarrollo)...$(NC)"
+	@echo "$(CYAN)================================================$(NC)"
+	@echo "$(YELLOW)💡 Single node etcd para desarrollo (HA será en K3s)$(NC)"
+	@echo ""
+
+	@echo "$(BLUE)🔍 Verificando estado de etcd...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ etcd ya está corriendo$(NC)"; \
+	else \
+		echo "$(BLUE)🗂️ Iniciando etcd single node...$(NC)"; \
+		if lsof -i:2379 > /dev/null 2>&1 || lsof -i:2380 > /dev/null 2>&1; then \
+			echo "$(YELLOW)⚠️ Limpiando puertos ocupados...$(NC)"; \
+			pkill -f "etcd" 2>/dev/null || true; \
+			sleep 2; \
+		fi; \
+		chmod +x $(ETCD_START_SCRIPT); \
+		$(ETCD_START_SCRIPT) & \
+		sleep 3; \
+	fi
+
+	@echo "$(BLUE)🔍 Verificando conectividad...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ etcd operativo$(NC) ($(ETCD_ENDPOINT))"; \
+		echo "$(BLUE)📝 Registrando servicios básicos...$(NC)"; \
+		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-backbone localhost 2379 300; \
+		echo "$(GREEN)🎉 Backbone distribuido listo para desarrollo$(NC)"; \
+	else \
+		echo "$(RED)❌ etcd no responde$(NC)"; \
+		exit 1; \
+	fi
+
+dist-ui: ## Iniciar interfaz web para etcd (Docker)
+	@echo "$(BLUE)🌐 Iniciando UI web para etcd...$(NC)"
+	@if ! docker info > /dev/null 2>&1; then \
+		echo "$(RED)❌ Docker no está disponible$(NC)"; \
+		echo "$(YELLOW)💡 Inicia Docker Desktop y vuelve a intentar$(NC)"; \
+		exit 1; \
+	fi
+
+	@if ! curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		echo "$(RED)❌ etcd no disponible$(NC)"; \
+		echo "$(BLUE)💡 Ejecuta primero: make dist-start$(NC)"; \
+		exit 1; \
+	fi
+
+	@echo "$(BLUE)🐳 Iniciando contenedor UI etcd...$(NC)"
+	@docker run -d --name $(ETCD_UI_CONTAINER) \
+		-p $(ETCD_UI_PORT):8081 \
+		-e ETCD_ENDPOINT=$(ETCD_ENDPOINT) \
+		-e EDITABLE=1 \
+		--restart unless-stopped \
+		rustyx/etcdv3-browser 2>/dev/null || \
+		echo "$(YELLOW)⚠️ Contenedor ya existe$(NC)"
+
+	@sleep 3
+	@if curl -s http://localhost:$(ETCD_UI_PORT) > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ UI etcd disponible en: http://localhost:$(ETCD_UI_PORT)$(NC)"; \
+		echo "$(CYAN)💡 Para detener: make dist-ui-stop$(NC)"; \
+	else \
+		echo "$(RED)❌ UI etcd no responde$(NC)"; \
+		docker logs $(ETCD_UI_CONTAINER) 2>/dev/null || true; \
+	fi
+
+dist-ui-stop: ## Detener interfaz web de etcd
+	@echo "$(YELLOW)🛑 Deteniendo UI etcd...$(NC)"
+	@docker stop $(ETCD_UI_CONTAINER) 2>/dev/null || echo "$(YELLOW)⚠️ UI no estaba corriendo$(NC)"
+	@docker rm $(ETCD_UI_CONTAINER) 2>/dev/null || true
+	@echo "$(GREEN)✅ UI etcd detenida$(NC)"
+
+dist-ui-open: ## Abrir interfaz web de etcd en navegador
+	@echo "$(BLUE)🌐 Abriendo UI etcd...$(NC)"
+	@if curl -s http://localhost:$(ETCD_UI_PORT) > /dev/null 2>&1; then \
+		which open >/dev/null && open http://localhost:$(ETCD_UI_PORT) || \
+		which xdg-open >/dev/null && xdg-open http://localhost:$(ETCD_UI_PORT) || \
+		echo "💡 Abrir manualmente: http://localhost:$(ETCD_UI_PORT)"; \
+	else \
+		echo "$(RED)❌ UI no disponible. Ejecuta: make dist-ui$(NC)"; \
+	fi
+
+dist-status: ## Estado del sistema distribuido simple
+	@echo "$(CYAN)📊 Estado Sistema Distribuido (modo dev)$(NC)"
+	@echo "$(CYAN)========================================$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🗂️ Backbone etcd:$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		echo "  Estado: $(GREEN)✅ Operativo$(NC) ($(ETCD_ENDPOINT))"; \
+		version=$$(curl -s $(ETCD_ENDPOINT)/version | jq -r '.etcdserver' 2>/dev/null || echo "N/A"); \
+		echo "  Versión: $$version"; \
+		servicios=$$(etcdctl --endpoints=$(ETCD_ENDPOINT) get /services/ --prefix --keys-only 2>/dev/null | grep -c /services/ || echo 0); \
+		echo "  Servicios: $$servicios registrados"; \
+	else \
+		echo "  Estado: $(RED)⭕ No disponible$(NC)"; \
+	fi
+
+	@echo ""
+	@echo "$(YELLOW)🌐 UI Web:$(NC)"
+	@if curl -s http://localhost:$(ETCD_UI_PORT) > /dev/null 2>&1; then \
+		echo "  UI etcd: $(GREEN)✅ Disponible$(NC) (http://localhost:$(ETCD_UI_PORT))"; \
+	else \
+		echo "  UI etcd: $(RED)⭕ No disponible$(NC)"; \
+	fi
+
+	@echo ""
+	@echo "$(YELLOW)🐳 Docker:$(NC)"
+	@if docker info > /dev/null 2>&1; then \
+		echo "  Docker: $(GREEN)✅ Disponible$(NC)"; \
+		if docker ps --filter name=$(ETCD_UI_CONTAINER) --format "table {{.Names}}\t{{.Status}}" | grep -q $(ETCD_UI_CONTAINER); then \
+			echo "  Contenedor: $(GREEN)✅ Corriendo$(NC)"; \
+		else \
+			echo "  Contenedor: $(YELLOW)⚠️ Detenido$(NC)"; \
+		fi \
+	else \
+		echo "  Docker: $(RED)❌ No disponible$(NC)"; \
+	fi
+
+dist-discover: ## Ver servicios registrados
+	@echo "$(BLUE)🔍 Servicios registrados:$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
+		$(SERVICE_DISCOVERY_SCRIPT) discover; \
+	else \
+		echo "$(RED)❌ etcd no disponible$(NC)"; \
+		echo "$(BLUE)💡 Ejecuta: make dist-start$(NC)"; \
+	fi
+
+dist-register: ## Re-registrar servicios V3.1
+	@echo "$(BLUE)📝 Re-registrando servicios V3.1...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-sniffer localhost 5559 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-geoip localhost 5560 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-ml localhost 5561 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-scheduler localhost 5561 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-firewall localhost 5562 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-dashboard localhost 8080 120; \
+		echo "$(GREEN)✅ Servicios registrados$(NC)"; \
+	else \
+		echo "$(RED)❌ etcd no disponible$(NC)"; \
+	fi
+
+dist-watch: ## Monitorear cambios en tiempo real
+	@echo "$(BLUE)👀 Monitoreando servicios...$(NC)"
+	@echo "$(YELLOW)💡 Presiona Ctrl+C para salir$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
+		$(SERVICE_DISCOVERY_SCRIPT) watch; \
+	else \
+		echo "$(RED)❌ etcd no disponible$(NC)"; \
+	fi
+
+dist-stop: ## Detener infraestructura distribuida
+	@echo "$(YELLOW)🛑 Deteniendo backbone distribuido...$(NC)"
+	@pkill -f "etcd" 2>/dev/null || echo "  etcd no estaba corriendo"
+	@$(MAKE) dist-ui-stop 2>/dev/null || true
+	@echo "$(GREEN)✅ Backbone detenido$(NC)"
+
+dist-clean: dist-stop ## Limpiar datos distribuidos
+	@echo "$(YELLOW)🧹 Limpiando datos distribuidos...$(NC)"
+	@rm -rf $(ETCD_DATA_DIR)/* $(ETCD_LOG_DIR)/* .pids/etcd*.pid 2>/dev/null || true
+	@docker stop $(ETCD_UI_CONTAINER) 2>/dev/null || true
+	@docker rm $(ETCD_UI_CONTAINER) 2>/dev/null || true
+	@echo "$(GREEN)✅ Limpieza completada$(NC)"
+
+dist-dev: dist-start dist-ui start_v31 ## Setup completo simple: etcd + UI + V3.1
+	@echo ""
+	@echo "$(GREEN)🚀 MODO DISTRIBUIDO SIMPLE OPERATIVO$(NC)"
+	@echo "$(GREEN)====================================$(NC)"
+	@echo "$(YELLOW)Configuración de desarrollo con backbone distribuido$(NC)"
+	@echo ""
+
+	@echo "$(BLUE)📝 Registrando servicios V3.1...$(NC)"
+	@$(MAKE) dist-register
+
+	@echo ""
+	@echo "$(BLUE)🔍 Estado del sistema:$(NC)"
+	@$(MAKE) dist-discover
+
+	@echo ""
+	@echo "$(GREEN)🎉 ECOSISTEMA DE DESARROLLO OPERATIVO:$(NC)"
+	@echo "$(CYAN)📊 Dashboard V3.1: http://localhost:8080$(NC)"
+	@echo "$(CYAN)🗂️ etcd UI: http://localhost:$(ETCD_UI_PORT)$(NC)"
+	@echo "$(CYAN)🔍 Estado: make dist-status$(NC)"
+	@echo "$(CYAN)👀 Monitor: make dist-watch$(NC)"
+	@echo ""
+	@echo "$(PURPLE)🎯 Próximo: K3s para HA real$(NC)"
+
+# =============================================================================
+# INTEGRACIÓN CON SISTEMA V3.1 (sin cambios en el core)
+# =============================================================================
+start_v31: install verify-protobuf-compiled-v31 create-configs-v31 stop
+	@echo "$(GREEN)🚀 Iniciando Sistema V3.1 + Service Discovery...$(NC)"
+	# [Pipeline V3.1 sin cambios]
+	# Al final, auto-registro si etcd disponible:
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		echo "$(BLUE)📝 Auto-registrando en service discovery...$(NC)"; \
+		$(MAKE) dist-register; \
+		echo "$(GREEN)✅ Servicios registrados automáticamente$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️ Service discovery no disponible (modo local)$(NC)"; \
+	fi
+
+# =============================================================================
+# HELP SIMPLIFICADO
+# =============================================================================
+help:
+	@echo "$(CYAN)🧬 Sistema Autoinmune Digital V3.1 + Distributed (SIMPLE)$(NC)"
+	@echo "$(CYAN)==========================================================$(NC)"
+	@echo "$(PURPLE)Filosofía: Simple en desarrollo, HA en K3s$(NC)"
+	@echo ""
+	@echo "$(YELLOW)🚀 INICIO RÁPIDO:$(NC)"
+	@echo "  $(GREEN)make dist-dev$(NC)            - Ecosistema completo (etcd + UI + V3.1)"
+	@echo "  $(GREEN)make quick_v31$(NC)           - Solo V3.1 (sin distribuido)"
+	@echo ""
+	@echo "$(YELLOW)🌐 MODO DISTRIBUIDO SIMPLE:$(NC)"
+	@echo "  $(CYAN)make dist-start$(NC)          - Iniciar etcd single node"
+	@echo "  $(CYAN)make dist-ui$(NC)             - UI web (Docker) - Puerto $(ETCD_UI_PORT)"
+	@echo "  $(CYAN)make dist-status$(NC)         - Estado del sistema"
+	@echo "  $(CYAN)make dist-discover$(NC)       - Ver servicios registrados"
+	@echo "  $(CYAN)make dist-watch$(NC)          - Monitor tiempo real"
+	@echo "  $(CYAN)make dist-register$(NC)       - Registrar servicios V3.1"
+	@echo "  $(CYAN)make dist-stop$(NC)           - Detener todo"
+	@echo "  $(CYAN)make dist-clean$(NC)          - Limpiar datos"
+	@echo ""
+	@echo "$(YELLOW)🛡️ SISTEMA V3.1:$(NC)"
+	@echo "  $(GREEN)make start_v31$(NC)           - Pipeline V3.1 (auto-registro si etcd disponible)"
+	@echo "  $(GREEN)make status_v31$(NC)          - Estado V3.1"
+	@echo "  $(GREEN)make show-dashboard$(NC)      - Abrir dashboard V3.1"
+	@echo ""
+	@echo "$(CYAN)🏗️ ARQUITECTURA SIMPLE:$(NC)"
+	@echo "  etcd single node (puerto 2379) ← Service Discovery"
+	@echo "  ↓"
+	@echo "  Pipeline V3.1 (auto-registro automático)"
+	@echo "  ↓"
+	@echo "  Dashboard V3.1 + etcd UI"
+	@echo ""
+	@echo "$(GREEN)💡 FLUJO RECOMENDADO:$(NC)"
+	@echo "  1. $(CYAN)make dist-dev$(NC)         # Todo el ecosistema"
+	@echo "  2. $(GREEN)make show-dashboard$(NC)  # Dashboard V3.1"
+	@echo "  3. $(CYAN)make dist-ui-open$(NC)    # UI etcd"
+	@echo "  4. $(CYAN)make dist-watch$(NC)      # Monitor servicios"
+	@echo ""
+	@echo "$(PURPLE)🎯 FUTURO: K3s para HA real$(NC)"

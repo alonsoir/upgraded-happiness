@@ -29,6 +29,8 @@ from pathlib import Path
 from collections import deque, defaultdict
 from typing import Dict, Any, Optional, Tuple, List
 from threading import Event
+from crypto.crypto_zmq_v31 import CryptoZMQV31
+from protocols.v3_1 import network_security_clean_v31_pb2
 
 # 📦 Protobuf v3.1.0 - REQUERIDO - Importación robusta
 PROTOBUF_AVAILABLE = False
@@ -40,16 +42,16 @@ def import_protobuf_module():
     """Importa el módulo protobuf v3.1.0 con múltiples estrategias"""
     global NetworkSecurityEventProto, PROTOBUF_AVAILABLE, PROTOBUF_VERSION
 
-    # Estrategia 1: Importación relativa desde protocols.v3.1
+    # Estrategia 1: Importación relativa desde protocols.v3_1
     import_strategies = [
-        ("protocols.v3.1.network_security_clean_v31_pb2", "Paquete protocols.v3.1"),
+        ("protocols.v3_1.network_security_clean_v31_pb2", "Paquete protocols.v3_1"),
         ("protocols.network_security_clean_v31_pb2", "Paquete protocols"),
         ("network_security_clean_v31_pb2", "Importación directa"),
     ]
 
     for import_path, description in import_strategies:
         try:
-            NetworkSecurityEventProto = __import__(import_path, fromlist=[''])
+            NetworkSecurityEventProto = network_security_clean_v31_pb2
             PROTOBUF_AVAILABLE = True
             PROTOBUF_VERSION = "v3.1.0"
             print(f"✅ Protobuf v3.1 cargado: {description} ({import_path})")
@@ -323,6 +325,9 @@ class DistributedGeoIPEnricherVerticalV31:
 
         # 🌐 Handler de IPs con discovery público (MANTENIDO)
         self.ip_handler = IPAddressHandler(self.config)
+
+        # 🔐 Crypto wrapper setup
+        self.crypto_wrapper = None
 
         # 🔌 Setup ZeroMQ con optimizaciones verticales (MANTENIDO)
         self.context = zmq.Context()
@@ -635,6 +640,31 @@ class DistributedGeoIPEnricherVerticalV31:
             # BIND para que ml_detector se conecte
             output_address = f"tcp://*:{output_config['port']}"
             self.output_socket.bind(output_address)
+
+            if self.config.get("crypto", {}).get("enabled", False):
+                try:
+                    crypto_config_file = self.config.get("crypto", {}).get("config_file",
+                                                                           "config/crypto/crypto_config_v31.json")
+                    crypto_component_id = self.config.get("crypto", {}).get("component_crypto_id", self.node_id)
+
+                    # Inicializar crypto wrapper
+                    self.crypto_wrapper = CryptoZMQV31(crypto_component_id, crypto_config_file)
+
+                    # 🔓 Wrap input socket para DESCIFRAR (del sniffer)
+                    self.input_socket = self.crypto_wrapper.wrap_socket_recv(self.input_socket)
+
+                    # 🔒 Wrap output socket para CIFRAR (hacia ML detector)
+                    self.output_socket = self.crypto_wrapper.wrap_socket_send(self.output_socket)
+
+                    self.logger.info("🔐 Crypto wrapper habilitado para GeoIP Enricher v3.1.0")
+                    self.logger.info(f"   🔓 Input: Descifrado automático desde evolutionary_sniffer")
+                    self.logger.info(f"   🔒 Output: Cifrado automático hacia ML detector")
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error configurando crypto wrapper: {e}")
+                    raise RuntimeError(f"Error inicializando crypto: {e}")
+            else:
+                self.logger.info("🔐 Crypto wrapper deshabilitado")
 
             self.logger.info(f"🔌 Sockets ZMQ VERTICAL v3.1.0 configurados:")
             self.logger.info(f"   📥 Input: CONNECT to {input_address}")
@@ -1335,7 +1365,13 @@ class DistributedGeoIPEnricherVerticalV31:
 
         for thread in threads:
             thread.join(timeout=5)
-
+        # 🔐 Cleanup crypto wrapper
+        if self.crypto_wrapper:
+            try:
+                self.crypto_wrapper.close()
+                self.logger.info("🔐 Crypto wrapper cerrado correctamente")
+            except Exception as e:
+                self.logger.error(f"❌ Error cerrando crypto wrapper: {e}")
         if self.input_socket:
             self.input_socket.close()
         if self.output_socket:

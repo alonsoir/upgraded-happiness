@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SCADA Dashboard ETCD V3.1 - Sistema Tricapa Enhanced</title>
+
+    <!-- 🗺️ Leaflet CSS - DEBE ir antes que el JavaScript -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+
+    <!-- 🎨 Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 🎨 CSS Unificado del Dashboard V3.1 -->
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- 🖥️ Header ETCD V3.1 -->
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <span>SCADA Dashboard ETCD V3.1 - Sistema Tricapa Enhanced</span>
+                <span class="v31-badge">ETCD V3.1</span>
+            </div>
+            <div class="status-indicators">
+                <!-- 🔥 ESTADO GENERAL -->
+                <div class="status-indicator" onclick="showConnectionDetails('overall')">
+                    <div class="status-dot connecting" id="overall-status"></div>
+                    <span id="overall-status-text">Connecting ETCD V3.1...</span>
+                </div>
+
+                <!-- 🔥 COMPONENTES ESPECÍFICOS V3.1 -->
+                <div class="status-indicator" onclick="showConnectionDetails('promiscuous-agent')">
+                    <div class="status-dot disconnected" id="promiscuous-agent-status"></div>
+                    <span>Promiscuous Agent</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('geoip-enricher')">
+                    <div class="status-dot disconnected" id="geoip-enricher-status"></div>
+                    <span>GeoIP Enricher</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('ml-detector')">
+                    <div class="status-dot disconnected" id="ml-detector-status"></div>
+                    <span>ML Detector ETCD V3.1</span>
+                </div>
+                <div class="status-indicator" onclick="showConnectionDetails('firewall-agent')">
+                    <div class="status-dot disconnected" id="firewall-agent-status"></div>
+                    <span>Firewall Agent</span>
+                </div>
+
+                <!-- 🆕 NUEVO: INDICADOR ETCD -->
+                <div class="status-indicator" onclick="showETCDManagementPage()">
+                    <div class="status-dot connecting" id="etcd-status"></div>
+                    <span>ETCD Backend</span>
+                </div>
+
+                <!-- 🆕 NUEVO: INDICADOR RAG (se añade dinámicamente) -->
+
+                <!-- INFO DEL SISTEMA V3.1 -->
+                <div class="status-indicator" onclick="showSystemInfoV31()">
+                    <span id="current-time">--:--:--</span>
+                </div>
+                <div class="status-indicator" onclick="showEventsSummary()">
+                    <span>Events: <span id="events-counter">0</span></span>
+                </div>
+                <div class="status-indicator" onclick="showLiveStatsV31()">
+                    <span>Stats ETCD: <span id="confirmations-counter">0</span></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 🗺️ Área principal del mapa -->
+        <main class="main-content">
+            <div class="map-controls">
+                <button class="map-control-btn" onclick="clearAllMarkers()" title="Limpiar todos los marcadores del mapa">
+                    <i class="fas fa-eraser"></i> Clear Map
+                </button>
+                <button class="map-control-btn" onclick="centerMap()" title="Centrar mapa en nodo local">
+                    <i class="fas fa-crosshairs"></i> Center
+                </button>
+                <button class="map-control-btn" onclick="toggleHeatmap()" title="Activar/desactivar mapa de calor">
+                    <i class="fas fa-fire"></i> Heatmap
+                </button>
+                <button class="map-control-btn" onclick="showMapLegend()" title="Mostrar leyenda del mapa">
+                    <i class="fas fa-info-circle"></i> Legend
+                </button>
+                <!-- 🆕 BOTONES ETCD V3.1 -->
+                <button class="map-control-btn" onclick="showAdvancedAnalysisV31(currentEvents[0] || {})" title="Análisis ML Avanzado ETCD V3.1" style="background: rgba(0, 170, 255, 0.8);">
+                    <i class="fas fa-brain"></i> ML ETCD V3.1
+                </button>
+                <button class="map-control-btn" onclick="showEnsembleModelsDetail()" title="Ver modelos ensemble desde ETCD" style="background: rgba(0, 255, 136, 0.8);">
+                    <i class="fas fa-robot"></i> Ensemble ETCD
+                </button>
+                <button class="map-control-btn" onclick="sendTestFirewallCommandV31()" title="Enviar evento de prueba al firewall ETCD V3.1" style="background: rgba(255, 170, 0, 0.8);">
+                    <i class="fas fa-vial"></i> Test FW ETCD
+                </button>
+            </div>
+            <!-- 🌍 CRÍTICO: Contenedor del mapa -->
+            <div id="map"></div>
+        </main>
+
+        <!-- 📊 Sidebar -->
+        <aside class="sidebar">
+            <!-- 🏗️ Información de Arquitectura ETCD V3.1 -->
+            <div class="collapsible-section" id="architecture-section">
+                <div class="section-header" onclick="toggleSection('architecture')">
+                    <div class="architecture-title">
+                        🏗️ Arquitectura ETCD V3.1 - Protobuf Enhanced
+                        <i class="fas fa-chevron-down toggle-icon" id="architecture-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="architecture-content">
+                    <div class="architecture-info">
+                        <div>Eventos: <span id="events-count" class="clickable-counter" onclick="showEventsDetail(event)">0</span> |
+                             Comandos: <span id="commands-count" class="clickable-counter" onclick="showCommandsDetail(event)">0</span> |
+                             Confirmaciones: <span id="confirmations-count" class="clickable-counter" onclick="showConfirmationsDetail(event)">0</span></div>
+
+                        <!-- 🆕 PUERTOS ACTUALIZADOS ETCD V3.1 -->
+                        <div class="port-info events" onclick="showPortDetails(5570, event)">
+                            <span class="port-number">Puerto 5570:</span> ml_detector → dashboard (legacy)
+                        </div>
+                        <div class="port-info commands v31-field" onclick="showPortDetails(5580, event)">
+                            <span class="port-number">Puerto 5580:</span> ML_detector SUB ETCD V3.1 → dashboard
+                        </div>
+                        <div class="port-info confirmations" onclick="showPortDetails(5581, event)">
+                            <span class="port-number">Puerto 5581:</span> firewall_agent → dashboard
+                        </div>
+
+                        <!-- 🆕 INFORMACIÓN ETCD V3.1 -->
+                        <div style="margin-top: 10px; padding: 8px; background: rgba(0, 255, 136, 0.05); border-left: 3px solid #00ff88; border-radius: 4px;">
+                            <div style="font-size: 10px; color: #00ff88; font-weight: bold; margin-bottom: 4px;">🔗 Fuente: ETCD Backend V3.1</div>
+                            <div style="font-size: 9px; color: #ccc; line-height: 1.3;">
+                                • <span class="ensemble-confidence">ensemble_confidence</span><br>
+                                • <span class="pipeline-latency">pipeline_latency</span><br>
+                                • <span class="capturing-node-id">capturing_node_id</span><br>
+                                • <span style="color: #ffaa00;">tricapa_ml_scores</span><br>
+                                • <span style="color: #00aaff;">firewall_fleet_config</span><br>
+                                • <span style="color: #ff6b6b;">ensemble_models_active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔧 Estado de Componentes ETCD V3.1 -->
+            <div class="collapsible-section" id="components-section">
+                <div class="section-header" onclick="toggleSection('components')">
+                    <div class="section-title">
+                        🔧 Estado de Componentes ETCD V3.1
+                        <i class="fas fa-cogs clickable-icon"></i>
+                        <i class="fas fa-chevron-down toggle-icon" id="components-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="components-content">
+                    <!-- 🔥 PROMISCUOUS AGENT -->
+                    <div class="component-item promiscuous-agent" onclick="showComponentDetail('promiscuous-agent')">
+                        <div class="component-header">
+                            <span class="component-name">Promiscuous Agent ETCD V3.1</span>
+                            <span class="component-health healthy" id="promiscuous-agent-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('promiscuous-agent-packets', event)">
+                                Packets: <span id="promiscuous-agent-packets">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-interfaces', event)">
+                                Interfaces: <span id="promiscuous-agent-interfaces">eth0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-filtered', event)">
+                                Filtered: <span id="promiscuous-agent-filtered">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('promiscuous-agent-rate', event)">
+                                Rate: <span id="promiscuous-agent-rate">0 pkt/s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🔥 GEOIP ENRICHER ETCD V3.1 -->
+                    <div class="component-item geoip-enricher" onclick="showComponentDetail('geoip-enricher')">
+                        <div class="component-header">
+                            <span class="component-name">GeoIP Enricher ETCD V3.1</span>
+                            <span class="component-health warning" id="geoip-enricher-health">WAITING</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('geoip-enricher-lookups', event)">
+                                Lookups: <span id="geoip-enricher-lookups">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-cached', event)">
+                                Cached: <span id="geoip-enricher-cached">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-enriched', event)">
+                                Enriched: <span id="geoip-enricher-enriched">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('geoip-enricher-latency', event)">
+                                Latency: <span id="geoip-enricher-latency">0ms</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ML DETECTOR ETCD V3.1 -->
+                    <div class="component-item ml-detector" onclick="showComponentDetail('ml-detector')">
+                        <div class="component-header">
+                            <span class="component-name">ML Detector ETCD V3.1 (SUB 5580)</span>
+                            <span class="component-health healthy" id="ml-detector-health">HEALTHY</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('ml-detector-node', event)">
+                                Node: <span id="ml-detector-node">ml_detector_etcd_v31_001</span>
+                            </div>
+                            <div onclick="showComponentMetric('ml-detector-latency', event)" class="pipeline-latency">
+                                Pipeline: <span id="ml-detector-latency">0ms</span>
+                            </div>
+                            <div onclick="showComponentMetric('ml-detector-processed', event)">
+                                Processed: <span id="ml-detector-processed">0</span>
+                            </div>
+                            <div onclick="showEnsembleModelsDetail(event)" class="ensemble-confidence enhanced-v31">
+                                Ensemble: <span id="ml-detector-confidence">0 models</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FIREWALL AGENT ETCD V3.1 -->
+                    <div class="component-item firewall-agent" onclick="showComponentDetail('firewall-agent')">
+                        <div class="component-header">
+                            <span class="component-name">Firewall Agent ETCD V3.1</span>
+                            <span class="component-health healthy" id="firewall-agent-health">HEALTHY</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('firewall-agent-node', event)" class="capturing-node-id">
+                                Node: <span id="firewall-agent-node">simple_firewall_agent_etcd_v31_001</span>
+                            </div>
+                            <div onclick="showComponentMetric('firewall-active-rules', event)">
+                                Rules: <span id="firewall-active-rules">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('firewall-applied', event)">
+                                Applied: <span id="firewall-applied">0</span>
+                            </div>
+                            <div onclick="showComponentMetric('firewall-failed', event)">
+                                Failed: <span id="firewall-failed">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DASHBOARD ETCD V3.1 -->
+                    <div class="component-item dashboard" onclick="showComponentDetail('dashboard')">
+                        <div class="component-header">
+                            <span class="component-name">Dashboard ETCD V3.1</span>
+                            <span class="component-health healthy" id="dashboard-health">HEALTHY</span>
+                        </div>
+                        <div class="component-metrics">
+                            <div onclick="showComponentMetric('dashboard-node', event)">
+                                Node: <span id="dashboard-node">dashboard_etcd_v31_001</span>
+                            </div>
+                            <div onclick="showComponentMetric('dashboard-uptime', event)">
+                                Uptime: <span id="dashboard-uptime">0s</span>
+                            </div>
+                            <div onclick="showComponentMetric('dashboard-memory', event)">
+                                Memory: <span id="dashboard-memory">0MB</span>
+                            </div>
+                            <div onclick="showComponentMetric('dashboard-cpu', event)">
+                                CPU: <span id="dashboard-cpu">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🤖 Modelos Ensemble ETCD V3.1 - NUEVA SECCIÓN -->
+            <div class="collapsible-section" id="ensemble-models-section">
+                <div class="section-header" onclick="toggleSection('ensemble-models')">
+                    <div class="section-title">
+                        🤖 Modelos Ensemble ETCD V3.1
+                        <span class="event-count-badge" id="active-models-count" style="background: #ff6b6b;">0</span>
+                        <span class="realtime-indicator-v31"></span>
+                        <i class="fas fa-chevron-down toggle-icon" id="ensemble-models-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content collapsed" id="ensemble-models-content">
+                    <div style="margin-bottom: 12px; font-size: 10px; color: #ccc; text-align: center;">
+                        Configuración desde ETCD ml_detector_config
+                    </div>
+
+                    <!-- Lista de modelos activos -->
+                    <div id="active-models-list" style="margin-bottom: 15px;">
+                        <div style="color: #00ff88; font-weight: bold; font-size: 11px; margin-bottom: 8px;">✅ Modelos Activos:</div>
+                        <div id="active-models-container">
+                            <div style="color: #666; font-style: italic; font-size: 10px; text-align: center; padding: 10px;">
+                                No hay modelos activos disponibles desde ETCD
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lista de modelos disponibles -->
+                    <div id="available-models-list">
+                        <div style="color: #ffaa00; font-weight: bold; font-size: 11px; margin-bottom: 8px;">💤 Modelos Disponibles:</div>
+                        <div id="available-models-container">
+                            <div style="color: #666; font-style: italic; font-size: 10px; text-align: center; padding: 10px;">
+                                Cargando modelos desde ETCD...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botón para ver detalles -->
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button onclick="showEnsembleModelsDetail()"
+                                class="btn"
+                                style="border-color: #ff6b6b; color: #ff6b6b; font-size: 9px; padding: 6px 12px;">
+                            <i class="fas fa-robot"></i> Ver Todos los Modelos ETCD
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 📨 Eventos Entrantes ETCD V3.1 -->
+            <div class="collapsible-section" id="events-section">
+                <div class="section-header" onclick="toggleSection('events')">
+                    <div class="section-title">
+                        📨 Eventos ETCD V3.1 (Sin Límite)
+                        <span class="event-count-badge" id="live-events-count">0</span>
+                        <span class="realtime-indicator-v31"></span>
+                        <i class="fas fa-chevron-down toggle-icon" id="events-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="events-content">
+                    <div class="events-controls">
+                        <button class="mini-btn" onclick="clearEventsList()" title="Limpiar lista de eventos">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="mini-btn" onclick="pauseEventsUpdate()" title="Pausar/reanudar actualización" id="pause-events-btn">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                        <button class="mini-btn" onclick="sendTestFirewallCommandV31()" title="Enviar evento de prueba ETCD V3.1" style="border-color: #00aaff; color: #00aaff;">
+                            <i class="fas fa-vial"></i> ETCD
+                        </button>
+                        <!-- 🆕 ANÁLISIS AVANZADO ETCD -->
+                        <button class="mini-btn" onclick="showAdvancedAnalysisV31(currentEvents[0] || {})" title="Análisis ML Avanzado ETCD" style="border-color: #00ff88; color: #00ff88;">
+                            <i class="fas fa-brain"></i> ETCD
+                        </button>
+                        <!-- 🆕 MODELOS ENSEMBLE -->
+                        <button class="mini-btn" onclick="showEnsembleModelsDetail()" title="Modelos Ensemble desde ETCD" style="border-color: #ff6b6b; color: #ff6b6b;">
+                            <i class="fas fa-robot"></i>
+                        </button>
+                        <select id="events-filter" onchange="filterEvents()" class="mini-select">
+                            <option value="all">Todos</option>
+                            <option value="high">Alto Riesgo</option>
+                            <option value="medium">Medio Riesgo</option>
+                            <option value="low">Bajo Riesgo</option>
+                        </select>
+                    </div>
+                    <div class="events-list scrollable-infinite" id="events-list">
+                        <div class="no-events-placeholder">
+                            <i class="fas fa-inbox"></i>
+                            <p>No hay eventos ETCD V3.1 recientes</p>
+                            <button onclick="sendTestFirewallCommandV31()" class="btn btn-primary">
+                                🧪 Generar Evento ETCD V3.1
+                            </button>
+                        </div>
+                    </div>
+                    <!-- 🆕 INDICADOR DE EVENTOS INFINITOS ETCD -->
+                    <div class="infinite-events-indicator">
+                        📊 Eventos ilimitados ETCD V3.1 activos
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔥 Eventos del Firewall ETCD V3.1 -->
+            <div class="collapsible-section" id="firewall-events-section">
+                <div class="section-header" onclick="toggleSection('firewall-events')">
+                    <div class="section-title">
+                        🔥 Eventos Firewall ETCD V3.1
+                        <span class="event-count-badge" id="firewall-events-count" style="background: #00ff88;">0</span>
+                        <span class="realtime-indicator-v31"></span>
+                        <i class="fas fa-chevron-down toggle-icon" id="firewall-events-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="firewall-events-content">
+                    <!-- Estadísticas del Firewall ETCD V3.1 -->
+                    <div class="firewall-stats">
+                        <div class="firewall-stat">
+                            <div class="firewall-stat-label">Comandos</div>
+                            <div class="firewall-stat-value" id="firewall-commands-sent">0</div>
+                        </div>
+                        <div class="firewall-stat">
+                            <div class="firewall-stat-label">Resp. OK</div>
+                            <div class="firewall-stat-value" id="firewall-responses-ok">0</div>
+                        </div>
+                        <div class="firewall-stat">
+                            <div class="firewall-stat-label">Errores</div>
+                            <div class="firewall-stat-value" id="firewall-errors" style="color: #ff4444;">0</div>
+                        </div>
+                        <div class="firewall-stat">
+                            <div class="firewall-stat-label">Agentes</div>
+                            <div class="firewall-stat-value" id="firewall-agents-count" style="color: #00aaff;">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Controles del Firewall ETCD V3.1 -->
+                    <div class="firewall-controls">
+                        <button class="firewall-btn" onclick="clearFirewallEventsList()" title="Limpiar eventos del firewall">
+                            <i class="fas fa-fire"></i>
+                        </button>
+                        <button class="firewall-btn" onclick="pauseFirewallEventsUpdate()" title="Pausar/reanudar eventos firewall" id="pause-firewall-events-btn">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                        <button class="firewall-btn test" onclick="sendTestFirewallCommandV31()" title="Enviar comando test al firewall ETCD V3.1">
+                            <i class="fas fa-vial"></i> ETCD
+                        </button>
+                        <!-- 🆕 BOTÓN CONFIGURACIÓN ETCD -->
+                        <button class="firewall-btn" onclick="showETCDManagementPage()" title="Gestión ETCD" style="border-color: #0066cc; color: #0066cc;">
+                            <i class="fas fa-database"></i>
+                        </button>
+                    </div>
+
+                    <!-- Lista de Eventos del Firewall ETCD V3.1 -->
+                    <div class="firewall-events-list scrollable-infinite" id="firewall-events-list">
+                        <div class="no-firewall-events">
+                            <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                            <p>No hay eventos del firewall ETCD V3.1</p>
+                            <button onclick="sendTestFirewallCommandV31()" class="btn btn-primary" style="margin-top: 10px;">
+                                🧪 Enviar Test Firewall ETCD V3.1
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Info último agente ETCD V3.1 -->
+                    <div style="margin-top: 10px; font-size: 9px; color: #666; text-align: center;">
+                        Último Agent ETCD V3.1: <span id="firewall-last-agent" style="color: #00ff88;">N/A</span>
+                        <br>Agentes disponibles desde ETCD: <span id="firewall-available-agents" style="color: #00aaff;">0</span>
+                    </div>
+
+                    <!-- 🆕 INDICADOR TRICAPA ETCD -->
+                    <div class="tricapa-activity"></div>
+                </div>
+            </div>
+
+            <!-- 📊 Contadores Reactivos ETCD V3.1 -->
+            <div class="collapsible-section" id="counters-section">
+                <div class="section-header" onclick="toggleSection('counters')">
+                    <div class="section-title">
+                        📊 Métricas ETCD V3.1 en Tiempo Real
+                        <i class="fas fa-chevron-down toggle-icon" id="counters-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="counters-content">
+                    <div class="counters-section">
+                        <div class="counter events" onclick="showEventsPerMinuteDetail()">
+                            <span class="number" id="events-per-min">0</span>
+                            <span class="label">Eventos/min</span>
+                        </div>
+                        <div class="counter commands" onclick="showHighRiskEventsDetail()">
+                            <span class="number" id="high-risk-count">0</span>
+                            <span class="label">Alto Riesgo</span>
+                        </div>
+                        <div class="counter confirmations" onclick="showSuccessRateDetail()">
+                            <span class="number" id="success-rate">0</span>
+                            <span class="label">Éxito</span>
+                        </div>
+                        <div class="counter failures" onclick="showFailuresDetail()">
+                            <span class="number" id="failure-count">0</span>
+                            <span class="label">Fallos</span>
+                        </div>
+                    </div>
+
+                    <!-- 🆕 BOTONES NUEVAS FUNCIONALIDADES ETCD V3.1 -->
+                    <div style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <button onclick="showLiveStatsV31()" class="btn" style="border-color: #00ff88; color: #00ff88; font-size: 9px; padding: 6px;">
+                            <i class="fas fa-chart-line"></i> Stats ETCD
+                        </button>
+                        <button onclick="showSystemInfoV31()" class="btn" style="border-color: #00aaff; color: #00aaff; font-size: 9px; padding: 6px;">
+                            <i class="fas fa-info-circle"></i> System ETCD
+                        </button>
+                        <button onclick="showEnsembleModelsDetail()" class="btn" style="border-color: #ff6b6b; color: #ff6b6b; font-size: 9px; padding: 6px;">
+                            <i class="fas fa-robot"></i> Ensemble
+                        </button>
+                        <button onclick="showRAGConfigDetail()" class="btn" style="border-color: #ff6b6b; color: #ff6b6b; font-size: 9px; padding: 6px;">
+                            <i class="fas fa-brain"></i> RAG
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🔌 Estado ZeroMQ ETCD V3.1 -->
+            <div class="collapsible-section" id="zmq-section">
+                <div class="section-header" onclick="toggleSection('zmq')">
+                    <div class="section-title">
+                        🔌 Conexiones ZeroMQ ETCD V3.1
+                        <i class="fas fa-info-circle clickable-icon"></i>
+                        <i class="fas fa-chevron-down toggle-icon" id="zmq-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="zmq-content">
+                    <!-- Topología de conexión ETCD V3.1 -->
+                    <div class="connection-topology">
+                        <div class="topology-line active" onclick="showTopologyLineDetail('ml-events')">
+                            <strong>ML Events (Legacy):</strong> PULL:CONNECT → :5570
+                            <span class="topology-status" id="topology-ml-status">●</span>
+                        </div>
+                        <div class="topology-line active v31-field" onclick="showTopologyLineDetail('ml-events-etcd-v31')">
+                            <strong>ML Events ETCD V3.1:</strong> SUB:CONNECT → :5580
+                            <span class="topology-status" id="topology-ml-etcd-v31-status">●</span>
+                        </div>
+                        <div class="topology-line active" onclick="showTopologyLineDetail('fw-commands')">
+                            <strong>FW Commands ETCD:</strong> PUB:BIND → :5580
+                            <span class="topology-status" id="topology-fw-cmd-status">●</span>
+                        </div>
+                        <div class="topology-line active" onclick="showTopologyLineDetail('fw-responses')">
+                            <strong>FW Responses ETCD:</strong> PULL:BIND → :5581
+                            <span class="topology-status" id="topology-fw-resp-status">●</span>
+                        </div>
+                        <div class="topology-line active enhanced-v31" onclick="showTopologyLineDetail('etcd-backend')">
+                            <strong>ETCD Backend:</strong> HTTP:CONNECT → /api/etcd/*
+                            <span class="topology-status" id="topology-etcd-status">●</span>
+                        </div>
+                    </div>
+
+                    <!-- Conexiones detalladas ETCD V3.1 -->
+                    <div class="zmq-connections-list">
+                        <!-- ML Events Connection ETCD V3.1 -->
+                        <div class="zmq-connection active enhanced-v31" id="zmq-ml-events-etcd-v31" onclick="showZMQConnectionDetail('ml-events-etcd-v31')">
+                            <div class="connection-header">
+                                <span class="connection-name">📡 ML Events ETCD V3.1 (SUB 5580)</span>
+                                <span class="connection-status active" id="ml-events-etcd-v31-status">CONNECTED</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="ml-events-etcd-v31-endpoint">tcp://localhost:5580</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Messages ETCD:</span> <span id="ml-messages-etcd-v31">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Last Activity:</span> <span id="ml-last-activity-etcd-v31">-</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Config Source:</span> <span style="color: #00ff88;">ETCD Backend</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ETCD Backend Connection -->
+                        <div class="zmq-connection active enhanced-v31" id="zmq-etcd-backend" onclick="showZMQConnectionDetail('etcd-backend')">
+                            <div class="connection-header">
+                                <span class="connection-name">💾 ETCD Backend V3.1</span>
+                                <span class="connection-status active" id="etcd-backend-status">CONNECTED</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="etcd-backend-endpoint">/api/etcd/dashboard-metrics</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Requests:</span> <span id="etcd-requests">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Success Rate:</span> <span id="etcd-success-rate">0%</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Config Items:</span> <span id="etcd-config-items">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Firewall Commands Connection -->
+                        <div class="zmq-connection active" id="zmq-fw-commands" onclick="showZMQConnectionDetail('fw-commands')">
+                            <div class="connection-header">
+                                <span class="connection-name">🔥 Firewall Commands ETCD</span>
+                                <span class="connection-status active" id="fw-commands-status">BOUND</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="fw-commands-endpoint">tcp://*:5580</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Commands:</span> <span id="fw-cmd-count">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Agents:</span> <span id="fw-subscribers">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Source:</span> <span style="color: #00ff88;">ETCD Config</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Firewall Responses Connection -->
+                        <div class="zmq-connection active" id="zmq-fw-responses" onclick="showZMQConnectionDetail('fw-responses')">
+                            <div class="connection-header">
+                                <span class="connection-name">📥 Firewall Responses ETCD</span>
+                                <span class="connection-status active" id="fw-responses-status">BOUND</span>
+                            </div>
+                            <div class="connection-details">
+                                <div class="detail-row">
+                                    <span>Endpoint:</span> <span id="fw-responses-endpoint">tcp://*:5581</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Responses:</span> <span id="fw-resp-count">0</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Success Rate:</span> <span id="fw-success-rate">0%</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span>Agent Fleet:</span> <span id="fw-fleet-size">0 agents</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🐛 Debug Log Interactivo ETCD V3.1 -->
+            <div class="collapsible-section" id="debug-section">
+                <div class="section-header" onclick="toggleSection('debug')">
+                    <div class="section-title">
+                        🐛 Debug Log ETCD V3.1
+                        <i class="fas fa-terminal clickable-icon"></i>
+                        <i class="fas fa-chevron-down toggle-icon" id="debug-toggle"></i>
+                    </div>
+                </div>
+                <div class="section-content" id="debug-content">
+                    <div class="debug-log" id="debug-log" onclick="showDebugLogDetail()">
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Dashboard ETCD V3.1 iniciado con Protobuf V3.1</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Backend ZeroMQ + ETCD V3.1 conectado</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Campos ETCD V3.1: ensemble_confidence, pipeline_latency, capturing_node_id</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Sistema de ventanas flotantes ETCD V3.1 disponible</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Mapa Leaflet con animaciones misil ETCD V3.1</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Selector de agentes firewall en modales habilitado</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Lectura de ensemble models desde ETCD configurada</div>
+                        <div class="log-entry info" onclick="showLogEntryDetail(this, event)">[INFO] Placeholder sistema RAG integrado</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 🎛️ Botones de Acción ETCD V3.1 -->
+            <div class="action-buttons">
+                <button class="btn update" onclick="refreshDashboard()" title="Actualizar todas las métricas ETCD V3.1">
+                    <i class="fas fa-sync"></i> Update ETCD
+                </button>
+                <button class="btn clear" onclick="clearDebugLog()" title="Limpiar log de debug">
+                    <i class="fas fa-trash"></i> Clear
+                </button>
+                <button class="btn test" onclick="testAllConnections()" title="Probar conectividad ETCD V3.1">
+                    <i class="fas fa-plug"></i> Test ETCD
+                </button>
+                <button class="btn" onclick="showETCDManagementPage()" title="Gestión ETCD V3.1" style="border-color: #0066cc; color: #0066cc;">
+                    <i class="fas fa-database"></i> Manage ETCD
+                </button>
+                <button class="btn confirmations" onclick="exportDashboardConfigV31()" title="Exportar configuración ETCD V3.1" style="border-color: #00ff88; color: #00ff88;">
+                    <i class="fas fa-download"></i> Export ETCD
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 📋 Modal para mostrar detalles de eventos ETCD V3.1 -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal()"></div>
+    <div class="detail-modal" id="detail-modal">
+        <div class="modal-header">
+            <h3 id="modal-title">Detalles ETCD V3.1</h3>
+            <!-- 🆕 CONTROLES AVANZADOS V3.1 se añaden dinámicamente -->
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-content" id="modal-content">
+            <!-- El contenido se cargará dinámicamente desde ETCD -->
+        </div>
+        <div class="modal-actions" id="modal-actions">
+            <!-- Los botones se cargarán dinámicamente con selector de agentes -->
+        </div>
+    </div>
+
+    <!-- ⚠️ Indicador de amenaza ETCD V3.1 -->
+    <div class="threat-indicator" id="threat-indicator">
+        ⚠️ Nueva amenaza ETCD V3.1 detectada!
+    </div>
+
+    <!-- 📢 Notificaciones toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- 🔧 Indicador de completación ETCD V3.1 -->
+    <div class="v31-complete-marker">🔗 ETCD V3.1 Enhanced</div>
+
+    <!-- 🗺️ Leaflet JavaScript - DEBE ir después del CSS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- 🔧 Dashboard JavaScript ETCD V3.1 -->
+    <script src="/static/js/dashboard_v31_etcd.js"></script>
+
+    <!-- 🚀 Inicialización ETCD V3.1 -->
+    <script>
+        // Inicialización del dashboard ETCD V3.1 cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 DOM cargado, inicializando dashboard ETCD V3.1...');
+            initializeDashboard();
+        });
+
+        // 🔧 Debug: Detectar errores de CSP
+        window.addEventListener('securitypolicyviolation', function(e) {
+            console.error('🔒 CSP Violation ETCD V3.1:', e.violatedDirective, e.blockedURI);
+            const debugLog = document.getElementById('debug-log');
+            if (debugLog) {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry error';
+                entry.innerHTML = `[ERROR] CSP Violation ETCD V3.1: ${e.violatedDirective} - ${e.blockedURI}`;
+                debugLog.appendChild(entry);
+            }
+        });
+
+        // 🔧 Debug: Detectar si Leaflet está disponible ETCD V3.1
+        window.addEventListener('load', function() {
+            if (typeof L === 'undefined') {
+                console.error('❌ Leaflet no está disponible para ETCD V3.1');
+                const debugLog = document.getElementById('debug-log');
+                if (debugLog) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry error';
+                    entry.innerHTML = '[ERROR] Leaflet library no está disponible para ETCD V3.1';
+                    debugLog.appendChild(entry);
+                }
+            } else {
+                console.log('✅ Leaflet está disponible para ETCD V3.1:', L.version);
+                const debugLog = document.getElementById('debug-log');
+                if (debugLog) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry info';
+                    entry.innerHTML = `[INFO] Leaflet ${L.version} cargado correctamente para ETCD V3.1`;
+                    debugLog.appendChild(entry);
+                }
+            }
+        });
+
+        // 🚀 Debug: Verificar funciones ETCD V3.1 disponibles
+        window.addEventListener('load', function() {
+            const etcdV31Functions = [
+                'showAdvancedAnalysisV31',
+                'showLiveStatsV31',
+                'showSystemInfoV31',
+                'sendTestFirewallCommandV31',
+                'exportDashboardConfigV31',
+                'showEnsembleModelsDetail',
+                'showRAGConfigDetail',
+                'showETCDManagementPage'
+            ];
+
+            etcdV31Functions.forEach(funcName => {
+                if (typeof window[funcName] === 'function') {
+                    console.log(`✅ Función ETCD V3.1 disponible: ${funcName}`);
+                } else {
+                    console.warn(`⚠️ Función ETCD V3.1 no encontrada: ${funcName}`);
+                }
+            });
+
+            console.log('🔗 Dashboard ETCD V3.1 completamente cargado y funcional');
+            console.log('📡 Endpoints ETCD V3.1 configurados:');
+            console.log('   - /api/etcd/dashboard-metrics');
+            console.log('   - /api/etcd/execute-firewall-action');
+            console.log('   - /api/etcd/firewall-agent-info');
+            console.log('   - /api/etcd/activate-ensemble-model');
+            console.log('   - /api/etcd/toggle-rag');
+            console.log('   - /etcd/management');
+        });
+    </script>
+</body>
+</html>

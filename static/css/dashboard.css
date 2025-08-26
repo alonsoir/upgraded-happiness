@@ -4684,3 +4684,700 @@ body {
 .v31-complete-marker::before {
     content: '🚀 V3.1 Enhanced';
 }
+
+/*
+CSS COMPLEMENTARIO ETCD V3.1 - dashboard_etcd_v31_additions.css
+ESTE ARCHIVO SE AÑADE AL CSS EXISTENTE V3.1
++ ESTILOS ESPECÍFICOS PARA ELEMENTOS ETCD V3.1
++ REFINAMIENTOS Y AJUSTES
++ COMPATIBILIDAD 100% CON JS/HTML V3.1
+*/
+
+/* ============================================================================
+   🔥 ESTILOS ESPECÍFICOS PARA MODELOS ENSEMBLE ETCD V3.1
+   ============================================================================ */
+
+/* Contenedores específicos de modelos ensemble */
+#active-models-container, #available-models-container {
+    margin: 8px 0;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+#active-models-container:hover, #available-models-container:hover {
+    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(0, 255, 136, 0.2);
+}
+
+/* Elementos individuales de modelos */
+.ensemble-model-item {
+    background: rgba(0, 255, 136, 0.05);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 6px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.ensemble-model-item:hover {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: rgba(0, 255, 136, 0.4);
+    transform: translateX(3px);
+}
+
+.ensemble-model-item.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: rgba(0, 255, 136, 0.6);
+    box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+}
+
+.ensemble-model-item.available {
+    background: rgba(255, 170, 0, 0.05);
+    border-color: rgba(255, 170, 0, 0.2);
+}
+
+.ensemble-model-item.available:hover {
+    background: rgba(255, 170, 0, 0.1);
+    border-color: rgba(255, 170, 0, 0.4);
+}
+
+.ensemble-model-name {
+    font-weight: bold;
+    color: #00ff88;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.ensemble-model-available .ensemble-model-name {
+    color: #ffaa00;
+}
+
+.ensemble-model-confidence {
+    float: right;
+    color: #00ff88;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.ensemble-model-description {
+    font-size: 9px;
+    color: #888;
+    margin-top: 4px;
+    line-height: 1.3;
+}
+
+.ensemble-model-activate-btn {
+    float: right;
+    background: rgba(0, 255, 136, 0.2);
+    border: 1px solid #00ff88;
+    color: #00ff88;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 9px;
+    transition: all 0.3s ease;
+}
+
+.ensemble-model-activate-btn:hover {
+    background: rgba(0, 255, 136, 0.3);
+    transform: scale(1.05);
+    box-shadow: 0 0 5px rgba(0, 255, 136, 0.4);
+}
+
+/* ============================================================================
+   🎯 BADGE ESPECÍFICO PARA MODELOS ACTIVOS
+   ============================================================================ */
+
+#active-models-count {
+    background: linear-gradient(45deg, #ff6b6b, #ff4444) !important;
+    color: #ffffff !important;
+    font-weight: bold;
+    box-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
+    animation: activeModelsBadgePulse 2s infinite alternate;
+}
+
+@keyframes activeModelsBadgePulse {
+    from {
+        box-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
+        transform: scale(1);
+    }
+    to {
+        box-shadow: 0 0 12px rgba(255, 107, 107, 0.8), 0 0 20px rgba(255, 107, 107, 0.3);
+        transform: scale(1.05);
+    }
+}
+
+/* ============================================================================
+   🔗 INDICADOR ETCD BACKEND ESPECÍFICO
+   ============================================================================ */
+
+#etcd-status.connected {
+    background-color: #00aaff !important;
+    box-shadow: 0 0 8px #00aaff !important;
+    animation: etcdConnectedPulse 2s infinite alternate;
+}
+
+@keyframes etcdConnectedPulse {
+    from {
+        box-shadow: 0 0 8px #00aaff;
+    }
+    to {
+        box-shadow: 0 0 16px #00aaff, 0 0 24px rgba(0, 170, 255, 0.3);
+    }
+}
+
+#etcd-status.error {
+    background-color: #ff4444 !important;
+    box-shadow: 0 0 8px #ff4444 !important;
+    animation: etcdErrorBlink 1s infinite;
+}
+
+@keyframes etcdErrorBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+/* Indicador ETCD en estado de sincronización */
+#etcd-status.syncing {
+    background-color: #ffaa00 !important;
+    box-shadow: 0 0 8px #ffaa00 !important;
+    animation: etcdSyncRotate 2s linear infinite;
+}
+
+@keyframes etcdSyncRotate {
+    from { transform: rotate(0deg) scale(1); }
+    to { transform: rotate(360deg) scale(1.1); }
+}
+
+/* ============================================================================
+   📡 BOTONES ETCD ESPECÍFICOS MEJORADOS
+   ============================================================================ */
+
+/* Botones con estilos ETCD específicos */
+.btn-etcd-primary {
+    background: linear-gradient(135deg, rgba(0, 170, 255, 0.2), rgba(0, 170, 255, 0.05)) !important;
+    border: 2px solid #00aaff !important;
+    color: #00aaff !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-etcd-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 170, 255, 0.3), transparent);
+    transition: left 0.6s ease;
+}
+
+.btn-etcd-primary:hover::before {
+    left: 100%;
+}
+
+.btn-etcd-primary:hover {
+    background: linear-gradient(135deg, rgba(0, 170, 255, 0.3), rgba(0, 170, 255, 0.1)) !important;
+    border-color: #0088ff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 170, 255, 0.4);
+}
+
+/* Botones de ensemble específicos */
+.btn-ensemble {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 107, 107, 0.05)) !important;
+    border: 2px solid #ff6b6b !important;
+    color: #ff6b6b !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-ensemble:hover {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.3), rgba(255, 107, 107, 0.1)) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+}
+
+/* Botones RAG específicos */
+.btn-rag {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.15), rgba(138, 43, 226, 0.05)) !important;
+    border: 2px solid #8a2be2 !important;
+    color: #8a2be2 !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-rag:hover {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(138, 43, 226, 0.1)) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.4);
+}
+
+/* ============================================================================
+   🏗️ MEJORAS ESPECÍFICAS PARA ARQUITECTURA ETCD V3.1
+   ============================================================================ */
+
+/* Información de puertos V3.1 */
+.port-info.v31-field {
+    background: rgba(0, 170, 255, 0.05);
+    border-left-color: #00aaff !important;
+}
+
+.port-info.v31-field:hover {
+    background: rgba(0, 170, 255, 0.1);
+    transform: translateX(5px);
+}
+
+.port-info.v31-field .port-number {
+    color: #00aaff !important;
+    text-shadow: 0 0 3px #00aaff;
+}
+
+/* Información de campos ETCD V3.1 en arquitectura */
+.architecture-info .ensemble-confidence {
+    background: rgba(0, 170, 255, 0.1);
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 170, 255, 0.3);
+}
+
+.architecture-info .pipeline-latency {
+    background: rgba(0, 136, 255, 0.1);
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 136, 255, 0.3);
+}
+
+.architecture-info .capturing-node-id {
+    background: rgba(255, 170, 0, 0.1);
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid rgba(255, 170, 0, 0.3);
+}
+
+/* ============================================================================
+   🔌 ZMQ CONEXIONES ETCD V3.1 ESPECÍFICAS
+   ============================================================================ */
+
+/* Líneas de topología específicas V3.1 */
+.topology-line.v31-field {
+    background: rgba(0, 170, 255, 0.05);
+    border-left-color: #00aaff !important;
+}
+
+.topology-line.enhanced-v31 {
+    background: rgba(0, 255, 136, 0.05);
+    border-left-color: #00ff88 !important;
+    position: relative;
+}
+
+.topology-line.enhanced-v31::after {
+    content: 'V3.1';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 7px;
+    color: rgba(0, 255, 136, 0.6);
+    background: rgba(0, 255, 136, 0.1);
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+/* Conexiones ZMQ específicas ETCD V3.1 */
+.zmq-connection.enhanced-v31 {
+    border-left-color: #00ff88 !important;
+    background: rgba(0, 255, 136, 0.03);
+}
+
+.zmq-connection.enhanced-v31:hover {
+    background: rgba(0, 255, 136, 0.08);
+    border-left-color: #00ffaa !important;
+}
+
+/* ============================================================================
+   📊 CONTADORES Y MÉTRICAS ETCD V3.1
+   ============================================================================ */
+
+/* Métricas específicas para componentes V3.1 */
+.component-metrics .v31-field {
+    background: rgba(0, 170, 255, 0.05);
+    border: 1px solid rgba(0, 170, 255, 0.2);
+    border-radius: 3px;
+    position: relative;
+}
+
+.component-metrics .enhanced-v31::before {
+    content: '✨';
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    font-size: 8px;
+    opacity: 0.6;
+}
+
+/* Estadísticas firewall específicas ETCD */
+.firewall-stat[title*="ETCD"] {
+    border: 1px solid rgba(0, 170, 255, 0.3);
+    background: rgba(0, 170, 255, 0.05);
+}
+
+.firewall-stat[title*="ETCD"]:hover {
+    border-color: rgba(0, 170, 255, 0.5);
+    background: rgba(0, 170, 255, 0.1);
+}
+
+/* ============================================================================
+   🚀 MEJORAS PARA EVENTOS ETCD V3.1
+   ============================================================================ */
+
+/* Eventos con información ETCD específica */
+.event-item.etcd-enhanced {
+    border-left-width: 5px !important;
+    background: linear-gradient(90deg, rgba(0, 170, 255, 0.05) 0%, transparent 100%);
+}
+
+.event-item.etcd-enhanced::before {
+    content: 'ETCD';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 6px;
+    color: rgba(0, 170, 255, 0.6);
+    background: rgba(0, 170, 255, 0.1);
+    padding: 1px 3px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 170, 255, 0.2);
+}
+
+/* Quick actions específicos para ETCD */
+.event-quick-actions .quick-action-btn[onclick*="ETCD"] {
+    border-width: 2px !important;
+    font-weight: bold !important;
+}
+
+/* ============================================================================
+   🎨 EFECTOS ESPECIALES ETCD V3.1
+   ============================================================================ */
+
+/* Efecto de datos en tiempo real desde ETCD */
+.etcd-realtime-data {
+    position: relative;
+    overflow: hidden;
+}
+
+.etcd-realtime-data::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #00aaff, transparent);
+    animation: etcdDataFlow 3s infinite;
+}
+
+@keyframes etcdDataFlow {
+    0% { left: -100%; opacity: 0; }
+    50% { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+}
+
+/* Indicador de sincronización con ETCD */
+.etcd-sync-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #00aaff;
+    animation: etcdSyncPulse 1.5s infinite;
+    margin-left: 4px;
+}
+
+@keyframes etcdSyncPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+        box-shadow: 0 0 6px #00aaff;
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.3);
+        box-shadow: 0 0 12px #00aaff;
+    }
+}
+
+/* ============================================================================
+   🔧 UTILIDADES Y MEJORAS FINALES ETCD V3.1
+   ============================================================================ */
+
+/* Placeholder mejorado para cuando no hay datos ETCD */
+.no-etcd-data {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    background: rgba(0, 170, 255, 0.03);
+    border: 1px dashed rgba(0, 170, 255, 0.2);
+    border-radius: 4px;
+    margin: 10px 0;
+}
+
+.no-etcd-data::before {
+    content: '🔗';
+    display: block;
+    font-size: 24px;
+    margin-bottom: 8px;
+    opacity: 0.5;
+}
+
+/* Texto de estado ETCD */
+.etcd-status-text {
+    font-size: 9px;
+    color: #00aaff;
+    text-shadow: 0 0 3px #00aaff;
+}
+
+.etcd-status-text.error {
+    color: #ff4444;
+    text-shadow: 0 0 3px #ff4444;
+}
+
+.etcd-status-text.warning {
+    color: #ffaa00;
+    text-shadow: 0 0 3px #ffaa00;
+}
+
+/* Links específicos de management ETCD */
+.etcd-management-link {
+    color: #00aaff !important;
+    text-decoration: none;
+    border-bottom: 1px dotted rgba(0, 170, 255, 0.5);
+    transition: all 0.3s ease;
+}
+
+.etcd-management-link:hover {
+    color: #0088ff !important;
+    border-bottom-color: #0088ff;
+    text-shadow: 0 0 5px #00aaff;
+}
+
+/* Badges específicos para configuración ETCD */
+.etcd-config-badge {
+    background: linear-gradient(45deg, #00aaff, #0088ff);
+    color: #ffffff;
+    padding: 1px 4px;
+    border-radius: 6px;
+    font-size: 7px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 4px;
+    box-shadow: 0 1px 3px rgba(0, 170, 255, 0.3);
+    animation: etcdConfigBadgeGlow 2s infinite alternate;
+}
+
+@keyframes etcdConfigBadgeGlow {
+    from { box-shadow: 0 1px 3px rgba(0, 170, 255, 0.3); }
+    to { box-shadow: 0 1px 6px rgba(0, 170, 255, 0.6), 0 0 8px rgba(0, 170, 255, 0.2); }
+}
+
+/* ============================================================================
+   📱 RESPONSIVE PARA NUEVOS ELEMENTOS ETCD V3.1
+   ============================================================================ */
+
+@media (max-width: 1200px) {
+    .ensemble-model-item {
+        padding: 6px;
+        font-size: 10px;
+    }
+
+    .ensemble-model-confidence {
+        font-size: 9px;
+    }
+
+    .ensemble-model-activate-btn {
+        font-size: 8px;
+        padding: 1px 6px;
+    }
+
+    #active-models-container, #available-models-container {
+        padding: 6px;
+    }
+}
+
+@media (max-width: 900px) {
+    .ensemble-model-item {
+        padding: 4px;
+        font-size: 9px;
+    }
+
+    .ensemble-model-activate-btn {
+        font-size: 7px;
+        padding: 1px 4px;
+    }
+
+    .topology-line.enhanced-v31::after {
+        font-size: 6px;
+        padding: 0px 2px;
+    }
+
+    .btn-etcd-primary, .btn-ensemble, .btn-rag {
+        font-size: 8px;
+        padding: 4px 8px;
+    }
+}
+
+@media (max-width: 768px) {
+    .ensemble-model-item {
+        margin-bottom: 4px;
+    }
+
+    .ensemble-model-confidence {
+        display: block;
+        float: none;
+        margin-top: 4px;
+    }
+
+    .ensemble-model-activate-btn {
+        float: none;
+        display: block;
+        margin-top: 6px;
+        width: 100%;
+        text-align: center;
+    }
+
+    .etcd-sync-indicator {
+        width: 6px;
+        height: 6px;
+    }
+
+    .no-etcd-data {
+        padding: 15px;
+        font-size: 10px;
+    }
+}
+
+/* ============================================================================
+   ⚡ OPTIMIZACIONES DE RENDIMIENTO ETCD V3.1
+   ============================================================================ */
+
+/* Optimización para dispositivos de baja potencia */
+@media (prefers-reduced-motion: reduce) {
+    .activeModelsBadgePulse,
+    .etcdConnectedPulse,
+    .etcdErrorBlink,
+    .etcdSyncRotate,
+    .etcdDataFlow,
+    .etcdSyncPulse,
+    .etcdConfigBadgeGlow {
+        animation: none !important;
+    }
+
+    .etcd-sync-indicator {
+        animation: none !important;
+        background: #00aaff !important;
+        box-shadow: 0 0 6px #00aaff !important;
+    }
+
+    #active-models-count {
+        animation: none !important;
+        box-shadow: 0 0 8px rgba(255, 107, 107, 0.4) !important;
+    }
+}
+
+/* Optimización para pantallas táctiles */
+@media (pointer: coarse) {
+    .ensemble-model-item {
+        min-height: 40px;
+        padding: 8px;
+    }
+
+    .ensemble-model-activate-btn {
+        min-height: 28px;
+        min-width: 60px;
+        font-size: 9px;
+    }
+
+    .btn-etcd-primary, .btn-ensemble, .btn-rag {
+        min-height: 36px;
+        padding: 8px 12px;
+        font-size: 10px;
+    }
+
+    .quick-action-btn[onclick*="ETCD"] {
+        min-height: 28px;
+        min-width: 50px;
+        font-size: 8px;
+    }
+}
+
+/* ============================================================================
+   ✨ FINALIZACIÓN CSS COMPLEMENTARIO ETCD V3.1
+   ============================================================================ */
+
+/* Marca de finalización del CSS complementario */
+.etcd-v31-css-complete::after {
+    content: '🔗 CSS ETCD V3.1 Complementario Cargado';
+    position: fixed;
+    bottom: 30px;
+    right: 10px;
+    background: linear-gradient(45deg, #00aaff, #0088ff);
+    color: #ffffff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 7px;
+    font-weight: bold;
+    opacity: 0.8;
+    z-index: 999998;
+    pointer-events: none;
+}
+
+/* Validación de carga completa */
+body.etcd-v31-loaded {
+    /* Indicador invisible que confirma que el CSS complementario está cargado */
+}
+
+body.etcd-v31-loaded .v31-complete-marker::after {
+    content: ' + CSS Complementario';
+    color: rgba(0, 170, 255, 0.6);
+}
+
+/* ============================================================================
+   🎯 COMENTARIOS FINALES ETCD V3.1
+   ============================================================================ */
+
+/*
+RESUMEN DE ADICIONES CSS COMPLEMENTARIO ETCD V3.1:
+
+✅ AÑADIDO:
+- Estilos específicos para modelos ensemble (#active-models-container, #available-models-container)
+- Badge de modelos activos (#active-models-count) con animaciones
+- Indicadores ETCD específicos (#etcd-status con estados)
+- Botones ETCD mejorados (.btn-etcd-primary, .btn-ensemble, .btn-rag)
+- Mejoras para arquitectura V3.1 (.port-info.v31-field)
+- ZMQ conexiones ETCD específicas (.topology-line.enhanced-v31)
+- Efectos de tiempo real ETCD (.etcd-realtime-data)
+- Utilidades y badges ETCD (.etcd-config-badge)
+- Responsive design para nuevos elementos
+- Optimizaciones de rendimiento
+- Compatibilidad táctil
+
+🎯 USO:
+1. Añadir este CSS DESPUÉS del CSS principal V3.1
+2. O incluir estas reglas AL FINAL del CSS existente
+3. Verificar que body tenga clase 'etcd-v31-loaded' para confirmación
+
+🔗 COMPATIBILIDAD:
+- ✅ Compatible con dashboard_v31_etcd.js
+- ✅ Compatible con dashboard_v31_etcd.html
+- ✅ Compatible con CSS V3.1 existente
+- ✅ No sobrescribe estilos existentes
+- ✅ Solo añade especificidad donde es necesaria
+
+🚀 READY FOR PRODUCTION ETCD V3.1
+*/

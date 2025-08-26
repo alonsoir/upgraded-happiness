@@ -1,0 +1,525 @@
+{
+  "component": {
+    "name": "lightweight_ml_detector_tricapa_v31_etcd",
+    "version": "3.1.2-etcd-pubsub-optimized",
+    "mode": "tricapa_json_controlled_pubsub_etcd"
+  },
+  "node_id": "ml_detector_tricapa_v31_001",
+  "version": "3.1.2",
+  "component_type": "ml_detector_tricapa_v31",
+  "_comment_etcd_crypto": "\ud83d\udd10 ETCD CRYPTO - NUEVA SECCI\u00d3N OBLIGATORIA - Sin token = NO ARRANCA",
+  "etcd_crypto": {
+    "etcd_host": "localhost",
+    "etcd_port": 2379,
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "node_id": "ml_detector_tricapa_v31_001"
+  },
+  "network": {
+    "input_socket": {
+      "address": "localhost",
+      "port": 5560,
+      "mode": "connect",
+      "socket_type": "PULL",
+      "description": "Recibe eventos enriquecidos v3.1 del geoip_enricher con ETCD crypto"
+    },
+    "output_socket": {
+      "address": "localhost",
+      "port": 5580,
+      "mode": "bind",
+      "socket_type": "PUB",
+      "_comment_change": "\ud83d\udd04 CAMBIO CR\u00cdTICO: PUSH \u2192 PUB para m\u00faltiples suscriptores",
+      "description": "Publica eventos v3.1 con an\u00e1lisis tricapa (dashboard + no-gui + futuros) con ETCD crypto"
+    }
+  },
+  "zmq": {
+    "input_port": 5560,
+    "output_port": 5580,
+    "_comment_hwm": "\ud83d\ude80 HWM OPTIMIZADO para PUB/SUB",
+    "rcvhwm": 500,
+    "sndhwm": 1000,
+    "_comment_sndhwm": "\ud83d\udcc8 SNDHWM aumentado para m\u00faltiples suscriptores",
+    "_comment_timeouts": "Timeouts optimizados",
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 250,
+    "_comment_buffers": "\ud83d\udd25 BUFFERS OPTIMIZADOS para PUB performance",
+    "recv_buffer_size": 131072,
+    "send_buffer_size": 262144,
+    "_comment_send_buffer": "\ud83d\udce6 Buffer de env\u00edo aumentado para PUB",
+    "linger_ms": 0,
+    "max_message_size": 50000,
+    "pub_socket_optimizations": {
+      "_comment": "\ud83c\udfaf OPTIMIZACIONES ESPEC\u00cdFICAS PARA PUB",
+      "tcp_keepalive": true,
+      "tcp_keepalive_idle": 300,
+      "immediate": false,
+      "conflate": false,
+      "_comment_immediate": "false = mejor throughput para m\u00faltiples suscriptores",
+      "_comment_conflate": "false = todos los eventos son importantes"
+    },
+    "vertical_scaling_optimizations": {
+      "io_threads": 2,
+      "max_sockets": 64,
+      "tcp_keepalive": true,
+      "tcp_keepalive_idle": 300,
+      "immediate": false,
+      "conflate": false
+    }
+  },
+  "backpressure": {
+    "enabled": true,
+    "_comment_optimized": "\ud83d\ude80 BACKPRESSURE OPTIMIZADO para PUB",
+    "max_retries": 2,
+    "retry_delays_ms": [
+      1,
+      5
+    ],
+    "drop_threshold_percent": 5.0,
+    "activation_threshold": 20,
+    "queue_full_strategy": "drop_oldest",
+    "emergency_drop_enabled": true,
+    "emergency_drop_threshold_percent": 70.0,
+    "force_flush_interval_ms": 100,
+    "_comment_pubsub": "Con PUB, el backpressure es menos cr\u00edtico pero mantenemos control"
+  },
+  "processing": {
+    "_comment_threads": "\ud83e\uddf5 OPTIMIZADO: Hasta 3 workers seg\u00fan HW",
+    "threads": 3,
+    "send_threads": 1,
+    "ml_worker_processes": 3,
+    "max_workers": 4,
+    "_comment_queues": "\ud83d\udccb COLAS OPTIMIZADAS para PUB throughput",
+    "internal_queue_size": 200,
+    "protobuf_queue_size": 300,
+    "queue_timeout_seconds": 1.0,
+    "performance_mode": "tricapa_optimized_pubsub_v312_etcd",
+    "enable_heuristics": true,
+    "enable_alerts": true,
+    "max_processing_time": 5.0,
+    "vertical_scaling": {
+      "optimized_for_tricapa": true,
+      "memory_buffer_multiplier": 1.5,
+      "cpu_intensive_operations": true,
+      "leave_cores_for_system": 1,
+      "processing_batch_optimization": false
+    },
+    "queue_overflow_handling": {
+      "strategy": "drop_oldest",
+      "max_queue_wait_ms": 25,
+      "emergency_drop_threshold_percent": 60.0,
+      "log_drops": true
+    },
+    "message_validation": {
+      "enabled": true,
+      "max_protobuf_size": 45000,
+      "validate_before_processing": true,
+      "drop_oversized_messages": true,
+      "log_validation_errors": false,
+      "validate_v31_schema": true,
+      "require_network_features": true
+    }
+  },
+  "ml": {
+    "enabled": true,
+    "_comment_thresholds": "\ud83c\udfaf UMBRALES OPTIMIZADOS para mejor detecci\u00f3n",
+    "thresholds": {
+      "level1_attack_threshold": 0.65,
+      "level2_ddos_threshold": 0.7,
+      "level2_ransomware_threshold": 0.75,
+      "level3_anomaly_threshold": 0.8
+    },
+    "degraded_mode": {
+      "min_models_required": 1,
+      "continue_with_partial_models": true,
+      "log_degraded_operations": false,
+      "fallback_to_heuristics": true
+    },
+    "_comment_models_section": "\ud83e\udde0 MODELOS CONTROLADOS POR JSON - HW ACTUAL LIMITADO",
+    "models": {
+      "_comment_level1": "\ud83e\udd47 NIVEL 1: SIEMPRE ACTIVO (obligatorio)",
+      "level1_attack_detector": {
+        "enabled": true,
+        "model_file": "rf_production_sniffer_compatible.joblib",
+        "scaler_file": "rf_production_sniffer_compatible_scaler.joblib",
+        "features_count": 23,
+        "requires_scaling": true,
+        "model_location": "production",
+        "_comment": "Modelo base - siempre requerido"
+      },
+      "_comment_level2_ddos": "\ud83d\udd25 NIVEL 2 DDOS: Solo RF habilitado (LGB deshabilitado por HW)",
+      "ddos_rf": {
+        "enabled": true,
+        "model_file": "ddos_random_forest.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ddos",
+        "_comment": "RF m\u00e1s eficiente para HW actual"
+      },
+      "ddos_lgb": {
+        "enabled": false,
+        "_comment_disabled": "\u274c DESHABILITADO: LightGBM consume mucha memoria en HW actual",
+        "model_file": "ddos_lightgbm.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ddos"
+      },
+      "_comment_level2_ransomware": "\ud83e\udda0 NIVEL 2 RANSOMWARE: Solo RF habilitado",
+      "ransomware_rf": {
+        "enabled": true,
+        "model_file": "ransomware_random_forest.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ransomware",
+        "_comment": "RF m\u00e1s eficiente para HW actual"
+      },
+      "ransomware_lgb": {
+        "enabled": false,
+        "_comment_disabled": "\u274c DESHABILITADO: LightGBM consume mucha memoria en HW actual",
+        "model_file": "ransomware_lightgbm.joblib",
+        "features_count": 82,
+        "requires_scaling": false,
+        "model_location": "tricapa",
+        "threat_type": "ransomware"
+      },
+      "_comment_level3": "\ud83d\udd0d NIVEL 3: Solo internal habilitado (web deshabilitado por HW)",
+      "internal_detector": {
+        "enabled": true,
+        "model_file": "internal_normal_detector.joblib",
+        "features_count": 4,
+        "requires_scaling": false,
+        "model_location": "tricapa_or_production",
+        "traffic_type": "internal",
+        "_comment": "Detector interno - prioritario"
+      },
+      "web_detector": {
+        "enabled": false,
+        "_comment_disabled": "\u274c DESHABILITADO: Para reducir carga en HW actual",
+        "model_file": "web_normal_detector.joblib",
+        "features_count": 4,
+        "requires_scaling": false,
+        "model_location": "tricapa_or_production",
+        "traffic_type": "web"
+      }
+    },
+    "_comment_summary": "RESUMEN HW ACTUAL: 4/7 modelos habilitados (level1 + ddos_rf + ransomware_rf + internal_detector)",
+    "feature_engineering": {
+      "use_protobuf_v31_fields": true,
+      "extract_82_features_from_network_features": true,
+      "apply_feature_mapping_82_to_23": true,
+      "apply_feature_mapping_82_to_4": true,
+      "feature_mappings": {
+        "82_to_23_enabled": true,
+        "82_to_4_enabled": true,
+        "validate_feature_counts": true,
+        "pad_missing_features": true,
+        "log_mapping_errors": false
+      },
+      "feature_extraction": {
+        "ignore_repeated_double_fields": true,
+        "use_network_features_struct": true,
+        "validate_protobuf_fields": true,
+        "handle_missing_fields_gracefully": true
+      }
+    }
+  },
+  "tricapa": {
+    "enabled": true,
+    "version": "3.1.2-json-controlled-pubsub-etcd",
+    "architecture": {
+      "level1_name": "General Attack Detection",
+      "level1_description": "RF production model (23 features) - Initial attack detection",
+      "level2_name": "Specialized Threat Classification - JSON CONTROLLED",
+      "level2_description": "RF-only models seg\u00fan JSON (82 features) - DDOS vs Ransomware",
+      "level3_name": "Normality Validation - JSON CONTROLLED",
+      "level3_description": "Internal detector seg\u00fan JSON (4 features)"
+    },
+    "ensemble": {
+      "enabled": true,
+      "confidence_threshold": 0.7,
+      "use_weighted_voting": false,
+      "level2_combination_strategy": "max_score",
+      "level3_activation_strategy": "traffic_type_based"
+    },
+    "model_paths": {
+      "base_models_dir": "models",
+      "production_subdir": "production",
+      "tricapa_subdir": "production/tricapa",
+      "auto_discover_models": true,
+      "fallback_model_locations": [
+        "production",
+        "tricapa"
+      ],
+      "validate_model_files_on_startup": true
+    },
+    "performance": {
+      "_comment_performance": "\ud83d\ude80 OPTIMIZACIONES DE PERFORMANCE para PUB + ETCD",
+      "parallel_level2_predictions": false,
+      "cache_feature_extractions": true,
+      "cache_size": 500,
+      "enable_model_warmup": true,
+      "warmup_iterations": 3,
+      "log_prediction_times": false
+    },
+    "failure_handling": {
+      "continue_on_model_failure": true,
+      "min_models_for_operation": 1,
+      "level1_failure_strategy": "abort_analysis",
+      "level2_failure_strategy": "continue_with_available",
+      "level3_failure_strategy": "skip_level",
+      "log_model_failures": true,
+      "escalate_critical_failures": false
+    }
+  },
+  "advanced_logging": {
+    "enabled": true,
+    "version": "3.1.2",
+    "rag_logging": {
+      "enabled": false,
+      "_comment_disabled": "\u274c DESHABILITADO para optimizar performance en HW actual"
+    },
+    "protobuf_logging": {
+      "enabled": true,
+      "protobuf_base_dir": "logs/proto",
+      "file_format": "events_{HHMMSS}.proto",
+      "directory_structure": "{year}/{month:02d}/{day:02d}",
+      "append_mode": true,
+      "compression_enabled": false,
+      "max_file_size_mb": 50,
+      "rotate_files": true
+    },
+    "indexing": {
+      "enabled": false,
+      "_comment_disabled": "\u274c DESHABILITADO para optimizar performance"
+    },
+    "retention": {
+      "enabled": true,
+      "protobuf_logs_retention_days": 3,
+      "cleanup_frequency": "daily"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "_comment_visible": "\ud83d\udd0d INFO level para VER SCORES ML",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [tricapa_v31:{node_id}] [pid:{pid}] - %(message)s",
+    "file": "logs/tricapa_ml_detector_v31_etcd.log",
+    "max_file_size_mb": 50,
+    "backup_count": 3,
+    "performance_logging": {
+      "enabled": true,
+      "log_slow_requests": true,
+      "slow_request_threshold_ms": 100,
+      "log_model_prediction_times": false,
+      "log_feature_extraction_times": false
+    },
+    "console_logging": {
+      "enabled": true,
+      "level": "INFO"
+    },
+    "file_logging": {
+      "enabled": true,
+      "level": "INFO",
+      "rotation_enabled": true
+    }
+  },
+  "monitoring": {
+    "stats_interval_seconds": 60,
+    "_comment_optimized": "\ud83d\udd52 60s interval para reducir overhead",
+    "detailed_metrics": true,
+    "track_tricapa_performance": true,
+    "component_health_check": {
+      "enabled": true,
+      "check_interval_seconds": 120,
+      "memory_threshold_mb": 256,
+      "cpu_threshold_percent": 50.0,
+      "model_response_time_threshold_ms": 50.0
+    },
+    "tricapa_specific_alerts": {
+      "max_level1_failure_rate_percent": 10.0,
+      "max_level2_ensemble_disagreement_percent": 50.0,
+      "max_level3_skip_rate_percent": 80.0,
+      "min_overall_model_availability_percent": 50.0,
+      "max_degraded_mode_duration_minutes": 60
+    },
+    "alerts": {
+      "max_queue_usage_percent": 50.0,
+      "max_ml_failure_rate_percent": 25.0,
+      "max_processing_latency_ms": 50.0,
+      "max_backpressure_activations": 50,
+      "max_drop_rate_percent": 10.0
+    },
+    "_comment_etcd_monitoring": "\ud83d\udd10 NUEVO: Monitoreo espec\u00edfico ETCD",
+    "etcd_crypto_monitoring": {
+      "track_pipeline_key_usage": true,
+      "track_crypto_operations": true,
+      "alert_on_etcd_failures": true,
+      "max_crypto_failures_per_minute": 5,
+      "etcd_connectivity_check_interval": 30
+    }
+  },
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "ml_detector_tricapa_v31_json_controlled_pubsub_etcd",
+    "enable_container_detection": true,
+    "enable_system_info_collection": false,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": false,
+      "track_component_path": true,
+      "max_pipeline_hops": 6,
+      "track_tricapa_stages": true,
+      "track_etcd_crypto_operations": true
+    }
+  },
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 50000,
+      "validate_protobuf_schema": true,
+      "validate_v31_schema_version": false,
+      "sanitize_ml_scores": true,
+      "reject_malformed_events": true,
+      "min_required_features": 15
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "max_events_per_second": 150,
+      "burst_capacity": 300,
+      "penalty_duration_seconds": 30
+    },
+    "_comment_etcd_security": "\ud83d\udd10 NUEVO: Seguridad espec\u00edfica ETCD",
+    "etcd_crypto_security": {
+      "validate_pipeline_keys": true,
+      "rotate_keys_on_error": false,
+      "secure_key_storage": true,
+      "crypto_failure_threshold": 10
+    }
+  },
+  "debug": {
+    "enabled": false,
+    "_comment_performance": "\u274c DEBUG DESHABILITADO para m\u00e1ximo performance",
+    "sample_events": false,
+    "log_protobuf_details": false,
+    "profile_performance": false,
+    "log_ml_predictions": false,
+    "log_tricapa_stages": false,
+    "log_model_loading": true,
+    "log_degraded_mode_operations": false,
+    "_comment_etcd_debug": "\ud83d\udd10 Debug espec\u00edfico ETCD (solo para desarrollo)",
+    "log_etcd_operations": false,
+    "trace_pipeline_key_operations": false,
+    "validate_crypto_tokens": true
+  },
+  "v31_enhancements": {
+    "protobuf_v31_support": {
+      "enabled": true,
+      "use_network_features_struct": true,
+      "validate_schema_version": false,
+      "handle_backward_compatibility": false
+    },
+    "tricapa_architecture": {
+      "enabled": true,
+      "full_arsenal_mode": false,
+      "_comment_json_controlled": "\ud83c\udfaf ARSENAL CONTROLADO POR JSON - no hardcoded",
+      "parallel_level2_processing": false,
+      "dynamic_model_selection": false
+    },
+    "advanced_logging_system": {
+      "enabled": false,
+      "_comment_disabled": "\u274c Sistema de logging avanzado DESHABILITADO para performance"
+    },
+    "intelligent_degradation": {
+      "enabled": true,
+      "continue_with_partial_models": true,
+      "intelligent_fallbacks": true,
+      "graceful_failure_handling": true
+    },
+    "performance_optimizations": {
+      "enabled": true,
+      "feature_extraction_caching": true,
+      "model_prediction_caching": false,
+      "memory_efficient_operations": true,
+      "optimized_protobuf_handling": true
+    },
+    "_comment_etcd_enhancements": "\ud83d\udd10 NUEVO: Mejoras espec\u00edficas ETCD",
+    "etcd_crypto_enhancements": {
+      "enabled": true,
+      "automatic_key_refresh": true,
+      "failover_on_etcd_down": false,
+      "pipeline_key_caching": true,
+      "crypto_performance_optimization": true
+    }
+  },
+  "_config_metadata": {
+    "config_version": "3.1.2-hw-current-pubsub-etcd",
+    "created_for": "HW Actual - MacBook con limitaciones + PUB/SUB + ETCD crypto",
+    "optimization_level": "HIGH_PERFORMANCE_PUBSUB_ETCD",
+    "models_enabled_count": 4,
+    "models_disabled_count": 3,
+    "description": "Config para HW actual: 4 modelos eficientes + patr\u00f3n PUB/SUB + integraci\u00f3n ETCD obligatoria",
+    "hw_profile": "LIMITED_MEMORY",
+    "socket_pattern": "PUB/SUB",
+    "crypto_integration": "ETCD_MANDATORY",
+    "subscribers_supported": "dashboard + dashboard_nogui + futuros",
+    "portability": "Para HW mejor, cambiar enabled:false -> enabled:true en modelos LGB y web_detector",
+    "performance_target": "OPTIMIZED_THROUGHPUT_WITH_PUBSUB_DISTRIBUTION_ETCD_CRYPTO"
+  },
+  "_pubsub_info": {
+    "publisher": "ml_detector_tricapa_v31_001",
+    "publisher_port": 5580,
+    "socket_type": "PUB",
+    "subscribers": [
+      "dashboard_v31 (tcp://localhost:5580 SUB)",
+      "dashboard_nogui_v31 (tcp://localhost:5580 SUB)",
+      "future_components (tcp://localhost:5580 SUB)"
+    ],
+    "scaling": "A\u00f1adir suscriptores sin modificar publisher",
+    "benefits": [
+      "Un solo puerto para m\u00faltiples consumidores",
+      "Distribuci\u00f3n autom\u00e1tica de eventos",
+      "Escalabilidad sin l\u00edmites",
+      "Pipeline modo terminal + GUI seg\u00fan necesidad"
+    ]
+  },
+  "_comment_crypto": "\ud83d\udd10 CRYPTO ETCD - OBLIGATORIO: Descifrado GeoIP + Cifrado hacia Dashboard",
+  "crypto": {
+    "enabled": true,
+    "role": "receiver_sender",
+    "use_etcd_pipeline_key": true,
+    "_comment_mandatory": "\u274c Sin token ETCD = componente NO ARRANCA",
+    "channels": {
+      "input": {
+        "decrypt": true,
+        "description": "Descifrar eventos enriquecidos de GeoIP con ETCD pipeline key"
+      },
+      "output": {
+        "encrypt": true,
+        "description": "Cifrar an\u00e1lisis ML hacia m\u00faltiples suscriptores con ETCD pipeline key"
+      }
+    },
+    "component_crypto_id": "ml_detector_tricapa_v31_001",
+    "_comment_etcd": "Token rotativo distribuido autom\u00e1ticamente por ETCD - mucho m\u00e1s seguro que env vars"
+  },
+  "_etcd_integration_requirements": {
+    "mandatory_dependencies": [
+      "ETCD cluster running on localhost:2379",
+      "ETCD Crypto Coordinator active",
+      "Protobuf v3_1 compatibility (no dots in folder names)",
+      "etcd3-py with compatible protobuf version"
+    ],
+    "startup_sequence": [
+      "1. ETCD cluster UP",
+      "2. ETCD Crypto Coordinator UP",
+      "3. ml_detector connects to ETCD",
+      "4. Obtiene pipeline key rotativo",
+      "5. Si NO obtiene key \u2192 SHUTDOWN",
+      "6. Si obtiene key \u2192 INICIA con crypto habilitado"
+    ],
+    "failure_modes": {
+      "no_etcd_connection": "SHUTDOWN - no fallback",
+      "no_pipeline_key": "SHUTDOWN - no hardcoded keys",
+      "crypto_disabled_in_json": "SHUTDOWN - crypto es obligatorio"
+    }
+  }
+}
