@@ -1,6 +1,6 @@
 {
-  "_comment_header": "🚀 EVOLUTIONARY SNIFFER v3.1 CONFIG - TODO O NADA",
-  "_philosophy": "Sin compatibilidad hacia atrás - Solo v3.1 - Time windows configurables",
+  "_comment_header": "🚀 EVOLUTIONARY SNIFFER v3.1 CONFIG - TODO O NADA + ETCD CRYPTO",
+  "_philosophy": "Sin compatibilidad hacia atrás - Solo v3.1 - Time windows configurables + ETCD crypto",
 
   "component": {
     "name": "evolutionary_sniffer",
@@ -12,6 +12,14 @@
   "node_id": "evolutionary_sniffer_v31_001",
   "version": "3.1.0",
   "cluster_name": "upgraded-happiness-cluster",
+
+  "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA",
+  "etcd_crypto": {
+    "etcd_host": "localhost",
+    "etcd_port": 2379,
+    "cluster_name": "upgraded-happiness-cluster",
+    "node_id": "evolutionary_sniffer_v31_001"
+  },
 
   "_comment_network": "🔌 NETWORK - Configuración ZeroMQ v3.1",
   "network": {
@@ -273,5 +281,20 @@
     "forward_compatibility": true,
     "migration_mode": false,
     "_comment": "TODO O NADA - Solo v3.1 - Sin legacyware"
+  },
+
+  "_comment_crypto": "🔐 CRYPTO - Cifrado específico de este componente - MODIFICADO",
+  "crypto": {
+    "enabled": true,
+    "role": "sender",
+    "use_etcd_pipeline_key": true,
+    "_comment_old": "config_file quitado - ahora usa ETCD pipeline key",
+    "channels": {
+      "output": {
+        "encrypt": true,
+        "description": "Cifrar eventos hacia siguiente componente"
+      }
+    },
+    "component_crypto_id": "evolutionary_sniffer_v31_001"
   }
 }

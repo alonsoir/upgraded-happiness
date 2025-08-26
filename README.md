@@ -1,15 +1,25 @@
 # 🧬 Upgraded Happiness - Sistema Autoinmune Digital V3.1
 
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](https://github.com/alonsoir/upgraded-happiness)
-[![Status](https://img.shields.io/badge/status-production-green.svg)](https://github.com/alonsoir/upgraded-happiness)
-[![Pipeline](https://img.shields.io/badge/pipeline-v3.1-orange.svg)](https://github.com/alonsoir/upgraded-happiness)
+[![Version](https://img.shields.io/badge/version-3.1.0--distributed-blue.svg)](https://github.com/alonsoir/upgraded-happiness)
+[![Status](https://img.shields.io/badge/status-production--distributed-green.svg)](https://github.com/alonsoir/upgraded-happiness)
+[![Pipeline](https://img.shields.io/badge/pipeline-v3.1--etcd-orange.svg)](https://github.com/alonsoir/upgraded-happiness)
 [![ML Models](https://img.shields.io/badge/models-7%20tricapa-purple.svg)](https://github.com/alonsoir/upgraded-happiness)
+[![etcd](https://img.shields.io/badge/etcd-distributed--backbone-red.svg)](https://github.com/alonsoir/upgraded-happiness)
 
-**Sistema de ciberseguridad adaptativa con IA tricapa y respuesta autónoma en tiempo real.**
+**Sistema de ciberseguridad adaptativa con IA tricapa, respuesta autónoma en tiempo real y backbone distribuido etcd.**
 
 ## 🚀 Estado Actual del Proyecto
 
-### ✅ **V3.1 - Versión Evolutiva (Producción)**
+### ✅ **V3.1 DISTRIBUTED - Versión con Backbone etcd (ACTUAL)**
+**SISTEMA DISTRIBUIDO COMPLETAMENTE OPERATIVO** - Pipeline con etcd como cerebro:
+- 🗂️ **etcd Backbone** - Almacenamiento distribuido de configuraciones JSON
+- 🔐 **Cifrado y Compresión** - Token cifrado a través de etcd
+- 🎯 **Protobuf V3.1** - Esquemas expandidos para DDoS y Ransomware
+- 🔄 **Hot Configuration Reload** - Preparado para modificación en caliente
+- 🌐 **Service Discovery** - Registro automático de servicios
+- 📊 **Dashboard etcd** operativo en `http://localhost:8080`
+
+### ✅ **V3.1 - Versión Evolutiva Original (Compatibilidad)**
 **Dashboard V3.1 COMPLETAMENTE FUNCIONAL** - Pipeline completo operativo con:
 - 🗺️ **Mapa interactivo** con trayectorias de ataques en tiempo real
 - 🎯 **1600+ eventos procesados** sin errores
@@ -22,9 +32,47 @@ Versión estable para mostrar conceptos y arquitectura base.
 
 ---
 
-## 🏗️ Arquitectura V3.1
+## 🗂️ Arquitectura Distribuida con etcd Backbone
 
-### **Pipeline Principal (V3.1)**
+### **Pipeline etcd V3.1 (NUEVO - Recomendado)**
+```mermaid
+graph TB
+    subgraph "etcd Backbone"
+        E[etcd<br/>:2379]
+        SD[Service Discovery]
+        CONFIG[JSON Configurations<br/>Encrypted & Compressed]
+        METRICS[Pipeline Metrics]
+    end
+    
+    subgraph "Pipeline V3.1 + etcd"
+        A[evolutionary_sniffer_standalone.py] 
+        B[geoip_enricher_v31_etcd.py]
+        C[ml_detector_tricapa_v31_etcd.py]
+        D[scheduler_firewall_v31_etcd.py]
+        F[simple_firewall_agent_v31_etcd.py]
+        G[dashboard_v31_etcd.py]
+    end
+    
+    A -->|Port 5559| B
+    B -->|Port 5560| C
+    C -->|Port 5561| D
+    D -->|Commands| F
+    C -->|Port 5580| G
+    G -->|Web UI| H[http://localhost:8080]
+    
+    A -.-> E
+    B -.-> E
+    C -.-> E
+    D -.-> E
+    F -.-> E
+    G -.-> E
+    
+    E --> SD
+    E --> CONFIG
+    E --> METRICS
+```
+
+### **Pipeline Principal V3.1 (Original - Compatibilidad)**
 ```mermaid
 graph LR
     A[evolutionary_sniffer_v31.py] -->|Port 5559| B[geoip_enricher_v31.py]
@@ -35,21 +83,41 @@ graph LR
     F -->|Web UI| G[http://localhost:8080]
 ```
 
-### **Componentes V3.1**
-| Componente | Función | Puerto | Estado |
-|------------|---------|--------|--------|
-| `evolutionary_sniffer_v31.py` | Captura de tráfico avanzada | 5559 | ✅ Operativo |
-| `geoip_enricher_v31.py` | Enriquecimiento geográfico dual | 5560 | ✅ Operativo |
-| `ml_detector_tricapa_v31.py` | IA tricapa + análisis ML | 5561 | ✅ Operativo |
-| `scheduler-firewall.py` | Orquestador de firewall | - | ✅ Operativo |
-| `simple_firewall_agent_v31.py` | Agente de firewall | 5562 | ✅ Operativo |
-| `dashboard_v31.py` | Dashboard web V3.1 | 8080 | ✅ **FUNCIONAL** |
+### **Componentes V3.1 + etcd**
+| Componente | Función | Puerto | Estado | etcd |
+|------------|---------|--------|--------|------|
+| `evolutionary_sniffer_standalone.py` | Captura avanzada | 5559 | ✅ Operativo | ✅ |
+| `geoip_enricher_v31_etcd.py` | Geolocalización dual | 5560 | ✅ Operativo | ✅ |
+| `ml_detector_tricapa_v31_etcd.py` | IA tricapa + análisis ML | 5561 | ✅ Operativo | ✅ |
+| `scheduler_firewall_v31_etcd.py` | Orquestador distribuido | - | ✅ Operativo | ✅ |
+| `simple_firewall_agent_v31_etcd.py` | Agente firewall distribuido | 5562 | ✅ Operativo | ✅ |
+| `dashboard_v31_etcd.py` | Dashboard web distribuido | 8080 | ✅ **FUNCIONAL** | ✅ |
+| **etcd backbone** | **Cerebro distribuido** | **2379** | ✅ **OPERATIVO** | 🗂️ |
 
 ---
 
 ## ⚡ Inicio Rápido
 
-### **🎯 V3.1 - Versión Evolutiva (Recomendado)**
+### **🗂️ V3.1 DISTRIBUTED - Con Backbone etcd (RECOMENDADO)**
+```bash
+# Setup completo distribuido
+make start-with-etcd-v31
+
+# O paso a paso:
+make setup install
+make dist-start                    # Iniciar backbone etcd
+make start-with-etcd-v31          # Iniciar pipeline + etcd
+
+# Dashboard etcd distribuido
+open http://localhost:8080
+
+# Gestión etcd
+make etcd-show                     # Ver todo en etcd
+make etcd-show-services           # Ver servicios registrados
+make dist-ui-open                 # UI web de etcd
+```
+
+### **🎯 V3.1 - Versión Evolutiva Original (Compatibilidad)**
 ```bash
 # Setup completo
 make quick_v31
@@ -73,12 +141,97 @@ open http://localhost:8080
 
 ### **🛑 Parada**
 ```bash
-# Parada normal
+# Parada normal (V3.1 + etcd)
 make stop
 
-# Parada nuclear (ambas versiones)
-make stop-nuclear
+# Parada completa distribuida
+make stop-etcd-v31
+
+# Parada nuclear completa (TODO)
+make stop-nuclear-v31
 ```
+
+---
+
+## 🗂️ Sistema etcd Distribuido
+
+### **🧠 etcd como Cerebro del Sistema**
+- **📝 Configuraciones JSON** - Almacenadas en `/config/` con cifrado
+- **🔍 Service Discovery** - Registro automático en `/services/`  
+- **📊 Métricas** - Telemetría en `/metrics/`
+- **🔐 Seguridad** - Tokens cifrados y compresión automática
+- **🔄 Hot Reload** - Preparado para modificación en caliente
+
+### **🌐 Gestión Distribuida**
+```bash
+# Estado del sistema distribuido
+make dist-status
+
+# Ver todo en etcd
+make etcd-show
+
+# Monitoreo tiempo real
+make etcd-watch
+
+# Servicios registrados
+make etcd-show-services
+
+# UI web etcd
+make dist-ui-open                  # http://localhost:8081
+```
+
+### **🔧 Service Discovery**
+```bash
+# Descubrir servicios
+make dist-discover
+
+# Re-registrar servicios
+make dist-register
+
+# Test completo
+make dist-test
+```
+
+---
+
+## 📊 Protobuf V3.1 - Esquemas Expandidos
+
+### **🔴 Nuevos Esquemas para DDoS y Ransomware**
+```
+protocols/v3_1/
+├── network_security_clean_v31.proto      # Esquema principal expandido
+├── firewall_commands_v31.proto           # Comandos firewall
+├── network_security_clean_v31_pb2.py     # ✅ Precompilado
+└── firewall_commands_v31_pb2.py          # ✅ Precompilado
+```
+
+### **⚠️ IMPORTANTE - Instalación Protobuf**
+
+**Para compilar esquemas (desarrollo):**
+```bash
+# macOS - Instalar herramientas protobuf por separado
+brew install protobuf                     # Instala protoc compiler
+
+# Verificar instalación
+protoc --version                         # Debe mostrar libprotoc 3.21.12+
+
+# Compilar esquemas manualmente
+cd protocols/v3_1/
+protoc --python_out=. --proto_path=. network_security_clean_v31.proto
+protoc --python_out=. --proto_path=. firewall_commands_v31.proto
+```
+
+**Para producción:**
+- ✅ **Archivos precompilados incluidos** - No necesitas compilar
+- ✅ **etcd + protobuf 3.x compatible** - Versiones optimizadas en requirements.txt
+- ⚠️ **Versiones diferentes** - Desarrollo necesita tools más recientes que producción
+
+### **🆕 Campos V3.1 Expandidos**
+- **DDoS Detection** - Campos específicos para ataques distribuidos
+- **Ransomware Analysis** - Metadatos de cifrado malicioso  
+- **Coordenadas Duales** - source_latitude/longitude + target_latitude/longitude
+- **Node Tracking** - capturing_node_id para trazabilidad distribuida
+- **Pipeline Metrics** - Latencias y throughput por componente
 
 ---
 
@@ -89,11 +242,13 @@ make stop-nuclear
 - **🟡 Nivel 2:** Detectores especializados (web/internal)  
 - **🟢 Nivel 3:** Amenazas específicas (DDoS/Ransomware)
 
-### **Features V3.1**
+### **🆕 Features V3.1 + etcd**
 - ✅ **Coordenadas duales** - source_latitude/longitude + target_latitude/longitude
-- ✅ **Protobuf V3.1** - network_security_clean_v31.proto
+- ✅ **Protobuf V3.1 expandido** - Esquemas DDoS + Ransomware
+- ✅ **etcd Configuration** - Configuraciones distribuidas cifradas
+- ✅ **Service Discovery** - Registro automático de servicios ML
 - ✅ **Ensemble confidence** - Scores de confianza ML mejorados
-- ✅ **Pipeline latency tracking** - Monitoreo de rendimiento
+- ✅ **Pipeline latency tracking** - Monitoreo de rendimiento distribuido
 - ✅ **Capturing node ID** - Trazabilidad distribuida
 
 ---
@@ -110,49 +265,82 @@ make stop-nuclear
 - **Botones de acción directa** - Block IP, Rate Limit, etc.
 - **Estados en tiempo real** - 1600+ eventos procesados
 - **Modales draggables** - UX avanzada
-- **Fleet management** - Gestión de múltiples agentes
+- **Fleet management** - Gestión de múltiples agentes distribuidos
 
-### **📈 Análisis**
+### **📈 Análisis Distribuido**
 - **ML Scores en vivo** - Isolation Forest, SVM, LOF
 - **Ensemble confidence** - Predicciones consolidadas
-- **Pipeline metrics** - Latencia y throughput
+- **Pipeline metrics** - Latencia y throughput distribuido
 - **Geographic analysis** - Distancias y correlaciones
+- **etcd Integration** - Configuraciones en tiempo real
 
 ---
 
 ## 🔧 Comandos Principales
 
-### **Gestión del Sistema**
+### **🗂️ Gestión Distribuida (etcd)**
 ```bash
-# V3.1 - Versión evolutiva
-make start_v31              # Iniciar pipeline V3.1
-make status_v31              # Estado componentes V3.1
-make monitor_v31             # Monitor tiempo real V3.1
+# Sistema distribuido completo
+make start-with-etcd-v31         # Iniciar pipeline + etcd (RECOMENDADO)
+make status-etcd-v31             # Estado sistema distribuido
+make logs-etcd-v31               # Logs sistema distribuido
+make stop-etcd-v31               # Parada distribuida
+
+# Gestión etcd
+make etcd-show                   # Ver todo en etcd
+make etcd-show-services          # Servicios registrados
+make etcd-watch                  # Monitoreo tiempo real
+make etcd-health                 # Estado de salud etcd
+
+# UI y herramientas
+make dist-ui-open                # Abrir UI web etcd (:8081)
+make dist-discover               # Descubrir servicios
+make dist-test                   # Test service discovery
+```
+
+### **Gestión del Sistema V3.1**
+```bash
+# V3.1 - Versión evolutiva original
+make start_v31                   # Iniciar pipeline V3.1
+make status_v31                  # Estado componentes V3.1
+make monitor_v31                 # Monitor tiempo real V3.1
 
 # Demo - Versión enseñanza
-make start                   # Iniciar demo
-make status                  # Estado demo
+make start                       # Iniciar demo
+make status                      # Estado demo
 
 # Utilidades
-make stop                    # Parada normal
-make stop-nuclear            # Parada nuclear (ambas versiones)
-make logs                    # Ver logs
-make quick_v31               # Setup + start V3.1 completo
+make stop                        # Parada normal (V3.1 + demo)
+make stop-nuclear-v31            # Parada nuclear distribuida
+make logs                        # Ver logs
+make quick_v31                   # Setup + start V3.1 completo
 ```
 
 ### **Desarrollo**
 ```bash
-make compile-protobuf        # Compilar protobuf V3.1
-make check-deps              # Verificar dependencias
-make verify                  # Verificar integridad
-make debug                   # Modo debug
+make compile-protobuf-v31        # Compilar protobuf V3.1 (requiere protoc)
+make check-deps                  # Verificar dependencias + etcd
+make verify                      # Verificar integridad completa
+make debug                       # Modo debug
 ```
 
 ---
 
 ## 📋 Configuración
 
-### **Archivos de Configuración V3.1**
+### **🗂️ Configuraciones etcd V3.1 (NUEVO)**
+```
+config/json/
+├── evolutionary_sniffer_config_v31_etcd.json
+├── geoip_enricher_config_v31_etcd.json
+├── lightweight_ml_detector_tricapa_v31_etcd_config_dev.json
+├── scheduler_firewall_etcd_config_dev.json
+├── simple_firewall_agent_v31_etcd.json
+├── dashboard_config_v31_etcd.json
+└── firewall_rules_v31.json
+```
+
+### **Archivos de Configuración V3.1 (Original)**
 ```
 config/json/
 ├── evolutionary_sniffer_config_v31.json
@@ -164,26 +352,37 @@ config/json/
 └── firewall_rules_v31.json
 ```
 
-### **Modelos ML**
+### **🗂️ Configuración etcd**
+```
+config/etcd/
+└── etcd-basic-config.yaml       # Configuración backbone etcd
+```
+
+### **Modelos ML (Expandidos V3.1)**
 ```
 models/production/tricapa/
-├── rf_production_cicids.joblib
-├── web_normal_detector.joblib
-├── internal_normal_detector.joblib
-├── ddos_random_forest.joblib
-├── ddos_lightgbm.joblib
-├── ransomware_random_forest.joblib
-└── ransomware_lightgbm.joblib
+├── rf_production_cicids.joblib           # Nivel 1 - Clasificación general
+├── web_normal_detector.joblib            # Nivel 2 - Web traffic
+├── internal_normal_detector.joblib       # Nivel 2 - Internal traffic
+├── ddos_random_forest.joblib            # 🆕 Nivel 3 - DDoS Random Forest
+├── ddos_lightgbm.joblib                 # 🆕 Nivel 3 - DDoS LightGBM
+├── ransomware_random_forest.joblib      # 🆕 Nivel 3 - Ransomware RF
+└── ransomware_lightgbm.joblib           # 🆕 Nivel 3 - Ransomware LightGBM
 ```
 
 ---
 
 ## 🌐 API y Endpoints
 
-### **Dashboard V3.1**
+### **Dashboard V3.1 + etcd**
 - **Web UI:** `http://localhost:8080`
 - **API Metrics:** `http://localhost:8080/api/metrics`
 - **Firewall Actions:** `http://localhost:8080/api/execute-firewall-action`
+
+### **🗂️ etcd Endpoints**
+- **etcd API:** `http://localhost:2379`
+- **etcd UI:** `http://localhost:8081` (make dist-ui-open)
+- **Health Check:** `http://localhost:2379/health`
 
 ### **ZeroMQ Ports**
 - **5559:** Sniffer → GeoIP
@@ -194,27 +393,79 @@ models/production/tricapa/
 
 ---
 
-## 🔬 Desarrollo y Pruebas
+## 🛠️ Instalación y Dependencias
 
-### **Tests**
+### **⚠️ IMPORTANTE - Protobuf Tools**
+
+**Instalar herramientas protobuf por separado:**
 ```bash
-make test                    # Tests generales
-make test-pipeline           # Test pipeline completo
-make benchmark               # Benchmark rendimiento
+# macOS
+brew install protobuf                    # Para protoc compiler
+
+# Ubuntu/Debian  
+sudo apt-get install protobuf-compiler
+
+# Verificar
+protoc --version                         # libprotoc 3.21.12+
 ```
 
-### **Monitorización**
+### **📦 Dependencias de Producción**
 ```bash
-make monitor_v31             # Monitor V3.1 avanzado
-make logs-tail               # Seguimiento logs tiempo real
-make logs-errors             # Solo errores
+# Instalar dependencias (optimizadas para etcd + protobuf 3.x)
+pip install -r requirements.txt
+
+# ⚠️ NOTA: protobuf < 4.0.0 para compatibilidad con etcd3
+# ⚠️ NOTA: grpcio-tools NO incluido - usar protoc del sistema
+```
+
+### **🗂️ etcd Installation**
+```bash
+# Instalar etcd automáticamente
+make dist-install-etcd
+
+# O manualmente (macOS)
+brew install etcd
+
+# Verificar
+etcd --version
+etcdctl version
+```
+
+---
+
+## 🔬 Desarrollo y Pruebas
+
+### **Tests Distribuidos**
+```bash
+make test                        # Tests generales
+make test-pipeline               # Test pipeline completo
+make benchmark                   # Benchmark rendimiento
+make dist-test                   # Test service discovery etcd
+```
+
+### **Monitorización Distribuida**
+```bash
+make monitor_v31                 # Monitor V3.1 avanzado
+make logs-etcd-v31              # Logs sistema distribuido
+make etcd-watch                  # Monitoreo etcd tiempo real
+make logs-tail                   # Seguimiento logs tiempo real
+make logs-errors                 # Solo errores
 ```
 
 ---
 
 ## 🚀 Roadmap
 
-### **✅ Completado (V3.1)**
+### **✅ Completado (V3.1 DISTRIBUTED)**
+- ✅ **etcd Backbone** - Cerebro distribuido operativo
+- ✅ **Protobuf V3.1 expandido** - Esquemas DDoS + Ransomware
+- ✅ **Pipeline distribuido** - Todos los componentes con etcd
+- ✅ **Service Discovery** - Registro automático de servicios
+- ✅ **Configuraciones cifradas** - JSON en etcd con token cifrado
+- ✅ **Dashboard distribuido** - UI integrada con etcd
+- ✅ **Hot Config preparado** - Base para modificación en caliente
+
+### **✅ Completado (V3.1 Original)**
 - ✅ Dashboard V3.1 completamente funcional
 - ✅ Pipeline V3.1 con protobuf actualizado
 - ✅ Mapa interactivo con trayectorias
@@ -223,15 +474,18 @@ make logs-errors             # Solo errores
 - ✅ 1600+ eventos procesados sin errores
 
 ### **🔄 En Desarrollo**
-- 🔄 Content Security Policy optimization
-- 🔄 Advanced threat analytics
-- 🔄 Multi-node distributed deployment
+- 🔄 **Hot Configuration Reload** - Modificación en caliente via etcd
+- 🔄 **Advanced etcd clustering** - Multi-nodo distribuido
+- 🔄 **etcd TLS security** - Cifrado de transporte
+- 🔄 **Content Security Policy optimization**
+- 🔄 **Advanced threat analytics distribuidos**
 
 ### **🎯 Próximo (Q4 2025)**
-- 🎯 Kubernetes deployment
-- 🎯 Advanced ML retraining
-- 🎯 API REST completa
-- 🎯 Mobile dashboard
+- 🎯 **Kubernetes deployment** con etcd operator
+- 🎯 **Advanced ML retraining** distribuido
+- 🎯 **API REST completa** con etcd backend
+- 🎯 **Mobile dashboard** con sincronización etcd
+- 🎯 **Multi-datacenter etcd** replication
 
 ---
 
@@ -240,6 +494,7 @@ make logs-errors             # Solo errores
 ### **Enlaces Principales**
 - 📖 [Wiki del Proyecto](https://github.com/alonsoir/upgraded-happiness/wiki)
 - 🏗️ [Arquitectura Detallada](docs/architecture.md)
+- 🗂️ [etcd Distributed Guide](docs/etcd-distributed.md)
 - 🤖 [ML Models Documentation](docs/ml-models.md)
 - 🔧 [Deployment Guide](docs/deployment.md)
 
@@ -251,7 +506,15 @@ make logs-errors             # Solo errores
 
 ## 🏆 Logros del Proyecto
 
-### **🎉 Hitos Técnicos**
+### **🎉 Hitos Técnicos V3.1 DISTRIBUTED**
+- **🗂️ etcd Backbone** - Sistema distribuido con cerebro centralizado
+- **🔐 Configuraciones cifradas** - JSON almacenado de forma segura
+- **📊 Protobuf V3.1 expandido** - Esquemas DDoS + Ransomware operativos
+- **🌐 Service Discovery** - Registro automático y descubrimiento
+- **⚡ Hot Config preparado** - Base para modificación en caliente
+- **🔄 Pipeline resiliente** - Tolerancia a fallos distribuida
+
+### **🎉 Hitos Técnicos Históricos**
 - **142 archivos organizados** sin pérdidas
 - **7 modelos ML tricapa** operativos en producción
 - **329 sitios globales** para generación de tráfico
@@ -259,11 +522,12 @@ make logs-errors             # Solo errores
 - **Dashboard interactivo** con 1600+ eventos procesados
 
 ### **💎 Joyas Técnicas**
-- `fixed_service_sniffer.py` - Demostración del 90% del proyecto
+- `evolutionary_sniffer_standalone.py` - Captura distribuida con etcd
 - Sistema de coordenadas duales source/target
-- Fleet management distribuido
-- Ensemble confidence scoring
-- Pipeline latency tracking
+- Fleet management distribuido con etcd backbone
+- Ensemble confidence scoring con métricas distribuidas
+- Pipeline latency tracking distribuido
+- **etcd como cerebro** - Configuraciones, servicios y métricas centralizadas
 
 ---
 
@@ -279,30 +543,52 @@ Las contribuciones son bienvenidas! Por favor lee [CONTRIBUTING.md](CONTRIBUTING
 
 ---
 
-**🧬 Upgraded Happiness - Sistema Autoinmune Digital V3.1**  
-*Defending the digital ecosystem with adaptive AI*
+**🧬 Upgraded Happiness - Sistema Autoinmune Digital V3.1 DISTRIBUTED**  
+*Defending the digital ecosystem with adaptive AI and distributed intelligence*
 
 ---
 
 ## 📊 Estado Actual
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    🧬 SISTEMA V3.1 STATUS                  │
-├─────────────────────────────────────────────────────────────┤
-│ Pipeline V3.1:           ✅ OPERATIVO                      │
-│ Dashboard V3.1:          ✅ FUNCIONAL (1600+ eventos)      │
-│ ML Tricapa:              ✅ 7 MODELOS ACTIVOS              │
-│ Firewall Integration:    ✅ CLICK-TO-BLOCK                 │
-│ Mapa Interactivo:        ✅ TRAYECTORIAS ANIMADAS          │
-│ Protobuf V3.1:           ✅ DUAL COORDINATES               │
-│                                                             │
-│ 🎯 READY FOR PRODUCTION                                    │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                  🧬 SISTEMA V3.1 DISTRIBUTED STATUS                │
+├─────────────────────────────────────────────────────────────────────┤
+│ 🗂️ etcd Backbone:        ✅ OPERATIVO (Puerto 2379)               │
+│ Pipeline V3.1 + etcd:    ✅ OPERATIVO (6 componentes)             │
+│ Dashboard Distribuido:   ✅ FUNCIONAL (http://localhost:8080)      │
+│ ML Tricapa + DDoS/Ransom: ✅ 7 MODELOS ACTIVOS                    │
+│ Service Discovery:       ✅ REGISTRO AUTOMÁTICO                    │
+│ Configuraciones Cifradas: ✅ JSON EN ETCD                         │
+│ Protobuf V3.1 Expandido: ✅ ESQUEMAS DDOS + RANSOMWARE            │
+│ Hot Config (preparado):  ⏳ BASE LISTA                            │
+│                                                                     │
+│ 🎯 DISTRIBUTED SYSTEM READY FOR PRODUCTION                        │
+│ 🌐 NEXT: Hot Configuration Reload                                  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    🧬 SISTEMA V3.1 ORIGINAL STATUS                 │
+├─────────────────────────────────────────────────────────────────────┤
+│ Pipeline V3.1:           ✅ OPERATIVO (compatibilidad)             │
+│ Dashboard V3.1:          ✅ FUNCIONAL (1600+ eventos)              │
+│ ML Tricapa:              ✅ 7 MODELOS ACTIVOS                      │
+│ Firewall Integration:    ✅ CLICK-TO-BLOCK                         │
+│ Mapa Interactivo:        ✅ TRAYECTORIAS ANIMADAS                  │
+│ Protobuf V3.1:           ✅ DUAL COORDINATES                       │
+│                                                                     │
+│ 🎯 READY FOR PRODUCTION (Original V3.1)                           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ![pantallazo1.png](pantallazos/pantallazo1.png)
 ![pantallazo2.png](pantallazos/pantallazo2.png)
 ![pantallazo3.png](pantallazos/pantallazo3.png)
 ![pantallazo4.png](pantallazos/pantallazo4.png)
 ![pantallazo5.png](pantallazos/pantallazo5.png)
 ![pantallazo6.png](pantallazos/pantallazo6.png)
+![pantallazo7.png](pantallazos/pantallazo7.png)
+![pantallazo8.png](pantallazos/pantallazo8.png)
+![hamza.png](pantallazos/hamza.png)

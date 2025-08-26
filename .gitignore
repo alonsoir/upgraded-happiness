@@ -3,9 +3,30 @@
 __pycache__/
 *.py[cod]
 *$py.class
+default.etcd
+default.etcd/
+default.etcd/*.*
+# ETCD runtime files
+*.etcd/
+member/
+wal/
+snap/
 
+# Common ETCD patterns
+etcd-data/
+etcd.log
 # C extensions
 *.so
+
+# certificates
+config/crypto/certificates/*.*
+config/crypto/keys/*.*
+
+core/crypto/config/crypto/certificates
+core/crypto/config/crypto/keys
+
+core/crypto/config/crypto/certificates/*.*
+core/crypto/config/crypto/keys/*.*
 
 # Distribution / packaging
 .Python
@@ -221,4 +242,9 @@ upgraded-happiness-bitdefender/*.*
 
 .env
 
-actual_tests_state.txt
+actual_tests_state.txtconfig/crypto/certificates/sniffer.key
+
+# ETCD runtime files
+default.etcd/
+*.etcd/
+member/

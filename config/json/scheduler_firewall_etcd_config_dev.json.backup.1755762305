@@ -1,0 +1,316 @@
+{
+  "node_id": "scheduler_firewall_001",
+  "component": {
+    "name": "scheduler_firewall_etcd",
+    "version": "1.0.0-etcd-integration",
+    "mode": "distributed_decision_engine_etcd",
+    "role": "firewall_scheduler_nogui_etcd",
+    "description": "JSON-controlled Firewall Decision Engine - No GUI + ETCD crypto"
+  },
+  "_comment_etcd_crypto": "\ud83d\udd10 ETCD CRYPTO - NUEVA SECCI\u00d3N OBLIGATORIA - Sin token = NO ARRANCA",
+  "etcd_crypto": {
+    "etcd_host": "localhost",
+    "etcd_port": 2379,
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "node_id": "scheduler_firewall_001"
+  },
+  "_comment_architecture": "\ud83c\udfaf ARQUITECTURA: ml_detector:5580(PUB) \u2192 scheduler:5580(SUB) \u2192 firewall_agent:5582(PUSH) \u2190 \u2192 scheduler:5581(PULL)",
+  "network": {
+    "ml_events_input": {
+      "address": "localhost",
+      "port": 5580,
+      "_comment_fix": "\ud83d\udd27 CORRECTO: 5580 para recibir de ml_detector PUB con ETCD crypto",
+      "mode": "connect",
+      "socket_type": "SUB",
+      "high_water_mark": 500,
+      "expected_publishers": 1,
+      "description": "Receives encrypted ML events from ML Detector V3.1.2 tricapa (4 models) with ETCD crypto"
+    },
+    "firewall_commands_output": {
+      "address": "localhost",
+      "port": 5582,
+      "_comment_fix": "\ud83d\udd27 MANTENER: Puerto 5582 para enviar comandos cifrados al firewall agent",
+      "mode": "connect",
+      "socket_type": "PUSH",
+      "high_water_mark": 200,
+      "expected_subscribers": 1,
+      "description": "Sends encrypted firewall commands to simple_firewall_agent with ETCD crypto"
+    },
+    "firewall_responses_input": {
+      "address": "localhost",
+      "port": 5581,
+      "_comment": "\u2705 CORRECTO: Recibe respuestas cifradas del firewall agent",
+      "mode": "bind",
+      "socket_type": "PULL",
+      "high_water_mark": 200,
+      "expected_publishers": 1,
+      "description": "Receives encrypted responses from simple_firewall_agent with ETCD crypto"
+    }
+  },
+  "_port_flow_etcd": {
+    "step_1": "ml_detector:5580(PUB+ENCRYPT) \u2192 scheduler:5580(SUB+DECRYPT)",
+    "step_2": "scheduler:5582(PUSH+ENCRYPT) \u2192 firewall_agent:5582(PULL+DECRYPT)",
+    "step_3": "firewall_agent:5581(PUSH+ENCRYPT) \u2192 scheduler:5581(PULL+DECRYPT)",
+    "status": "\u2705 ALL PORTS ALIGNED WITH ETCD CRYPTO"
+  },
+  "zmq": {
+    "_comment_conservative": "\ud83d\udd12 CONFIGURACI\u00d3N ULTRA CONSERVADORA basada en ml_detector con 4 modelos + ETCD crypto",
+    "context_io_threads": 1,
+    "max_sockets": 16,
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": false,
+    "linger_ms": 0,
+    "recv_timeout_ms": 500,
+    "send_timeout_ms": 250,
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 131072,
+    "max_message_size": 50000,
+    "scheduler_optimizations": {
+      "_comment": "\ud83c\udfaf OPTIMIZACIONES ESPEC\u00cdFICAS DEL SCHEDULER + ETCD",
+      "conflate": false,
+      "recovery_ivl": 10000,
+      "sndbuf": 131072,
+      "rcvbuf": 65536
+    }
+  },
+  "processing": {
+    "_comment_threads": "\ud83e\uddf5 ULTRA CONSERVADOR: 1 thread por funci\u00f3n + ETCD overhead",
+    "threads": {
+      "ml_events_consumers": 1,
+      "firewall_command_producers": 1,
+      "firewall_response_consumers": 1
+    },
+    "internal_queues": {
+      "ml_events_queue_size": 200,
+      "firewall_commands_queue_size": 1000,
+      "firewall_responses_queue_size": 100
+    },
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 100,
+      "emergency_drop_threshold": 80.0
+    },
+    "decision_engine": {
+      "max_decisions_per_second": 50,
+      "decision_timeout_ms": 100,
+      "batch_processing": false,
+      "cache_decisions": false
+    },
+    "backpressure": {
+      "enabled": true,
+      "max_retries": 2,
+      "retry_delays_ms": [
+        1,
+        5
+      ],
+      "drop_threshold_percent": 10.0,
+      "activation_threshold": 15,
+      "queue_full_strategy": "drop_oldest"
+    }
+  },
+  "monitoring": {
+    "stats_interval_seconds": 60,
+    "detailed_metrics": true,
+    "health_check_interval": 120,
+    "alerts": {
+      "max_queue_usage_percent": 70.0,
+      "max_processing_latency_ms": 100.0,
+      "max_error_rate_percent": 5.0,
+      "max_memory_usage_mb": 256,
+      "max_cpu_usage_percent": 40.0,
+      "max_decision_latency_ms": 50.0,
+      "min_decisions_per_minute": 1,
+      "max_consecutive_errors": 5
+    },
+    "_comment_etcd_monitoring": "\ud83d\udd10 NUEVO: Monitoreo espec\u00edfico ETCD",
+    "etcd_crypto_monitoring": {
+      "track_pipeline_key_usage": true,
+      "track_crypto_operations": true,
+      "alert_on_etcd_failures": true,
+      "max_crypto_failures_per_minute": 5,
+      "etcd_connectivity_check_interval": 30
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [scheduler_etcd:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO"
+      },
+      "file": {
+        "enabled": true,
+        "path": "logs/scheduler_firewall_etcd.log",
+        "level": "INFO",
+        "max_size": "50MB",
+        "backup_count": 5,
+        "rotation": "size"
+      },
+      "decision_log": {
+        "enabled": true,
+        "path": "logs/scheduler_decisions_etcd.log",
+        "level": "INFO",
+        "log_all_decisions": true,
+        "log_rule_applications": true,
+        "include_event_context": true,
+        "log_crypto_operations": true
+      }
+    }
+  },
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 50000,
+      "validate_risk_scores": true,
+      "risk_score_min": 0.0,
+      "risk_score_max": 1.0,
+      "validate_ip_addresses": true,
+      "require_valid_ipv4": true
+    },
+    "decision_safety": {
+      "enabled": true,
+      "require_firewall_agent_validation": true,
+      "max_block_decisions_per_minute": 10,
+      "force_dry_run_above_rate": 20
+    },
+    "_comment_etcd_security": "\ud83d\udd10 NUEVO: Seguridad espec\u00edfica ETCD",
+    "etcd_crypto_security": {
+      "validate_pipeline_keys": true,
+      "rotate_keys_on_error": false,
+      "secure_key_storage": true,
+      "crypto_failure_threshold": 10
+    }
+  },
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "firewall_decision_engine_scheduler_etcd",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 6,
+      "track_etcd_crypto_operations": true
+    },
+    "scheduler_specific": {
+      "track_decision_latency": true,
+      "track_rule_applications": true,
+      "track_firewall_responses": true,
+      "enable_decision_analytics": true,
+      "track_crypto_performance": true
+    }
+  },
+  "decision_engine": {
+    "rules_file_check_interval": 30,
+    "default_risk_threshold": 0.5,
+    "emergency_mode_threshold": 0.95,
+    "decision_cache": {
+      "enabled": false
+    },
+    "fallback_behavior": {
+      "enabled": true,
+      "default_action": "MONITOR",
+      "default_duration": 300,
+      "default_priority": "MEDIUM",
+      "force_dry_run": true
+    }
+  },
+  "debug": {
+    "enabled": false,
+    "log_all_events": false,
+    "log_decision_details": false,
+    "log_protobuf_parsing": false,
+    "performance_profiling": false,
+    "_comment_etcd_debug": "\ud83d\udd10 Debug espec\u00edfico ETCD (solo para desarrollo)",
+    "log_etcd_operations": false,
+    "trace_pipeline_key_operations": false,
+    "validate_crypto_tokens": true
+  },
+  "_config_metadata": {
+    "config_version": "1.0.0-etcd-integration",
+    "created_for": "HW Actual - Scheduler con ETCD crypto obligatorio",
+    "optimization_level": "CONSERVATIVE_SCHEDULER_ETCD",
+    "crypto_integration": "ETCD_MANDATORY",
+    "socket_pattern": "SUB/PUSH/PULL",
+    "firewall_integration": "Ultra-secure JSON-controlled + ETCD crypto",
+    "performance_target": "STABLE_DECISION_ENGINE_WITH_ETCD_CRYPTO"
+  },
+  "protobuf_storage": {
+    "enabled": true,
+    "storage_path": "./protobuf_storage/enriched/",
+    "archive_path": "./protobuf_storage/archived/",
+    "file_naming": "enriched_{timestamp}_{event_id}.pb",
+    "compression": "gzip",
+    "retention_days": 30,
+    "auto_archive": true,
+    "storage_conditions": {
+      "store_all": false,
+      "store_on_ml_confidence_below": 0.8,
+      "store_on_policy_override": true,
+      "store_on_human_intervention": true,
+      "store_on_retrain_candidate": true
+    }
+  },
+  "axiom_generation": {
+    "enabled": true,
+    "axiom_output_path": "./axioms/pending/",
+    "template_path": "./axioms/templates/axiom_template.json",
+    "generate_conditions": {
+      "always_generate": false,
+      "on_ml_prediction": true,
+      "on_policy_decision": true,
+      "min_confidence_threshold": 0.1
+    }
+  },
+  "_comment_crypto": "\ud83d\udd10 CRYPTO ETCD - OBLIGATORIO: ML events + Firewall commands (CR\u00cdTICO)",
+  "crypto": {
+    "enabled": true,
+    "role": "receiver_sender",
+    "use_etcd_pipeline_key": true,
+    "_comment_mandatory": "\u274c Sin token ETCD = componente NO ARRANCA",
+    "channels": {
+      "ml_events_input": {
+        "decrypt": true,
+        "description": "Descifrar eventos ML para an\u00e1lisis de decisiones con ETCD pipeline key"
+      },
+      "firewall_commands_output": {
+        "encrypt": true,
+        "description": "Cifrar comandos firewall hacia agente (CR\u00cdTICO) con ETCD pipeline key"
+      },
+      "firewall_responses_input": {
+        "decrypt": true,
+        "description": "Descifrar respuestas del agente firewall con ETCD pipeline key"
+      }
+    },
+    "component_crypto_id": "scheduler_firewall_001",
+    "_comment_etcd": "Token rotativo distribuido autom\u00e1ticamente por ETCD - mucho m\u00e1s seguro que config files"
+  },
+  "_etcd_integration_requirements": {
+    "mandatory_dependencies": [
+      "ETCD cluster running on localhost:2379",
+      "ETCD Crypto Coordinator active",
+      "ML Detector tricapa running on port 5580 (PUB)",
+      "Simple Firewall Agent on ports 5582/5581",
+      "etcd3-py with compatible protobuf version"
+    ],
+    "startup_sequence": [
+      "1. ETCD cluster UP",
+      "2. ETCD Crypto Coordinator UP",
+      "3. ML Detector UP (publishing encrypted events)",
+      "4. scheduler connects to ETCD",
+      "5. Obtiene pipeline key rotativo",
+      "6. Si NO obtiene key \u2192 SHUTDOWN",
+      "7. Si obtiene key \u2192 INICIA con crypto en 3 canales",
+      "8. Simple Firewall Agent UP (waiting for encrypted commands)"
+    ],
+    "failure_modes": {
+      "no_etcd_connection": "SHUTDOWN - no fallback",
+      "no_pipeline_key": "SHUTDOWN - no hardcoded keys",
+      "crypto_disabled_in_json": "SHUTDOWN - crypto es obligatorio para firewall"
+    }
+  }
+}

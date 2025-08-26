@@ -498,5 +498,22 @@
       "Escalabilidad sin límites",
       "Pipeline modo terminal + GUI según necesidad"
     ]
-  }
+  },
+    "_comment_crypto": "🔐 CRYPTO - Descifrado GeoIP + Cifrado hacia Scheduler/Dashboard",
+    "crypto": {
+      "enabled": true,
+      "role": "receiver_sender",
+      "config_file": "config/crypto/crypto_config_v31.json",
+      "channels": {
+        "input": {
+          "decrypt": true,
+          "description": "Descifrar eventos enriquecidos de GeoIP"
+        },
+        "output": {
+          "encrypt": true,
+          "description": "Cifrar análisis ML hacia múltiples suscriptores"
+        }
+      },
+      "component_crypto_id": "ml_detector_tricapa_v31_001"
+    }
 }

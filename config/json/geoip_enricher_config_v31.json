@@ -513,5 +513,22 @@
     "trace_private_ip_resolution": false,
     "log_geographic_analysis": true,
     "validate_tripartite_completeness": true
-  }
+  },
+    "_comment_crypto": "🔐 CRYPTO - Descifrado Sniffer + Cifrado hacia ML_Detector",
+    "crypto": {
+      "enabled": true,
+      "role": "receiver_sender",
+      "config_file": "config/crypto/crypto_config_v31.json",
+      "channels": {
+        "input": {
+          "decrypt": true,
+          "description": "Descifrar eventos de Sniffer"
+        },
+        "output": {
+          "encrypt": true,
+          "description": "Cifrar eventos enriquecidos hacia ML_Detector"
+        }
+      },
+      "component_crypto_id": "geoip_enricher_v31_001"
+    }
 }

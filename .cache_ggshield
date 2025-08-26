@@ -1,1 +1,1 @@
-{"last_found_secrets": [{"name": "Generic High Entropy Secret - commit://staged/geoip_enricher_config.json", "match": "c0aac57288bc9d64aa37dfacb817c43a3e6c04daddfd8c0bc912bf77786bb0d0"}]}
+{"last_found_secrets": [{"name": "Generic Private Key - commit://staged/config/crypto/certificates/sniffer.key", "match": "0a17b2a140c55fd76d5fd7e92da53397a12302709d053630b3730525bcc6f0c8"}]}

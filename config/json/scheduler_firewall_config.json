@@ -236,5 +236,26 @@
       "on_policy_decision": true,
       "min_confidence_threshold": 0.1
     }
-  }
+  },
+    "_comment_crypto": "🔐 CRYPTO - ML events + Firewall commands (CRÍTICO)",
+    "crypto": {
+      "enabled": true,
+      "role": "receiver_sender",
+      "config_file": "config/crypto/crypto_config_v31.json",
+      "channels": {
+        "ml_events_input": {
+          "decrypt": true,
+          "description": "Descifrar eventos ML para análisis de decisiones"
+        },
+        "firewall_commands_output": {
+          "encrypt": true,
+          "description": "Cifrar comandos firewall hacia agente (CRÍTICO)"
+        },
+        "firewall_responses_input": {
+          "decrypt": true,
+          "description": "Descifrar respuestas del agente firewall"
+        }
+      },
+      "component_crypto_id": "scheduler_firewall_001"
+    }
 }
