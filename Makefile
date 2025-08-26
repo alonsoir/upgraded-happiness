@@ -188,7 +188,7 @@ NUCLEAR_STOP_SCRIPT = scripts/deployment/nuclear-stop.sh
 # =============================================================================
 # PHONY DECLARATIONS
 # =============================================================================
-.PHONY: help setup install clean test \
+.PHONY: help setup install clean test start status \
         compile-protobuf-v31 check-protobuf-v31 verify-protobuf-compiled-v31 \
         start start_v31 start-demo start-bg stop stop-nuclear restart \
         start-with-etcd-v31 stop-etcd-v31 stop-nuclear-v31 status-etcd-v31 logs-etcd-v31 \
@@ -893,4 +893,404 @@ check-deps:
 	@echo "$(YELLOW)🔧 Verificando compatibilidad protobuf-etcd3...$(NC)"
 	@$(ACTIVATE) && $(PYTHON_VENV) -c "import google.protobuf; v=google.protobuf.__version__; print('✅ Protobuf compatible:', v) if v.startswith('3.') else print('⚠️  Protobuf puede causar problemas con etcd3:', v)"
 
-# [Mantener todas las demás reglas del Makefile original igual]
+# =============================================================================
+# REGLAS BÁSICAS GENERALES
+# =============================================================================
+start: install ## Iniciar sistema demo por defecto
+	@echo "$(GREEN)🚀 Iniciando Sistema Demo (por defecto)...$(NC)"
+	@echo "$(CYAN)======================================$(NC)"
+	@echo "$(PURPLE)Para V3.1 usar: make start_v31$(NC)"
+	@echo "$(PURPLE)Para etcd V3.1: make start-with-etcd-v31$(NC)"
+	@echo ""
+	@$(MAKE) start-demo
+
+status: ## Estado general del sistema (demo + V3.1 + distribuido)
+	@echo "$(CYAN)📊 Estado General del Sistema$(NC)"
+	@echo "$(CYAN)==============================$(NC)"
+
+	@echo "$(BLUE)🛡️  Sistema Demo:$(NC)"
+	@pgrep -f "$(PROMISCUOUS_AGENT_DEMO)" >/dev/null && echo "  🕵️  Promiscuous Agent: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🕵️  Promiscuous Agent: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(GEOIP_ENRICHER_DEMO)" >/dev/null && echo "  🌍 GeoIP Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🌍 GeoIP Demo: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(ML_DETECTOR_DEMO)" >/dev/null && echo "  🤖 ML Detector Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🤖 ML Detector Demo: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(DASHBOARD_DEMO)" >/dev/null && echo "  📊 Dashboard Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  📊 Dashboard Demo: $(RED)⭕ Detenido$(NC)"
+	@pgrep -f "$(FIREWALL_AGENT_DEMO)" >/dev/null && echo "  🛡️  Firewall Demo: $(GREEN)✅ Ejecutándose$(NC)" || echo "  🛡️  Firewall Demo: $(RED)⭕ Detenido$(NC)"
+
+	@echo ""
+	@echo "$(CYAN)💡 Para más detalles:$(NC)"
+	@echo "  $(BLUE)make status_v31$(NC)        - Estado V3.1 específico"
+	@echo "  $(BLUE)make status-etcd-v31$(NC)   - Estado sistema distribuido"
+
+# =============================================================================
+# REGLAS ADICIONALES DISTRIBUIDAS
+# =============================================================================
+dist-register: ## Re-registrar servicios V3.1 en etcd
+	@echo "$(BLUE)📝 Registrando servicios V3.1 en etcd...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		chmod +x $(SERVICE_DISCOVERY_SCRIPT); \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-sniffer localhost $(CAPTURE_PORT_V31) 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-geoip localhost $(GEOIP_PORT_V31) 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-ml localhost $(ML_PORT_V31) 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-scheduler localhost $(ML_PORT_V31) 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-firewall localhost $(FIREWALL_PORT_V31) 120; \
+		$(SERVICE_DISCOVERY_SCRIPT) register axiom-dashboard localhost $(DASHBOARD_WEB_PORT) 120; \
+		echo "$(GREEN)✅ Servicios V3.1 registrados en etcd$(NC)"; \
+	else \
+		echo "$(RED)❌ etcd no disponible$(NC)"; \
+	fi
+
+dist-clean: ## Limpiar datos distribuidos
+	@echo "$(YELLOW)🧹 Limpiando datos distribuidos...$(NC)"
+	@if curl -s $(ETCD_ENDPOINT)/health > /dev/null 2>&1; then \
+		etcdctl --endpoints=$(ETCD_ENDPOINT) del "" --from-key; \
+		echo "$(GREEN)✅ Datos etcd limpiados$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️  etcd no disponible$(NC)"; \
+	fi
+	@rm -rf $(ETCD_DATA_DIR)/* $(ETCD_LOG_DIR)/etcd.log 2>/dev/null || true
+
+dist-reset: dist-stop dist-clean dist-start ## Reset completo del sistema distribuido
+
+dist-ui: ## Iniciar UI web para etcd (puerto 8081)
+	@echo "$(BLUE)🌐 Iniciando UI web para etcd...$(NC)"
+	@if command -v docker &> /dev/null; then \
+		docker run -d --name etcd-browser -p 8081:8080 --env ETCD_ENDPOINT=$(ETCD_ENDPOINT) evildecay/etcdkeeper; \
+		echo "$(GREEN)✅ UI etcd disponible en: http://localhost:8081$(NC)"; \
+	else \
+		echo "$(RED)❌ Docker no disponible$(NC)"; \
+		echo "$(YELLOW)💡 Para usar UI web, instala Docker$(NC)"; \
+	fi
+
+dist-ui-stop: ## Detener UI web etcd
+	@echo "$(YELLOW)🛑 Deteniendo UI web etcd...$(NC)"
+	@docker stop etcd-browser 2>/dev/null || true
+	@docker rm etcd-browser 2>/dev/null || true
+	@echo "$(GREEN)✅ UI etcd detenida$(NC)"
+
+dist-ui-open: dist-ui ## Abrir UI etcd en navegador
+	@sleep 3
+	@echo "$(BLUE)🌐 Abriendo UI etcd...$(NC)"
+	@which open >/dev/null && open http://localhost:8081 || \
+       which xdg-open >/dev/null && xdg-open http://localhost:8081 || \
+       echo "💡 Abrir manualmente: http://localhost:8081"
+
+dist-quick: dist-setup dist-start ## Setup + start distribuido rápido
+
+# =============================================================================
+# CONFIGURACIONES V3.1 ORIGINALES
+# =============================================================================
+create-configs-v31: ## Crear configuraciones V3.1 originales
+	@echo "$(BLUE)📁 Creando configuraciones V3.1...$(NC)"
+	@mkdir -p $(CONFIG_DIR)
+
+	@echo "$(BLUE)📝 Creando config evolutionary_sniffer_config_v31.json...$(NC)"
+	@test -f $(EVOLUTIONARY_SNIFFER_CONFIG_V31) || echo '{"interface": "en0", "capture_filter": "", "output_port": 5559, "log_level": "INFO", "version": "v3.1"}' > $(EVOLUTIONARY_SNIFFER_CONFIG_V31)
+
+	@echo "$(BLUE)📝 Creando config geoip_enricher_config_v31.json...$(NC)"
+	@test -f $(GEOIP_ENRICHER_CONFIG_V31) || echo '{"input_port": 5559, "output_port": 5560, "geoip_db_path": "GeoLite2-City.mmdb", "log_level": "INFO", "version": "v3.1"}' > $(GEOIP_ENRICHER_CONFIG_V31)
+
+	@echo "$(BLUE)📝 Creando config lightweight_ml_detector_tricapa_v31_config_dev.json...$(NC)"
+	@test -f $(ML_DETECTOR_TRICAPA_CONFIG_V31) || echo '{"input_port": 5560, "output_port": 5561, "dashboard_port": 5580, "models_path": "models/production/tricapa/", "tricapa_enabled": true, "ensemble_confidence": true, "log_level": "INFO", "version": "v3.1"}' > $(ML_DETECTOR_TRICAPA_CONFIG_V31)
+
+	@echo "$(BLUE)📝 Creando config scheduler_firewall_config.json...$(NC)"
+	@test -f $(SCHEDULER_FIREWALL_CONFIG) || echo '{"input_port": 5561, "firewall_port": 5562, "rules_file": "config/json/firewall_rules_v31.json", "log_level": "INFO", "version": "v3.1"}' > $(SCHEDULER_FIREWALL_CONFIG)
+
+	@echo "$(BLUE)📝 Creando config simple_firewall_agent_v31_config.json...$(NC)"
+	@test -f $(FIREWALL_AGENT_CONFIG_V31) || echo '{"agent_id": "firewall_001", "port": 5562, "rules_file": "config/json/firewall_rules_v31.json", "enabled": true, "log_level": "INFO", "version": "v3.1"}' > $(FIREWALL_AGENT_CONFIG_V31)
+
+	@echo "$(BLUE)📝 Creando config dashboard_config_v31.json...$(NC)"
+	@test -f $(DASHBOARD_CONFIG_V31) || echo '{"port": 8080, "ml_input_port": 5580, "host": "localhost", "debug": false, "firewall_integration": true, "version": "v3.1"}' > $(DASHBOARD_CONFIG_V31)
+
+	@echo "$(BLUE)📝 Verificando firewall_rules_v31.json...$(NC)"
+	@test -f $(FIREWALL_RULES_V31) || echo '{"firewall_rules": {"rules": [], "manual_actions": {}, "firewall_agents": {}, "global_settings": {"version": "v3.1", "auto_block": true, "confidence_threshold": 0.8}}}' > $(FIREWALL_RULES_V31)
+
+	@echo "$(GREEN)✅ Configuraciones V3.1 creadas$(NC)"
+
+verify-configs-v31: ## Verificar configuraciones V3.1
+	@echo "$(BLUE)🔍 Verificando configuraciones V3.1...$(NC)"
+	@for config in $(EVOLUTIONARY_SNIFFER_CONFIG_V31) $(GEOIP_ENRICHER_CONFIG_V31) $(ML_DETECTOR_TRICAPA_CONFIG_V31) $(SCHEDULER_FIREWALL_CONFIG) $(FIREWALL_AGENT_CONFIG_V31) $(DASHBOARD_CONFIG_V31) $(FIREWALL_RULES_V31); do \
+		if [ -f "$$config" ]; then \
+			echo "  ✅ $$config"; \
+		else \
+			echo "  ❌ $$config falta"; \
+		fi \
+	done
+
+# =============================================================================
+# PROTOBUF V3.1 COMPILATION
+# =============================================================================
+compile-protobuf-v31: ## Compilar protobuf V3.1 (requiere protoc del sistema)
+	@echo "$(BLUE)🔧 Compilando protobuf V3.1...$(NC)"
+	@if command -v protoc &> /dev/null; then \
+		echo "$(GREEN)✅ protoc disponible: $$(protoc --version)$(NC)"; \
+		cd $(PROTOBUF_DIR) && protoc --python_out=. --proto_path=. network_security_clean_v31.proto; \
+		cd $(PROTOBUF_DIR) && protoc --python_out=. --proto_path=. firewall_commands_v31.proto; \
+		echo "$(GREEN)✅ Protobuf V3.1 compilado exitosamente$(NC)"; \
+	else \
+		echo "$(RED)❌ protoc no encontrado$(NC)"; \
+		echo "$(YELLOW)💡 Instalar con: brew install protobuf$(NC)"; \
+		exit 1; \
+	fi
+
+check-protobuf-v31: ## Verificar disponibilidad de protoc
+	@echo "$(BLUE)🔍 Verificando protoc...$(NC)"
+	@if command -v protoc &> /dev/null; then \
+		echo "$(GREEN)✅ protoc disponible: $$(protoc --version)$(NC)"; \
+	else \
+		echo "$(RED)❌ protoc no encontrado$(NC)"; \
+		echo "$(YELLOW)💡 Instalar con: brew install protobuf$(NC)"; \
+		exit 1; \
+	fi
+
+verify-protobuf-compiled-v31: ## Verificar archivos protobuf compilados V3.1
+	@echo "$(BLUE)🔍 Verificando protobuf V3.1 compilado...$(NC)"
+	@for proto in $(PROTOBUF_COMPILED_V31); do \
+		if [ -f "$$proto" ]; then \
+			echo "  ✅ $$proto"; \
+		else \
+			echo "  ❌ $$proto falta - ejecutar: make compile-protobuf-v31"; \
+		fi \
+	done
+
+# =============================================================================
+# LOGS Y MONITOREO
+# =============================================================================
+logs: ## Ver logs recientes de todos los componentes
+	@echo "$(CYAN)📋 Logs del Sistema$(NC)"
+	@echo "$(CYAN)==================$(NC)"
+	@if [ -f $(DASHBOARD_LOG_V31) ]; then echo "$(YELLOW)=== 📊 Dashboard V3.1 ===$(NC)"; tail -8 $(DASHBOARD_LOG_V31); echo ""; fi
+	@if [ -f $(ML_TRICAPA_LOG_V31) ]; then echo "$(YELLOW)=== 🤖 ML Detector V3.1 ===$(NC)"; tail -8 $(ML_TRICAPA_LOG_V31); echo ""; fi
+	@if [ -f $(GEOIP_LOG_V31) ]; then echo "$(YELLOW)=== 🌍 GeoIP V3.1 ===$(NC)"; tail -8 $(GEOIP_LOG_V31); echo ""; fi
+	@if [ -f $(EVOLUTIONARY_SNIFFER_LOG_V31) ]; then echo "$(YELLOW)=== 🕵️  Sniffer V3.1 ===$(NC)"; tail -8 $(EVOLUTIONARY_SNIFFER_LOG_V31); echo ""; fi
+	@if [ -f $(FIREWALL_LOG_V31) ]; then echo "$(YELLOW)=== 🛡️  Firewall V3.1 ===$(NC)"; tail -8 $(FIREWALL_LOG_V31); fi
+
+logs-v31: ## Logs específicos V3.1
+	@echo "$(CYAN)📋 Logs Sistema V3.1$(NC)"
+	@echo "$(CYAN)====================$(NC)"
+	@if [ -f $(EVOLUTIONARY_SNIFFER_LOG_V31) ]; then echo "$(YELLOW)=== 🕵️  Evolutionary Sniffer V3.1 ===$(NC)"; tail -10 $(EVOLUTIONARY_SNIFFER_LOG_V31); echo ""; fi
+	@if [ -f $(GEOIP_LOG_V31) ]; then echo "$(YELLOW)=== 🌍 GeoIP Enricher V3.1 ===$(NC)"; tail -10 $(GEOIP_LOG_V31); echo ""; fi
+	@if [ -f $(ML_TRICAPA_LOG_V31) ]; then echo "$(YELLOW)=== 🤖 ML Detector V3.1 ===$(NC)"; tail -10 $(ML_TRICAPA_LOG_V31); echo ""; fi
+	@if [ -f $(SCHEDULER_LOG) ]; then echo "$(YELLOW)=== 🎯 Scheduler Firewall ===$(NC)"; tail -10 $(SCHEDULER_LOG); echo ""; fi
+	@if [ -f $(FIREWALL_LOG_V31) ]; then echo "$(YELLOW)=== 🛡️  Firewall Agent V3.1 ===$(NC)"; tail -10 $(FIREWALL_LOG_V31); echo ""; fi
+	@if [ -f $(DASHBOARD_LOG_V31) ]; then echo "$(YELLOW)=== 📊 Dashboard V3.1 ===$(NC)"; tail -10 $(DASHBOARD_LOG_V31); fi
+
+logs-tail: ## Seguir logs en tiempo real
+	@echo "$(BLUE)👀 Siguiendo logs en tiempo real...$(NC)"
+	@echo "$(YELLOW)💡 Presiona Ctrl+C para salir$(NC)"
+	@tail -f $(LOGS_DIR)/*.log 2>/dev/null || echo "$(YELLOW)No hay logs disponibles$(NC)"
+
+logs-errors: ## Mostrar solo errores
+	@echo "$(CYAN)❌ Errores del Sistema$(NC)"
+	@echo "$(CYAN)=====================$(NC)"
+	@grep -i "error\|exception\|failed\|critical" $(LOGS_DIR)/*.log 2>/dev/null | tail -20 || echo "$(GREEN)✅ No hay errores recientes$(NC)"
+
+monitor: ## Monitor general del sistema
+	@echo "$(BLUE)👀 Monitor del sistema cada 5 segundos...$(NC)"
+	@echo "$(YELLOW)💡 Presiona Ctrl+C para salir$(NC)"
+	@echo "$(CYAN)====================================$(NC)"
+	@while true; do \
+		clear; \
+		echo "$(CYAN)🧬 Sistema Autoinmune Digital - Monitor$(NC)"; \
+		echo "$(CYAN)======================================$(NC)"; \
+		date; \
+		echo ""; \
+		$(MAKE) status 2>/dev/null; \
+		echo ""; \
+		echo "$(BLUE)💾 Uso de recursos:$(NC)"; \
+		echo "  CPU: $$(top -l1 | grep "CPU usage" | awk '{print $$3}' | sed 's/%//')% user"; \
+		echo "  Memoria: $$(vm_stat | grep "Pages active" | awk '{print $$3}' | sed 's/\.//')KB activa"; \
+		echo ""; \
+		sleep 5; \
+	done
+
+monitor_v31: ## Monitor específico V3.1
+	@echo "$(BLUE)👀 Monitor V3.1 cada 5 segundos...$(NC)"
+	@echo "$(YELLOW)💡 Presiona Ctrl+C para salir$(NC)"
+	@echo "$(CYAN)====================================$(NC)"
+	@while true; do \
+		clear; \
+		echo "$(CYAN)🧬 Sistema V3.1 - Monitor$(NC)"; \
+		echo "$(CYAN)===========================$(NC)"; \
+		date; \
+		echo ""; \
+		$(MAKE) status_v31 2>/dev/null; \
+		echo ""; \
+		echo "$(BLUE)🌐 Puertos V3.1:$(NC)"; \
+		lsof -i:$(CAPTURE_PORT_V31),$(GEOIP_PORT_V31),$(ML_PORT_V31),$(FIREWALL_PORT_V31),$(DASHBOARD_WEB_PORT) 2>/dev/null | grep LISTEN || echo "  Ningún puerto escuchando"; \
+		echo ""; \
+		sleep 5; \
+	done
+
+# =============================================================================
+# UTILIDADES Y SHORTCUTS
+# =============================================================================
+quick: setup install start ## Setup completo + inicio rápido (demo)
+
+quick_v31: setup install start_v31 ## Setup completo + inicio V3.1
+	@echo ""
+	@echo "$(GREEN)🎉 SISTEMA V3.1 LISTO$(NC)"
+	@echo "$(CYAN)=====================$(NC)"
+	@echo "$(YELLOW)📊 Dashboard: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+	@echo "$(YELLOW)📋 Estado: make status_v31$(NC)"
+	@echo "$(YELLOW)👀 Monitor: make monitor_v31$(NC)"
+
+restart: stop start ## Reiniciar sistema completo
+
+stop-nuclear: ## Parada nuclear (todos los sistemas)
+	@echo "$(RED)☢️  PARADA NUCLEAR ☢️$(NC)"
+	@echo "$(RED)===================$(NC)"
+	@$(MAKE) stop 2>/dev/null || true
+	@$(MAKE) stop-etcd-v31 2>/dev/null || true
+	@$(MAKE) dist-stop 2>/dev/null || true
+	@echo "$(YELLOW)💀 Eliminando todos los procesos Python del proyecto...$(NC)"
+	@-pkill -9 -f "python.*upgraded.happiness" 2>/dev/null || true
+	@-sudo pkill -9 -f "python.*upgraded.happiness" 2>/dev/null || true
+	@echo "$(YELLOW)💀 Liberando puertos...$(NC)"
+	@for port in 5559 5560 5561 5562 5580 8080 2379 2380 8081; do \
+		PIDS=$$(lsof -ti:$$port 2>/dev/null); \
+		if [ ! -z "$$PIDS" ]; then \
+			echo "💀 Liberando puerto $$port..."; \
+			echo "$$PIDS" | xargs -r kill -9 2>/dev/null || echo "$$PIDS" | xargs -r sudo kill -9 2>/dev/null || true; \
+		fi \
+	done
+	@rm -rf $(PIDS_DIR)/*.pid
+	@echo "$(GREEN)☢️  PARADA NUCLEAR COMPLETADA ☢️$(NC)"
+
+debug: ## Información de debug del sistema
+	@echo "$(CYAN)🔍 Información de Debug$(NC)"
+	@echo "$(CYAN)========================$(NC)"
+	@echo "$(BLUE)🐍 Python:$(NC)"
+	@echo "  Versión: $$($(PYTHON) --version)"
+	@echo "  Ubicación: $$(which $(PYTHON))"
+	@echo "  Pip: $$($(PYTHON) -m pip --version)"
+	@echo ""
+	@echo "$(BLUE)🔧 Entorno Virtual:$(NC)"
+	@echo "  Directorio: $(VENV_NAME)"
+	@echo "  Python venv: $(PYTHON_VENV)"
+	@echo "  Pip venv: $(PIP_VENV)"
+	@echo ""
+	@echo "$(BLUE)📂 Directorios:$(NC)"
+	@echo "  PIDs: $(PIDS_DIR)"
+	@echo "  Logs: $(LOGS_DIR)"
+	@echo "  Config: $(CONFIG_DIR)"
+	@echo "  etcd: $(ETCD_CONFIG_DIR)"
+	@echo ""
+	@echo "$(BLUE)🌐 Puertos V3.1:$(NC)"
+	@echo "  Captura: $(CAPTURE_PORT_V31)"
+	@echo "  GeoIP: $(GEOIP_PORT_V31)"
+	@echo "  ML: $(ML_PORT_V31)"
+	@echo "  Firewall: $(FIREWALL_PORT_V31)"
+	@echo "  Dashboard: $(DASHBOARD_WEB_PORT)"
+	@echo ""
+	@echo "$(BLUE)🗂️  etcd:$(NC)"
+	@echo "  Endpoint: $(ETCD_ENDPOINT)"
+	@echo "  Config: $(ETCD_CONFIG_FILE)"
+	@echo ""
+	@$(MAKE) check-deps
+
+benchmark: ## Ejecutar benchmarks de rendimiento
+	@echo "$(BLUE)🚀 Ejecutando benchmarks...$(NC)"
+	@if [ -d "$(VENV_NAME)" ]; then \
+		echo "$(GREEN)✅ Usando entorno virtual$(NC)"; \
+		$(ACTIVATE) && $(PYTHON_VENV) -m pytest benchmarks/ -v --benchmark-only 2>/dev/null || echo "$(YELLOW)⚠️  Benchmarks no disponibles$(NC)"; \
+	else \
+		echo "$(RED)❌ Entorno virtual no encontrado$(NC)"; \
+	fi
+
+test: ## Ejecutar tests del proyecto
+	@echo "$(BLUE)🧪 Ejecutando tests...$(NC)"
+	@if [ -d "$(VENV_NAME)" ]; then \
+		$(ACTIVATE) && $(PYTHON_VENV) -m pytest tests/ -v 2>/dev/null || echo "$(YELLOW)⚠️  Tests no disponibles$(NC)"; \
+	else \
+		echo "$(RED)❌ Entorno virtual no encontrado$(NC)"; \
+	fi
+
+test-pipeline: ## Test completo del pipeline
+	@echo "$(BLUE)🧪 Test del pipeline completo...$(NC)"
+	@echo "$(YELLOW)⚠️  Test pipeline no implementado aún$(NC)"
+
+setup-perms: ## Configurar permisos necesarios
+	@echo "$(BLUE)🔐 Configurando permisos...$(NC)"
+	@chmod +x scripts/*.sh 2>/dev/null || true
+	@chmod +x $(SERVICE_DISCOVERY_SCRIPT) 2>/dev/null || true
+	@chmod +x $(ETCD_START_SCRIPT) 2>/dev/null || true
+	@chmod +x $(ETCD_INSTALL_SCRIPT) 2>/dev/null || true
+	@echo "$(GREEN)✅ Permisos configurados$(NC)"
+
+show-architecture-v31: ## Mostrar arquitectura V3.1
+	@echo "$(CYAN)🏗️  Arquitectura Sistema V3.1$(NC)"
+	@echo "$(CYAN)==============================$(NC)"
+	@echo ""
+	@echo "$(PURPLE)Pipeline V3.1:$(NC)"
+	@echo "  1. 🕵️  evolutionary_sniffer_v31.py      → Puerto $(CAPTURE_PORT_V31)"
+	@echo "  2. 🌍 geoip_enricher_v31.py            → Puerto $(GEOIP_PORT_V31)"
+	@echo "  3. 🤖 ml_detector_tricapa_v31.py       → Puerto $(ML_PORT_V31) + $(DASHBOARD_PORT_V31)"
+	@echo "  4. 🎯 scheduler-firewall.py            → Orquestación"
+	@echo "  5. 🛡️  simple_firewall_agent_v31.py    → Puerto $(FIREWALL_PORT_V31)"
+	@echo "  6. 📊 dashboard_v31.py                 → Puerto $(DASHBOARD_WEB_PORT)"
+	@echo ""
+	@echo "$(PURPLE)Pipeline etcd V3.1:$(NC)"
+	@echo "  0. 🗂️  etcd backbone                   → Puerto 2379"
+	@echo "  1. 🕵️  evolutionary_sniffer_standalone → Puerto $(CAPTURE_PORT_V31)"
+	@echo "  2. 🌍 geoip_enricher_v31_etcd         → Puerto $(GEOIP_PORT_V31)"
+	@echo "  3. 🤖 ml_detector_tricapa_v31_etcd    → Puerto $(ML_PORT_V31) + $(DASHBOARD_PORT_V31)"
+	@echo "  4. 🎯 scheduler_firewall_v31_etcd     → Orquestación distribuida"
+	@echo "  5. 🛡️  simple_firewall_agent_v31_etcd → Puerto $(FIREWALL_PORT_V31)"
+	@echo "  6. 📊 dashboard_v31_etcd              → Puerto $(DASHBOARD_WEB_PORT)"
+
+show-roadmap-v31: ## Mostrar roadmap V3.1
+	@echo "$(CYAN)🗺️  Roadmap V3.1$(NC)"
+	@echo "$(CYAN)===============$(NC)"
+	@echo ""
+	@echo "$(GREEN)✅ Completado:$(NC)"
+	@echo "  • Pipeline V3.1 evolutivo funcional"
+	@echo "  • Dashboard interactivo con mapa"
+	@echo "  • ML Tricapa con 7 modelos"
+	@echo "  • Protobuf V3.1 con coordenadas duales"
+	@echo "  • etcd backbone distribuido"
+	@echo "  • Service discovery automático"
+	@echo "  • Configuraciones cifradas"
+	@echo ""
+	@echo "$(YELLOW)🔄 En desarrollo:$(NC)"
+	@echo "  • Hot configuration reload"
+	@echo "  • Advanced etcd clustering"
+	@echo "  • TLS security para etcd"
+	@echo ""
+	@echo "$(BLUE)🎯 Próximos:$(NC)"
+	@echo "  • Kubernetes deployment"
+	@echo "  • Multi-datacenter replication"
+	@echo "  • Advanced threat analytics"
+	@echo "  • Mobile dashboard"
+
+start-demo: install ## Iniciar versión demo/enseñanza
+	@echo "$(GREEN)🚀 Iniciando Sistema Demo/Enseñanza...$(NC)"
+	@echo "$(CYAN)=======================================$(NC)"
+	@echo "$(PURPLE)Componentes Demo: promiscuous_agent → geoip → ml_detector → dashboard$(NC)"
+	@echo ""
+
+	@echo "$(BLUE)1. 🛡️  Simple Firewall Agent Demo...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(FIREWALL_AGENT_DEMO) $(FIREWALL_CONFIG_DEMO) $(FIREWALL_RULES_DEMO) > $(LOGS_DIR)/firewall_demo.log 2>&1 & echo $$! > $(FIREWALL_PID_DEMO)
+	@sleep 2
+
+	@echo "$(BLUE)2. 🕵️  Promiscuous Agent Demo...$(NC)"
+	@sudo bash -c '$(PYTHON_VENV) $(PROMISCUOUS_AGENT_DEMO) $(PROMISCUOUS_CONFIG_DEMO) > $(LOGS_DIR)/promiscuous_demo.log 2>&1 & echo $$! > $(PROMISCUOUS_PID_DEMO)'
+	@sleep 3
+
+	@echo "$(BLUE)3. 🌍 GeoIP Enricher Demo...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(GEOIP_ENRICHER_DEMO) $(GEOIP_CONFIG_DEMO) > $(LOGS_DIR)/geoip_demo.log 2>&1 & echo $$! > $(GEOIP_PID_DEMO)
+	@sleep 3
+
+	@echo "$(BLUE)4. 🤖 ML Detector Demo...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(ML_DETECTOR_DEMO) $(ML_CONFIG_DEMO) > $(LOGS_DIR)/ml_demo.log 2>&1 & echo $$! > $(ML_PID_DEMO)
+	@sleep 3
+
+	@echo "$(BLUE)5. 📊 Dashboard Demo...$(NC)"
+	@$(ACTIVATE) && $(PYTHON_VENV) $(DASHBOARD_DEMO) $(DASHBOARD_CONFIG_DEMO) $(FIREWALL_RULES_DEMO) > $(LOGS_DIR)/dashboard_demo.log 2>&1 & echo $$! > $(DASHBOARD_PID_DEMO)
+	@sleep 3
+
+	@echo ""
+	@echo "$(GREEN)🎉 SISTEMA DEMO OPERACIONAL$(NC)"
+	@echo "$(CYAN)=============================$(NC)"
+	@echo "$(YELLOW)📊 Dashboard Demo: http://localhost:$(DASHBOARD_WEB_PORT)$(NC)"
+
+
+start-bg: start ## Alias para start en background
