@@ -6,7 +6,7 @@ Crear el sistema de detección de amenazas de red más avanzado y confiable, com
 
 ---
 
-## ✅ **COMPLETADO - Q3 2025**
+## ✅ **COMPLETADO - Q3-Q4 2025**
 
 ### 🏆 **HITO MAYOR**: Sistema Tricapa de Detección Operativo
 
@@ -18,245 +18,279 @@ Crear el sistema de detección de amenazas de red más avanzado y confiable, com
 - ✅ **Híbrido Sniffer/ML-Detector**: Integración completa scan → features → predicción
 - ✅ **Superación de Datasets Corruptos**: Metodología científica aplicada exitosamente
 
-### 🔬 **Investigación y Validación**
+### 🗂️ **HITO RECIENTE**: Sistema Distribuido con etcd Backbone
+
+**🎉 Breakthrough Distribuido Completado - Agosto 2025**
+- ✅ **etcd como Cerebro del Sistema**: Almacenamiento distribuido de configuraciones JSON cifradas
+- ✅ **Service Discovery Automático**: Registro automático de servicios en `/services/`
+- ✅ **Hot Configuration Preparado**: Base para modificación en caliente de configuraciones
+- ✅ **Pipeline Distribuido Completo**: 6 componentes con integración etcd
+  - `evolutionary_sniffer_standalone.py` + etcd
+  - `geoip_enricher_v31_etcd.py`
+  - `ml_detector_tricapa_v31_etcd.py` 
+  - `scheduler_firewall_v31_etcd.py`
+  - `simple_firewall_agent_v31_etcd.py`
+  - `dashboard_v31_etcd.py`
+- ✅ **Protobuf V3.1 Expandido**: Esquemas para DDoS y Ransomware operativos
+- ✅ **Seguridad Distribuida**: Token cifrado y compresión a través de etcd
+- ✅ **Makefile Completo**: 60+ reglas para gestión distribuida completa
+
+### 🔬 **Investigación y Validación** (Heredado)
 - ✅ **Análisis Exhaustivo de Datasets**: Identificación de corrupción en datasets oficiales
-  - UNSW-NB15: ❌ Confirmado corrupto (valores incompatibles con Scapy)
-  - CICIDS 2017: ✅ Procesado y limpio (1044.1MB utilizable)
-  - CSE-CIC-IDS2018: ✅ Validado (4051.9MB)
 - ✅ **Feature Engineering Robusto**: Extracción compatible con herramientas reales
 - ✅ **Metodología Científica**: Validación cruzada y reproducibilidad garantizada
 
-### 🏗️ **Arquitectura Core Establecida**
-- ✅ **Sistema de Captura**: Sniffers optimizados para ML (`fixed_service_sniffer.py`)
-- ✅ **Pipeline ML**: Entrenamiento, validación y re-entrenamiento automatizados
-- ✅ **Dashboard Operativo**: Interfaz web completa (154.6KB, 2625 líneas)
-- ✅ **Firewall Inteligente**: Reglas dinámicas basadas en ML
-- ✅ **Geolocalización**: Enriquecimiento automático con GeoIP
+### 📊 **Modelos en Producción** (Expandidos)
+- ✅ `rf_production_cicids.joblib` - Detector principal CICIDS2017
+- ✅ `web_normal_detector.joblib` - Tráfico web
+- ✅ `internal_normal_detector.joblib` - Tráfico interno
+- ✅ `ddos_random_forest.joblib` - **NUEVO**: Detección DDoS
+- ✅ `ddos_lightgbm.joblib` - **NUEVO**: DDoS LightGBM
+- ✅ `ransomware_random_forest.joblib` - **NUEVO**: Detección Ransomware
+- ✅ `ransomware_lightgbm.joblib` - **NUEVO**: Ransomware LightGBM
 
-### 📊 **Modelos en Producción**
-- ✅ `rf_production_sniffer_compatible.joblib` (10.1MB) - Detector principal
-- ✅ `web_normal_detector.joblib` (2.5MB) - Tráfico web
-- ✅ `internal_normal_detector.joblib` (2.3MB) - Tráfico interno
-- ✅ Scalers y explicadores SHAP incluidos
-
-### 🔧 **Infraestructura de Desarrollo**
-- ✅ **Makefile Completo**: 39.3KB de automatización
-- ✅ **Sistema de Configuración**: JSON externalizados
-- ✅ **Logging Centralizado**: Monitorización en tiempo real
-- ✅ **Pipeline CI/CD**: Scripts de deployment y testing
+### 🔧 **Infraestructura Madura**
+- ✅ **Sistema de Configuración Distribuido**: JSON en etcd con cifrado
+- ✅ **Logging Distribuido**: Monitorización centralizada via etcd
+- ✅ **Pipeline CI/CD Robusto**: Scripts automatizados completos
+- ✅ **Compatibilidad Completa**: V3.1 original + distribuido + demo
 
 ---
 
-## 🔄 **EN PROGRESO - Q4 2025**
+## 🔥 **EN PROGRESO - Q4 2025/Q1 2026**
 
-### 🏠 **Housekeeping y Optimización** *(ACTUAL)*
-**Estado**: 🟡 En desarrollo activo
-**Objetivo**: Organizar y optimizar el sistema sin romper funcionalidad
+### 📦 **Containerización y Orquestación** *(PRÓXIMA FEATURE PRIORITARIA)*
+**Estado**: 🔴 Iniciando desarrollo
+**Branch**: `feature/docker-k8s`
+**Objetivo**: Sistema completamente containerizado con despliegue en Kubernetes
 
-#### **Reorganización del Código**
-- 🔄 **Estructura de Directorios**: Organización lógica de componentes
+#### **🐳 Containerización Completa**
+- 🔄 **Multistage Dockerfiles**: Imágenes optimizadas por componente
   ```
-  core/          # Componentes sistema principal
-  ml_pipeline/   # Pipeline de Machine Learning  
-  data_pipeline/ # Procesamiento de datasets
-  config/        # Configuraciones centralizadas
-  models/        # Modelos organizados por estado
-  archive/       # Legacy valioso preservado
+  evolutionary_sniffer:v3.1.0    - Python slim + CAP_NET_RAW
+  geoip_enricher:v3.1.0          - Python slim optimizado  
+  ml_detector:v3.1.0             - Python + modelos embedded
+  scheduler_firewall:v3.1.0      - Python distribuido
+  firewall_agent:v3.1.0          - Python + iptables tools
+  dashboard:v3.1.0               - Python + web assets
+  etcd_coordinator:v3.1.0        - Go binario + distroless
   ```
-- 🔄 **Mapeo de Dependencias**: Inventario completo de interconexiones
-- 🔄 **Documentación Exhaustiva**: Guías para cada componente
+- 🔄 **Security Hardening por Defecto**:
+  - Usuario no-root en todos los contenedores
+  - `no-new-privileges`, `read-only` rootfs
+  - Capabilities mínimas (`CAP_NET_RAW` solo para sniffer)
+  - Seccomp profiles personalizados
+- 🔄 **Imágenes Base Optimizadas**:
+  - `python:3.11-slim` para componentes Python/Scapy
+  - `gcr.io/distroless/static` para binarios Go/Rust
+  - Build stages para minimizar superficie de ataque
 
-#### **Optimización de Performance**
-- 🔄 **Memory Management**: Optimización para datasets grandes
-- 🔄 **Processing Pipeline**: Reducción de latencia end-to-end
-- 🔄 **Model Optimization**: Cuantización y pruning de modelos
-- 🔄 **Concurrent Processing**: Paralelización de tareas CPU-intensivas
+#### **🎼 Docker Compose Stack**
+- 🔄 **Stack Completo**: docker-compose.yml con todos los servicios
+- 🔄 **Networking Seguro**: Bridge networks con políticas de acceso
+- 🔄 **Volumes Persistentes**: etcd data, logs, configuraciones
+- 🔄 **Health Checks**: Monitorización automática de contenedores
+- 🔄 **Resource Limits**: CPU/Memory constraints por servicio
+- 🔄 **Restart Policies**: Auto-recovery configurado
 
-#### **Testing Comprehensive**
-- 🔄 **Unit Tests**: Coverage completo de componentes individuales
-- 🔄 **Integration Tests**: Validación de pipeline completo
-- 🔄 **Load Testing**: Pruebas de stress con alto volumen de tráfico
-- 🔄 **Regression Tests**: Prevención de degradación de modelos
+#### **☸️ Kubernetes Deployment**
+- 🔄 **K3s/K8s Manifests**: Deployments, Services, ConfigMaps
+- 🔄 **Helm Charts**: Gestión de configuraciones complejas
+- 🔄 **RBAC y Network Policies**: Seguridad zero-trust
+- 🔄 **PodSecurity Policies**: Restricted security contexts
+- 🔄 **Horizontal Pod Autoscaler**: Escalado automático basado en métricas
+
+#### **🔒 Supply Chain Security**
+- 🔄 **CI Pipeline Robusto**:
+  1. Build multistage + hadolint
+  2. Unit tests + integration tests
+  3. SBOM generation (syft)
+  4. Vulnerability scanning (trivy) 
+  5. Image signing (cosign)
+  6. Immutable registry push
+- 🔄 **Registry Security**: Harbor/Artifactory con políticas
+- 🔄 **Dependency Scanning**: SCA continuo de dependencias Python
+
+#### **📊 Observabilidad**
+- 🔄 **Prometheus Metrics**: Métricas de aplicación y sistema
+- 🔄 **Grafana Dashboards**: Visualización de pipeline distribuido
+- 🔄 **Jaeger Tracing**: Trazabilidad de requests end-to-end
+- 🔄 **Centralized Logging**: ELK/Loki para agregación de logs
 
 ---
 
-## 🚀 **PRÓXIMOS HITOS - Q1 2026**
+## 🚀 **PRÓXIMOS HITOS - Q1-Q2 2026**
 
-### 📦 **Containerización y Distribución**
+### 🌐 **API y Integraciones Enterprise**
 **Prioridad**: 🔴 Alta
-**Objetivo**: Sistema deployable en cualquier entorno
-
-#### **Docker Ecosystem**
-- 🎯 **Multi-container Setup**: Docker Compose para todo el stack
-- 🎯 **Microservices Architecture**: Contenedores especializados por función
-- 🎯 **Config Management**: Configuración externa via env vars
-- 🎯 **Health Checks**: Monitorización automática de containers
-
-#### **Orquestación**
-- 🎯 **Kubernetes Manifests**: Deployment para clusters
-- 🎯 **Helm Charts**: Gestión de configuraciones complejas
-- 🎯 **Auto-scaling**: Escalado automático basado en carga
-- 🎯 **Rolling Updates**: Deployment sin downtime
-
-### 🌐 **API y Integraciones**
-**Prioridad**: 🔴 Alta
+**Branch**: `feature/api-enterprise`
 **Objetivo**: Integración con ecosistemas existentes
 
-#### **REST API**
+#### **🔗 REST API Completa**
 - 🎯 **FastAPI Framework**: API moderna con documentación automática
-- 🎯 **Authentication**: JWT y API keys
+- 🎯 **Authentication & Authorization**: JWT + RBAC + API keys
 - 🎯 **Rate Limiting**: Control de acceso y abuse prevention
 - 🎯 **Webhook Support**: Notificaciones push para alertas
+- 🎯 **GraphQL Endpoint**: Query flexible para dashboards custom
 
-#### **SIEM Integration**
-- 🎯 **Splunk Connector**: Export directo de alertas
-- 🎯 **ELK Stack Support**: Integración con Elasticsearch
-- 🎯 **STIX/TAXII**: Threat intelligence sharing
-- 🎯 **CEF/LEEF**: Formatos estándar de logging
+#### **🔧 SIEM Integration**
+- 🎯 **Splunk App**: Connector oficial para Splunk Enterprise
+- 🎯 **ELK Stack Plugin**: Integración nativa con Elasticsearch
+- 🎯 **STIX/TAXII Support**: Threat intelligence sharing estándar
+- 🎯 **CEF/LEEF Export**: Formatos estándar de logging
+- 🎯 **MISP Integration**: Threat intelligence feeds automáticos
+
+### 🔄 **Hot Configuration Reload**
+**Prioridad**: 🟡 Media-Alta
+**Branch**: `feature/hot-reload`
+**Objetivo**: Modificación en caliente sin downtime
+
+#### **⚡ Live Reconfiguration**
+- 🎯 **etcd Watch System**: Detección automática de cambios
+- 🎯 **Config Validation**: Schema validation antes de aplicar
+- 🎯 **Graceful Updates**: Aplicación sin interrumpir tráfico
+- 🎯 **Rollback Capability**: Reversión automática en caso de error
+- 🎯 **A/B Config Testing**: Testing de configuraciones en paralelo
 
 ---
 
-## 🔮 **VISIÓN FUTURA - 2026+**
+## 🔮 **VISIÓN FUTURA - Q3 2026+**
 
 ### 🧠 **AI/ML Avanzado**
 **Prioridad**: 🟡 Media-Alta
+**Branch**: `feature/advanced-ml`
 **Objetivo**: Detección de amenazas de próxima generación
 
-#### **Deep Learning Integration**
-- 🔮 **Neural Networks**: Redes profundas para patrones complejos
-- 🔮 **Transformers**: Modelos de atención para secuencias de tráfico
+#### **🎯 Deep Learning Integration**
+- 🔮 **Transformer Models**: Análisis secuencial de tráfico de red
+- 🔮 **Graph Neural Networks**: Detección de patrones de comunicación
 - 🔮 **Adversarial Training**: Robustez contra ataques adversariales
-- 🔮 **Federated Learning**: Aprendizaje distribuido sin centralizar datos
+- 🔮 **Federated Learning**: Aprendizaje distribuido preservando privacidad
 
-#### **Threat Intelligence**
-- 🔮 **Zero-day Detection**: Identificación de amenazas desconocidas
-- 🔮 **Behavioral Analysis**: Análisis de comportamiento anómalo
-- 🔮 **Predictive Modeling**: Predicción de vectores de ataque
-- 🔮 **Threat Hunting**: Búsqueda proactiva de amenazas
+#### **🕵️ Zero-day Detection**
+- 🔮 **Behavioral Anomaly Detection**: Identificación de comportamientos anómalos
+- 🔮 **Predictive Threat Modeling**: Predicción de vectores de ataque emergentes  
+- 🔮 **Automated Threat Hunting**: Búsqueda proactiva de amenazas desconocidas
+- 🔮 **Real-time Model Adaptation**: Adaptación automática a nuevas amenazas
 
 ### 🌍 **Escalabilidad Global**
 **Prioridad**: 🟡 Media
+**Branch**: `feature/multi-tenant`
 **Objetivo**: Deployment a escala enterprise
 
-#### **Multi-tenant Architecture**
+#### **🏢 Multi-tenant Architecture**
 - 🔮 **Tenant Isolation**: Separación segura de datos por cliente
-- 🔮 **Custom Models**: Modelos especializados per tenant
+- 🔮 **Custom ML Models**: Modelos especializados per tenant
 - 🔮 **SLA Management**: Garantías de servicio diferenciadas
-- 🔮 **Billing Integration**: Facturación automática basada en uso
+- 🔮 **Usage-based Billing**: Facturación automática basada en uso
 
-#### **Edge Computing**
-- 🔮 **Edge Deployment**: Procesamiento en edge devices
-- 🔮 **Offline Capability**: Funcionamiento sin conectividad
-- 🔮 **Model Synchronization**: Sincronización de modelos edge-cloud
-- 🔮 **5G Integration**: Optimización para redes 5G
-
-### 🔐 **Seguridad Avanzada**
-**Prioridad**: 🔴 Alta
-**Objetivo**: Security-by-design en todo el sistema
-
-#### **Zero Trust Architecture**
-- 🔮 **Identity Verification**: Verificación continua de identidades
-- 🔮 **Least Privilege**: Acceso mínimo requerido
-- 🔮 **Encrypt Everything**: Cifrado end-to-end
-- 🔮 **Audit Trail**: Trazabilidad completa de acciones
-
-#### **Privacy by Design**
-- 🔮 **Data Minimization**: Recolección mínima de datos
-- 🔮 **Anonymization**: Técnicas de privacidad diferencial
-- 🔮 **GDPR Compliance**: Cumplimiento regulatorio automático
-- 🔮 **Right to be Forgotten**: Eliminación garantizada de datos
+#### **📡 Edge Computing**
+- 🔮 **Edge Deployment**: Procesamiento en edge devices/IoT
+- 🔮 **Offline Capability**: Funcionamiento sin conectividad constante
+- 🔮 **Model Synchronization**: Sincronización edge-cloud optimizada
+- 🔮 **5G/6G Integration**: Optimización para redes de próxima generación
 
 ---
 
-## 📊 **Métricas de Éxito**
+## 📊 **Métricas de Éxito Actualizadas**
 
 ### 🎯 **KPIs Técnicos**
-| Métrica | Q3 2025 (Actual) | Q1 2026 (Objetivo) | 2026+ (Visión) |
+| Métrica | Q4 2025 (Actual) | Q2 2026 (Objetivo) | 2027+ (Visión) |
 |---------|------------------|---------------------|-----------------|
 | **Precisión Detección** | >95% | >98% | >99.5% |
 | **Latencia Procesamiento** | <100ms | <50ms | <10ms |
 | **Throughput** | 1K pps | 10K pps | 100K pps |
 | **False Positivos** | <2% | <0.5% | <0.1% |
 | **Uptime** | 99% | 99.9% | 99.99% |
+| **Container Startup Time** | N/A | <30s | <10s |
+| **Resource Efficiency** | N/A | 50% CPU optimizado | 70% optimizado |
+
+### 🐳 **KPIs de Containerización (NUEVOS)**
+- **Image Size**: <500MB por componente (objetivo <200MB)
+- **Security Scan**: 0 vulnerabilidades HIGH/CRITICAL
+- **Build Time**: <5 minutos para stack completo
+- **Registry Push Time**: <2 minutos para todas las imágenes
+- **K8s Deployment Time**: <60 segundos para stack completo
+- **Pod Resource Usage**: <1GB RAM por componente
 
 ### 📈 **KPIs de Negocio**
 - **Time to Detection**: <1 segundo para amenazas conocidas
-- **Cost per Detection**: Reducción 50% vs soluciones comerciales
-- **Deployment Time**: <30 minutos para setup completo
+- **Time to Deploy**: <5 minutos (docker-compose), <10 minutos (K8s)
+- **Cost per Detection**: Reducción 60% vs soluciones comerciales
 - **User Satisfaction**: >4.5/5 en surveys de usuario
-
-### 🔬 **KPIs de Investigación**
-- **Paper Publications**: 2+ papers por año en conferencias top-tier
-- **Open Source Contributions**: 100+ stars, 50+ forks en GitHub  
-- **Community Adoption**: 10+ organizaciones usando en producción
-- **Patent Applications**: 3+ patents filed para innovaciones clave
 
 ---
 
-## 🏁 **Milestones Críticos**
+## 🏁 **Milestones Críticos Actualizados**
 
 ### 📅 **Timeline Detallado**
 
-#### **Q4 2025**
-- **Octubre 2025**: Housekeeping completo, estructura reorganizada
-- **Noviembre 2025**: Testing suite completo, CI/CD operativo
-- **Diciembre 2025**: Performance optimizations, benchmark publicado
+#### **Q4 2025 (ACTUAL)**
+- **Octubre 2025**: Dockerfiles multistage + docker-compose básico
+- **Noviembre 2025**: Security hardening + vulnerability scanning pipeline
+- **Diciembre 2025**: K8s manifests + Helm charts + first deployment
 
 #### **Q1 2026**
-- **Enero 2026**: Containerización completa, Docker Hub registry
-- **Febrero 2026**: API REST operativa, primeras integraciones
-- **Marzo 2026**: Kubernetes deployment, primera instalación enterprise
+- **Enero 2026**: Observability stack (Prometheus/Grafana/Jaeger)
+- **Febrero 2026**: Supply chain security completo (SBOM + signing)
+- **Marzo 2026**: Production-ready K8s deployment + auto-scaling
 
-#### **Q2-Q4 2026**
-- **Q2**: SIEM integrations, threat intelligence feeds
-- **Q3**: Deep learning models, zero-day detection prototype
-- **Q4**: Multi-tenant architecture, edge computing pilot
+#### **Q2 2026**
+- **Abril 2026**: API REST completa + authentication
+- **Mayo 2026**: SIEM integrations (Splunk/ELK) operativas  
+- **Junio 2026**: Hot configuration reload via etcd
 
----
-
-## 🤝 **Contribución y Comunidad**
-
-### 🌟 **Llamada a la Comunidad**
-Buscamos colaboradores en:
-- **ML Engineers**: Para modelos de deep learning
-- **DevOps Engineers**: Para automatización y deployment
-- **Security Researchers**: Para threat intelligence
-- **UI/UX Designers**: Para mejora de dashboard
-- **Technical Writers**: Para documentación
-
-### 📢 **Eventos y Difusión**
-- **DefCon 2026**: Presentación de resultados
-- **Black Hat 2026**: Demo del sistema completo
-- **PyData Conferences**: Charlas sobre ML pipeline
-- **OWASP Chapters**: Talleres de implementación
+#### **Q3-Q4 2026**
+- **Q3**: Multi-tenant architecture + edge computing pilot
+- **Q4**: Advanced ML models + zero-day detection prototype
 
 ---
 
-## 💡 **Innovaciones Clave**
+## 💡 **Decisiones Técnicas Clave**
 
-### 🔬 **Contribuciones Científicas**
-1. **Hybrid Sniffer/ML Architecture**: Primera integración exitosa de captura real-time con ML
-2. **Dataset Corruption Detection**: Metodología para identificar datasets no válidos
-3. **Feature Consistency Framework**: Garantiza compatibilidad training/inference
-4. **Multi-model Ensemble**: Arquitectura tricapa para detección especializada
+### 🐳 **Containerización**
+- **Base Images**: `python:3.11-slim` para Python, `distroless` para binarios
+- **Security**: Usuario no-root por defecto, capabilities mínimas
+- **Networking**: CAP_NET_RAW solo para sniffer, resto sin privilegios
+- **Storage**: Volumes persistentes para etcd, logs opcionales
+- **Registry**: Imágenes firmadas con cosign, SBOM incluido
 
-### 🏆 **Ventajas Competitivas**
-- **Real-world Validation**: Testado con tráfico real, no solo datasets
-- **Open Source**: Transparencia total vs black-box comerciales
-- **Scientific Rigor**: Metodología reproducible y verificable
-- **Practical Focus**: Diseñado para operaciones reales, no solo research
-
----
-
-## 🎯 **Declaración de Impacto**
-
-**Upgraded Happiness** no es solo otro sistema de detección de amenazas. Es la demostración de que la investigación científica rigurosa, combinada con ingeniería práctica, puede crear soluciones que superen a productos comerciales millonarios.
-
-Nuestro objetivo es democratizar la seguridad de red avanzada, haciendo que organizaciones de cualquier tamaño puedan acceder a protección de clase enterprise basada en ML de última generación.
+### ☸️ **Kubernetes**
+- **Distribution**: Soporte K3s (edge) + K8s estándar (enterprise)
+- **Security**: PodSecurity restricted, NetworkPolicies, RBAC estricto
+- **Scaling**: HPA basado en CPU/memoria + custom metrics
+- **Storage**: PVC para etcd, ConfigMaps para configuraciones
+- **Networking**: Service mesh opcional (Istio/Linkerd)
 
 ---
 
-*"La felicidad se actualiza cuando la seguridad se automatiza"* 🛡️
+## 🤝 **Contribución y Comunidad Actualizada**
 
-**Última actualización**: Agosto 2025 - Post-breakthrough tricapa  
-**Próxima revisión**: Octubre 2025 - Post-housekeeping
+### 🌟 **Llamada Específica para docker-k8s**
+Buscamos colaboradores especializados en:
+- **DevOps Engineers**: Kubernetes, Helm, ArgoCD/Flux
+- **Security Engineers**: Container security, policy enforcement
+- **Platform Engineers**: Multi-cloud deployment, service mesh
+- **Site Reliability Engineers**: Observability, incident response
+
+### 📢 **Eventos Próximos**
+- **KubeCon 2026**: Presentación de arquitectura cloud-native
+- **DockerCon 2026**: Demo de containerización segura
+- **BSides**: Talleres de deployment en K8s
+- **OWASP**: Security best practices para containers
+
+---
+
+## 🎯 **Declaración de Impacto Actualizada**
+
+**Upgraded Happiness** evoluciona hacia ser la primera plataforma de detección de amenazas completamente cloud-native, combinando la potencia del ML tricapa con la flexibilidad de despliegue en cualquier infraestructura - desde edge devices hasta clusters multi-cloud.
+
+Con la containerización completa, democratizamos no solo la tecnología de detección avanzada, sino también su despliegue y operación, haciendo que cualquier organización pueda ejecutar protección de clase enterprise en su infraestructura preferida.
+
+---
+
+**"La seguridad se containeriza, la detección se distribuye, la protección se automatiza"** 🛡️
+
+**Última actualización**: Agosto 2025 - Post-etcd backbone  
+**Próxima revisión**: Octubre 2025 - Post-containerización  
+**Próxima feature**: `docker-k8s` - Sistema completamente containerizado
