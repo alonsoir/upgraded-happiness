@@ -656,15 +656,8 @@ class DashboardETCD:
         try:
             self.logger.info("🔐 Initializing ETCD crypto for Dashboard...")
 
-            # Detectar testing mode automáticamente
-            testing_mode = os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true"
-            if testing_mode:
-                self.logger.info("🧪 Dev mode detected - enabling testing mode for ETCD")
-
             # Setup ETCD crypto usando el cliente específico
-            success = await setup_dashboard_crypto(
-                dashboard_config_path, firewall_rules_path, testing_mode
-            )
+            success = await setup_dashboard_crypto(dashboard_config_path, firewall_rules_path)
 
             if not success:
                 self.logger.error("❌ ETCD crypto initialization failed")
@@ -957,7 +950,7 @@ class DashboardETCD:
             command_bytes = pb_command.SerializeToString()
 
             # 🔐 Enviar comando (CIFRADO AUTOMÁTICO por ETCD si está habilitado)
-            success = await self._send_command_to_fleet(firewall_node_id, command_bytes)
+            success = self._send_command_to_fleet(firewall_node_id, command_bytes)
 
             if success:
                 # Registrar evento de firewall
@@ -992,7 +985,7 @@ class DashboardETCD:
             self.logger.error(f"❌ Error in firewall action execution: {e}")
             return {'success': False, 'message': f'Execution error: {str(e)}'}
 
-    async def _send_command_to_fleet(self, agent_id: str, command_bytes: bytes) -> bool:
+    def _send_command_to_fleet(self, agent_id: str, command_bytes: bytes) -> bool:
         """Enviar comando a agente específico del fleet - ETCD CRYPTO AUTOMÁTICO"""
         try:
             if agent_id not in self.fleet_command_sockets:
@@ -1001,7 +994,7 @@ class DashboardETCD:
 
             socket = self.fleet_command_sockets[agent_id]
             # 🔐 ETCD maneja auto-encrypt transparentemente
-            await socket.send(command_bytes)
+            socket.send(command_bytes)
             self.stats.etcd_crypto_operations += 1
 
             self.logger.info(f"📤 Command sent to agent {agent_id} (ETCD encrypted: {self.etcd_crypto_ready})")
