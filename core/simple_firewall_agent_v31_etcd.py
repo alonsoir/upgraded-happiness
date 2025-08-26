@@ -625,15 +625,9 @@ class SimpleFirewallAgentETCD:
         try:
             self.logger.info("🔐 Initializing ETCD crypto for Simple Firewall Agent...")
 
-            # Detectar testing mode automáticamente
-            testing_mode = os.environ.get("UPGRADED_HAPPINESS_DEV_MODE") == "true"
-            if testing_mode:
-                self.logger.info("🧪 Dev mode detected - enabling testing mode for ETCD")
-
             # Setup ETCD crypto usando el cliente específico
             success = await setup_simple_firewall_agent_crypto(
-                agent_config_path,  testing_mode
-            )
+                agent_config_path, firewall_rules_path)
 
             if not success:
                 self.logger.error("❌ ETCD crypto initialization failed")

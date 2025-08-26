@@ -84,9 +84,9 @@ class ETCDCryptoClientDashboard:
             self.logger.info("✅ Firewall rules config loaded successfully")
             
         except json.JSONDecodeError as e:
-            raise ValueError(f"❌ Invalid JSON in firewall rules config: {{e}}")
+            raise ValueError(f"❌ Invalid JSON in firewall rules config: {e}")
         except Exception as e:
-            raise RuntimeError(f"❌ Failed to load firewall rules config: {{e}}")
+            raise RuntimeError(f"❌ Failed to load firewall rules config: {e}")
 
     def _extract_etcd_config(self):
         """Extraer configuración ETCD del config del componente"""
@@ -160,7 +160,7 @@ class ETCDCryptoClientDashboard:
                 
                 # PUT rules a ETCD
                 etcd_client.put(rules_config_key, json.dumps(rules_config_data, indent=2))
-                self.logger.info(f"✅ Firewall rules registered at: {{rules_config_key}}")
+                self.logger.info(f"✅ Firewall rules registered at: {rules_config_key}")
 
             self.logger.info(f"📊 Dashboard_Scada_V31_Etcd config registration completed successfully")
 

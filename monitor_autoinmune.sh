@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # =============================================================================
-# 🧬 Monitor Avanzado - Sistema Autoinmune Digital v2.0
+# 🧬 Monitor Avanzado - Sistema Autoinmune Digital v3.1 ETCD
 # =============================================================================
 # Compatible con macOS bash - Sin arrays asociativos
-# Versión optimizada para máxima compatibilidad
+# Versión optimizada para componentes ETCD v3.1 + protobuf
 # =============================================================================
 
 # Colores y formato
@@ -115,25 +115,39 @@ check_port() {
     lsof -i ":$port" >/dev/null 2>&1
 }
 
-# Función para obtener información de componente
+# Función para verificar ETCD
+check_etcd() {
+    lsof -i ":2379" >/dev/null 2>&1
+}
+
+# Función para obtener información de componente ETCD v3.1
 get_component_info() {
     local component_type="$1"
 
     case "$component_type" in
-        "promiscuous")
-            echo "promiscuous_agent|🕵️  Promiscuous Agent|5559"
+        "etcd")
+            echo "etcd|🔐 ETCD Cluster|2379"
+            ;;
+        "sniffer")
+            echo "evolutionary_sniffer_standalone|📡 Evolutionary Sniffer v3.1 ETCD|raw"
+            ;;
+        "optimizer")
+            echo "zmq_performance_optimizer|⚡ ZMQ Performance Optimizer|consumer"
             ;;
         "geoip")
-            echo "geoip_enricher|🌍 GeoIP Enricher|5560"
+            echo "geoip_enricher_v31_etcd|🌍 GeoIP Enricher v3.1 ETCD|5560"
             ;;
         "ml")
-            echo "lightweight_ml_detector|🤖 ML Detector|5561"
+            echo "lightweight_ml_detector_tricapa_v31_etcd|🤖 ML Detector Tricapa v3.1 ETCD|5580"
             ;;
-        "dashboard")
-            echo "real_zmq_dashboard_with_firewall|📊 Dashboard|8080"
+        "scheduler")
+            echo "scheduler_firewall_v31_etcd|🧠 Scheduler Firewall v3.1 ETCD|5570"
             ;;
         "firewall")
-            echo "simple_firewall_agent|🛡️  Firewall Agent|5562"
+            echo "simple_firewall_agent_v31_etcd|🛡️  Firewall Agent v3.1 ETCD|5583"
+            ;;
+        "dashboard")
+            echo "dashboard_v31_etcd|📊 Dashboard SCADA v3.1 ETCD|8080"
             ;;
     esac
 }
@@ -145,23 +159,32 @@ monitor_system() {
 
         # Header elegante
         echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║                    🧬 SISTEMA AUTOINMUNE DIGITAL v2.0                       ║${NC}"
+        echo -e "${CYAN}║                🧬 SISTEMA AUTOINMUNE DIGITAL v3.1 ETCD                      ║${NC}"
         echo -e "${CYAN}╠══════════════════════════════════════════════════════════════════════════════╣${NC}"
         echo -e "${CYAN}║ ${WHITE}$(date +'%A, %d %B %Y - %H:%M:%S %Z')${CYAN}                                         ║${NC}"
         echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
 
-        # Variables de estado para cada componente
-        local components="promiscuous geoip ml dashboard firewall"
+        # Variables de estado para cada componente (nueva secuencia)
+        local components="etcd sniffer geoip ml scheduler firewall dashboard"
+        local optional_components="optimizer"
 
         # Estado general del sistema
-        echo -e "${BOLD}${PURPLE}📊 ESTADO GENERAL DEL SISTEMA${NC}"
-        echo -e "${PURPLE}════════════════════════════════════════${NC}"
+        echo -e "${BOLD}${PURPLE}📊 ESTADO GENERAL DEL SISTEMA ETCD v3.1${NC}"
+        echo -e "${PURPLE}════════════════════════════════════════════════════════${NC}"
 
         local total_cpu=0
         local total_mem=0
         local active_components=0
-        local total_components=5
+        local total_components=7  # Sin contar optimizer que es opcional
+
+        # Verificar ETCD primero (crítico)
+        local etcd_status=""
+        if check_etcd; then
+            etcd_status="${GREEN}✅ ETCD ACTIVO${NC}"
+        else
+            etcd_status="${RED}❌ ETCD OFFLINE${NC}"
+        fi
 
         for component in $components; do
             local component_info=$(get_component_info "$component")
@@ -179,12 +202,13 @@ monitor_system() {
         # Mostrar resumen general
         local health_percentage=$((active_components * 100 / total_components))
         echo -e "🎯 Estado General: $(show_health_status "$health_percentage" "80" "60" "%") ($active_components/$total_components componentes activos)"
+        echo -e "🔐 ETCD Status: $etcd_status"
         echo -e "🔥 CPU Total: $(show_health_status "$total_cpu" "50" "100" "%") $(show_progress_bar "$total_cpu" "200")"
         echo -e "💾 RAM Total: $(show_health_status "$total_mem" "10" "20" "%") $(show_progress_bar "$total_mem" "30")"
         echo ""
 
         # Análisis detallado por componente
-        echo -e "${BOLD}${YELLOW}🔍 ANÁLISIS DETALLADO DE COMPONENTES${NC}"
+        echo -e "${BOLD}${YELLOW}🔍 PIPELINE ETCD v3.1 - ANÁLISIS DETALLADO${NC}"
         echo -e "${YELLOW}════════════════════════════════════════════════════════════════${NC}"
         echo ""
 
@@ -194,9 +218,19 @@ monitor_system() {
             local name=$(echo "$component_info" | cut -d'|' -f2)
             local port=$(echo "$component_info" | cut -d'|' -f3)
 
-            printf "%-25s" "$name"
+            printf "%-35s" "$name"
 
-            if is_process_active "$pattern"; then
+            if [ "$component" = "etcd" ]; then
+                if check_etcd; then
+                    printf "${GREEN}●${NC} ACTIVO   "
+                    printf "🔐 ETCD  "
+                    printf "⏱️  ${GRAY}cluster${NC}"
+                    printf "  🌐 $port"
+                else
+                    printf "${RED}●${NC} OFFLINE  "
+                    printf "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                fi
+            elif is_process_active "$pattern"; then
                 local cpu=$(get_cpu_usage "$pattern")
                 local mem=$(get_mem_usage "$pattern")
                 local uptime=$(get_process_uptime "$pattern")
@@ -206,13 +240,16 @@ monitor_system() {
                 printf "RAM$(show_health_status "$mem" "5" "15" "%%")  "
                 printf "⏱️  ${GRAY}${uptime}${NC}"
 
-                # Verificar puerto específico
-                if check_port "$port"; then
-                    printf "  🌐 $port"
+                # Verificar puerto específico (si no es raw o consumer)
+                if [[ "$port" != "raw" && "$port" != "consumer" ]]; then
+                    if check_port "$port"; then
+                        printf "  🌐 $port"
+                    else
+                        printf "  ${RED}✗${NC} $port"
+                    fi
                 else
-                    printf "  ${RED}✗${NC} $port"
+                    printf "  🔧 $port"
                 fi
-
             else
                 printf "${RED}●${NC} OFFLINE  "
                 printf "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -220,11 +257,35 @@ monitor_system() {
             echo ""
         done
 
+        # Componentes opcionales
+        echo -e "${BOLD}${GRAY}📋 COMPONENTES OPCIONALES${NC}"
+        echo -e "${GRAY}═══════════════════════════════════════${NC}"
+
+        for component in $optional_components; do
+            local component_info=$(get_component_info "$component")
+            local pattern=$(echo "$component_info" | cut -d'|' -f1)
+            local name=$(echo "$component_info" | cut -d'|' -f2)
+            local port=$(echo "$component_info" | cut -d'|' -f3)
+
+            printf "%-35s" "$name"
+
+            if is_process_active "$pattern"; then
+                local cpu=$(get_cpu_usage "$pattern")
+                local mem=$(get_mem_usage "$pattern")
+                printf "${BLUE}●${NC} ACTIVO   "
+                printf "CPU$(show_health_status "$cpu" "30" "70" "%%") RAM$(show_health_status "$mem" "5" "15" "%%")  🔧 $port"
+            else
+                printf "${GRAY}●${NC} OFFLINE  "
+                printf "${DIM}(opcional - no requerido para operación)${NC}"
+            fi
+            echo ""
+        done
+
         echo ""
 
-        # Pipeline de datos visual
-        echo -e "${BOLD}${CYAN}🔄 PIPELINE DE DATOS${NC}"
-        echo -e "${CYAN}═══════════════════════════════════════${NC}"
+        # Pipeline de datos visual ETCD v3.1
+        echo -e "${BOLD}${CYAN}🔄 PIPELINE DATOS ETCD v3.1 + PROTOBUF${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
         echo ""
 
         # Crear representación visual del pipeline
@@ -233,30 +294,41 @@ monitor_system() {
             local component_info=$(get_component_info "$component")
             local pattern=$(echo "$component_info" | cut -d'|' -f1)
 
-            if is_process_active "$pattern"; then
+            if [ "$component" = "etcd" ]; then
+                if check_etcd; then
+                    pipeline_status="${pipeline_status}${GREEN}●${NC}"
+                else
+                    pipeline_status="${pipeline_status}${RED}●${NC}"
+                fi
+            elif is_process_active "$pattern"; then
                 pipeline_status="${pipeline_status}${GREEN}●${NC}"
             else
                 pipeline_status="${pipeline_status}${RED}●${NC}"
             fi
 
-            if [ "$component" != "firewall" ]; then
+            if [ "$component" != "dashboard" ]; then
                 pipeline_status="${pipeline_status} ${GRAY}→${NC} "
             fi
         done
 
-        echo -e "📡 Captura ${GRAY}→${NC} 🌍 GeoIP ${GRAY}→${NC} 🤖 ML ${GRAY}→${NC} 📊 Dashboard ${GRAY}→${NC} 🛡️  Firewall"
+        echo -e "🔐 ETCD ${GRAY}→${NC} 📡 Sniffer ${GRAY}→${NC} 🌍 GeoIP ${GRAY}→${NC} 🤖 ML Tricapa ${GRAY}→${NC} 🧠 Scheduler ${GRAY}→${NC} 🛡️  Firewall ${GRAY}→${NC} 📊 Dashboard"
         echo -e "   $pipeline_status"
         echo ""
+        echo -e "${CYAN}🔐 Cifrado ETCD:${NC} AES-256-GCM + LZ4 automático en todos los canales"
+        echo -e "${CYAN}📡 Protobuf:${NC} v3.1.0 exclusivo con campos nativos node_id + timestamp"
+        echo ""
 
-        # Métricas de rendimiento
-        echo -e "${BOLD}${BLUE}📈 MÉTRICAS DE RENDIMIENTO${NC}"
-        echo -e "${BLUE}════════════════════════════════════════════${NC}"
+        # Métricas de rendimiento ETCD
+        echo -e "${BOLD}${BLUE}📈 MÉTRICAS DE RENDIMIENTO ETCD v3.1${NC}"
+        echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
 
-        # Buscar métricas en logs
+        # Buscar métricas en logs ETCD
         local throughput="N/A"
         local latency="N/A"
         local processed_events="N/A"
         local blocked_ips="N/A"
+        local etcd_operations="N/A"
+        local crypto_operations="N/A"
 
         if [ -d "$LOG_DIR" ]; then
             # Throughput
@@ -265,21 +337,26 @@ monitor_system() {
                 throughput="$throughput_raw"
             fi
 
-            # Latencia
-            local latency_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -10 {} \; 2>/dev/null | grep -o "[0-9]\+\.[0-9]*ms" | tail -1)
+            # Latencia pipeline
+            local latency_raw=$(find "$LOG_DIR" -name "*ml*" -exec tail -5 {} \; 2>/dev/null | grep -o "pipeline_latency[: ]*[0-9]\+\.[0-9]*" | tail -1 | grep -o "[0-9]\+\.[0-9]*")
             if [ -n "$latency_raw" ]; then
-                latency="$latency_raw"
+                latency="${latency_raw}ms"
             fi
 
             # Eventos procesados
-            local events_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -5 {} \; 2>/dev/null | grep -o "Procesados[: ]*[0-9]\+" | tail -1 | grep -o "[0-9]\+")
+            local events_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -10 {} \; 2>/dev/null | grep -o "events_processed[: ]*[0-9]\+" | tail -1 | grep -o "[0-9]\+")
             if [ -n "$events_raw" ]; then
                 processed_events="$events_raw"
             fi
 
-            # IPs bloqueadas (buscar en firewall log) - mejorado
-            local blocked_raw=$(find "$LOG_DIR" -name "*firewall*.log" -exec tail -10 {} \; 2>/dev/null | grep -c "bloqueada\|blocked\|denied" 2>/dev/null)
-            # Validar que blocked_raw es un número
+            # Operaciones ETCD crypto
+            local crypto_raw=$(find "$LOG_DIR" -name "*.log" -exec tail -5 {} \; 2>/dev/null | grep -o "crypto_operations[: ]*[0-9]\+" | tail -1 | grep -o "[0-9]\+")
+            if [ -n "$crypto_raw" ]; then
+                crypto_operations="$crypto_raw"
+            fi
+
+            # IPs bloqueadas
+            local blocked_raw=$(find "$LOG_DIR" -name "*firewall*.log" -exec tail -10 {} \; 2>/dev/null | grep -c "blocked\|bloqueada\|BLOCK_IP" 2>/dev/null)
             if [[ ! "$blocked_raw" =~ ^[0-9]+$ ]]; then
                 blocked_raw=0
             fi
@@ -288,24 +365,39 @@ monitor_system() {
             fi
         fi
 
-        printf "%-25s %s\n" "⚡ Throughput:" "$throughput"
-        printf "%-25s %s\n" "⏱️  Latencia promedio:" "$latency"
-        printf "%-25s %s\n" "📊 Eventos procesados:" "$processed_events"
-        printf "%-25s %s\n" "🚫 IPs bloqueadas:" "$blocked_ips"
+        printf "%-30s %s\n" "⚡ Throughput:" "$throughput"
+        printf "%-30s %s\n" "⏱️  Pipeline Latency:" "$latency"
+        printf "%-30s %s\n" "📊 Eventos procesados:" "$processed_events"
+        printf "%-30s %s\n" "🔐 Operaciones crypto ETCD:" "$crypto_operations"
+        printf "%-30s %s\n" "🚫 IPs bloqueadas:" "$blocked_ips"
         echo ""
 
-        # Análisis de red
-        echo -e "${BOLD}${PURPLE}🌐 ANÁLISIS DE RED${NC}"
-        echo -e "${PURPLE}═══════════════════════════════════════${NC}"
+        # Análisis de red ETCD
+        echo -e "${BOLD}${PURPLE}🌐 ANÁLISIS DE RED ETCD v3.1${NC}"
+        echo -e "${PURPLE}═══════════════════════════════════════════════${NC}"
 
-        # Puertos ZeroMQ activos (mejorado)
-        local zmq_ports=$(netstat -an 2>/dev/null | grep -E "LISTEN.*:(55[0-9][0-9]|8080)" | wc -l | tr -d ' ')
-        # Validar que zmq_ports es un número
+        # Puertos ETCD + ZeroMQ activos
+        local etcd_port_active=0
+        local zmq_ports=0
+
+        if check_etcd; then
+            etcd_port_active=1
+        fi
+
+        zmq_ports=$(netstat -an 2>/dev/null | grep -E "LISTEN.*:(55[0-9][0-9]|8080)" | wc -l | tr -d ' ')
         if [[ ! "$zmq_ports" =~ ^[0-9]+$ ]]; then
             zmq_ports=0
         fi
-        printf "%-25s " "🔌 Puertos ZeroMQ:"
-        if [ "$zmq_ports" -gt "3" ]; then
+
+        printf "%-30s " "🔐 Puerto ETCD (2379):"
+        if [ "$etcd_port_active" -eq "1" ]; then
+            echo -e "${GREEN}ACTIVO${NC} ✅"
+        else
+            echo -e "${RED}OFFLINE${NC} ❌"
+        fi
+
+        printf "%-30s " "🔌 Puertos ZeroMQ:"
+        if [ "$zmq_ports" -gt "4" ]; then
             echo -e "${GREEN}$zmq_ports activos${NC} ✅"
         elif [ "$zmq_ports" -gt "0" ]; then
             echo -e "${YELLOW}$zmq_ports activos${NC} ⚠️"
@@ -313,26 +405,31 @@ monitor_system() {
             echo -e "${RED}$zmq_ports activos${NC} ❌"
         fi
 
-        # Conexiones activas (mejorado)
+        # Conexiones activas
         local active_connections=$(netstat -an 2>/dev/null | grep "ESTABLISHED" | wc -l | tr -d ' ')
-        # Validar que active_connections es un número
         if [[ ! "$active_connections" =~ ^[0-9]+$ ]]; then
             active_connections=0
         fi
-        printf "%-25s " "🔗 Conexiones activas:"
+        printf "%-30s " "🔗 Conexiones activas:"
         echo -e "$(show_health_status "$active_connections" "100" "200" "")"
 
         echo ""
 
-        # Alertas y recomendaciones
-        echo -e "${BOLD}${RED}🚨 ALERTAS Y RECOMENDACIONES${NC}"
-        echo -e "${RED}════════════════════════════════════════════════${NC}"
+        # Alertas y recomendaciones ETCD
+        echo -e "${BOLD}${RED}🚨 ALERTAS Y RECOMENDACIONES ETCD v3.1${NC}"
+        echo -e "${RED}════════════════════════════════════════════════════════════${NC}"
 
         local alerts=0
 
+        # Verificar ETCD crítico
+        if ! check_etcd; then
+            echo -e "${RED}⚠️  CRÍTICO:${NC} ETCD cluster offline - Sistema no operacional"
+            ((alerts++))
+        fi
+
         # Verificar componentes offline
         if [ "$active_components" -lt "$total_components" ]; then
-            echo -e "${RED}⚠️  CRÍTICO:${NC} $((total_components - active_components)) componente(s) offline"
+            echo -e "${RED}⚠️  CRÍTICO:${NC} $((total_components - active_components)) componente(s) v3.1 ETCD offline"
             ((alerts++))
         fi
 
@@ -345,32 +442,32 @@ monitor_system() {
 
         # Verificar puertos ZeroMQ
         if [ "$zmq_ports" -eq "0" ]; then
-            echo -e "${YELLOW}⚠️  ADVERTENCIA:${NC} Sin puertos ZeroMQ activos"
+            echo -e "${YELLOW}⚠️  ADVERTENCIA:${NC} Sin puertos ZeroMQ activos - Pipeline desconectado"
             ((alerts++))
         fi
 
-        # Verificar logs de errores recientes
+        # Verificar logs de errores ETCD recientes
         if [ -d "$LOG_DIR" ]; then
-            local recent_errors=$(find "$LOG_DIR" -name "*.log" -newermt "-60 seconds" -exec grep -l -i "error\|exception\|failed" {} \; 2>/dev/null | wc -l | tr -d ' ')
-            # Asegurar que recent_errors es un número válido
+            local recent_errors=$(find "$LOG_DIR" -name "*.log" -newermt "-60 seconds" -exec grep -l -i "error\|exception\|failed\|crypto.*error" {} \; 2>/dev/null | wc -l | tr -d ' ')
             if [[ ! "$recent_errors" =~ ^[0-9]+$ ]]; then
                 recent_errors=0
             fi
             if [ "$recent_errors" -gt "0" ]; then
-                echo -e "${YELLOW}⚠️  ADVERTENCIA:${NC} $recent_errors archivo(s) con errores recientes"
+                echo -e "${YELLOW}⚠️  ADVERTENCIA:${NC} $recent_errors archivo(s) con errores ETCD recientes"
                 ((alerts++))
             fi
         fi
 
         if [ "$alerts" -eq "0" ]; then
-            echo -e "${GREEN}✅ SISTEMA OPERACIONAL${NC} - No se detectaron problemas críticos"
+            echo -e "${GREEN}✅ SISTEMA ETCD v3.1 OPERACIONAL${NC} - Pipeline crypto funcionando correctamente"
         fi
 
         echo ""
 
-        # Footer con controles
+        # Footer con controles actualizados
         echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║ ${WHITE}🎮 CONTROLES:${NC} ${GRAY}Ctrl+C para salir${NC} ${CYAN}│${NC} ${WHITE}📊 Dashboard:${NC} ${BLUE}http://localhost:8080${NC} ${CYAN}            ║${NC}"
+        echo -e "${CYAN}║ ${WHITE}🎮 CONTROLES:${NC} ${GRAY}Ctrl+C para salir${NC} ${CYAN}│${NC} ${WHITE}📊 Dashboard v3.1:${NC} ${BLUE}http://localhost:8080${NC} ${CYAN}        ║${NC}"
+        echo -e "${CYAN}║ ${WHITE}🔐 ETCD:${NC} ${BLUE}localhost:2379${NC} ${CYAN}│${NC} ${WHITE}📡 Protobuf:${NC} ${BLUE}v3.1.0 exclusivo${NC} ${CYAN}                    ║${NC}"
         echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
 
         # Esperar antes del siguiente refresh
@@ -378,10 +475,10 @@ monitor_system() {
     done
 }
 
-# Función de ayuda
+# Función de ayuda actualizada
 show_help() {
-    echo "🧬 Monitor Sistema Autoinmune Digital v2.0"
-    echo "=========================================="
+    echo "🧬 Monitor Sistema Autoinmune Digital v3.1 ETCD"
+    echo "==============================================="
     echo ""
     echo "Uso: $0 [opciones]"
     echo ""
@@ -390,8 +487,20 @@ show_help() {
     echo "  -i, --interval N    Intervalo de refresh en segundos (default: 5)"
     echo "  -s, --status        Mostrar estado una vez y salir"
     echo ""
+    echo "Componentes monitoreados (secuencia ETCD v3.1):"
+    echo "  🔐 ETCD Cluster (puerto 2379) - CRÍTICO"
+    echo "  📡 Evolutionary Sniffer v3.1 ETCD"
+    echo "  🌍 GeoIP Enricher v3.1 ETCD (puerto 5560)"
+    echo "  🤖 ML Detector Tricapa v3.1 ETCD (puerto 5580)"
+    echo "  🧠 Scheduler Firewall v3.1 ETCD (puerto 5570)"
+    echo "  🛡️  Firewall Agent v3.1 ETCD (puerto 5583)"
+    echo "  📊 Dashboard SCADA v3.1 ETCD (puerto 8080)"
+    echo ""
+    echo "Componentes opcionales:"
+    echo "  ⚡ ZMQ Performance Optimizer"
+    echo ""
     echo "Ejemplos:"
-    echo "  $0                  # Monitor en tiempo real"
+    echo "  $0                  # Monitor en tiempo real ETCD v3.1"
     echo "  $0 -i 10           # Refresh cada 10 segundos"
     echo "  $0 -s              # Estado único"
 }
@@ -409,6 +518,13 @@ check_dependencies() {
 
     if [ "$missing" -gt "0" ]; then
         echo "⚠️  Instala las dependencias faltantes para un funcionamiento completo"
+        echo ""
+    fi
+
+    # Verificar si ETCD está disponible
+    if ! check_etcd; then
+        echo "⚠️  ADVERTENCIA: ETCD cluster no detectado en puerto 2379"
+        echo "   El sistema ETCD v3.1 requiere ETCD para operar"
         echo ""
     fi
 }
@@ -451,8 +567,9 @@ main() {
     # Ejecutar modo seleccionado
     case $mode in
         "monitor")
-            echo "🚀 Iniciando monitor en tiempo real..."
+            echo "🚀 Iniciando monitor ETCD v3.1 en tiempo real..."
             echo "⏱️  Intervalo de refresh: ${REFRESH_INTERVAL}s"
+            echo "🔐 Verificando ETCD cluster..."
             echo "🛑 Presiona Ctrl+C para salir"
             echo ""
             sleep 2
@@ -461,11 +578,19 @@ main() {
         "status")
             # Para modo status, ejecutar una vez y salir después de mostrar info
             clear
-            echo "🧬 ESTADO ACTUAL DEL SISTEMA AUTOINMUNE DIGITAL v2.0"
-            echo "====================================================="
+            echo "🧬 ESTADO ACTUAL DEL SISTEMA AUTOINMUNE DIGITAL v3.1 ETCD"
+            echo "=========================================================="
             echo ""
 
-            local components="promiscuous geoip ml dashboard firewall"
+            # Verificar ETCD primero
+            if check_etcd; then
+                echo -e "🔐 ETCD Cluster: ${GREEN}✅ ACTIVO${NC}"
+            else
+                echo -e "🔐 ETCD Cluster: ${RED}❌ OFFLINE${NC} - Sistema no operacional"
+            fi
+            echo ""
+
+            local components="sniffer geoip ml scheduler firewall dashboard"
             local active_components=0
 
             for component in $components; do
@@ -473,7 +598,7 @@ main() {
                 local pattern=$(echo "$component_info" | cut -d'|' -f1)
                 local name=$(echo "$component_info" | cut -d'|' -f2)
 
-                printf "%-25s" "$name"
+                printf "%-35s" "$name"
                 if is_process_active "$pattern"; then
                     local cpu=$(get_cpu_usage "$pattern")
                     local mem=$(get_mem_usage "$pattern")
@@ -485,16 +610,17 @@ main() {
             done
 
             echo ""
-            echo "📊 Resumen: $active_components/5 componentes activos"
+            echo "📊 Resumen: $active_components/6 componentes v3.1 ETCD activos"
             echo ""
             echo "🔧 Para monitor completo: $0"
-            echo "📊 Dashboard: http://localhost:8080"
+            echo "📊 Dashboard v3.1 ETCD: http://localhost:8080"
+            echo "🔐 ETCD cluster: localhost:2379"
             ;;
     esac
 }
 
 # Manejar señales
-trap 'echo -e "\n\n${YELLOW}🛑 Monitor detenido por el usuario${NC}"; exit 0' INT TERM
+trap 'echo -e "\n\n${YELLOW}🛑 Monitor ETCD v3.1 detenido por el usuario${NC}"; exit 0' INT TERM
 
 # Ejecutar función principal
 main "$@"
