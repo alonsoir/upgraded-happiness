@@ -1,0 +1,103 @@
+# =============================================================================
+# Dashboard V3.1 ETCD - Ultra-secure Lightweight Dockerfile
+# Component: dashboard_v31_etcd.py
+# Security: Non-root, AppArmor ready, minimal surface, precise file copying
+# Base: python:3.13-slim (42MB, Debian-based)
+# SHA: sha256:27f90d79cc85e9b7b2560063ef44fa0e9eaae7a7c3f5a9f74563065c5477cc24
+# =============================================================================
+
+# Stage 1: Build dependencies
+FROM python:3.13-slim@sha256:27f90d79cc85e9b7b2560063ef44fa0e9eaae7a7c3f5a9f74563065c5477cc24 AS builder
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# Install build dependencies - minimal set
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Copy and install Python dependencies only
+COPY requirements-dashboard.txt ./requirements.txt
+RUN pip install --user --no-warn-script-location -r requirements.txt
+
+# Stage 2: Runtime - Ultra minimal
+FROM python:3.13-slim@sha256:27f90d79cc85e9b7b2560063ef44fa0e9eaae7a7c3f5a9f74563065c5477cc24 AS runtime
+
+# Create unprivileged user with specific UID/GID for security
+RUN groupadd -g 1000 dashboard && \
+    useradd -u 1000 -g 1000 -r -m -d /home/dashboard dashboard
+
+# Set working directory
+WORKDIR /app
+
+# Install ONLY runtime dependencies - absolutely minimal
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/dashboard/.local
+
+# Copy ONLY the specific files we need - precise file copying
+# Main application
+COPY core/dashboard_v31_etcd.py /app/
+
+# Critical dependency - etcd crypto client (from core directory)
+COPY core/etcd_crypto_client_dashboard_fixed.py /app/
+
+# Protocols (protobuf compiled files) with correct structure
+COPY protocols/__init__.py /app/protocols/
+COPY protocols/v3_1/__init__.py /app/protocols/v3_1/
+COPY protocols/v3_1/network_security_clean_v31_pb2.py /app/protocols/v3_1/
+COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
+
+# Configuration files
+COPY config/json/dashboard_config_v31_etcd.json /app/config/json/
+COPY config/json/firewall_rules_v31.json /app/config/json/
+
+# Frontend assets - specific files only
+COPY static/css/dashboard.css /app/static/css/
+COPY static/js/dashboard_v31_etcd.js /app/static/js/
+COPY templates/html/dashboard_v31_etcd.html /app/templates/html/
+
+# Create minimal directory structure and set ownership
+RUN mkdir -p /app/logs && \
+    chown -R dashboard:dashboard /app /home/dashboard
+
+# Switch to unprivileged user
+USER dashboard
+
+# Set PATH for user-installed packages
+ENV PATH="/home/dashboard/.local/bin:${PATH}"
+
+# Security: No new privileges
+USER 1000:1000
+
+# Expose only required port
+EXPOSE 8080
+
+# Minimal health check (no curl dependency)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+
+# Environment variables
+ENV ETCD_ENDPOINT=http://etcd:2379 \
+    NODE_ID=dashboard_v31_etcd_001 \
+    LOG_LEVEL=INFO \
+    PYTHONPATH=/app
+
+# AppArmor ready - no special privileges needed
+# Security context will be handled at runtime (docker-compose/k8s)
+
+# Run with exact command sequence specified
+CMD ["python", "/app/dashboard_v31_etcd.py", "/app/config/json/dashboard_config_v31_etcd.json", "/app/config/json/firewall_rules_v31.json"]
