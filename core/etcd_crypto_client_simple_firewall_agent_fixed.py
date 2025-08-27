@@ -386,7 +386,7 @@ if __name__ == "__main__":
             print(
                 "❌ Usage: python core/etcd_crypto_client_simple_firewall_agent_fixed.py <agent_config.json> <firewall_rules.json>")
             print(
-                "🔧 Example: python core/etcd_crypto_client_simple_firewall_agent_fixed.py config/json/simple_firewall_agent_v31_etcd.json config/json/firewall_rules_v31.json")
+                "🔧 Example: python core/etcd_crypto_client_simple_firewall_agent_fixed.py config/json/simple_firewall_agent_config.json config/json/firewall_rules.json")
             return
 
         agent_config_path = sys.argv[1]

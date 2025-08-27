@@ -386,7 +386,7 @@ if __name__ == "__main__":
             print(
                 "❌ Usage: python core/etcd_crypto_client_scheduler_firewall_fixed.py <scheduler_config.json> <firewall_rules.json>")
             print(
-                "🔧 Example: python core/etcd_crypto_client_scheduler_firewall_fixed.py config/json/scheduler_firewall_etcd_config_dev.json config/json/firewall_rules_v31.json")
+                "🔧 Example: python core/etcd_crypto_client_scheduler_firewall_fixed.py config/json/scheduler_firewall_config.json config/json/firewall_rules.json")
             return
 
         scheduler_config_path = sys.argv[1]

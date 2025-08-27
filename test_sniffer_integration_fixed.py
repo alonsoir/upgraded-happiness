@@ -419,7 +419,7 @@ async def run_all_tests():
         print("\n📋 Next steps:")
         print("1. export UPGRADED_HAPPINESS_DEV_MODE=true")
         print(
-            "2. sudo python core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "2. sudo python core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
         print("\n📁 Required files:")
         print("   ✅ core/sniffer_components.py")
         print("   ✅ core/etcd_crypto_client_sniffer_fixed.py")

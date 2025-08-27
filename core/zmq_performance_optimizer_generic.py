@@ -439,11 +439,11 @@ def main():
         print("   rollback  - Restaurar desde backup más reciente")
         print("\n💡 Ejemplos:")
         print("   # Solo analizar (SEGURO)")
-        print("   python script.py simple_firewall_agent_v31_etcd.json")
+        print("   python script.py simple_firewall_agent_config.json")
         print("   # Proponer cambios conservadores")
-        print("   python script.py simple_firewall_agent_v31_etcd.json optimize")
+        print("   python script.py simple_firewall_agent_config.json optimize")
         print("   # Solo consejos")
-        print("   python script.py simple_firewall_agent_v31_etcd.json advice")
+        print("   python script.py simple_firewall_agent_config.json advice")
         sys.exit(1)
 
     config_file = sys.argv[1]

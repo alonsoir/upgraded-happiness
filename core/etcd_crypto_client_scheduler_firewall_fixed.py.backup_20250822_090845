@@ -7,7 +7,7 @@ core/etcd_crypto_client_scheduler_firewall_fixed.py
 - Maneja dependencias problemáticas (protobuf v3_1 + etcd)
 - Fallback si etcd no está disponible solo en testing mode
 - Testing mode incluido
-- Usa scheduler_firewall_etcd_config_dev.json embebido
+- Usa scheduler_firewall_config.json embebido
 - GUARDA TODO: JSON config + reglas firewall + performance data para optimización futura
 """
 
@@ -164,7 +164,7 @@ class ETCDCryptoClientSchedulerFirewall:
         if 'etcd_crypto' not in self.scheduler_config:
             raise KeyError(
                 "❌ REQUIRED section 'etcd_crypto' not found in scheduler config.\n"
-                "   Add 'etcd_crypto' section to scheduler_firewall_etcd_config_dev.json"
+                "   Add 'etcd_crypto' section to scheduler_firewall_config.json"
             )
 
         etcd_section = self.scheduler_config['etcd_crypto']
@@ -180,7 +180,7 @@ class ETCDCryptoClientSchedulerFirewall:
         if missing_fields:
             raise KeyError(
                 f"❌ REQUIRED fields missing in etcd_crypto section: {missing_fields}\n"
-                f"   Add these fields to scheduler_firewall_etcd_config_dev.json"
+                f"   Add these fields to scheduler_firewall_config.json"
             )
 
         # ML Events Input config (CONNECT al ml_detector)
@@ -686,7 +686,7 @@ async def setup_scheduler_firewall_crypto(scheduler_config_path: str, firewall_r
     Setup crypto FIJO para scheduler firewall
 
     Args:
-        scheduler_config_path: Ruta al scheduler_firewall_etcd_config_dev.json
+        scheduler_config_path: Ruta al scheduler_firewall_config.json
         firewall_rules_path: Ruta al firewall_rules.json
         testing_mode: Si True, usa mock tokens si ETCD falla
 

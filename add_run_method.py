@@ -155,7 +155,7 @@ def main():
         print("\n🎉 ALL FIXES APPLIED!")
         print("\n🚀 Now run the sniffer:")
         print(
-            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
     else:
         print("\n❌ Some issues remain")
         if not success:

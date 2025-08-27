@@ -7,7 +7,7 @@ core/etcd_crypto_client_ml_detector_fixed.py
 - Maneja dependencias problemáticas (protobuf v3_1 + etcd)
 - Fallback si etcd no está disponible solo en testing mode
 - Testing mode incluido
-- Usa lightweight_ml_detector_tricapa_v31_etcd_config_dev.json embebido
+- Usa ml_detector_config.json embebido
 """
 
 import asyncio
@@ -138,7 +138,7 @@ class ETCDCryptoClientMLDetector:
         if 'etcd_crypto' not in self.ml_detector_config:
             raise KeyError(
                 "❌ REQUIRED section 'etcd_crypto' not found in ml_detector config.\n"
-                "   Add 'etcd_crypto' section to lightweight_ml_detector_tricapa_v31_etcd_config_dev.json"
+                "   Add 'etcd_crypto' section to ml_detector_config.json"
             )
 
         etcd_section = self.ml_detector_config['etcd_crypto']
@@ -154,7 +154,7 @@ class ETCDCryptoClientMLDetector:
         if missing_fields:
             raise KeyError(
                 f"❌ REQUIRED fields missing in etcd_crypto section: {missing_fields}\n"
-                f"   Add these fields to lightweight_ml_detector_tricapa_v31_etcd_config_dev.json"
+                f"   Add these fields to ml_detector_config.json"
             )
 
         # Input socket config (CONNECT al geoip_enricher)
@@ -446,7 +446,7 @@ async def setup_ml_detector_crypto(ml_detector_config_path: str, testing_mode: b
     Setup crypto FIJO para ml_detector tricapa
 
     Args:
-        ml_detector_config_path: Ruta al lightweight_ml_detector_tricapa_v31_etcd_config_dev.json
+        ml_detector_config_path: Ruta al ml_detector_config.json
         testing_mode: Si True, usa mock tokens si ETCD falla
 
     Returns:

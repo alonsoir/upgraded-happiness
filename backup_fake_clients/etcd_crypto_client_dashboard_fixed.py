@@ -7,7 +7,7 @@ core/etcd_crypto_client_dashboard_fixed.py
 - Maneja dependencias problemáticas (protobuf v3_1 + etcd)
 - Fallback si etcd no está disponible solo en testing mode
 - Testing mode incluido
-- Usa dashboard_config_v31_etcd.json embebido
+- Usa dashboard_config.json embebido
 - GUARDA TODO: JSON config dashboard + reglas firewall + performance data para optimización futura
 - REGISTRA DUAL: config dashboard + firewall rules en ETCD
 """
@@ -60,7 +60,7 @@ except ImportError as e:
 
 @dataclass
 class DashboardETCDConfig:
-    """Configuración ETCD extraída desde dashboard_config_v31_etcd.json"""
+    """Configuración ETCD extraída desde dashboard_config.json"""
     etcd_host: str
     etcd_port: int
     cluster_name: str
@@ -168,7 +168,7 @@ class ETCDCryptoClientDashboard:
         if 'etcd_crypto' not in self.dashboard_config:
             raise KeyError(
                 "❌ REQUIRED section 'etcd_crypto' not found in dashboard config.\n"
-                "   Add 'etcd_crypto' section to dashboard_config_v31_etcd.json"
+                "   Add 'etcd_crypto' section to dashboard_config.json"
             )
 
         etcd_section = self.dashboard_config['etcd_crypto']
@@ -184,7 +184,7 @@ class ETCDCryptoClientDashboard:
         if missing_fields:
             raise KeyError(
                 f"❌ REQUIRED fields missing in etcd_crypto section: {missing_fields}\n"
-                f"   Add these fields to dashboard_config_v31_etcd.json"
+                f"   Add these fields to dashboard_config.json"
             )
 
         # ML Events Input config (CONNECT al ml_detector)
@@ -801,7 +801,7 @@ async def setup_dashboard_crypto(dashboard_config_path: str, firewall_rules_path
     Setup crypto FIJO para dashboard
 
     Args:
-        dashboard_config_path: Ruta al dashboard_config_v31_etcd.json
+        dashboard_config_path: Ruta al dashboard_config.json
         firewall_rules_path: Ruta al firewall_rules.json
         testing_mode: Si True, usa mock tokens si ETCD falla
 

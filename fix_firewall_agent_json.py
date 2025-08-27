@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fix_firewall_agent_json.py - Arreglar simple_firewall_agent_v31_etcd.json
+fix_firewall_agent_json.py - Arreglar simple_firewall_agent_config.json
 PROBLEMA CRÍTICO: Agent sin inputs/outputs -> 0 fleet sockets
 """
 

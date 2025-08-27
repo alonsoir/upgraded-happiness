@@ -312,7 +312,7 @@ async def main():
         print("🎉 ALL TESTS PASSED!")
         print("\n🚀 READY TO RUN FULL SNIFFER:")
         print(
-            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
         print("\n📊 Expected to see:")
         print("   📦 Packets: >0 (capturing)")
         print("   📤 Events: >0 (processing)")

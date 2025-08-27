@@ -1626,7 +1626,7 @@ class TricapaMLDetectorV31JsonControlledETCD:
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("❌ Uso: python lightweight_ml_detector_tricapa_v31_etcd.py <config.json>")
-        print("💡 Ejemplo: python lightweight_ml_detector_tricapa_v31_etcd.py lightweight_ml_detector_tricapa_v31_etcd_config_dev.json")
+        print("💡 Ejemplo: python lightweight_ml_detector_tricapa_v31_etcd.py ml_detector_config.json")
         print()
         print("🔐 ETCD crypto OBLIGATORIO:")
         print("   - ETCD debe estar corriendo en localhost:2379")

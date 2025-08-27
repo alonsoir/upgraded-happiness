@@ -310,7 +310,7 @@ def main():
         print("\n🎉 DEBUGGING PATCHES APPLIED!")
         print("\n🚀 Now run the sniffer and watch for detailed event creation logs:")
         print(
-            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
         print("\n🔍 Look for logs starting with:")
         print("   🔄 Creating event for flow...")
         print("   📦 Step X: ...")

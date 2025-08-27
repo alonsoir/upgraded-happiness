@@ -176,7 +176,7 @@ def main():
         print("\nThe sniffer should now run without DistributedNode errors.")
         print("\n🚀 Restart the sniffer:")
         print(
-            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
     else:
         print("\n❌ Failed to fix mock protobuf")
 

@@ -138,7 +138,7 @@ async def test_real_sniffer():
     if core_path not in sys.path:
         sys.path.insert(0, core_path)
 
-    config_file = "config/json/evolutionary_sniffer_config_v31_etcd.json"
+    config_file = "config/json/sniffer_config.json"
 
     print(f"🧪 Testing sniffer with: {config_file}")
 
@@ -215,7 +215,7 @@ def main():
         print("")
         print("2. If test passes, run full sniffer:")
         print(
-            "   sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "   sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
         print("")
         print("3. Watch for:")
         print("   📤 Events sent: should be > 0")

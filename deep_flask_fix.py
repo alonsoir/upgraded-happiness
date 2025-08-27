@@ -201,7 +201,7 @@ if __name__ == "__main__":
                 print("\n🎉 ¡IMPORTS FLASK COMPLETAMENTE LIMPIOS!")
                 print("\n📋 Sistema listo para ejecutar:")
                 print(
-                    "   python3 core/dashboard_v31_etcd.py config/json/dashboard_config_v31_etcd.json config/json/firewall_rules_v31.json")
+                    "   python3 core/dashboard_v31_etcd.py config/json/dashboard_config.json config/json/firewall_rules.json")
             else:
                 print("\n⚠️  Imports limpios, pero hay errores de sintaxis")
         else:

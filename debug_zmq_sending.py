@@ -237,7 +237,7 @@ def kill_existing_sniffer():
 
 def fix_config_port():
     """Change config to use different port"""
-    config_file = "config/json/evolutionary_sniffer_config_v31_etcd.json"
+    config_file = "config/json/sniffer_config.json"
 
     if not os.path.exists(config_file):
         print(f"❌ Config file not found: {config_file}")
@@ -271,7 +271,7 @@ def main():
     fix_config_port()
 
     print("\\n🚀 NOW TRY RUNNING SNIFFER AGAIN:")
-    print("sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+    print("sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
 
 if __name__ == "__main__":
     main()

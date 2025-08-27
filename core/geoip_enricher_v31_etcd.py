@@ -1609,7 +1609,7 @@ class DistributedGeoIPEnricherVerticalV31ETCD:
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("❌ Uso: python geoip_enricher_v31_etcd.py <config.json>")
-        print("💡 Ejemplo: python geoip_enricher_v31_etcd.py geoip_enricher_config_v31_etcd.json")
+        print("💡 Ejemplo: python geoip_enricher_v31_etcd.py geoip_config.json")
         print()
         print("🔑 Variables de entorno opcionales:")
         print("   export IPAPI_TOKEN='tu_token_ipapi_aqui'  # Para plan pago IPAPI")

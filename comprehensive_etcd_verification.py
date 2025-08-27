@@ -21,13 +21,13 @@ class ETCDConfigurationVerifier:
             # Pipeline principal
             'evolutionary_sniffer': 'config/json/evolutionary_sniffer_config_v31.json',
             'geoip_enricher': 'config/json/geoip_enricher_config_v31.json',
-            'ml_detector': 'config/json/lightweight_ml_detector_tricapa_v31_etcd_config_dev.json',
-            'scheduler_firewall': 'config/json/scheduler_firewall_etcd_config_dev.json',
-            'dashboard': 'config/json/dashboard_config_v31_etcd.json',
-            'firewall_agent': 'config/json/simple_firewall_agent_v31_etcd.json',
+            'ml_detector': 'config/json/ml_detector_config.json',
+            'scheduler_firewall': 'config/json/scheduler_firewall_config.json',
+            'dashboard': 'config/json/dashboard_config.json',
+            'firewall_agent': 'config/json/simple_firewall_agent_config.json',
 
             # Configuraciones adicionales
-            'firewall_rules': 'config/json/firewall_rules_v31.json',
+            'firewall_rules': 'config/json/firewall_rules.json',
 
             # Posibles archivos adicionales que puedan existir
             'scheduler_config': 'config/json/scheduler-firewall-v31-etcd.json',

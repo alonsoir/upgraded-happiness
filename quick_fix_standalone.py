@@ -118,7 +118,7 @@ def main():
             print("\n🎉 FIX SUCCESSFUL!")
             print("\n🚀 Now run the sniffer:")
             print(
-                "sudo python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+                "sudo python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
         else:
             print("\n❌ Import still failing after fix")
     else:

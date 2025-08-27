@@ -1,0 +1,10 @@
+# requirements-scheduler.txt
+# Scheduler Firewall ETCD - dependencias mínimas
+
+# =============================================================================
+# DEPENDENCIAS CRÍTICAS
+# =============================================================================
+protobuf>=3.19.0,<4.0.0       # Protobuf compatible con etcd3
+etcd3>=0.12.0,<1.0.0          # Cliente etcd para modo distribuido
+pyzmq>=25.1.0,<26.0.0         # ZeroMQ - mensajería asincrónica
+psutil>=5.9.0,<6.0.0          # Utilidades de sistema y procesos

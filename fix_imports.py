@@ -80,7 +80,7 @@ def main():
             print("\n🎉 ALL IMPORTS WORKING!")
             print("\n🚀 Ready to run sniffer:")
             print(
-                "sudo python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+                "sudo python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
 
             # Export PYTHONPATH for shell
             core_dir = os.path.join(os.getcwd(), 'core')

@@ -1,8 +1,8 @@
 # =============================================================================
-# Dashboard V3.1 ETCD - Ultra-secure Lightweight Dockerfile
-# Component: dashboard_v31_etcd.py
+# simple_firewall_agent V3.1 ETCD - Ultra-secure firewall agent Dockerfile
+# Component: simple_firewall_agent_v31_etcd.py
 # Security: Non-root, AppArmor ready, minimal surface, precise file copying
-# Base: python:3.12-slim (compatible con pyzmq)
+# Base: python:3.12-slim (compatible con pyzmq + ML libs)
 # =============================================================================
 
 # Stage 1: Build dependencies
@@ -15,44 +15,49 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /build
 
-# Install build dependencies - minimal set
+# Install build dependencies - minimal set for ML libraries
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
-        ca-certificates && \
+        ca-certificates \
+        gfortran \
+        libatlas-base-dev \
+        liblapack-dev && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
 # Copy and install Python dependencies only
-COPY infrastructure/docker/requirements-dashboard.txt ./requirements.txt
+COPY infrastructure/docker/requirements-simple-firewall-agent.txt ./requirements.txt
 RUN pip install --user --no-warn-script-location -r requirements.txt
 
 # Stage 2: Runtime - Ultra minimal
 FROM python:3.12-slim@sha256:af4e85f1cac90dd3771e47292ea7c8a9830abfabbe4faa5c53f158854c2e819d AS runtime
 
 # Create unprivileged user with specific UID/GID for security
-RUN groupadd -g 1000 dashboard && \
-    useradd -u 1000 -g 1000 -r -m -d /home/dashboard dashboard
+RUN groupadd -g 1002 firewall && \
+    useradd -u 1002 -g 1002 -r -m -d /home/firewall firewall
 
 # Set working directory
 WORKDIR /app
 
-# Install ONLY runtime dependencies - absolutely minimal
+# Install ONLY runtime dependencies for ML (minimal math libraries)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        ca-certificates && \
+        ca-certificates \
+        libatlas3-base \
+        libgfortran5 && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
 # Copy Python packages from builder
-COPY --from=builder /root/.local /home/dashboard/.local
+COPY --from=builder /root/.local /home/firewall/.local
 
 # Copy ONLY the specific files we need - precise file copying
 # Main application
-COPY core/dashboard_v31_etcd.py /app/
+COPY core/simple_firewall_agent_v31_etcd.py /app/
 
-# Critical dependency - etcd crypto client (from core directory)
-COPY core/etcd_crypto_client_dashboard_fixed.py /app/
+# Critical dependency - etcd crypto client (ML specific)
+COPY core/etcd_crypto_client_simple_firewall_agent_fixed.py /app/
 
 # Protocols (protobuf compiled files) with correct structure
 COPY protocols/__init__.py /app/protocols/
@@ -61,44 +66,39 @@ COPY protocols/v3_1/network_security_clean_v31_pb2.py /app/protocols/v3_1/
 COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
 # Configuration files
-COPY config/json/dashboard_config_v31_etcd.json /app/config/json/
+COPY config/json/simple_firewall_agent_v31_etcd.json /app/config/json/
 COPY config/json/firewall_rules_v31.json /app/config/json/
-
-# Frontend assets - specific files only
-COPY static/css/dashboard.css /app/static/css/
-COPY static/js/dashboard_v31_etcd.js /app/static/js/
-COPY templates/dashboard_v31_etcd.html /app/templates/
 
 # Create minimal directory structure and set ownership
 RUN mkdir -p /app/logs && \
-    chown -R dashboard:dashboard /app /home/dashboard
+    chown -R firewall:firewall /app /home/firewall
 
 # Switch to unprivileged user
-USER dashboard
+USER firewall
 
 # Set PATH for user-installed packages
-ENV PATH="/home/dashboard/.local/bin:${PATH}"
+ENV PATH="/home/firewall/.local/bin:${PATH}"
 
 # Security: No new privileges
-USER 1000:1000
+USER 1002:1002
 
-# Expose only required port
-EXPOSE 8080
+# Expose port (if ML detector has API endpoints)
+EXPOSE 8082
 
-# Minimal health check (no curl dependency)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+# Minimal health check - test ML service readiness
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD python -c "import sklearn, numpy; print('ML libs OK')" || exit 1
 
 # Environment variables
 ENV ETCD_ENDPOINT=http://etcd:2379 \
-    NODE_ID=dashboard_v31_etcd_001 \
+    NODE_ID=simple_firewall_agent_001 \
     LOG_LEVEL=INFO \
     PYTHONPATH=/app \
-    DASHBOARD_DATA_PATH=/app/data/dashboard
-
+    FIREWALL_DATA_PATH=/app/data/firewall
+    SKLEARN_ENABLE_RESOURCE_WARNINGS=false
 
 # AppArmor ready - no special privileges needed
 # Security context will be handled at runtime (docker-compose/k8s)
 
 # Run with exact command sequence specified
-CMD ["python", "/app/dashboard_v31_etcd.py", "/app/config/json/dashboard_config_v31_etcd.json", "/app/config/json/firewall_rules_v31.json"]
+CMD ["python", "/app/simple_firewall_agent_v31_etcd.py", "/app/config/json/simple_firewall_agent_v31_etcd.json","/app/config/firewall_rules_v31.json"]

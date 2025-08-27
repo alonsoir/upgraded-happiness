@@ -18,46 +18,46 @@ class ETCDClientExtractor:
             {
                 'name': 'EVOLUTIONARY_SNIFFER',
                 'script': 'core/evolutionary_sniffer_standalone.py',
-                'config': 'config/json/evolutionary_sniffer_config_v31_etcd.json',
+                'config': 'config/json/sniffer_config.json',
                 'step': '#1'
             },
             {
                 'name': 'ZMQ_PERFORMANCE_OPTIMIZER',
                 'script': 'zmq_performance_optimizer.py',
-                'config': 'config/json/evolutionary_sniffer_config_v31_etcd.json',
+                'config': 'config/json/sniffer_config.json',
                 'step': '#2 (Opcional)'
             },
             {
                 'name': 'GEOIP_ENRICHER',
                 'script': 'core/geoip_enricher_v31_etcd.py',
-                'config': 'config/json/geoip_enricher_config_v31_etcd.json',
+                'config': 'config/json/geoip_config.json',
                 'step': '#3'
             },
             {
                 'name': 'ML_DETECTOR',
                 'script': 'core/lightweight_ml_detector_tricapa_v31_etcd.py',
-                'config': 'config/json/lightweight_ml_detector_tricapa_v31_etcd_config_dev.json',
+                'config': 'config/json/ml_detector_config.json',
                 'step': '#4'
             },
             {
                 'name': 'SCHEDULER_FIREWALL',
                 'script': 'core/scheduler_firewall_v31_etcd.py',
-                'config': 'config/json/scheduler_firewall_etcd_config_dev.json',
-                'additional_config': 'config/json/firewall_rules_v31.json',
+                'config': 'config/json/scheduler_firewall_config.json',
+                'additional_config': 'config/json/firewall_rules.json',
                 'step': '#5'
             },
             {
                 'name': 'FIREWALL_AGENT',
                 'script': 'core/simple_firewall_agent_v31_etcd.py',
-                'config': 'config/json/simple_firewall_agent_v31_etcd.json',
-                'additional_config': 'config/json/firewall_rules_v31.json',
+                'config': 'config/json/simple_firewall_agent_config.json',
+                'additional_config': 'config/json/firewall_rules.json',
                 'step': '#6'
             },
             {
                 'name': 'DASHBOARD',
                 'script': 'core/dashboard_v31_etcd.py',
-                'config': 'config/json/dashboard_config_v31_etcd.json',
-                'additional_config': 'config/json/firewall_rules_v31.json',
+                'config': 'config/json/dashboard_config.json',
+                'additional_config': 'config/json/firewall_rules.json',
                 'step': '#7'
             }
         ]

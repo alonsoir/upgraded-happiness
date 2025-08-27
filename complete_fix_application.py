@@ -294,13 +294,13 @@ def show_testing_plan():
 3. INICIAR SECUENCIALMENTE:
 
    Terminal 1 - Consumer:
-   python core/zmq_performance_optimizer_generic.py config/json/scheduler_firewall_etcd_config_dev.json consume
+   python core/zmq_performance_optimizer_generic.py config/json/scheduler_firewall_config.json consume
 
    Terminal 2 - Agent (con debug de compresión):
-   python core/simple_firewall_agent_v31_etcd.py config/json/simple_firewall_agent_v31_etcd.json config/json/firewall_rules_v31.json
+   python core/simple_firewall_agent_v31_etcd.py config/json/simple_firewall_agent_config.json config/json/firewall_rules_v31.json
 
    Terminal 3 - Scheduler:
-   python core/scheduler_firewall_v31_etcd.py config/json/scheduler_firewall_etcd_config_dev.json config/json/firewall_rules_v31.json
+   python core/scheduler_firewall_v31_etcd.py config/json/scheduler_firewall_config.json config/json/firewall_rules_v31.json
 
 4. VERIFICAR OUTPUT ESPERADO:
 

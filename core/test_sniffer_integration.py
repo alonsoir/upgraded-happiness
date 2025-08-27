@@ -352,7 +352,7 @@ async def run_all_tests():
         print("🚀 Ready to run evolutionary sniffer!")
         print("\nNext steps:")
         print("1. export UPGRADED_HAPPINESS_DEV_MODE=true")
-        print("2. python core/evolutionary_sniffer_v31_etcd.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+        print("2. python core/evolutionary_sniffer_v31_etcd.py config/json/sniffer_config.json")
     else:
         print("\n❌ Some tests failed. Fix issues before proceeding.")
         print("\n💡 Quick fixes:")

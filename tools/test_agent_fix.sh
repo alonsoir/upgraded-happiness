@@ -74,7 +74,7 @@ echo ""
 echo "🔍 Test 3: Verificando lectura de configuración JSON..."
 timeout 10s python core/simple_firewall_agent_v31.py \
     config/json/simple_firewall_agent_v31_config.json \
-    config/json/firewall_rules_v31.json > /tmp/agent_test.log 2>&1 &
+    config/json/firewall_rules.json > /tmp/agent_test.log 2>&1 &
 
 AGENT_PID=$!
 sleep 3

@@ -1,75 +1,86 @@
-version: '3.8'
+version: "3.9"
+
 services:
   etcd:
-    image: bitnami/etcd:latest
-    environment:
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
-      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd:2380
-      - ETCD_INITIAL_CLUSTER=etcd=http://etcd:2380
-      - ETCD_INITIAL_CLUSTER_STATE=new
-      - ETCD_INITIAL_CLUSTER_TOKEN=etcd-demo
-    networks:
-      - scada_net
+    image: registry.k8s.io/etcd:3.5.16-0
+    container_name: etcd
     ports:
       - "2379:2379"
       - "2380:2380"
+    command: >
+      /usr/local/bin/etcd
+      --name s1
+      --listen-client-urls http://0.0.0.0:2379
+      --advertise-client-urls http://0.0.0.0:2379
+      --listen-peer-urls http://0.0.0.0:2380
+      --initial-advertise-peer-urls http://0.0.0.0:2380
+      --initial-cluster s1=http://0.0.0.0:2380
+      --initial-cluster-token tkn
+      --initial-cluster-state new
+    volumes:
+      - etcd_data:/etcd-data
 
-  zmq_concentrator:
-    build: .
-    command: ["python", "zmq_concentrator.py"]
-    networks:
-      - scada_net
-    ports:
-      - "5555:5555" # PUB/SUB entrada de nodos
-      - "5556:5556" # PUB al dashboard
-      - "5557:5557" # Heartbeats
-    environment:
-      - ETCD_HOST=etcd
-      - GEO_FILTER=Europe
+  sniffer:
+    image: upgraded-happiness/sniffer:v3.1-etcd
+    container_name: sniffer
+    depends_on:
+      - etcd
+    volumes:
+      - ./config:/app/config
+    command: >
+      python /app/simple_sniffer.py /app/config/sniffer_config.json
 
-  firewall_agent_1:
-    build: .
-    command: ["python", "simple_firewall_agent.py", "simple_firewall_agent_config_1.json"]
-    networks:
-      - scada_net
-    environment:
-      - ETCD_HOST=etcd
+  simple-firewall-agent:
+    image: upgraded-happiness/simple-firewall-agent:v3.1-etcd
+    container_name: simple-firewall-agent
+    depends_on:
+      - etcd
+    volumes:
+      - ./config:/app/config
+    command: >
+      python /app/simple_firewall_agent_v31_etcd.py /app/config/simple_firewall_agent_config.json /app/config/firewall_rules.json
 
-  firewall_agent_2:
-    build: .
-    command: ["python", "simple_firewall_agent.py", "simple_firewall_agent_config_2.json"]
-    networks:
-      - scada_net
-    environment:
-      - ETCD_HOST=etcd
+  scheduler-firewall:
+    image: upgraded-happiness/scheduler-firewall:v3.1-etcd
+    container_name: scheduler-firewall
+    depends_on:
+      - etcd
+    volumes:
+      - ./config:/app/config
+    command: >
+      python /app/scheduler_firewall.py /app/config/scheduler_firewall_config.json
 
-  ml_detector_1:
-    build: .
-    command: ["python", "lightweight_ml_detector.py", "lightweight_ml_detector_config_1.json"]
-    networks:
-      - scada_net
-    environment:
-      - ETCD_HOST=etcd
+  ml-detector:
+    image: upgraded-happiness/ml-detector:v3.1-etcd
+    container_name: ml-detector
+    depends_on:
+      - etcd
+    volumes:
+      - ./config:/app/config
+    command: >
+      python /app/ml_detector.py /app/config/ml_detector_config.json
 
-  ml_detector_2:
-    build: .
-    command: ["python", "lightweight_ml_detector.py", "lightweight_ml_detector_config_2.json"]
-    networks:
-      - scada_net
-    environment:
-      - ETCD_HOST=etcd
+  geoip:
+    image: upgraded-happiness/geoip:v3.1-etcd
+    container_name: geoip
+    depends_on:
+      - etcd
+    volumes:
+      - ./config:/app/config
+    command: >
+      python /app/geoip_service.py /app/config/geoip_config.json
 
   dashboard:
-    build: .
-    command: ["python", "real_zmq_dashboard_with_firewall.py", "dashboard_config.json"]
-    networks:
-      - scada_net
+    image: upgraded-happiness/dashboard:v3.1-etcd
+    container_name: dashboard
+    depends_on:
+      - etcd
     ports:
-      - "8050:8050"
-    environment:
-      - ETCD_HOST=etcd
-      - CONCENTRATOR_HOST=zmq_concentrator
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config
+    command: >
+      python /app/dashboard.py /app/config/dashboard_config.json
 
-networks:
-  scada_net:
-    driver: bridge
+volumes:
+  etcd_data:

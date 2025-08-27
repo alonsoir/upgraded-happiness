@@ -277,7 +277,7 @@ def main():
         print("\n🎉 ALL METHODS ADDED SUCCESSFULLY!")
         print("\n🚀 Now run the sniffer:")
         print(
-            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/evolutionary_sniffer_config_v31_etcd.json")
+            "sudo -E python3 core/evolutionary_sniffer_standalone.py config/json/sniffer_config.json")
         print("\n🔍 Expected to see:")
         print("   🚀 Starting Evolutionary Sniffer Standalone")
         print("   🤝 Handshake sent successfully")

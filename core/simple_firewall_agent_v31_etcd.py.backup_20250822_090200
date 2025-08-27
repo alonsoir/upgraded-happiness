@@ -3,7 +3,7 @@
 🧬 Simple Firewall Agent V3.1 ETCD - MIGRACIÓN COMPLETA CON DUAL COMMUNICATION
 ✅ ETCD Crypto OBLIGATORIO - Sin fallbacks, máxima seguridad
 ✅ DUAL COMMUNICATION - Scheduler (PUSH/PULL) + Dashboard (PUB/SUB)
-✅ Configuración JSON completa - TODO O NADA desde simple_firewall_agent_v31_etcd.json
+✅ Configuración JSON completa - TODO O NADA desde simple_firewall_agent_config.json
 ✅ Protobuf V3.1 EXCLUSIVO - Compatible con scheduler ETCD
 ✅ Ultra-seguridad mantenida - Solo MONITOR y LIST_RULES
 ✅ Pipeline position 5 - Después de scheduler_firewall (position 4)
