@@ -273,12 +273,6 @@ Buscamos colaboradores especializados en:
 - **Platform Engineers**: Multi-cloud deployment, service mesh
 - **Site Reliability Engineers**: Observability, incident response
 
-### 📢 **Eventos Próximos**
-- **KubeCon 2026**: Presentación de arquitectura cloud-native
-- **DockerCon 2026**: Demo de containerización segura
-- **BSides**: Talleres de deployment en K8s
-- **OWASP**: Security best practices para containers
-
 ---
 
 ## 🎯 **Declaración de Impacto Actualizada**
@@ -294,3 +288,4 @@ Con la containerización completa, democratizamos no solo la tecnología de dete
 **Última actualización**: Agosto 2025 - Post-etcd backbone  
 **Próxima revisión**: Octubre 2025 - Post-containerización  
 **Próxima feature**: `docker-k8s` - Sistema completamente containerizado
+**Próxima feature**: `etcd-edition` - Capacidad de poder modificar en runtime los JSON guardados en etcd.
