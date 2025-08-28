@@ -9,7 +9,7 @@ pytest-cov>=4.0.0,<5.0.0        # Coverage reporting
 pytest-mock>=3.10.0,<4.0.0      # Mocking utilities
 
 # Code quality and formatting
-black>=22.0.0,<24.0.0            # Code formatter
+black>=22.0.0,<26.0.0            # Code formatter
 flake8>=4.0.0,<7.0.0             # Linting
 isort>=5.10.0,<6.0.0             # Import sorting
 mypy>=1.0.0,<2.0.0               # Type checking
