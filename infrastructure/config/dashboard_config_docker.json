@@ -1,0 +1,566 @@
+{
+  "deployment_metadata": {
+    "environment": "docker-compose",
+    "orchestrator": "docker",
+    "namespace": "upgraded-happiness",
+    "pod_id": "dashboard-b8c4f6d2k-p7q9m",
+    "container_name": "dashboard",
+    "deployment_timestamp": "2025-08-29T08:49:07.621Z",
+    "config_version": "3.1.0-etcd-integration-docker",
+    "cluster_info": {
+      "cluster_name": "upgraded-happiness-cluster-v31",
+      "availability_zone": "docker-local-az1",
+      "region": "docker-compose-local"
+    },
+    "runtime_metadata": {
+      "_comment": "Estos campos se completan en runtime por el cliente etcd",
+      "process_id": null,
+      "startup_timestamp": null,
+      "host_info": null
+    }
+  },
+
+  "node_id": "dashboard_main_v31_etcd_001",
+  "component": {
+    "name": "dashboard_scada_v31_etcd",
+    "version": "3.1.0-etcd-integration",
+    "mode": "distributed_monitoring_etcd",
+    "role": "dashboard_scada_nogui_etcd",
+    "description": "Dashboard SCADA V3.1 con ETCD crypto obligatorio + fleet management + web interface"
+  },
+
+  "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA - Sin token = NO ARRANCA",
+  "etcd_crypto": {
+    "etcd_host": "etcd",
+    "etcd_port": 2379,
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "node_id": "dashboard_main_v31_etcd_001"
+  },
+
+  "_comment_architecture": "🎯 ARQUITECTURA: ml_detector:5580(PUB) → dashboard:5580(SUB) ↔ firewall_agents:5583/5584(PUB/SUB) + web:8080",
+  "network": {
+    "ml_events_input": {
+      "address": "ml-detector",
+      "port": 5580,
+      "_comment_fix": "🔧 CORRECTO: 5580 para recibir de ml_detector PUB con ETCD crypto",
+      "mode": "connect",
+      "socket_type": "SUB",
+      "high_water_mark": 500,
+      "_comment_hwm": "🔧 BALANCED: HWM para dashboard monitoring",
+      "expected_publishers": 1,
+      "description": "Receives encrypted ML events from ML Detector V3.1.2 tricapa with ETCD crypto"
+    },
+    "scheduler_communication": {
+      "enabled": false,
+      "_comment_optional": "🔧 OPCIONAL: Comunicación con scheduler si se necesita",
+      "address": "scheduler-firewall",
+      "port": 5585,
+      "mode": "connect",
+      "socket_type": "REQ",
+      "high_water_mark": 100,
+      "request_timeout_ms": 5000,
+      "description": "Optional encrypted communication with scheduler_firewall with ETCD crypto"
+    }
+  },
+
+  "_port_flow_etcd": {
+    "step_1": "ml-detector:5580(PUB+ENCRYPT) → dashboard:5580(SUB+DECRYPT)",
+    "step_2": "dashboard:5583(PUB+ENCRYPT) → simple-firewall-agent:5583(SUB+DECRYPT)",
+    "step_3": "simple-firewall-agent:5584(PUB+ENCRYPT) → dashboard:5584(SUB+DECRYPT)",
+    "step_4": "dashboard:8080(HTTP) → web_interface (exposed to host)",
+    "status": "✅ ALL PORTS ALIGNED WITH ETCD CRYPTO"
+  },
+
+  "firewall_fleet": {
+    "enabled": true,
+    "description": "Fleet management para múltiples agentes firewall V3.1 con ETCD crypto",
+    "_comment": "🔥 FLEET CIFRADA COMPLETA - ETCD maneja crypto automáticamente",
+    "agents": [
+      {
+        "node_id": "simple_firewall_agent_001",
+        "status": "active",
+        "network_endpoints": {
+          "dashboard_communication": {
+            "commands_input": "tcp://simple-firewall-agent:5583",
+            "responses_output": "tcp://simple-firewall-agent:5584"
+          }
+        },
+        "capabilities": {
+          "allowed_actions": [
+            "BLOCK_IP",
+            "RATE_LIMIT_IP",
+            "LIST_RULES",
+            "ALLOW_IP_TEMP"
+          ]
+        }
+      }
+    ],
+    "fleet_management": {
+      "auto_discovery": false,
+      "_comment": "🔧 Fleet discovery manual via JSON - más seguro",
+      "health_check_interval": 60,
+      "command_timeout": 10,
+      "max_retry_attempts": 3,
+      "load_balancing": "round_robin",
+      "batch_commands": false
+    }
+  },
+
+  "_port_flow_etcd_FIXED": {
+    "step_1": "ml-detector:5580(PUB+ENCRYPT) → dashboard:5580(SUB+DECRYPT)",
+    "step_2": "dashboard:5583(PUB+ENCRYPT) → simple-firewall-agent:5583(SUB+DECRYPT)",
+    "step_3": "simple-firewall-agent:5584(PUB+ENCRYPT) → dashboard:5584(SUB+DECRYPT)",
+    "step_4": "dashboard:8080(HTTP) → web_interface (local only)",
+    "status": "✅ ALL PORTS NOW ALIGNED WITH FIREWALL AGENT"
+  },
+
+  "web_server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "_comment_host": "🌐 0.0.0.0 para K8s compatibility",
+    "debug": true,
+    "threaded": true,
+    "use_reloader": true,
+    "_comment_reloader": "🔧 Enabled para development",
+    "cors": {
+      "enabled": true,
+      "origins": [
+        "*"
+      ],
+      "_comment_origins": "🔧 * para desarrollo - restringir en producción",
+      "methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "headers": [
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With"
+      ]
+    },
+    "security": {
+      "rate_limiting": {
+        "enabled": true,
+        "requests_per_minute": 120,
+        "burst": 30,
+        "_comment": "🔧 Aumentado para dashboard interactivo"
+      },
+      "csrf_protection": false,
+      "_comment_csrf": "🔧 Disabled para API usage en desarrollo",
+      "secure_headers": true,
+      "max_request_size": "10MB"
+    },
+    "static_files": {
+      "enabled": true,
+      "folder": "web/static",
+      "url_path": "/static",
+      "cache_timeout": 300
+    },
+    "templates": {
+      "enabled": true,
+      "folder": "web/templates",
+      "auto_reload": true
+    }
+  },
+
+  "zmq": {
+    "_comment_conservative": "🔧 CONFIGURACIÓN BALANCEADA para dashboard con ETCD crypto",
+    "context_io_threads": 2,
+    "_comment_threads": "🔧 2 threads para manejar crypto + UI simultaneously",
+    "max_sockets": 16,
+    "_comment_sockets": "🔧 Reducido - dashboard usa menos sockets que scheduler",
+    "tcp_keepalive": true,
+    "tcp_keepalive_idle": 300,
+    "immediate": false,
+    "linger_ms": 1000,
+    "_comment_linger": "🔧 1s para permitir envío de mensajes pendientes",
+    "recv_timeout_ms": 2000,
+    "_comment_timeout1": "🔧 2s timeout para dashboard - menos agresivo",
+    "send_timeout_ms": 1000,
+    "_comment_timeout2": "🔧 1s send timeout",
+    "recv_buffer_size": 65536,
+    "send_buffer_size": 131072,
+    "max_message_size": 50000,
+    "dashboard_optimizations": {
+      "_comment": "🎯 OPTIMIZACIONES ESPECÍFICAS DASHBOARD + ETCD",
+      "conflate": false,
+      "recovery_ivl": 10000,
+      "sndbuf": 65536,
+      "rcvbuf": 65536,
+      "subscribe_all": true
+    }
+  },
+
+  "processing": {
+    "_comment_threads": "🔧 DASHBOARD: Menos threads que scheduler - foco en visualización",
+    "threads": {
+      "ml_events_consumers": 1,
+      "_comment_ml": "🔧 1 thread para procesar eventos ML",
+      "fleet_command_senders": 1,
+      "_comment_fleet_out": "🔧 1 thread para enviar comandos a fleet",
+      "fleet_response_consumers": 1,
+      "_comment_fleet_in": "🔧 1 thread para recibir respuestas de fleet",
+      "web_workers": 2,
+      "_comment_web": "🔧 2 threads para web server si es necesario"
+    },
+    "internal_queues": {
+      "ml_events_queue_size": 200,
+      "_comment_queue1": "🔧 Cola eventos ML para dashboard",
+      "fleet_commands_queue_size": 50,
+      "_comment_queue2": "🔧 Cola comandos hacia fleet",
+      "fleet_responses_queue_size": 100,
+      "_comment_queue3": "🔧 Cola respuestas desde fleet",
+      "web_events_queue_size": 500,
+      "_comment_queue4": "🔧 Cola para eventos hacia web interface"
+    },
+    "queue_management": {
+      "enabled": true,
+      "overflow_strategy": "drop_oldest",
+      "max_wait_ms": 500,
+      "_comment_wait": "🔧 500ms wait para dashboard",
+      "emergency_drop_threshold": 85.0,
+      "_comment_threshold": "🔧 85% threshold"
+    },
+    "event_processing": {
+      "max_events_in_memory": 1000,
+      "_comment_memory": "🔧 1000 eventos en memoria para visualización",
+      "event_retention_hours": 4,
+      "_comment_retention": "🔧 4 horas de retención para dashboard",
+      "auto_cleanup_enabled": true,
+      "duplicate_detection": true,
+      "event_aggregation": true
+    },
+    "backpressure": {
+      "enabled": true,
+      "max_retries": 2,
+      "_comment_retries": "🔧 Menos retries para dashboard",
+      "retry_delays_ms": [
+        50,
+        100
+      ],
+      "_comment_delays": "🔧 Delays más rápidos",
+      "drop_threshold_percent": 20.0,
+      "_comment_drop": "🔧 20% threshold",
+      "activation_threshold": 30,
+      "_comment_activation": "🔧 Threshold 30",
+      "queue_full_strategy": "drop_oldest"
+    }
+  },
+
+  "monitoring": {
+    "stats_interval_seconds": 30,
+    "_comment_stats": "🔧 30s para dashboard monitoring",
+    "detailed_metrics": true,
+    "health_check_interval": 120,
+    "prometheus_metrics": false,
+    "metrics_port": 9090,
+    "performance_tracking": {
+      "enabled": true,
+      "track_event_processing_latency": true,
+      "track_fleet_command_latency": true,
+      "track_web_response_time": true,
+      "track_queue_utilization": true
+    },
+    "alerts": {
+      "max_queue_usage_percent": 75.0,
+      "_comment_queue_alert": "🔧 75% para dashboard",
+      "max_processing_latency_ms": 200.0,
+      "_comment_latency_alert": "🔧 200ms para dashboard",
+      "max_error_rate_percent": 10.0,
+      "_comment_error_alert": "🔧 10% error rate",
+      "max_memory_usage_mb": 512,
+      "max_cpu_usage_percent": 50.0,
+      "_comment_cpu": "🔧 50% CPU para dashboard",
+      "max_web_response_time_ms": 1000.0,
+      "min_events_per_minute": 0,
+      "_comment_min_events": "🔧 0 mínimo - dashboard puede estar sin eventos",
+      "max_consecutive_errors": 10,
+      "fleet_health_check_failures": 5
+    },
+    "_comment_etcd_monitoring": "🔐 NUEVO: Monitoreo específico ETCD",
+    "etcd_crypto_monitoring": {
+      "track_pipeline_key_usage": true,
+      "track_crypto_operations": true,
+      "alert_on_etcd_failures": true,
+      "max_crypto_failures_per_minute": 5,
+      "etcd_connectivity_check_interval": 30
+    }
+  },
+
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - [dashboard_etcd:{node_id}] [pid:{pid}] - %(message)s",
+    "handlers": {
+      "console": {
+        "enabled": true,
+        "level": "INFO",
+        "colored": true
+      },
+      "file": {
+        "enabled": true,
+        "path": "/app/logs/dashboard_v31_etcd.log",
+        "level": "INFO",
+        "max_size": "50MB",
+        "backup_count": 5,
+        "rotation": "size"
+      },
+      "web_access_log": {
+        "enabled": true,
+        "path": "/app/logs/dashboard_web_access.log",
+        "level": "INFO",
+        "log_requests": true,
+        "log_responses": true,
+        "_comment": "🌐 Log web requests para debugging"
+      },
+      "fleet_communication_log": {
+        "enabled": true,
+        "path": "/app/logs/dashboard_fleet_comm.log",
+        "level": "INFO",
+        "log_commands_sent": true,
+        "log_responses_received": true,
+        "log_crypto_operations": true,
+        "_comment": "🔥 Log comunicación con fleet cifrada"
+      }
+    }
+  },
+
+  "security": {
+    "input_validation": {
+      "enabled": true,
+      "max_event_size_bytes": 50000,
+      "validate_json_schema": true,
+      "sanitize_web_inputs": true,
+      "validate_ip_addresses": true,
+      "require_valid_ipv4": true
+    },
+    "web_security": {
+      "enabled": true,
+      "require_authentication": false,
+      "_comment_auth": "🔧 Sin auth para desarrollo - añadir en producción",
+      "rate_limiting": true,
+      "request_logging": true,
+      "error_masking": false,
+      "xss_protection": true,
+      "content_type_validation": true
+    },
+    "fleet_security": {
+      "enabled": true,
+      "validate_agent_responses": true,
+      "command_confirmation": false,
+      "_comment_confirmation": "🔧 Dashboard puede ejecutar sin confirmación en desarrollo",
+      "max_commands_per_minute": 60,
+      "max_concurrent_commands": 10
+    },
+    "_comment_etcd_security": "🔐 NUEVO: Seguridad específica ETCD",
+    "etcd_crypto_security": {
+      "validate_pipeline_keys": true,
+      "rotate_keys_on_error": false,
+      "secure_key_storage": true,
+      "crypto_failure_threshold": 10
+    },
+    "privacy": {
+      "anonymize_ips": false,
+      "mask_sensitive_data": false
+    }
+  },
+
+  "distributed": {
+    "cluster_name": "upgraded-happiness-cluster-v31",
+    "component_role": "dashboard_scada_monitoring_etcd",
+    "enable_container_detection": true,
+    "enable_system_info_collection": true,
+    "pipeline_tracking": {
+      "enabled": true,
+      "track_latency": true,
+      "track_component_path": true,
+      "max_pipeline_hops": 6,
+      "track_etcd_crypto_operations": true
+    },
+    "dashboard_specific": {
+      "track_visualization_latency": true,
+      "track_fleet_communication_latency": true,
+      "track_web_performance": true,
+      "enable_dashboard_analytics": true,
+      "track_crypto_performance": true,
+      "register_firewall_rules_in_etcd": true,
+      "_comment_rules_registration": "🔥 NUEVO: Dashboard registra reglas firewall en ETCD"
+    }
+  },
+
+  "data_visualization": {
+    "enabled": true,
+    "real_time_updates": true,
+    "update_interval_ms": 1000,
+    "_comment_update": "🔧 1s updates para tiempo real",
+    "max_data_points": 1000,
+    "data_retention": {
+      "events_hours": 4,
+      "metrics_hours": 8,
+      "alerts_hours": 24
+    },
+    "charts": {
+      "risk_score_timeline": true,
+      "geographic_visualization": true,
+      "network_topology": true,
+      "firewall_rules_status": true,
+      "system_performance": true
+    },
+    "export": {
+      "enabled": true,
+      "formats": [
+        "JSON",
+        "CSV"
+      ],
+      "max_export_size": 10000
+    }
+  },
+
+  "api": {
+    "enabled": true,
+    "version": "v3.1",
+    "base_path": "/api/v3.1",
+    "endpoints": {
+      "events": "/events",
+      "metrics": "/metrics",
+      "health": "/health",
+      "fleet": "/fleet",
+      "firewall": "/firewall",
+      "config": "/config"
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 1000,
+      "burst": 100
+    },
+    "documentation": {
+      "enabled": true,
+      "swagger_ui": true,
+      "endpoint": "/api/docs"
+    }
+  },
+
+  "debug": {
+    "enabled": true,
+    "log_all_events": true,
+    "log_web_requests": true,
+    "simulate_events": true,
+    "performance_profiling": true,
+    "_comment_etcd_debug": "🔐 Debug específico ETCD (solo para desarrollo)",
+    "log_etcd_operations": true,
+    "trace_pipeline_key_operations": true,
+    "validate_crypto_tokens": true,
+    "log_fleet_crypto_details": true
+  },
+
+  "_comment_crypto": "🔐 CRYPTO ETCD - OBLIGATORIO: ML events + Fleet commands/responses",
+  "crypto": {
+    "enabled": true,
+    "role": "receiver_sender",
+    "use_etcd_pipeline_key": true,
+    "_comment_mandatory": "❌ Sin token ETCD = componente NO ARRANCA",
+    "channels": {
+      "ml_events_input": {
+        "decrypt": true,
+        "decompress": true,
+        "_comment_decompress": "🔧 CRÍTICO: ETCD debe descomprimir ANTES de parsing protobuf",
+        "description": "Descifrar y descomprimir eventos ML para visualización con ETCD pipeline key"
+      },
+      "fleet_commands_output": {
+        "encrypt": true,
+        "compress": true,
+        "_comment_compress": "🔧 CRÍTICO: ETCD debe comprimir DESPUÉS de serializar protobuf",
+        "_comment_pattern": "🔤 ACTUALIZADO: Ahora usa PUB en puerto 5583",
+        "description": "Cifrar y comprimir comandos hacia fleet de agentes con ETCD pipeline key (PUB:5583)"
+      },
+      "fleet_responses_input": {
+        "decrypt": true,
+        "decompress": true,
+        "_comment_decompress": "🔧 CRÍTICO: ETCD debe descomprimir ANTES de parsing protobuf",
+        "_comment_pattern": "🔥 ACTUALIZADO: Ahora usa SUB en puerto 5584",
+        "description": "Descifrar y descomprimir respuestas de fleet con ETCD pipeline key (SUB:5584)"
+      },
+      "scheduler_communication": {
+        "encrypt": true,
+        "decrypt": true,
+        "compress": true,
+        "description": "Comunicación opcional cifrada con scheduler (si habilitada) con ETCD pipeline key"
+      }
+    },
+    "component_crypto_id": "dashboard_main_v31_etcd_001",
+    "_comment_etcd": "Token rotativo distribuido automáticamente por ETCD - mucho más seguro que config files"
+  },
+
+  "_etcd_integration_requirements": {
+    "mandatory_dependencies": [
+      "ETCD cluster running on etcd:2379",
+      "ETCD Crypto Coordinator active",
+      "ML Detector tricapa running on port 5580 (PUB)",
+      "Firewall Agents fleet on configured ports",
+      "etcd3-py with compatible protobuf version"
+    ],
+    "startup_sequence": [
+      "1. ETCD cluster UP",
+      "2. ETCD Crypto Coordinator UP",
+      "3. ML Detector UP (publishing encrypted events)",
+      "4. dashboard connects to ETCD",
+      "5. Obtiene pipeline key rotativo",
+      "6. Si NO obtiene key → SHUTDOWN",
+      "7. Si obtiene key → INICIA con crypto en todos los canales",
+      "8. Firewall Agents UP (waiting for encrypted commands)",
+      "9. Web server UP en puerto 8080"
+    ],
+    "failure_modes": {
+      "no_etcd_connection": "SHUTDOWN - no fallback",
+      "no_pipeline_key": "SHUTDOWN - no hardcoded keys",
+      "crypto_disabled_in_json": "SHUTDOWN - crypto es obligatorio para dashboard",
+      "web_server_port_conflict": "SHUTDOWN - puerto 8080 debe estar disponible"
+    },
+    "etcd_data_registration": {
+      "dashboard_config": "Registra su propia configuración JSON completa en ETCD",
+      "firewall_rules_config": "Registra fichero de reglas firewall en ETCD para consulta",
+      "registration_path": "/upgraded-happiness-cluster-v31/v31/components/dashboard/",
+      "update_on_config_change": true,
+      "config_version_tracking": true
+    }
+  },
+
+  "_config_metadata": {
+    "template_version": "3.1.0-etcd-integration-dashboard-docker",
+    "generated_from": "dashboard_config_template.json",
+    "config_version": "3.1.0-etcd-integration-docker",
+    "created_for": "Dashboard con ETCD crypto obligatorio + fleet management + web interface",
+    "optimization_level": "BALANCED_DASHBOARD_ETCD",
+    "crypto_integration": "ETCD_MANDATORY",
+    "socket_pattern": "SUB/PUB/SUB + HTTP",
+    "fleet_integration": "Ultra-secure encrypted fleet management + ETCD crypto",
+    "web_interface": "Real-time dashboard with encrypted backend data",
+    "performance_target": "STABLE_DASHBOARD_WITH_ETCD_CRYPTO_AND_WEB",
+    "compatible_orchestrators": ["docker", "k8s", "k3s", "podman"],
+    "required_volumes": ["/app/logs", "/app/web"],
+    "required_environment_vars": [],
+    "required_external_services": ["etcd_cluster", "ml_detector", "firewall_agents"],
+    "last_modified": "2025-08-29T08:49:07.621Z"
+  },
+
+  "_docker_specific_metadata": {
+    "container_dependencies": ["etcd", "ml-detector"],
+    "optional_dependencies": ["simple-firewall-agent"],
+    "network_mode": "bridge",
+    "exposed_ports": [8080],
+    "internal_ports": [5580, 5583, 5584],
+    "required_volumes": ["/app/config", "/app/logs", "/app/web"],
+    "memory_limit": "512m",
+    "cpu_limit": "0.5",
+    "restart_policy": "unless-stopped",
+    "healthcheck": {
+      "test": "curl -f http://localhost:8080/api/v3.1/health || exit 1",
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 3,
+      "start_period": "40s"
+    }
+  },
+
+  "role_description": "Dashboard V3.1 ETCD - CONTROLADOR DIRECTO. Envía comandos firewall directamente."
+}
