@@ -80,9 +80,6 @@ ENV PATH="/home/sniffer/.local/bin:${PATH}"
 # Security: No new privileges
 USER 1001:1001
 
-# Expose port (if geoip enricher has API endpoints)
-EXPOSE 8081
-
 # Minimal health check - test GeoIP service readiness
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import psutil, sys; sys.exit(0 if psutil.virtual_memory().percent < 90 else 1)" || exit 1

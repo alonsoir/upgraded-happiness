@@ -1,8 +1,8 @@
 # =============================================================================
-# simple_firewall_agent V3.1 ETCD - Ultra-secure firewall agent Dockerfile
+# Simple Firewall Agent V3.1 ETCD - Ultra-secure firewall agent Dockerfile
 # Component: simple_firewall_agent_v31_etcd.py
-# Security: Non-root, AppArmor ready, minimal surface, precise file copying
-# Base: python:3.12-slim (compatible con pyzmq + ML libs)
+# Security: Privileged mode required, NET_ADMIN capability, minimal surface
+# Base: python:3.12-slim (compatible con pyzmq + protobuf + ETCD)
 # =============================================================================
 
 # Stage 1: Build dependencies
@@ -15,14 +15,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /build
 
-# Install build dependencies - minimal set for ML libraries
+# Install build dependencies for ZMQ, protobuf and ETCD
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
-        gfortran \
-        libatlas-base-dev \
-        liblapack-dev && \
+        libffi-dev \
+        libzmq3-dev && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -30,7 +29,7 @@ RUN apt-get update && \
 COPY infrastructure/docker/requirements-simple-firewall-agent.txt ./requirements.txt
 RUN pip install --user --no-warn-script-location -r requirements.txt
 
-# Stage 2: Runtime - Ultra minimal
+# Stage 2: Runtime - Minimal with firewall capabilities
 FROM python:3.12-slim@sha256:af4e85f1cac90dd3771e47292ea7c8a9830abfabbe4faa5c53f158854c2e819d AS runtime
 
 # Create unprivileged user with specific UID/GID for security
@@ -40,12 +39,13 @@ RUN groupadd -g 1002 firewall && \
 # Set working directory
 WORKDIR /app
 
-# Install ONLY runtime dependencies for ML (minimal math libraries)
+# Install ONLY runtime dependencies for firewall agent (ZMQ + network tools)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
-        libatlas3-base \
-        libgfortran5 && \
+        libzmq5 \
+        iproute2 \
+        iptables && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -53,10 +53,10 @@ RUN apt-get update && \
 COPY --from=builder /root/.local /home/firewall/.local
 
 # Copy ONLY the specific files we need - precise file copying
-# Main application
+# Main firewall agent application
 COPY core/simple_firewall_agent_v31_etcd.py /app/
 
-# Critical dependency - etcd crypto client (ML specific)
+# Critical dependency - etcd crypto client (firewall agent specific)
 COPY core/etcd_crypto_client_simple_firewall_agent_fixed.py /app/
 
 # Protocols (protobuf compiled files) with correct structure
@@ -65,9 +65,9 @@ COPY protocols/v3_1/__init__.py /app/protocols/v3_1/
 COPY protocols/v3_1/network_security_clean_v31_pb2.py /app/protocols/v3_1/
 COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
-# Configuration files
-COPY config/json/simple_firewall_agent_v31_etcd.json /app/config/json/
-COPY config/json/firewall_rules_v31.json /app/config/json/
+# Configuration files - DOCKER SPECIFIC VERSIONS
+COPY infrastructure/config/simple_firewall_agent_config_docker.json /app/config/json/
+COPY infrastructure/config/firewall_rules_config_docker.json /app/config/json/
 
 # Create minimal directory structure and set ownership
 RUN mkdir -p /app/logs && \
@@ -79,26 +79,29 @@ USER firewall
 # Set PATH for user-installed packages
 ENV PATH="/home/firewall/.local/bin:${PATH}"
 
-# Security: No new privileges
+# Security: No new privileges (but container itself needs NET_ADMIN)
 USER 1002:1002
 
-# Expose port (if ML detector has API endpoints)
-EXPOSE 8082
+# NO PORTS EXPOSED - Internal ZMQ communication only
+# Ports used internally: 5582 (scheduler commands), 5581 (scheduler responses),
+#                        5583 (dashboard commands), 5584 (dashboard responses)
 
-# Minimal health check - test ML service readiness
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD python -c "import sklearn, numpy; print('ML libs OK')" || exit 1
+# Health check - test firewall agent readiness with ZMQ + ETCD connectivity
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import zmq; import etcd3; ctx=zmq.Context(); ctx.term(); print('Firewall Agent OK')" || exit 1
 
-# Environment variables
+# Environment variables for firewall agent
 ENV ETCD_ENDPOINT=http://etcd:2379 \
     NODE_ID=simple_firewall_agent_001 \
     LOG_LEVEL=INFO \
     PYTHONPATH=/app \
-    FIREWALL_DATA_PATH=/app/data/firewall
-    SKLEARN_ENABLE_RESOURCE_WARNINGS=false
+    FIREWALL_MODE=dual_communication \
+    FIREWALL_SAFETY_MODE=ULTRA_SECURE_V31 \
+    ZMQ_IO_THREADS=2 \
+    PROTOBUF_VALIDATE_UTF8=false
 
-# AppArmor ready - no special privileges needed
-# Security context will be handled at runtime (docker-compose/k8s)
+# Container requires NET_ADMIN capability and privileged mode for firewall operations
+# These will be set in docker-compose.yml or kubernetes deployment
 
-# Run with exact command sequence specified
-CMD ["python", "/app/simple_firewall_agent_v31_etcd.py", "/app/config/json/simple_firewall_agent_v31_etcd.json","/app/config/firewall_rules_v31.json"]
+# Run firewall agent with both required configuration files
+CMD ["python", "/app/simple_firewall_agent_v31_etcd.py", "/app/config/json/simple_firewall_agent_config_docker.json", "/app/config/json/firewall_rules_config_docker.json"]

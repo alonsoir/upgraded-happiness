@@ -3,14 +3,14 @@
     "environment": "docker",
     "orchestrator": "docker",
     "namespace": "upgraded-happiness",
-    "pod_id": "firewall-rules-shared-config",
-    "container_name": "firewall-rules",
-    "deployment_timestamp": "2025-08-29T08:45:23.156Z",
-    "config_version": "1.0.0-etcd-integration-docker",
+    "pod_id": "scheduler-firewall-{{ HOSTNAME | default('container') }}",
+    "container_name": "scheduler-firewall",
+    "deployment_timestamp": "2025-08-30T18:45:00Z",
+    "config_version": "1.0.0-RELEASE-DOCKER",
     "cluster_info": {
-      "cluster_name": "upgraded-happiness-cluster-v31",
-      "availability_zone": "docker-local-az1",
-      "region": "docker-compose-local"
+      "cluster_name": "upgraded-happiness-cluster",
+      "availability_zone": "docker-zone-1",
+      "region": "local-docker"
     },
     "runtime_metadata": {
       "_comment": "Estos campos se completan en runtime por el cliente etcd",
@@ -22,8 +22,8 @@
 
   "firewall_rules": {
     "version": "1.0.0-RELEASE",
-    "last_updated": "2025-08-29T08:45:23.156Z",
-    "description": "RELEASE-1.0.0 - Single source of truth firewall configuration - DOCKER VERSION",
+    "last_updated": "2025-08-30T18:45:00Z",
+    "description": "RELEASE-1.0.0 - Single source of truth firewall configuration",
 
     "rules": [
       {
@@ -33,7 +33,7 @@
         "description": "Riesgo muy bajo: Solo listar reglas activas para verificación",
         "params": {
           "timeout": 5,
-          "log_level": "info"
+          "log_level": "debug"
         },
         "priority": "LOW",
         "dry_run": true,
@@ -46,7 +46,7 @@
         "description": "Riesgo bajo: Monitoreo básico de IP sospechosa",
         "params": {
           "duration": 300,
-          "log_level": "info"
+          "log_level": "debug"
         },
         "priority": "LOW",
         "dry_run": true,
@@ -142,13 +142,13 @@
 
         "network_endpoints": {
           "scheduler_communication": {
-            "commands_input": "tcp://simple-firewall-agent:5582",
-            "responses_output": "tcp://simple-firewall-agent:5581",
+            "commands_input": "tcp://firewall-agent-001:5582",
+            "responses_output": "tcp://firewall-agent-001:5581",
             "pattern": "PUSH/PULL"
           },
           "dashboard_communication": {
-            "commands_input": "tcp://simple-firewall-agent:5583",
-            "responses_output": "tcp://simple-firewall-agent:5584",
+            "commands_input": "tcp://firewall-agent-001:5580",
+            "responses_output": "tcp://firewall-agent-001:5584",
             "pattern": "PUB/SUB"
           }
         },
@@ -157,6 +157,72 @@
           "allowed_actions": ["MONITOR", "LIST_RULES"],
           "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
           "max_concurrent_rules": 10,
+          "default_rule_duration": 60
+        },
+
+        "security_profile": {
+          "safety_mode": "ULTRA_SECURE_V31",
+          "auto_force_dry_run": true,
+          "environment_detection": true
+        }
+      },
+
+      "simple_firewall_agent_002": {
+        "node_id": "simple_firewall_agent_002",
+        "version": "3.1.0",
+        "location": "zona_lan_002",
+        "status": "active",
+
+        "network_endpoints": {
+          "scheduler_communication": {
+            "commands_input": "tcp://firewall-agent-002:5592",
+            "responses_output": "tcp://firewall-agent-002:5591",
+            "pattern": "PUSH/PULL"
+          },
+          "dashboard_communication": {
+            "commands_input": "tcp://firewall-agent-002:5590",
+            "responses_output": "tcp://firewall-agent-002:5594",
+            "pattern": "PUB/SUB"
+          }
+        },
+
+        "capabilities": {
+          "allowed_actions": ["MONITOR", "LIST_RULES"],
+          "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+          "max_concurrent_rules": 15,
+          "default_rule_duration": 60
+        },
+
+        "security_profile": {
+          "safety_mode": "ULTRA_SECURE_V31",
+          "auto_force_dry_run": true,
+          "environment_detection": true
+        }
+      },
+
+      "simple_firewall_agent_003": {
+        "node_id": "simple_firewall_agent_003",
+        "version": "3.1.0",
+        "location": "zona_wan_003",
+        "status": "active",
+
+        "network_endpoints": {
+          "scheduler_communication": {
+            "commands_input": "tcp://firewall-agent-003:5602",
+            "responses_output": "tcp://firewall-agent-003:5601",
+            "pattern": "PUSH/PULL"
+          },
+          "dashboard_communication": {
+            "commands_input": "tcp://firewall-agent-003:5600",
+            "responses_output": "tcp://firewall-agent-003:5604",
+            "pattern": "PUB/SUB"
+          }
+        },
+
+        "capabilities": {
+          "allowed_actions": ["MONITOR", "LIST_RULES"],
+          "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+          "max_concurrent_rules": 20,
           "default_rule_duration": 60
         },
 
@@ -187,7 +253,7 @@
   "_config_metadata": {
     "template_version": "1.0.0-RELEASE",
     "generated_from": "firewall_rules_config_template.json",
-    "config_version": "1.0.0-etcd-integration-docker",
+    "config_version": "1.0.0-RELEASE-DOCKER",
     "compatible_orchestrators": ["docker", "k8s", "k3s", "podman"],
     "required_volumes": ["/app/logs"],
     "required_environment_vars": [],
@@ -201,12 +267,6 @@
       "audit_all_actions",
       "environment_detection"
     ],
-    "docker_specific": {
-      "shared_config": true,
-      "used_by_components": ["scheduler-firewall", "simple-firewall-agent"],
-      "network_dependencies": ["simple-firewall-agent"],
-      "development_safety_mode": true
-    },
-    "last_modified": "2025-08-29T08:45:23.156Z"
+    "last_modified": "2025-08-30T18:45:00Z"
   }
 }

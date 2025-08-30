@@ -84,9 +84,6 @@ ENV PATH="/home/mldetector/.local/bin:${PATH}"
 # Security: No new privileges
 USER 1002:1002
 
-# Expose port (if ML detector has API endpoints)
-EXPOSE 8082
-
 # Minimal health check - test ML service readiness
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD python -c "import sklearn, numpy; print('ML libs OK')" || exit 1
