@@ -61,7 +61,7 @@ COPY protocols/v3_1/network_security_clean_v31_pb2.py /app/protocols/v3_1/
 COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
 # Configuration files
-COPY config/json/geoip_enricher_config_v31_etcd.json /app/config/json/
+COPY infrastructure/config/geoip_config_docker.json /app/config/json/
 
 # GeoIP database directory (if needed - to be mounted or downloaded)
 RUN mkdir -p /app/data/geoip
@@ -97,4 +97,4 @@ ENV ETCD_ENDPOINT=http://etcd:2379 \
 # Security context will be handled at runtime (docker-compose/k8s)
 
 # Run with exact command sequence specified
-CMD ["python", "/app/geoip_enricher_v31_etcd.py", "/app/config/json/geoip_enricher_config_v31_etcd.json"]
+CMD ["python", "/app/geoip_enricher_v31_etcd.py", "/app/config/json/geoip_config_docker.json"]

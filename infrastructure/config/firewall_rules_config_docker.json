@@ -1,0 +1,212 @@
+{
+  "deployment_metadata": {
+    "environment": "docker",
+    "orchestrator": "docker",
+    "namespace": "upgraded-happiness",
+    "pod_id": "firewall-rules-shared-config",
+    "container_name": "firewall-rules",
+    "deployment_timestamp": "2025-08-29T08:45:23.156Z",
+    "config_version": "1.0.0-etcd-integration-docker",
+    "cluster_info": {
+      "cluster_name": "upgraded-happiness-cluster-v31",
+      "availability_zone": "docker-local-az1",
+      "region": "docker-compose-local"
+    },
+    "runtime_metadata": {
+      "_comment": "Estos campos se completan en runtime por el cliente etcd",
+      "process_id": null,
+      "startup_timestamp": null,
+      "host_info": null
+    }
+  },
+
+  "firewall_rules": {
+    "version": "1.0.0-RELEASE",
+    "last_updated": "2025-08-29T08:45:23.156Z",
+    "description": "RELEASE-1.0.0 - Single source of truth firewall configuration - DOCKER VERSION",
+
+    "rules": [
+      {
+        "rule_id": "rule_001_very_low_risk",
+        "risk_range": [0, 19],
+        "action": "LIST_RULES",
+        "description": "Riesgo muy bajo: Solo listar reglas activas para verificación",
+        "params": {
+          "timeout": 5,
+          "log_level": "info"
+        },
+        "priority": "LOW",
+        "dry_run": true,
+        "enabled": true
+      },
+      {
+        "rule_id": "rule_002_low_risk",
+        "risk_range": [20, 39],
+        "action": "MONITOR",
+        "description": "Riesgo bajo: Monitoreo básico de IP sospechosa",
+        "params": {
+          "duration": 300,
+          "log_level": "info"
+        },
+        "priority": "LOW",
+        "dry_run": true,
+        "enabled": true
+      },
+      {
+        "rule_id": "rule_003_medium_risk",
+        "risk_range": [40, 59],
+        "action": "MONITOR",
+        "description": "Riesgo medio: Monitoreo intensivo con alertas",
+        "params": {
+          "duration": 600,
+          "log_level": "warning",
+          "enhanced_monitoring": true
+        },
+        "priority": "MEDIUM",
+        "dry_run": true,
+        "enabled": true
+      },
+      {
+        "rule_id": "rule_004_high_risk",
+        "risk_range": [60, 79],
+        "action": "RATE_LIMIT",
+        "description": "Riesgo alto: Rate limiting para reducir capacidad de ataque",
+        "params": {
+          "requests_per_minute": 10,
+          "duration": 1800,
+          "burst_capacity": 5
+        },
+        "priority": "HIGH",
+        "dry_run": true,
+        "enabled": false,
+        "disabled_reason": "DEVELOPMENT MODE: Rate limiting disabled for safety"
+      },
+      {
+        "rule_id": "rule_005_critical_risk",
+        "risk_range": [80, 100],
+        "action": "BLOCK_IP",
+        "description": "Riesgo crítico: Bloqueo inmediato de IP maliciosa",
+        "params": {
+          "duration": 3600,
+          "immediate_action": true
+        },
+        "priority": "CRITICAL",
+        "dry_run": true,
+        "enabled": false,
+        "disabled_reason": "DEVELOPMENT MODE: IP blocking disabled for safety"
+      }
+    ],
+
+    "manual_actions": {
+      "LIST_RULES": {
+        "description": "Listar reglas activas - SEGURO V3.1",
+        "safety_level": "SAFE",
+        "enabled": true,
+        "requires_confirmation": false
+      },
+      "MONITOR": {
+        "description": "Monitorear IP - SEGURO V3.1",
+        "safety_level": "SAFE",
+        "enabled": true,
+        "requires_confirmation": false
+      },
+      "RATE_LIMIT": {
+        "description": "Rate limiting - PELIGROSO - Solo con aprobación humana",
+        "safety_level": "DANGEROUS",
+        "enabled": false,
+        "requires_confirmation": true,
+        "disabled_reason": "DEVELOPMENT MODE: Rate limiting disabled for safety"
+      },
+      "BLOCK_IP": {
+        "description": "Bloquear IP - MUY PELIGROSO - Solo emergencias",
+        "safety_level": "CRITICAL",
+        "enabled": false,
+        "requires_confirmation": true,
+        "requires_double_confirmation": true,
+        "disabled_reason": "DEVELOPMENT MODE: IP blocking disabled for safety"
+      },
+      "EMERGENCY_UNBLOCK": {
+        "description": "Desbloquear IP en emergencia - Para corregir errores",
+        "safety_level": "EMERGENCY_RECOVERY",
+        "enabled": true,
+        "requires_confirmation": true
+      }
+    },
+
+    "agents_fleet": {
+      "simple_firewall_agent_001": {
+        "node_id": "simple_firewall_agent_001",
+        "version": "3.1.0",
+        "location": "zona_dmz_001",
+        "status": "active",
+
+        "network_endpoints": {
+          "scheduler_communication": {
+            "commands_input": "tcp://simple-firewall-agent:5582",
+            "responses_output": "tcp://simple-firewall-agent:5581",
+            "pattern": "PUSH/PULL"
+          },
+          "dashboard_communication": {
+            "commands_input": "tcp://simple-firewall-agent:5583",
+            "responses_output": "tcp://simple-firewall-agent:5584",
+            "pattern": "PUB/SUB"
+          }
+        },
+
+        "capabilities": {
+          "allowed_actions": ["MONITOR", "LIST_RULES"],
+          "blocked_actions": ["BLOCK_IP", "RATE_LIMIT", "FLUSH_RULES"],
+          "max_concurrent_rules": 10,
+          "default_rule_duration": 60
+        },
+
+        "security_profile": {
+          "safety_mode": "ULTRA_SECURE_V31",
+          "auto_force_dry_run": true,
+          "environment_detection": true
+        }
+      }
+    },
+
+    "global_settings": {
+      "security": {
+        "force_dry_run_global": true,
+        "max_rule_duration_global": 300,
+        "require_confirmation_above_risk": 0.6,
+        "development_mode": true
+      },
+
+      "coordination": {
+        "scheduler_max_risk_auto": 0.6,
+        "human_oversight_required": true,
+        "audit_all_actions": true
+      }
+    }
+  },
+
+  "_config_metadata": {
+    "template_version": "1.0.0-RELEASE",
+    "generated_from": "firewall_rules_config_template.json",
+    "config_version": "1.0.0-etcd-integration-docker",
+    "compatible_orchestrators": ["docker", "k8s", "k3s", "podman"],
+    "required_volumes": ["/app/logs"],
+    "required_environment_vars": [],
+    "required_external_services": ["etcd_cluster", "scheduler", "dashboard"],
+    "security_profile": "ULTRA_SECURE_V31",
+    "safety_features": [
+      "force_dry_run_development",
+      "confirmation_required_dangerous_actions",
+      "double_confirmation_critical_actions",
+      "emergency_unblock_available",
+      "audit_all_actions",
+      "environment_detection"
+    ],
+    "docker_specific": {
+      "shared_config": true,
+      "used_by_components": ["scheduler-firewall", "simple-firewall-agent"],
+      "network_dependencies": ["simple-firewall-agent"],
+      "development_safety_mode": true
+    },
+    "last_modified": "2025-08-29T08:45:23.156Z"
+  }
+}

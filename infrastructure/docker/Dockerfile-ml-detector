@@ -66,7 +66,7 @@ COPY protocols/v3_1/network_security_clean_v31_pb2.py /app/protocols/v3_1/
 COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
 # Configuration files
-COPY config/json/lightweight_ml_detector_tricapa_v31_etcd_config_dev.json /app/config/json/
+COPY infrastructure/config/ml_detector_config_docker.json /app/config/json
 
 # ML models directory (if pre-trained models exist)
 RUN mkdir -p /app/models/pretrained
@@ -103,4 +103,4 @@ ENV ETCD_ENDPOINT=http://etcd:2379 \
 # Security context will be handled at runtime (docker-compose/k8s)
 
 # Run with exact command sequence specified
-CMD ["python", "/app/lightweight_ml_detector_tricapa_v31_etcd.py", "/app/config/json/lightweight_ml_detector_tricapa_v31_etcd_config_dev.json"]
+CMD ["python", "/app/lightweight_ml_detector_tricapa_v31_etcd.py", "/app/config/json/ml_detector_config_docker.json"]
