@@ -66,14 +66,20 @@ COPY protocols/v3_1/network_security_clean_v31_pb2.py /app/protocols/v3_1/
 COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
 # Configuration files
-COPY infrastructure/config/ml_detector_config_docker.json /app/config/json
+COPY infrastructure/config/ml_detector_config_docker.json /app/config/json/ml_detector_config_docker.json
 
-# ML models directory (if pre-trained models exist)
-RUN mkdir -p /app/models/pretrained
+# =========================================================
+# ML Detector Dockerfile - preparación de modelos y logs
+# =========================================================
 
-# Create minimal directory structure and set ownership
-RUN mkdir -p /app/logs && \
-    chown -R mldetector:mldetector /app /home/mldetector
+# Copiar todos los modelos fundacionales al directorio que espera el JSON
+COPY ./models/production/ /app/models/production/
+COPY ./models/production/tricapa/ /app/models/production/tricapa/
+
+# Crear directorios de logs y proto
+RUN mkdir -p /app/logs /app/logs/proto && \
+    chown -R mldetector:mldetector /app/models /app/logs && \
+    chmod -R 755 /app/models /app/logs
 
 # Switch to unprivileged user
 USER mldetector
@@ -93,7 +99,6 @@ ENV ETCD_ENDPOINT=http://etcd:2379 \
     NODE_ID=ml_detector_tricapa_v31_001 \
     LOG_LEVEL=INFO \
     PYTHONPATH=/app \
-    ML_MODEL_PATH=/app/models/pretrained \
     SKLEARN_ENABLE_RESOURCE_WARNINGS=false
 
 # AppArmor ready - no special privileges needed

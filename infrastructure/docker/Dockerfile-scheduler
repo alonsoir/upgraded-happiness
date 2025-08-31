@@ -65,7 +65,7 @@ COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
 # Configuration files - DOCKER SPECIFIC VERSIONS
 COPY infrastructure/config/scheduler_firewall_config_docker.json /app/config/json/
-COPY infrastructure/config/firewall_rules_config_docker.json /app/config/json/
+COPY infrastructure/config/firewall_rules_scheduler_config_docker.json /app/config/json/
 
 # Create minimal directory structure and set ownership
 RUN mkdir -p /app/logs /app/protobuf_storage/enriched /app/protobuf_storage/archived /app/axioms/pending /app/axioms/templates && \
@@ -98,4 +98,4 @@ ENV ETCD_ENDPOINT=http://etcd:2379 \
 # Security context will be handled at runtime (docker-compose/k8s)
 
 # Run scheduler with both required configuration files
-CMD ["python", "/app/scheduler_firewall_v31_etcd.py", "/app/config/json/scheduler_firewall_config_docker.json", "/app/config/json/firewall_rules_config_docker.json"]
+CMD ["python", "/app/scheduler_firewall_v31_etcd.py", "/app/config/json/scheduler_firewall_config_docker.json", "/app/config/json/firewall_rules_scheduler_config_docker.json"]

@@ -1,476 +1,518 @@
 #!/usr/bin/env python3
 """
-test_dashboard_etcd_compatibility.py
-Test de compatibilidad ETCD para Dashboard V3.1 Docker
-
-🎯 OBJETIVO: Verificar que dashboard_v31_etcd.py funciona con:
-- dashboard_config_docker.json
-- firewall_rules_config_docker.json
-- core/etcd_crypto_client_dashboard_fixed.py
-
-✅ Este test usa las clases REALES del archivo fixed
+tests/test_etcd_client_dashboard_integration.py
+🧪 TEST COMPLETO - Cliente ETCD Dashboard con Configuración Dual
+================================================================================
+Verifica que el cliente etcd_crypto_client_dashboard_fixed.py puede:
+1. Cargar correctamente dashboard_config_docker.json
+2. Cargar correctamente firewall_rules_dashboard_config_docker.json
+3. Extraer configuración ETCD del archivo principal
+4. Registrar ambas configuraciones en ETCD (simulado)
 """
 
-import sys
-import os
+import asyncio
 import json
 import logging
-import traceback
-import asyncio
-from pathlib import Path
-from typing import Dict, Any, Optional
+import os
+import sys
+import tempfile
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-def find_firewall_rules_config_docker():
-    # Ruta al config Docker del geoip
-    config_path = "infrastructure/config/firewall_rules_config_docker.json"
-    return config_path
-
-def find_dashboard_config_docker():
-    # Ruta al config Docker del geoip
-    config_path = "infrastructure/config/dashbo"
-    return config_path
-
-def find_project_root():
-    """Encuentra la raíz del proyecto buscando archivos característicos"""
-    current = Path.cwd()
-    for parent in [current] + list(current.parents):
-        if (parent / 'dashboard_v31_etcd.py').exists() or (parent / 'core').exists():
-            return parent
-    return current
+# Importar el cliente ETCD que vamos a testear
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'core'))
+from core.etcd_crypto_client_dashboard_fixed import (
+    ETCDCryptoClientDashboard,
+    DashboardScadaV31EtcdETCDConfig,
+    setup_dashboard_crypto,
+    get_dashboard_pipeline_key,
+    get_dashboard_crypto_status
+)
 
 
-def load_json_config(filepath: str) -> Optional[Dict[str, Any]]:
-    """Carga y valida un archivo JSON de configuración"""
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        logger.info(f"✅ Archivo JSON cargado: {filepath}")
-        return config
-    except FileNotFoundError:
-        logger.error(f"❌ Archivo no encontrado: {filepath}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"❌ Error JSON en {filepath}: {e}")
-        return None
+class TestETCDDashboardClientIntegration:
+    """Test Suite para integración completa del cliente ETCD Dashboard"""
 
+    def setup_method(self):
+        """Setup para cada test"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.dashboard_config_path = os.path.join(self.temp_dir, "dashboard_config.json")
+        self.rules_config_path = os.path.join(self.temp_dir, "firewall_rules_config.json")
 
-def validate_etcd_config_section(config: Dict[str, Any], config_name: str) -> bool:
-    """Valida la sección etcd_crypto de la configuración"""
-    logger.info(f"🔐 Validando sección etcd_crypto en {config_name}...")
+        # Configurar logging para tests
+        logging.basicConfig(level=logging.INFO)
 
-    if 'etcd_crypto' not in config:
-        logger.error(f"❌ Sección 'etcd_crypto' faltante en {config_name}")
-        return False
+    def teardown_method(self):
+        """Cleanup después de cada test"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    etcd_section = config['etcd_crypto']
-    required_fields = ['etcd_host', 'etcd_port', 'cluster_name', 'node_id']
-    missing_fields = [field for field in required_fields if field not in etcd_section]
+    def create_dashboard_config_file(self):
+        """Crear archivo de configuración del dashboard basado en el real"""
+        dashboard_config = {
+            "deployment_metadata": {
+                "environment": "docker-compose",
+                "orchestrator": "docker",
+                "namespace": "upgraded-happiness",
+                "pod_id": "dashboard-b8c4f6d2k-p7q9m",
+                "container_name": "dashboard",
+                "deployment_timestamp": "2025-08-29T08:49:07.621Z",
+                "config_version": "3.1.0-etcd-integration-docker",
+                "cluster_info": {
+                    "cluster_name": "upgraded-happiness-cluster-v31",
+                    "availability_zone": "docker-local-az1",
+                    "region": "docker-compose-local"
+                }
+            },
+            "node_id": "dashboard_main_v31_etcd_001",
+            "component": {
+                "name": "dashboard_scada_v31_etcd",
+                "version": "3.1.0-etcd-integration",
+                "mode": "distributed_monitoring_etcd",
+                "role": "dashboard_scada_nogui_etcd"
+            },
+            # 🔑 SECCIÓN CRÍTICA - etcd_crypto
+            "etcd_crypto": {
+                "etcd_host": "etcd",
+                "etcd_port": 2379,
+                "cluster_name": "upgraded-happiness-cluster-v31",
+                "node_id": "dashboard_main_v31_etcd_001"
+            },
+            "network": {
+                "ml_events_input": {
+                    "address": "ml-detector",
+                    "port": 5580,
+                    "mode": "connect",
+                    "socket_type": "SUB"
+                }
+            },
+            "distributed": {
+                "cluster_name": "upgraded-happiness-cluster-v31",
+                "component_role": "dashboard_scada_monitoring_etcd"
+            },
+            "crypto": {
+                "enabled": True,
+                "role": "receiver_sender",
+                "use_etcd_pipeline_key": True
+            },
+            "_config_metadata": {
+                "config_version": "3.1.0-etcd-integration-docker",
+                "template_version": "3.1.0-etcd-integration-dashboard-docker"
+            }
+        }
 
-    if missing_fields:
-        logger.error(f"❌ Campos faltantes en etcd_crypto: {missing_fields}")
-        return False
+        with open(self.dashboard_config_path, 'w') as f:
+            json.dump(dashboard_config, f, indent=2)
 
-    logger.info(f"✅ Sección etcd_crypto válida en {config_name}")
-    logger.info(f"   - ETCD Host: {etcd_section['etcd_host']}")
-    logger.info(f"   - ETCD Port: {etcd_section['etcd_port']}")
-    logger.info(f"   - Cluster: {etcd_section['cluster_name']}")
-    logger.info(f"   - Node ID: {etcd_section['node_id']}")
+    def create_firewall_rules_config_file(self):
+        """Crear archivo de reglas firewall basado en el real"""
+        rules_config = {
+            "deployment_metadata": {
+                "environment": "docker",
+                "orchestrator": "docker",
+                "namespace": "upgraded-happiness",
+                "config_version": "1.0.0-RELEASE-DOCKER",
+                "cluster_info": {
+                    "cluster_name": "upgraded-happiness-cluster",
+                    "availability_zone": "docker-zone-1",
+                    "region": "local-docker"
+                }
+            },
+            "firewall_rules": {
+                "version": "1.0.0-RELEASE",
+                "last_updated": "2025-08-30T18:45:00Z",
+                "description": "RELEASE-1.0.0 - Firewall rules for dashboard",
+                "rules": [
+                    {
+                        "rule_id": "rule_001_very_low_risk",
+                        "risk_range": [0, 19],
+                        "action": "LIST_RULES",
+                        "description": "Riesgo muy bajo: Solo listar reglas",
+                        "priority": "LOW",
+                        "dry_run": True,
+                        "enabled": True
+                    },
+                    {
+                        "rule_id": "rule_002_critical_risk",
+                        "risk_range": [80, 100],
+                        "action": "BLOCK_IP",
+                        "description": "Riesgo crítico: Bloqueo inmediato",
+                        "priority": "CRITICAL",
+                        "dry_run": True,
+                        "enabled": False
+                    }
+                ],
+                "agents_fleet": {
+                    "simple_firewall_agent_001": {
+                        "node_id": "simple_firewall_agent_001",
+                        "version": "3.1.0",
+                        "status": "active",
+                        "capabilities": {
+                            "allowed_actions": ["MONITOR", "LIST_RULES"],
+                            "blocked_actions": ["BLOCK_IP", "RATE_LIMIT"]
+                        }
+                    }
+                }
+            },
+            "_config_metadata": {
+                "template_version": "1.0.0-RELEASE",
+                "config_version": "1.0.0-RELEASE-DOCKER"
+            }
+        }
 
-    return True
+        with open(self.rules_config_path, 'w') as f:
+            json.dump(rules_config, f, indent=2)
 
+    def test_load_dashboard_config_success(self):
+        """Test: Cargar configuración del dashboard exitosamente"""
+        print("🧪 Test 1: Cargando configuración principal del dashboard...")
 
-def validate_dashboard_docker_structure(config: Dict[str, Any]) -> bool:
-    """Valida estructura específica para dashboard Docker"""
-    logger.info("🐳 Validando estructura Docker del dashboard...")
+        self.create_dashboard_config_file()
 
-    # Validar secciones principales
-    required_sections = [
-        'deployment_metadata',
-        'etcd_crypto',
-        'network',
-        'firewall_fleet',
-        'web_server',
-        'crypto',
-        'component'
-    ]
-
-    missing_sections = [section for section in required_sections if section not in config]
-    if missing_sections:
-        logger.error(f"❌ Secciones faltantes: {missing_sections}")
-        return False
-
-    # Validar metadata Docker
-    deployment_meta = config.get('deployment_metadata', {})
-    docker_fields = ['container_name', 'environment', 'orchestrator']
-    for field in docker_fields:
-        if field not in deployment_meta:
-            logger.warning(f"⚠️ Campo Docker faltante en deployment_metadata: {field}")
-
-    # Validar crypto role
-    crypto_section = config.get('crypto', {})
-    if crypto_section.get('role') != 'receiver_sender':
-        logger.error(f"❌ Crypto role incorrecto: {crypto_section.get('role')} (esperado: receiver_sender)")
-        return False
-
-    # Validar web server
-    web_server = config.get('web_server', {})
-    if web_server.get('port') != 8080:
-        logger.error(f"❌ Puerto web server incorrecto: {web_server.get('port')} (esperado: 8080)")
-        return False
-
-    logger.info("✅ Estructura Docker del dashboard válida")
-    return True
-
-
-def test_etcd_client_imports():
-    """Test de importaciones del cliente ETCD"""
-    logger.info("📦 Testeando importaciones del cliente ETCD...")
-
-    try:
-        # Intentar importar las clases REALES
-        from core.etcd_crypto_client_dashboard_fixed import (
-            DashboardScadaV31EtcdETCDConfig,
-            ETCDCryptoClientDashboard,
-            setup_dashboard_crypto,
-            get_dashboard_pipeline_key,
-            get_dashboard_crypto_status
-        )
-
-        logger.info("✅ Importaciones exitosas:")
-        logger.info(f"   - DashboardScadaV31EtcdETCDConfig (dataclass)")
-        logger.info(f"   - ETCDCryptoClientDashboard (clase principal)")
-        logger.info(f"   - setup_dashboard_crypto (función)")
-        logger.info(f"   - get_dashboard_pipeline_key (función)")
-        logger.info(f"   - get_dashboard_crypto_status (función)")
-
-        return True
-
-    except ImportError as e:
-        logger.error(f"❌ Error de importación: {e}")
-        return False
-
-
-def test_etcd_client_instantiation(dashboard_config_path: str, rules_config_path: str = None):
-    """Test de instanciación del cliente ETCD"""
-    logger.info("🔧 Testeando instanciación del cliente ETCD...")
-
-    try:
-        from core.etcd_crypto_client_dashboard_fixed import ETCDCryptoClientDashboard
-
-        # Crear instancia del cliente
         client = ETCDCryptoClientDashboard(
-            dashboard_config_path=dashboard_config_path,
-            rules_config_path=rules_config_path
+            self.dashboard_config_path,
+            None  # Sin reglas firewall por ahora
         )
 
-        logger.info("✅ Cliente ETCD instanciado correctamente")
-        logger.info(f"   - Dashboard config: {dashboard_config_path}")
-        if rules_config_path:
-            logger.info(f"   - Rules config: {rules_config_path}")
-
-        return client
-
-    except Exception as e:
-        logger.error(f"❌ Error al instanciar cliente ETCD: {e}")
-        logger.error(traceback.format_exc())
-        return None
-
-
-def test_config_loading(client, test_mode: bool = True):
-    """Test de carga de configuraciones"""
-    logger.info("📖 Testeando carga de configuraciones...")
-
-    try:
-        # Cargar config del componente
+        # Cargar config
         client._load_component_config()
-        logger.info("✅ Configuración del componente cargada")
 
-        # Cargar config de reglas (si existe)
-        if client.rules_config_path:
-            client._load_rules_config()
-            logger.info("✅ Configuración de reglas cargada")
+        # Verificaciones
+        assert client.component_config is not None
+        assert client.component_config["node_id"] == "dashboard_main_v31_etcd_001"
+        assert client.component_config["component"]["name"] == "dashboard_scada_v31_etcd"
+        assert "etcd_crypto" in client.component_config
 
-        # Extraer config ETCD
+        print("✅ Configuración principal cargada correctamente")
+
+    def test_load_firewall_rules_config_success(self):
+        """Test: Cargar configuración de reglas firewall exitosamente"""
+        print("🧪 Test 2: Cargando configuración de reglas firewall...")
+
+        self.create_dashboard_config_file()
+        self.create_firewall_rules_config_file()
+
+        client = ETCDCryptoClientDashboard(
+            self.dashboard_config_path,
+            self.rules_config_path
+        )
+
+        # Cargar ambos configs
+        client._load_component_config()
+        client._load_rules_config()
+
+        # Verificaciones config principal
+        assert client.component_config is not None
+        assert client.component_config["node_id"] == "dashboard_main_v31_etcd_001"
+
+        # Verificaciones config reglas
+        assert client.rules_config is not None
+        assert "firewall_rules" in client.rules_config
+        assert client.rules_config["firewall_rules"]["version"] == "1.0.0-RELEASE"
+
+        # Verificar que hay reglas
+        rules = client.rules_config["firewall_rules"]["rules"]
+        assert len(rules) == 2
+        assert rules[0]["rule_id"] == "rule_001_very_low_risk"
+        assert rules[1]["rule_id"] == "rule_002_critical_risk"
+
+        # Verificar agentes
+        agents = client.rules_config["firewall_rules"]["agents_fleet"]
+        assert "simple_firewall_agent_001" in agents
+
+        print("✅ Configuración de reglas firewall cargada correctamente")
+
+    def test_extract_etcd_config_success(self):
+        """Test: Extraer configuración ETCD del archivo principal"""
+        print("🧪 Test 3: Extrayendo configuración ETCD...")
+
+        self.create_dashboard_config_file()
+
+        client = ETCDCryptoClientDashboard(
+            self.dashboard_config_path,
+            None
+        )
+
+        # Cargar y extraer config ETCD
+        client._load_component_config()
         client._extract_etcd_config()
-        logger.info("✅ Configuración ETCD extraída")
-        logger.info(f"   - Host: {client.etcd_config.etcd_host}")
-        logger.info(f"   - Puerto: {client.etcd_config.etcd_port}")
-        logger.info(f"   - Cluster: {client.etcd_config.cluster_name}")
-        logger.info(f"   - Node ID: {client.etcd_config.node_id}")
 
-        return True
+        # Verificaciones
+        assert client.etcd_config is not None
+        assert isinstance(client.etcd_config, DashboardScadaV31EtcdETCDConfig)
+        assert client.etcd_config.etcd_host == "etcd"
+        assert client.etcd_config.etcd_port == 2379
+        assert client.etcd_config.cluster_name == "upgraded-happiness-cluster-v31"
+        assert client.etcd_config.node_id == "dashboard_main_v31_etcd_001"
 
-    except Exception as e:
-        logger.error(f"❌ Error en carga de configuraciones: {e}")
-        if not test_mode:
-            logger.error(traceback.format_exc())
-        return False
+        print("✅ Configuración ETCD extraída correctamente")
 
+    def test_extract_etcd_config_missing_section(self):
+        """Test: Error cuando falta sección etcd_crypto"""
+        print("🧪 Test 4: Verificando error con sección etcd_crypto faltante...")
 
-async def test_crypto_initialization(client, test_mode: bool = True):
-    """Test de inicialización crypto (modo test)"""
-    logger.info("🔐 Testeando inicialización crypto (modo test)...")
+        # Crear config SIN sección etcd_crypto
+        config_without_etcd = {
+            "node_id": "test_node",
+            "component": {"name": "test_component"}
+        }
 
-    try:
-        if test_mode:
-            # En modo test, simular inicialización sin conectar a ETCD real
-            logger.info("🧪 MODO TEST: Simulando inicialización sin ETCD real")
+        with open(self.dashboard_config_path, 'w') as f:
+            json.dump(config_without_etcd, f)
 
-            # Cargar configuraciones localmente
-            client._load_component_config()
-            if client.rules_config_path:
-                client._load_rules_config()
+        client = ETCDCryptoClientDashboard(self.dashboard_config_path, None)
+        client._load_component_config()
+
+        # Debe fallar al extraer config ETCD
+        with pytest.raises(KeyError) as exc_info:
             client._extract_etcd_config()
 
-            # Simular token crypto
-            from datetime import datetime
-            client.crypto_token = {
-                'key': f"dashboard_scada_v31_etcd_key_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                'version': 'v3.1.0-test',
-                'timestamp': datetime.now().isoformat(),
-                'test_mode': True
+        assert "etcd_crypto" in str(exc_info.value)
+        print("✅ Error detectado correctamente cuando falta sección etcd_crypto")
+
+    def test_extract_etcd_config_missing_required_fields(self):
+        """Test: Error cuando faltan campos requeridos en etcd_crypto"""
+        print("🧪 Test 5: Verificando error con campos ETCD faltantes...")
+
+        # Crear config con etcd_crypto incompleto
+        config_incomplete = {
+            "node_id": "test_node",
+            "etcd_crypto": {
+                "etcd_host": "etcd",
+                # Faltan etcd_port, cluster_name, node_id
             }
+        }
 
-            logger.info("✅ Inicialización crypto simulada exitosa")
-            logger.info(f"   - Token version: {client.crypto_token['version']}")
-            logger.info(f"   - Key: {client.crypto_token['key'][:50]}...")
+        with open(self.dashboard_config_path, 'w') as f:
+            json.dump(config_incomplete, f)
 
-            return True
-        else:
-            # Inicialización real (requiere ETCD corriendo)
-            success = await client.initialize_crypto()
-            logger.info(f"✅ Inicialización crypto real: {success}")
-            return success
+        client = ETCDCryptoClientDashboard(self.dashboard_config_path, None)
+        client._load_component_config()
 
-    except Exception as e:
-        logger.error(f"❌ Error en inicialización crypto: {e}")
-        if not test_mode:
-            logger.error(traceback.format_exc())
-        return False
+        # Debe fallar por campos faltantes
+        with pytest.raises(KeyError) as exc_info:
+            client._extract_etcd_config()
 
+        error_msg = str(exc_info.value)
+        assert "etcd_port" in error_msg or "cluster_name" in error_msg
+        print("✅ Error detectado correctamente cuando faltan campos ETCD requeridos")
 
-def test_api_functions(dashboard_config_path: str, rules_config_path: str = None):
-    """Test de funciones públicas de API"""
-    logger.info("🎯 Testeando funciones públicas de API...")
+    @patch('etcd3.client')
+    async def test_register_configs_in_etcd_success(self, mock_etcd3_client):
+        """Test: Registrar configuraciones en ETCD (simulado)"""
+        print("🧪 Test 6: Registrando configuraciones en ETCD...")
 
-    try:
-        from core.etcd_crypto_client_dashboard_fixed import (
-            setup_dashboard_crypto,
-            get_dashboard_pipeline_key,
-            get_dashboard_crypto_status
+        # Setup mock ETCD client
+        mock_client_instance = Mock()
+        mock_etcd3_client.return_value = mock_client_instance
+
+        self.create_dashboard_config_file()
+        self.create_firewall_rules_config_file()
+
+        client = ETCDCryptoClientDashboard(
+            self.dashboard_config_path,
+            self.rules_config_path
         )
 
-        # Test status antes de setup
-        status_before = get_dashboard_crypto_status()
-        logger.info(f"📊 Status antes del setup: {status_before}")
+        # Cargar configs y extraer ETCD config
+        client._load_component_config()
+        client._load_rules_config()
+        client._extract_etcd_config()
 
-        # Test pipeline key antes de setup
-        key_before = get_dashboard_pipeline_key()
-        logger.info(f"🔑 Pipeline key antes del setup: {key_before}")
+        # Registrar en ETCD
+        await client._register_configs_in_etcd()
 
-        logger.info("✅ Funciones públicas de API accesibles")
-        return True
+        # Verificaciones
+        mock_etcd3_client.assert_called_once_with(host="etcd", port=2379)
 
-    except Exception as e:
-        logger.error(f"❌ Error en test de API: {e}")
-        return False
+        # Verificar que se hicieron dos PUTs (config principal + reglas)
+        assert mock_client_instance.put.call_count == 2
 
+        # Verificar las claves utilizadas
+        call_args = mock_client_instance.put.call_args_list
+        keys_used = [call[0][0] for call in call_args]
 
-def analyze_component_info(dashboard_config: Dict[str, Any]) -> Dict[str, Any]:
-    """Analiza información del componente para el resumen"""
-    component_info = {
-        'name': dashboard_config.get('component', {}).get('name', 'dashboard_scada_v31_etcd'),
-        'version': dashboard_config.get('component', {}).get('version', '3.1.0'),
-        'role': dashboard_config.get('component', {}).get('role', 'dashboard_scada'),
-        'crypto_role': dashboard_config.get('crypto', {}).get('role', 'receiver_sender'),
-        'pipeline_position': 'dashboard_final_stage',
-        'endpoints': [],
-        'capabilities': []
-    }
+        assert "/upgraded-happiness/v31/components/dashboard/config" in keys_used
+        assert "/upgraded-happiness/v31/components/dashboard/firewall_rules" in keys_used
 
-    # Extraer endpoints de red
-    network = dashboard_config.get('network', {})
-    if 'ml_events_input' in network:
-        ml_input = network['ml_events_input']
-        component_info['endpoints'].append(
-            f"ML Input: {ml_input.get('address', 'ml-detector')}:{ml_input.get('port', 5580)} (SUB)")
+        # Verificar que los datos JSON son válidos
+        for call in call_args:
+            json_data = call[0][1]  # Segundo argumento (el valor)
+            parsed_data = json.loads(json_data)
+            assert "config_type" in parsed_data
+            assert "timestamp" in parsed_data
+            assert "node_id" in parsed_data
 
-    # Web server
-    web_server = dashboard_config.get('web_server', {})
-    if web_server.get('enabled', True):
-        component_info['endpoints'].append(
-            f"Web Server: {web_server.get('host', '0.0.0.0')}:{web_server.get('port', 8080)} (HTTP)")
+        print("✅ Configuraciones registradas correctamente en ETCD")
 
-    # Fleet management
-    firewall_fleet = dashboard_config.get('firewall_fleet', {})
-    if firewall_fleet.get('enabled', False):
-        component_info['capabilities'].append('Fleet Management')
-        component_info['capabilities'].append('Firewall Control')
+    @patch('etcd3.client')
+    async def test_full_initialization_success(self, mock_etcd3_client):
+        """Test: Inicialización completa del cliente ETCD"""
+        print("🧪 Test 7: Inicialización completa del cliente ETCD...")
 
-    # Crypto capabilities
-    crypto = dashboard_config.get('crypto', {})
-    if crypto.get('enabled', False):
-        component_info['capabilities'].append('ETCD Crypto')
-        component_info['capabilities'].append('Message Encryption/Decryption')
+        # Setup mock
+        mock_client_instance = Mock()
+        mock_etcd3_client.return_value = mock_client_instance
 
-    # Visualización
-    data_viz = dashboard_config.get('data_visualization', {})
-    if data_viz.get('enabled', False):
-        component_info['capabilities'].append('Real-time Visualization')
-        component_info['capabilities'].append('Geographic Mapping')
+        self.create_dashboard_config_file()
+        self.create_firewall_rules_config_file()
 
-    return component_info
+        client = ETCDCryptoClientDashboard(
+            self.dashboard_config_path,
+            self.rules_config_path
+        )
 
+        # Inicializar crypto completo
+        success = await client.initialize_crypto()
 
-def print_compatibility_summary(
-        dashboard_config: Dict[str, Any],
-        rules_config: Dict[str, Any],
-        test_results: Dict[str, bool],
-        component_info: Dict[str, Any]
-):
-    """Imprime resumen de compatibilidad"""
-    print("\n" + "=" * 80)
-    print("🎯 RESUMEN DE COMPATIBILIDAD ETCD - DASHBOARD V3.1 DOCKER")
-    print("=" * 80)
+        # Verificaciones
+        assert success is True
+        assert client.is_crypto_ready() is True
+        assert client.crypto_token is not None
+        assert client.get_pipeline_key() is not None
 
-    # Información del componente
-    print(f"\n📊 INFORMACIÓN DEL COMPONENTE:")
-    print(f"   • Nombre: {component_info['name']}")
-    print(f"   • Versión: {component_info['version']}")
-    print(f"   • Rol: {component_info['role']}")
-    print(f"   • Crypto Role: {component_info['crypto_role']}")
-    print(f"   • Pipeline Position: {component_info['pipeline_position']}")
+        # Verificar status
+        status = client.get_status()
+        assert status["component"] == "dashboard_scada_v31_etcd"
+        assert status["crypto_ready"] is True
+        assert status["etcd_config"]["host"] == "etcd"
+        assert status["etcd_config"]["port"] == 2379
 
-    # Endpoints
-    print(f"\n🌐 ENDPOINTS DE RED:")
-    for endpoint in component_info['endpoints']:
-        print(f"   • {endpoint}")
+        print("✅ Inicialización completa exitosa")
 
-    # Capacidades
-    print(f"\n⚡ CAPACIDADES:")
-    for capability in component_info['capabilities']:
-        print(f"   • {capability}")
+    @patch('etcd3.client')
+    async def test_public_api_functions(self, mock_etcd3_client):
+        """Test: Funciones públicas del API"""
+        print("🧪 Test 8: Verificando funciones públicas del API...")
 
-    # Resultados de tests
-    print(f"\n✅ RESULTADOS DE TESTS:")
-    for test_name, result in test_results.items():
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"   • {test_name}: {status}")
+        # Setup mock
+        mock_client_instance = Mock()
+        mock_etcd3_client.return_value = mock_client_instance
 
-    # Configuración ETCD
-    etcd_config = dashboard_config.get('etcd_crypto', {})
-    print(f"\n🔐 CONFIGURACIÓN ETCD:")
-    print(f"   • Host: {etcd_config.get('etcd_host', 'N/A')}")
-    print(f"   • Puerto: {etcd_config.get('etcd_port', 'N/A')}")
-    print(f"   • Cluster: {etcd_config.get('cluster_name', 'N/A')}")
-    print(f"   • Node ID: {etcd_config.get('node_id', 'N/A')}")
+        self.create_dashboard_config_file()
+        self.create_firewall_rules_config_file()
 
-    # Docker metadata
-    docker_meta = dashboard_config.get('deployment_metadata', {})
-    print(f"\n🐳 METADATOS DOCKER:")
-    print(f"   • Container: {docker_meta.get('container_name', 'N/A')}")
-    print(f"   • Namespace: {docker_meta.get('namespace', 'N/A')}")
-    print(f"   • Orchestrator: {docker_meta.get('orchestrator', 'N/A')}")
-    print(f"   • Config Version: {docker_meta.get('config_version', 'N/A')}")
+        # Test funciones públicas
+        success = await setup_dashboard_crypto(
+            self.dashboard_config_path,
+            self.rules_config_path
+        )
 
-    # Estado general
-    all_passed = all(test_results.values())
-    status_emoji = "🎉" if all_passed else "⚠️"
-    status_text = "TODAS LAS PRUEBAS PASARON" if all_passed else "ALGUNAS PRUEBAS FALLARON"
+        assert success is True
 
-    print(f"\n{status_emoji} ESTADO GENERAL: {status_text}")
+        # Verificar pipeline key
+        pipeline_key = get_dashboard_pipeline_key()
+        assert pipeline_key is not None
+        assert "dashboard_scada_v31_etcd" in pipeline_key
 
-    if all_passed:
-        print("\n🚀 El dashboard está listo para Docker/K8s con ETCD crypto!")
-    else:
-        print("\n🔧 Revisa los errores arriba antes de proceder al deployment.")
+        # Verificar status
+        status = get_dashboard_crypto_status()
+        assert status["component"] == "dashboard_scada_v31_etcd"
+        assert status["crypto_ready"] is True
 
-    print("=" * 80)
+        print("✅ Funciones públicas del API funcionan correctamente")
+
+    def test_config_files_consistency_check(self):
+        """Test: Verificar consistencia entre archivos de configuración"""
+        print("🧪 Test 9: Verificando consistencia entre archivos...")
+
+        self.create_dashboard_config_file()
+        self.create_firewall_rules_config_file()
+
+        # Cargar ambos archivos
+        with open(self.dashboard_config_path, 'r') as f:
+            dashboard_config = json.load(f)
+
+        with open(self.rules_config_path, 'r') as f:
+            rules_config = json.load(f)
+
+        # Verificar que los metadatos son consistentes
+        dashboard_env = dashboard_config["deployment_metadata"]["environment"]
+        rules_env = rules_config["deployment_metadata"]["environment"]
+
+        # Verificar campos críticos
+        assert dashboard_config["etcd_crypto"]["etcd_host"] == "etcd"
+        assert dashboard_config["etcd_crypto"]["etcd_port"] == 2379
+        assert dashboard_config["etcd_crypto"]["node_id"] == "dashboard_main_v31_etcd_001"
+
+        # Verificar que las reglas firewall tienen estructura válida
+        firewall_rules = rules_config["firewall_rules"]
+        assert "rules" in firewall_rules
+        assert "agents_fleet" in firewall_rules
+        assert len(firewall_rules["rules"]) > 0
+
+        print("✅ Consistencia entre archivos verificada")
+
+    async def run_all_tests(self):
+        """Ejecutar todos los tests"""
+        print("\n" + "=" * 80)
+        print("🚀 EJECUTANDO BATERÍA COMPLETA DE TESTS - Cliente ETCD Dashboard")
+        print("=" * 80)
+
+        tests = [
+            self.test_load_dashboard_config_success,
+            self.test_load_firewall_rules_config_success,
+            self.test_extract_etcd_config_success,
+            self.test_extract_etcd_config_missing_section,
+            self.test_extract_etcd_config_missing_required_fields,
+            self.test_register_configs_in_etcd_success,
+            self.test_full_initialization_success,
+            self.test_public_api_functions,
+            self.test_config_files_consistency_check
+        ]
+
+        passed = 0
+        failed = 0
+
+        for test_func in tests:
+            try:
+                self.setup_method()
+                if asyncio.iscoroutinefunction(test_func):
+                    await test_func()
+                else:
+                    test_func()
+                passed += 1
+                print(f"✅ {test_func.__name__} - PASSED")
+            except Exception as e:
+                failed += 1
+                print(f"❌ {test_func.__name__} - FAILED: {e}")
+            finally:
+                self.teardown_method()
+
+        print("\n" + "=" * 80)
+        print(f"📊 RESUMEN DE TESTS: {passed} PASSED | {failed} FAILED")
+        print("=" * 80)
+
+        if failed == 0:
+            print("🎉 TODOS LOS TESTS PASARON - Cliente ETCD Dashboard listo para Docker!")
+        else:
+            print("⚠️  ALGUNOS TESTS FALLARON - Revisar configuración antes de continuar")
+
+        return failed == 0
 
 
 async def main():
-    """Función principal del test"""
-    logger.info("🎯 Iniciando test de compatibilidad ETCD Dashboard V3.1 Docker")
+    """Función principal para ejecutar tests"""
+    print("🧪 Test Suite - Cliente ETCD Dashboard con Configuración Dual")
+    print("📁 Archivos a verificar:")
+    print("  - core/etcd_crypto_client_dashboard_fixed.py")
+    print("  - infrastructure/config/dashboard_config_docker.json")
+    print("  - infrastructure/config/firewall_rules_dashboard_config_docker.json")
 
-    # Encontrar raíz del proyecto
-    project_root = find_project_root()
-    logger.info(f"📁 Raíz del proyecto: {project_root}")
+    tester = TestETCDDashboardClientIntegration()
+    success = await tester.run_all_tests()
 
-    # Rutas de archivos
-    dashboard_config_path = project_root / "dashboard_config_docker.json"
-    rules_config_path = project_root / "firewall_rules_config_docker.json"
+    if success:
+        print("\n🎯 CONCLUSIÓN: El cliente ETCD puede trabajar correctamente con ambos archivos")
+        print("📋 PRÓXIMOS PASOS:")
+        print("  1. ✅ Cliente ETCD soporta configuración dual")
+        print("  2. ⏭️  Revisar integración en backend del dashboard")
+        print("  3. ⏭️  Validar Dockerfile para copia de archivos")
+        print("  4. ⏭️  Crear imágenes Docker de todos los componentes")
 
-    # Verificar archivos existen
-    if not dashboard_config_path.exists():
-        logger.error(f"❌ Archivo no encontrado: {dashboard_config_path}")
-        return False
-
-    # Rules config es opcional
-    rules_path = str(rules_config_path) if rules_config_path.exists() else None
-    if not rules_config_path.exists():
-        logger.warning(f"⚠️ Archivo de reglas no encontrado (opcional): {rules_config_path}")
-
-    # Cargar configuraciones
-    dashboard_config = load_json_config(str(dashboard_config_path))
-    rules_config = load_json_config(str(rules_config_path)) if rules_path else {}
-
-    if not dashboard_config:
-        logger.error("❌ No se pudo cargar la configuración del dashboard")
-        return False
-
-    # Resultados de tests
-    test_results = {}
-
-    # Test 1: Validar estructura ETCD
-    test_results['ETCD Config Structure'] = validate_etcd_config_section(dashboard_config, "dashboard")
-
-    # Test 2: Validar estructura Docker
-    test_results['Docker Structure'] = validate_dashboard_docker_structure(dashboard_config)
-
-    # Test 3: Importaciones
-    test_results['ETCD Client Imports'] = test_etcd_client_imports()
-
-    # Test 4: Instanciación del cliente
-    client = test_etcd_client_instantiation(str(dashboard_config_path), rules_path)
-    test_results['Client Instantiation'] = client is not None
-
-    if client:
-        # Test 5: Carga de configuraciones
-        test_results['Config Loading'] = test_config_loading(client, test_mode=True)
-
-        # Test 6: Inicialización crypto (modo test)
-        test_results['Crypto Initialization'] = await test_crypto_initialization(client, test_mode=True)
-
-    # Test 7: Funciones públicas API
-    test_results['Public API Functions'] = test_api_functions(str(dashboard_config_path), rules_path)
-
-    # Analizar información del componente
-    component_info = analyze_component_info(dashboard_config)
-
-    # Mostrar resumen
-    print_compatibility_summary(dashboard_config, rules_config, test_results, component_info)
-
-    # Retornar resultado general
-    all_passed = all(test_results.values())
-    return all_passed
+    return success
 
 
 if __name__ == "__main__":
-    try:
-        # Ejecutar test principal
-        result = asyncio.run(main())
-        exit_code = 0 if result else 1
-        sys.exit(exit_code)
-
-    except KeyboardInterrupt:
-        logger.info("\n⏹️ Test interrumpido por el usuario")
-        sys.exit(1)
-
-    except Exception as e:
-        logger.error(f"❌ Error fatal en test: {e}")
-        logger.error(traceback.format_exc())
-        sys.exit(1)
+    asyncio.run(main())

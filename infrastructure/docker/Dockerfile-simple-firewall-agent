@@ -67,7 +67,7 @@ COPY protocols/v3_1/firewall_commands_v31_pb2.py /app/protocols/v3_1/
 
 # Configuration files - DOCKER SPECIFIC VERSIONS
 COPY infrastructure/config/simple_firewall_agent_config_docker.json /app/config/json/
-COPY infrastructure/config/firewall_rules_config_docker.json /app/config/json/
+COPY infrastructure/config/firewall_rules_simple_agent_config_docker.json /app/config/json/
 
 # Create minimal directory structure and set ownership
 RUN mkdir -p /app/logs && \
@@ -104,4 +104,4 @@ ENV ETCD_ENDPOINT=http://etcd:2379 \
 # These will be set in docker-compose.yml or kubernetes deployment
 
 # Run firewall agent with both required configuration files
-CMD ["python", "/app/simple_firewall_agent_v31_etcd.py", "/app/config/json/simple_firewall_agent_config_docker.json", "/app/config/json/firewall_rules_config_docker.json"]
+CMD ["python", "/app/simple_firewall_agent_v31_etcd.py", "/app/config/json/simple_firewall_agent_config_docker.json", "/app/config/json/firewall_rules_simple_agent_config_docker.json"]

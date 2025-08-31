@@ -23,7 +23,7 @@
   "firewall_rules": {
     "version": "1.0.0-RELEASE",
     "last_updated": "2025-08-30T18:45:00Z",
-    "description": "RELEASE-1.0.0 - Single source of truth firewall configuration",
+    "description": "RELEASE-1.0.0 - Single source of truth firewall configuration for scheduler_firewall",
 
     "rules": [
       {

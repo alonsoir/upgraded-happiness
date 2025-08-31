@@ -796,11 +796,11 @@ class DashboardETCD:
         def dashboard():
             """Página principal del dashboard"""
             try:
-                # Usar el HTML embebido actualizado
-                return self._get_dashboard_html()
+            # Usar template file, NO HTML embebido
+                return render_template('dashboard_v31_etcd.html')
             except Exception as e:
-                self.logger.error(f"❌ Error serving dashboard: {e}")
-                return f"❌ Error loading dashboard: {e}", 500
+                self.logger.error(f"❌ Error serving dashboard template: {e}")
+                return f"❌ Error loading dashboard template: {e}", 500
 
         @self.app.route('/api/metrics')
         def get_metrics():
