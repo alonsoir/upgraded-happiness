@@ -58,8 +58,11 @@ def verify_protobuf_files():
     import os
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)
-    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
+    if current_dir == '/app':  # Ejecutándose en contenedor
+        protocols_path = '/app/protocols/v3_1'
+    else:  # Ejecutándose en host
+        project_root = os.path.dirname(current_dir)
+        protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
 
     required_files = [
         'network_security_clean_v31_pb2.py',
@@ -97,8 +100,11 @@ def import_agent_protobuf_v31():
 
     # Agregar path directo al sys.path
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)  # Subir un nivel desde core/
-    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
+    if current_dir == '/app':  # Ejecutándose en contenedor
+        protocols_path = '/app/protocols/v3_1'
+    else:  # Ejecutándose en host
+        project_root = os.path.dirname(current_dir)
+        protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
 
     if protocols_path not in sys.path:
         sys.path.insert(0, protocols_path)

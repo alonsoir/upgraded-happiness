@@ -51,6 +51,7 @@ COPY --from=builder /root/.local /home/sniffer/.local
 # Main application
 COPY core/evolutionary_sniffer_standalone.py /app/
 
+COPY core/sniffer_components.py /app/
 # Critical dependency - etcd crypto client (reused from dashboard)
 COPY core/etcd_crypto_client_sniffer_fixed.py /app/
 

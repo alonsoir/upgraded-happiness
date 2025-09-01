@@ -60,8 +60,11 @@ def import_dashboard_protobuf_v31():
 
     # Agregar path directo al sys.path
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)  # Subir un nivel desde donde esté el dashboard
-    protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
+    if current_dir == '/app':  # Ejecutándose en contenedor
+        protocols_path = '/app/protocols/v3_1'
+    else:  # Ejecutándose en host
+        project_root = os.path.dirname(current_dir)
+        protocols_path = os.path.join(project_root, 'protocols', 'v3_1')
 
     if protocols_path not in sys.path:
         sys.path.insert(0, protocols_path)
@@ -2814,8 +2817,8 @@ def get_etcd_firewall_agent_info():
 @app.route('/')
 def dashboard():
     """Ruta principal del dashboard"""
-    return render_template('dashboard_v31_etcd.html')
-
+    #return render_template('dashboard_v31_etcd.html')
+    return render_template('dashboard_ferrari.html')
 
 @app.route('/api/firewall-agent-info')
 def get_firewall_agent_info_alias():

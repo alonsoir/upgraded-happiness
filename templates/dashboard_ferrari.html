@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Dashboard SCADA V3.1 ETCD - Ferrari F1 Engine</title>
+
+    <!-- External Libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- 🔧 Dashboard JavaScript ETCD V3.1 -->
+    <script src="/static/js/dashboard_v31_etcd.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            color: #00ff88;
+            overflow-x: hidden;
+            line-height: 1.4;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            gap: 15px;
+            padding: 15px;
+            min-height: 100vh;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 12px;
+            border: 2px solid rgba(0, 255, 136, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent, rgba(0, 255, 136, 0.1), transparent);
+            animation: rotate 20s linear infinite;
+            z-index: -1;
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+
+        .etcd-status {
+            color: #ffaa00;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+        }
+
+        .system-info {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-card {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 255, 136, 0.2);
+        }
+
+        .info-card h3 {
+            color: #00aaff;
+            margin-bottom: 10px;
+        }
+
+        .info-card .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-dot.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .status-dot.warning { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
+        .status-dot.disconnected { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .events-section, .firewall-section {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .section-title {
+            color: #00ff88;
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        .btn:hover {
+            background: rgba(0, 255, 136, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: rgba(255, 68, 68, 0.2);
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 68, 68, 0.3);
+        }
+
+        .event-item {
+            background: rgba(0, 255, 136, 0.05);
+            border-left: 4px solid #00ff88;
+            margin: 8px 0;
+            padding: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .event-item:hover {
+            background: rgba(0, 255, 136, 0.1);
+            transform: translateX(5px);
+        }
+
+        .event-item.risk-high {
+            border-left-color: #ff4444;
+            background: rgba(255, 68, 68, 0.05);
+        }
+
+        .event-item.risk-medium {
+            border-left-color: #ffaa00;
+            background: rgba(255, 170, 0, 0.05);
+        }
+
+        .firewall-event {
+            background: rgba(255, 170, 0, 0.05);
+            border-left: 4px solid #ffaa00;
+            margin: 8px 0;
+            padding: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .firewall-event.command {
+            border-left-color: #0066CC;
+            background: rgba(0, 102, 204, 0.05);
+        }
+
+        .firewall-event.response {
+            border-left-color: #00ff88;
+            background: rgba(0, 255, 136, 0.05);
+        }
+
+        .firewall-event.error {
+            border-left-color: #ff4444;
+            background: rgba(255, 68, 68, 0.05);
+        }
+
+        .timestamp {
+            color: #888;
+            font-size: 0.8rem;
+            float: right;
+        }
+
+        .risk-score {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .risk-score.high {
+            background: rgba(255, 68, 68, 0.2);
+            color: #ff4444;
+        }
+
+        .risk-score.medium {
+            background: rgba(255, 170, 0, 0.2);
+            color: #ffaa00;
+        }
+
+        .no-events {
+            text-align: center;
+            color: #666;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .controls select {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        .map-container {
+            grid-column: 1 / -1;
+            height: 400px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1000;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 0.9rem;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 136, 0.9);
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 6px;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: rgba(255, 68, 68, 0.9);
+            color: #fff;
+        }
+
+        .toast.warning {
+            background: rgba(255, 170, 0, 0.9);
+            color: #000;
+        }
+
+        .scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 136, 0.3);
+            border-radius: 4px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 255, 136, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .etcd-indicator {
+            background: linear-gradient(45deg, #ffaa00, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: bold;
+            animation: pulse 3s infinite;
+        }
+
+        .ferrari-indicator {
+            background: linear-gradient(45deg, #ff0000, #ffaa00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 Dashboard SCADA V3.1 ETCD</h1>
+            <div class="etcd-status etcd-indicator">🔐 ETCD Crypto: ACTIVE - Pipeline Position 5</div>
+            <div class="ferrari-indicator" style="margin-top: 5px; font-size: 1.0rem;">
+                🏎️ Ferrari F1 Engine - Same Speed as Scheduler
+            </div>
+            <div style="margin-top: 10px; font-size: 0.9rem; color: #888;">
+                Fleet Management Cifrada | ETCD Compress+Encrypt | Zero-Knowledge Security
+            </div>
+        </div>
+
+        <!-- System Info Cards -->
+        <div class="system-info">
+            <div class="info-card">
+                <h3>📊 Eventos ML</h3>
+                <div class="value" id="events-count">0</div>
+                <div>ETCD Descifrados</div>
+            </div>
+            <div class="info-card">
+                <h3>🔥 Comandos Fleet</h3>
+                <div class="value" id="commands-count">0</div>
+                <div>Cifrados ETCD</div>
+            </div>
+            <div class="info-card">
+                <h3>✅ Respuestas</h3>
+                <div class="value" id="confirmations-count">0</div>
+                <div>Descifradas ETCD</div>
+            </div>
+            <div class="info-card">
+                <h3>⚡ Success Rate</h3>
+                <div class="value" id="success-rate">0%</div>
+                <div>Efectividad</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Events Section -->
+            <div class="events-section scrollbar">
+                <div class="section-header">
+                    <h2 class="section-title">📡 Eventos ML V3.1</h2>
+                    <div>
+                        <button class="btn" onclick="clearEventsList()">🗑️ Limpiar</button>
+                        <button class="btn" id="pause-events-btn" onclick="pauseEventsUpdate()">⏸️</button>
+                    </div>
+                </div>
+                <div class="controls">
+                    <select id="events-filter" onchange="filterEvents()">
+                        <option value="all">Todos los riesgos</option>
+                        <option value="high">Alto riesgo</option>
+                        <option value="medium">Riesgo medio</option>
+                        <option value="low">Bajo riesgo</option>
+                    </select>
+                </div>
+                <div id="events-list">
+                    <div class="no-events">
+                        <i class="fas fa-satellite-dish" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                        <p>Esperando eventos ML V3.1...</p>
+                        <small>Puerto 5580 SUB - ETCD Auto-decrypt</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Firewall Section -->
+            <div class="firewall-section scrollbar">
+                <div class="section-header">
+                    <h2 class="section-title">🔥 Fleet Commands V3.1</h2>
+                    <div>
+                        <button class="btn" onclick="clearFirewallEventsList()">🗑️ Limpiar</button>
+                        <button class="btn btn-danger" onclick="sendTestFirewallCommand()">🧪 Test ETCD</button>
+                    </div>
+                </div>
+                <div id="firewall-events-list">
+                    <div class="no-events">
+                        <i class="fas fa-fire" style="font-size: 24px; display: block; margin-bottom: 10px; opacity: 0.5;"></i>
+                        <p>No hay comandos fleet</p>
+                        <small>Fleet cifrada ETCD lista</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Connection Status -->
+    <div class="connection-status">
+        <div style="font-weight: bold; margin-bottom: 10px; color: #00ff88;">🌐 Estado Sistema ETCD</div>
+        <div class="status-item">
+            <span class="status-dot connected" id="ml-detector-status"></span>
+            ML Detector V3.1
+        </div>
+        <div class="status-item">
+            <span class="status-dot connected" id="etcd-crypto-status"></span>
+            ETCD Crypto
+        </div>
+        <div class="status-item">
+            <span class="status-dot connected" id="fleet-status"></span>
+            Fleet Agentes
+        </div>
+        <div class="status-item">
+            <span class="status-dot connected" id="api-status"></span>
+            Backend API
+        </div>
+        <div style="margin-top: 10px; font-size: 0.8rem; color: #888;">
+            <div>🔐 ETCD Pipeline Key</div>
+            <div>🗜️ Auto Compress</div>
+            <div>🔒 Auto Encrypt</div>
+            <div>🏎️ Ferrari Speed</div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script>
+        // Global Variables
+        let map = null;
+        let markers = [];
+        let eventCount = 0;
+        let pollingInterval = null;
+        let currentEvents = [];
+        let currentFirewallEvents = [];
+        let eventsPaused = false;
+
+        // Initialize Dashboard
+        function initializeDashboard() {
+            console.log('🚀 Inicializando Dashboard SCADA V3.1 ETCD con Ferrari F1 Engine...');
+
+            initializeMap();
+            startPolling();
+            updateConnectionStatus('etcd-crypto-status', 'connected');
+            updateConnectionStatus('api-status', 'connected');
+
+            console.log('✅ Dashboard V3.1 ETCD inicializado correctamente');
+        }
+
+        // Initialize Map
+        function initializeMap() {
+            try {
+                map = L.map('map').setView([40.4168, -3.7038], 6);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+                // Add initial markers
+                L.marker([40.4168, -3.7038])
+                    .bindPopup('<b>🖥️ Dashboard V3.1 ETCD</b><br>Madrid, España<br>ETCD Crypto Enabled<br>🏎️ Ferrari F1 Speed')
+                    .addTo(map);
+
+                console.log('✅ Mapa inicializado');
+            } catch (error) {
+                console.error('❌ Error inicializando mapa:', error);
+            }
+        }
+
+        // Start Polling
+        function startPolling() {
+            fetchData();
+            pollingInterval = setInterval(fetchData, 2000);
+            console.log('📡 Polling iniciado cada 2 segundos');
+        }
+
+        // Fetch Data from Backend
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/metrics');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateDashboard(data);
+                    updateConnectionStatus('api-status', 'connected');
+                }
+            } catch (error) {
+                console.error('❌ Error fetching data:', error);
+                updateConnectionStatus('api-status', 'disconnected');
+                showToast('Error conectando con backend ETCD', 'error');
+            }
+        }
+
+        // Update Dashboard
+        function updateDashboard(data) {
+            // Update counters
+            if (data.basic_stats) {
+                updateElement('events-count', data.basic_stats.total_events || 0);
+                updateElement('commands-count', data.basic_stats.commands_sent || 0);
+                updateElement('confirmations-count', data.basic_stats.confirmations || 0);
+                updateElement('success-rate', (data.basic_stats.success_rate || 0) + '%');
+
+                eventCount = data.basic_stats.total_events || 0;
+            }
+
+            // Update connection status
+            updateConnectionStatus('ml-detector-status',
+                data.zmq_connections?.ml_events_socket?.status === 'active' ? 'connected' : 'disconnected');
+            updateConnectionStatus('fleet-status',
+                data.firewall_config?.agents?.length > 0 ? 'connected' : 'warning');
+            updateConnectionStatus('etcd-crypto-status',
+                data.crypto_enabled ? 'connected' : 'disconnected');
+
+            // Process new events
+            if (data.recent_events && !eventsPaused) {
+                processNewEvents(data.recent_events);
+            }
+
+            // Process firewall events
+            if (data.firewall_events) {
+                processFirewallEvents(data.firewall_events);
+            }
+        }
+
+        // Process New Events
+        function processNewEvents(events) {
+            const eventsList = document.getElementById('events-list');
+            const placeholder = eventsList.querySelector('.no-events');
+
+            if (placeholder && events.length > 0) {
+                placeholder.remove();
+            }
+
+            events.forEach(event => {
+                if (!currentEvents.some(e => e.id === event.id)) {
+                    addEventToList(event);
+                    addEventToMap(event);
+                    currentEvents.push(event);
+                }
+            });
+        }
+
+        // Add Event to List
+        function addEventToList(event) {
+            const eventsList = document.getElementById('events-list');
+            const eventElement = document.createElement('div');
+
+            const riskScore = (event.ensemble_confidence || event.risk_score || 0) * 100;
+            const riskLevel = riskScore > 80 ? 'high' : riskScore > 50 ? 'medium' : 'low';
+
+            eventElement.className = `event-item risk-${riskLevel}`;
+            eventElement.onclick = () => showEventDetail(event);
+
+            const eventTime = new Date((event.timestamp || Date.now()) * (event.timestamp > 1e10 ? 1 : 1000));
+
+            eventElement.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${event.source_ip || 'N/A'} → ${event.target_ip || 'N/A'}</strong>
+                        <div style="font-size: 0.8rem; color: #888; margin-top: 2px;">
+                            ${event.event_type || 'network_event'} | Node: ${event.capturing_node_id || 'N/A'}
+                            <span style="color: #ffaa00;">🔐 ETCD</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="risk-score ${riskLevel}">${riskScore.toFixed(0)}%</span>
+                        <div class="timestamp">${eventTime.toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `;
+
+            eventsList.insertBefore(eventElement, eventsList.firstChild);
+        }
+
+        // Add Event to Map
+        function addEventToMap(event) {
+            if (!map) return;
+
+            try {
+                const lat = event.source_latitude || event.latitude || 40.4168;
+                const lng = event.source_longitude || event.longitude || -3.7038;
+
+                if (lat === 0 && lng === 0) return;
+
+                const riskScore = (event.ensemble_confidence || event.risk_score || 0) * 100;
+                const color = riskScore > 80 ? '#ff4444' : riskScore > 50 ? '#ffaa00' : '#00ff88';
+
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: color,
+                    color: color,
+                    weight: 2,
+                    opacity: 0.8,
+                    fillOpacity: 0.6
+                }).bindPopup(`
+                    <b>🚨 Evento V3.1 ETCD</b><br>
+                    <strong>IP:</strong> ${event.source_ip}<br>
+                    <strong>Target:</strong> ${event.target_ip}<br>
+                    <strong>Risk:</strong> ${riskScore.toFixed(0)}%<br>
+                    <strong>Node:</strong> ${event.capturing_node_id || 'N/A'}<br>
+                    <strong>🔐 ETCD:</strong> Auto-decrypted
+                `).addTo(map);
+
+                markers.push(marker);
+
+                // Remove old markers
+                if (markers.length > 50) {
+                    const oldMarker = markers.shift();
+                    map.removeLayer(oldMarker);
+                }
+            } catch (error) {
+                console.error('❌ Error adding marker:', error);
+            }
+        }
+
+        // Process Firewall Events
+        function processFirewallEvents(events) {
+            const firewallList = document.getElementById('firewall-events-list');
+            const placeholder = firewallList.querySelector('.no-events');
+
+            if (placeholder && events.length > 0) {
+                placeholder.remove();
+            }
+
+            events.forEach(event => {
+                if (!currentFirewallEvents.some(e => e.id === event.id)) {
+                    addFirewallEventToList(event);
+                    currentFirewallEvents.push(event);
+                }
+            });
+        }
+
+        // Add Firewall Event to List
+        function addFirewallEventToList(event) {
+            const firewallList = document.getElementById('firewall-events-list');
+            const eventElement = document.createElement('div');
+
+            const eventType = event.type || 'command';
+            eventElement.className = `firewall-event ${eventType}`;
+
+            const eventTime = new Date((event.timestamp || Date.now()) * (event.timestamp > 1e10 ? 1 : 1000));
+
+            eventElement.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${event.action || 'UNKNOWN'}</strong>
+                        <div style="font-size: 0.8rem; color: #888; margin-top: 2px;">
+                            ${event.target_ip || 'N/A'} | Agent: ${event.agent_id || 'N/A'}
+                            <span style="color: #ffaa00;">🔐 ETCD</span>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="color: ${eventType === 'response' ? '#00ff88' : eventType === 'error' ? '#ff4444' : '#ffaa00'};">
+                            ${eventType.toUpperCase()}
+                        </span>
+                        <div class="timestamp">${eventTime.toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `;
+
+            firewallList.insertBefore(eventElement, firewallList.firstChild);
+        }
+
+        // Utility Functions
+        function updateElement(id, value) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value;
+        }
+
+        function updateConnectionStatus(id, status) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.className = `status-dot ${status}`;
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => container.removeChild(toast), 300);
+            }, 3000);
+        }
+
+        // Event Handlers
+        function clearEventsList() {
+            const eventsList = document.getElementById('events-list');
+            eventsList.innerHTML = '<div class="no-events"><p>Lista limpiada</p></div>';
+            currentEvents = [];
+            showToast('Lista de eventos ML limpiada', 'info');
+        }
+
+        function clearFirewallEventsList() {
+            const firewallList = document.getElementById('firewall-events-list');
+            firewallList.innerHTML = '<div class="no-events"><p>Lista limpiada</p></div>';
+            currentFirewallEvents = [];
+            showToast('Lista de comandos fleet limpiada', 'info');
+        }
+
+        function pauseEventsUpdate() {
+            eventsPaused = !eventsPaused;
+            const btn = document.getElementById('pause-events-btn');
+
+            if (eventsPaused) {
+                btn.innerHTML = '▶️';
+                showToast('Eventos pausados', 'warning');
+            } else {
+                btn.innerHTML = '⏸️';
+                showToast('Eventos reanudados', 'info');
+            }
+        }
+
+        function filterEvents() {
+            const filter = document.getElementById('events-filter').value;
+            const events = document.querySelectorAll('.event-item');
+
+            events.forEach(event => {
+                const classes = event.className;
+                if (filter === 'all' || classes.includes(`risk-${filter}`)) {
+                    event.style.display = 'block';
+                } else {
+                    event.style.display = 'none';
+                }
+            });
+        }
+
+        async function sendTestFirewallCommand() {
+            try {
+                showToast('Enviando comando test ETCD...', 'info');
+
+                const response = await fetch('/api/execute-firewall-action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'LIST_RULES',
+                        target_ip: '127.0.0.1',
+                        firewall_node_id: 'simple_firewall_agent_001',
+                        command_id: `etcd_test_${Date.now()}`,
+                        force_dry_run: true
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('✅ Comando ETCD test enviado correctamente', 'success');
+                } else {
+                    showToast('❌ Error en comando ETCD test: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showToast('❌ Error comunicando con backend ETCD', 'error');
+            }
+        }
+
+        function showEventDetail(event) {
+            const riskScore = (event.ensemble_confidence || event.risk_score || 0) * 100;
+            showToast(`Evento ETCD: ${event.source_ip} → ${event.target_ip} (${riskScore.toFixed(0)}%)`, 'info');
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+
+        // Cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (pollingInterval) clearInterval(pollingInterval);
+        });
+    </script>
+</body>
+</html>

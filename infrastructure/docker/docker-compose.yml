@@ -60,7 +60,6 @@ services:
       - NODE_ID=sniffer_v31_etcd_001
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
-    # CORRECTED: Real executable and config paths from Dockerfile
     command: >
       python /app/evolutionary_sniffer_standalone.py 
       /app/config/json/sniffer_config_docker.json
@@ -71,18 +70,17 @@ services:
       - upgraded-happiness-network
     security_opt:
       - apparmor:docker-default
-      - no-new-privileges:true
-    read_only: true
+    read_only: false
     tmpfs:
       - /tmp:noexec,nodev,nosuid,size=50m
-    user: "1001:1001"  # Non-root user as defined in Dockerfile
+    # user: "1001:1001"  # COMENTADO - necesita root para packet capture
     cap_drop:
       - ALL
     cap_add:
-      - NET_RAW  # Required for packet capture
-      - NET_ADMIN  # Required for network interface access
+      - NET_RAW
+      - NET_ADMIN
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import sys; sys.exit(0)'"]
+      test: [ "CMD-SHELL", "python -c 'import sys; sys.exit(0)'" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -155,7 +153,6 @@ services:
       /app/config/json/ml_detector_config_docker.json
     volumes:
       - ml_detector_logs:/app/logs:rw
-      - ml_detector_models:/app/models:rw
       - ml_detector_data:/app/data:rw
     networks:
       - upgraded-happiness-network
@@ -378,9 +375,6 @@ volumes:
   ml_detector_data:
     driver: local
     name: upgraded-happiness-ml-detector-data
-  ml_detector_models:
-    driver: local
-    name: upgraded-happiness-ml-detector-models
   scheduler_data:
     driver: local
     name: upgraded-happiness-scheduler-data

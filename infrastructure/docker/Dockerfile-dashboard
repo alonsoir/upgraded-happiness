@@ -73,6 +73,7 @@ COPY infrastructure/config/firewall_rules_dashboard_config_docker.json /app/conf
 
 # Templates - dashboard HTML file
 COPY templates/dashboard_v31_etcd.html /app/templates/
+COPY templates/dashboard_ferrari.html /app/templates/
 
 # Static assets - CSS and JS files
 COPY static/css/ /app/static/css/
