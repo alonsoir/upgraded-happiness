@@ -1,6 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # BUILD ALL IMAGES - Upgraded Happiness V3.1 ETCD
+# infrastructure/docker/build_all_images.sh
 # =============================================================================
 # Script completo para destruir y reconstruir todas las imágenes Docker
 # Autor: Sistema Upgraded Happiness

@@ -71,15 +71,16 @@ COPY infrastructure/config/ml_detector_config_docker.json /app/config/json/ml_de
 # =========================================================
 # ML Detector Dockerfile - preparación de modelos y logs
 # =========================================================
+# Crear directorios para modelos, logs y proto
+RUN mkdir -p /app/models/production/tricapa \
+             /app/logs \
+             /app/logs/proto && \
+    chown -R mldetector:mldetector /app/models /app/logs && \
+    chmod -R 755 /app/models /app/logs
 
 # Copiar todos los modelos fundacionales al directorio que espera el JSON
 COPY ./models/production/ /app/models/production/
 COPY ./models/production/tricapa/ /app/models/production/tricapa/
-
-# Crear directorios de logs y proto
-RUN mkdir -p /app/logs /app/logs/proto && \
-    chown -R mldetector:mldetector /app/models /app/logs && \
-    chmod -R 755 /app/models /app/logs
 
 # Switch to unprivileged user
 USER mldetector
