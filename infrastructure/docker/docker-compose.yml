@@ -52,11 +52,12 @@ services:
     image: upgraded-happiness/sniffer:v3.1-etcd
     container_name: sniffer
     hostname: sniffer
+    network_mode: "host"
     depends_on:
       etcd:
         condition: service_healthy
     environment:
-      - ETCD_ENDPOINT=http://etcd:2379
+      - ETCD_ENDPOINT=http://127.0.0.1:12379  # CAMBIAR ESTO
       - NODE_ID=sniffer_v31_etcd_001
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
@@ -66,17 +67,14 @@ services:
     volumes:
       - sniffer_logs:/app/logs:rw
       - sniffer_data:/app/data:rw
-    networks:
-      - upgraded-happiness-network
     security_opt:
       - apparmor:docker-default
     read_only: false
     tmpfs:
       - /tmp:noexec,nodev,nosuid,size=50m
-    # user: "1001:1001"  # COMENTADO - necesita root para packet capture
-    cap_drop:
-      - ALL
+    privileged: true
     cap_add:
+      - SYS_ADMIN
       - NET_RAW
       - NET_ADMIN
     healthcheck:
