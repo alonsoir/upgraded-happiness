@@ -194,7 +194,7 @@ scada*.json
 
 *.out
 
-*.joblib
+# *.joblib
 
 models/*.pkl
 
@@ -230,11 +230,11 @@ tests/*.*
 
 geodata
 
-models
+# models
 
 geodata/*.*
 
-models/*.*
+# models/*.*
 
 tests_consolidated/*.*
 
@@ -248,3 +248,5 @@ actual_tests_state.txtconfig/crypto/certificates/sniffer.key
 default.etcd/
 *.etcd/
 member/
+models/*.joblib
+ml_models_v3/**/*.joblib

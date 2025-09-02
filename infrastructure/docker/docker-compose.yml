@@ -13,24 +13,20 @@ services:
     image: registry.k8s.io/etcd:3.5.16-0
     container_name: etcd
     hostname: etcd
-    ports:
-      - "12379:2379"
-      - "12380:2380"
+    network_mode: "host"
     command: >
       /usr/local/bin/etcd
       --name s1
       --listen-client-urls http://0.0.0.0:2379
-      --advertise-client-urls http://etcd:2379
+      --advertise-client-urls http://127.0.0.1:2379
       --listen-peer-urls http://0.0.0.0:2380
-      --initial-advertise-peer-urls http://etcd:2380
-      --initial-cluster s1=http://etcd:2380
+      --initial-advertise-peer-urls http://127.0.0.1:2380
+      --initial-cluster s1=http://127.0.0.1:2380
       --initial-cluster-token upgraded-happiness-cluster-token
       --initial-cluster-state new
       --data-dir /etcd-data
     volumes:
       - etcd_data:/etcd-data
-    networks:
-      - upgraded-happiness-network
     security_opt:
       - apparmor:docker-default
     read_only: false
@@ -57,7 +53,7 @@ services:
       etcd:
         condition: service_healthy
     environment:
-      - ETCD_ENDPOINT=http://127.0.0.1:12379  # CAMBIAR ESTO
+      - ETCD_ENDPOINT=http://127.0.0.1:2379
       - NODE_ID=sniffer_v31_etcd_001
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
