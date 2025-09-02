@@ -248,5 +248,15 @@ actual_tests_state.txtconfig/crypto/certificates/sniffer.key
 default.etcd/
 *.etcd/
 member/
+# models/*.joblib
+# ml_models_v3/**/*.joblib
+# Por estas líneas más específicas:
 models/*.joblib
+models/archive/**/*.joblib
+models/experimental/**/*.joblib
+models/backup_*/**/*.joblib
 ml_models_v3/**/*.joblib
+
+# Permitir explícitamente los modelos de producción:
+!models/production/**/*.joblib
+!models/production/**/*.json
