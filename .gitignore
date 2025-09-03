@@ -165,7 +165,6 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Linux
-*~
 
 # Backup files
 *.bak
@@ -190,11 +189,46 @@ scada*.json
 
 *.pid
 
-*.log
-
 *.out
+# Ignorar todos los modelos salvo los de production/ y tricapa/
+models/*.joblib
+!models/production/*.joblib
+!models/tricapa/*.joblib
 
-# *.joblib
+# Ignorar archivos pesados experimentales
+models/archive/
+models/experimental/
+
+# No ignorar GeoLite2
+!GeoLite2-City.mmdb
+
+
+# Ignorar explicadores SHAP pesados
+*shap_explainer.pkl
+
+# Ignorar configuraciones JSON enormes
+config/json/project_analysis.json
+
+# ========================
+# Ignorar joblib y similares por defecto
+*.joblib
+*.pkl
+*.json
+
+# ========================
+# Pero NO ignorar los joblib/json que están en production y tricapa
+!models/production/*.joblib
+!models/production/*.json
+!models/production/tricapa/*.joblib
+!models/production/tricapa/*.json
+
+# ========================
+# Ignorar caché de ggshield
+.cache_ggshield
+
+
+# Excluir caché de seguridad de ggshield
+
 
 models/*.pkl
 
@@ -207,8 +241,6 @@ ml_models/evaluations/*.*
 ml_models/versions/*.*
 
 logs/*.*
-
-data/*.*
 
 data/dataset/*.*
 
@@ -240,14 +272,9 @@ tests_consolidated/*.*
 
 upgraded-happiness-bitdefender/*.*
 
-.env
-
 actual_tests_state.txtconfig/crypto/certificates/sniffer.key
 
 # ETCD runtime files
-default.etcd/
-*.etcd/
-member/
 # models/*.joblib
 # ml_models_v3/**/*.joblib
 # Por estas líneas más específicas:
