@@ -279,8 +279,9 @@ ml_models_v3/**/*.joblib
 # ======================
 # VAGRANT FILES
 # ======================
-.vagrant/
 **/.vagrant/
-*.vagrant/
-Vagrantfile.original
 infrastructure/VM/.vagrant/
+
+# Vagrant - más comprehensivo
+**/vagrant/
+**/Vagrantfile.bak
