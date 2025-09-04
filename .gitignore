@@ -1,4 +1,3 @@
-# .gitignore
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -6,6 +5,7 @@ __pycache__/
 default.etcd
 default.etcd/
 default.etcd/*.*
+
 # ETCD runtime files
 *.etcd/
 member/
@@ -15,6 +15,7 @@ snap/
 # Common ETCD patterns
 etcd-data/
 etcd.log
+
 # C extensions
 *.so
 
@@ -133,8 +134,8 @@ normal_traffic.csv
 internal_traffic_dataset.csv
 
 validation_results/
-
 validation_results/*.*
+
 # Environment variables
 .env
 .env.local
@@ -152,6 +153,12 @@ temp_configs/
 temp/
 tmp/
 
+# Backup files
+*.bak
+*.backup
+*.old
+*.backup.*
+
 # OS specific
 # macOS
 .DS_Store
@@ -165,11 +172,6 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Linux
-
-# Backup files
-*.bak
-*.backup
-*.old
 
 # Documentation builds
 docs/_build/
@@ -186,10 +188,19 @@ dmypy.json
 scada*.json
 
 *.tar.gz
-
 *.pid
-
 *.out
+
+# ======================
+# VAGRANT FILES
+# ======================
+.vagrant/
+*.vagrant/
+Vagrantfile.original
+
+# ======================
+# MODELS MANAGEMENT
+# ======================
 # Ignorar todos los modelos salvo los de production/ y tricapa/
 models/*.joblib
 !models/production/*.joblib
@@ -201,7 +212,6 @@ models/experimental/
 
 # No ignorar GeoLite2
 !GeoLite2-City.mmdb
-
 
 # Ignorar explicadores SHAP pesados
 *shap_explainer.pkl
@@ -223,17 +233,13 @@ config/json/project_analysis.json
 !models/production/tricapa/*.json
 
 # ========================
-# Ignorar caché de ggshield
+# Ignorar caché de seguridad de ggshield
 .cache_ggshield
 
-
 # Excluir caché de seguridad de ggshield
-
-
 models/*.pkl
 
 ml_models_v3/best/*.*
-
 ml_models_v3/versions/*.*
 
 ml_models/best/*.*
@@ -243,41 +249,23 @@ ml_models/versions/*.*
 logs/*.*
 
 data/dataset/*.*
-
 data/dataset/Edge-IIoTset dataset
-
 data/dataset/Edge-IIoTset dataset/*.*
 
 bitdefender_integration/*.*
-
 backups/*.*
-
 backup_before_cleanup_20250701_094239/*.*
-
 research_results/*.*
-
 saved_models/*.*
-
 tests/*.*
-
 geodata
-
-# models
-
 geodata/*.*
-
-# models/*.*
-
 tests_consolidated/*.*
-
 upgraded-happiness-bitdefender/*.*
-
-actual_tests_state.txtconfig/crypto/certificates/sniffer.key
+actual_tests_state.txt
+config/crypto/certificates/sniffer.key
 
 # ETCD runtime files
-# models/*.joblib
-# ml_models_v3/**/*.joblib
-# Por estas líneas más específicas:
 models/*.joblib
 models/archive/**/*.joblib
 models/experimental/**/*.joblib

@@ -36,7 +36,7 @@
 
   "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA",
   "etcd_crypto": {
-    "etcd_host": "etcd",
+    "etcd_host": "127.0.0.1",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster",
     "node_id": "evolutionary_sniffer_v31_001"
@@ -199,8 +199,8 @@
   "_comment_capture": "🎯 CAPTURE - Configuración de captura de paquetes",
   "capture": {
     "mode": "real",
-    "interface": "any",
-    "promiscuous_mode": true,
+    "interface": "enp0s8",
+    "promiscuous_mode": false,
     "filter_expression": "",
     "buffer_size": 65536,
     "min_packet_size": 20,
@@ -315,7 +315,7 @@
     ],
     "node_registration": {
       "enabled": false,
-      "etcd_endpoints": ["etcd:2379"],
+      "etcd_endpoints": ["127.0.0.1:2379"],
       "registration_ttl_seconds": 60,
       "_comment": "etcd registration preparado para futuro k3s deployment"
     },

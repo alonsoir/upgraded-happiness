@@ -1,0 +1,550 @@
+Vagrant.configure("2") do |config|
+  # Ubuntu Server 24.04 LTS
+  config.vm.box = "ubuntu/noble64"
+  config.vm.hostname = "lab-upgraded-happiness"
+
+  # Upgraded Happiness Pipeline Ports
+  config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh"
+  config.vm.network "forwarded_port", guest: 8080, host: 8080, id: "dashboard"    # Dashboard Web UI
+  config.vm.network "forwarded_port", guest: 2379, host: 12379, id: "etcd"        # etcd client
+  config.vm.network "forwarded_port", guest: 2380, host: 12380, id: "etcd-peer"   # etcd peer
+  config.vm.network "forwarded_port", guest: 5571, host: 5571, id: "sniffer-zmq"  # Sniffer ZMQ
+  # k3s ports (if needed later)
+  config.vm.network "forwarded_port", guest: 6443, host: 6443, id: "k3s-api"
+  # Optional monitoring ports for future extensions
+  config.vm.network "forwarded_port", guest: 9090, host: 9090, id: "prometheus"
+  config.vm.network "forwarded_port", guest: 3001, host: 3001, id: "grafana"
+
+  # Bridge network for sniffing (Promiscuous Mode enabled)
+  # Auto-detect best interface, fallback to common ones
+  config.vm.network "public_network",
+    bridge: [
+      "en0: Wi-Fi (AirPort)",    # macOS Wi-Fi
+      "en1: Ethernet",           # macOS Ethernet
+      "en0",                     # Generic Wi-Fi
+      "eth0",                    # Linux Ethernet
+      "wlan0"                    # Linux Wi-Fi
+    ],
+    use_dhcp_assigned_default_route: false,
+    auto_config: true
+
+  # VM configuration optimized for the project
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "upgraded-happiness-lab"
+    vb.memory = "8192"  # Increased for ML models + native sniffer
+    vb.cpus = 4         # Increased for parallel processing
+    vb.gui = false
+
+    # Enable nested virtualization for k8s
+    vb.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+
+    # Network configuration
+    vb.customize ["modifyvm", :id, "--nic1", "nat"]
+    vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
+    vb.customize ["modifyvm", :id, "--nic2", "bridged"]
+    vb.customize ["modifyvm", :id, "--nictype2", "virtio"]
+    vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+
+    # Performance optimizations
+    vb.customize ["modifyvm", :id, "--ioapic", "on"]
+    vb.customize ["modifyvm", :id, "--pae", "on"]
+    vb.customize ["modifyvm", :id, "--hwvirtex", "on"]
+  end
+
+  # Sync project folder with better permissions - mount entire project
+  config.vm.synced_folder "../..", "/home/vagrant/upgraded-happiness",
+    owner: "vagrant",
+    group: "vagrant",
+    mount_options: ["dmode=755,fmode=644"],
+    type: "virtualbox"
+
+  # Main provisioning script
+  config.vm.provision "shell", inline: <<-SHELL
+    set -e
+
+    echo "🚀 Starting Upgraded Happiness Lab Provisioning (Hybrid Architecture)..."
+    echo "========================================================================"
+
+    # Update system
+    echo "🔄 Updating system packages..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get upgrade -y -qq
+
+    # Install essential packages
+    echo "📦 Installing essential packages..."
+    apt-get install -y -qq \
+      curl \
+      wget \
+      git \
+      htop \
+      iftop \
+      net-tools \
+      tcpdump \
+      wireshark-common \
+      tshark \
+      nmap \
+      iptables-persistent \
+      ca-certificates \
+      gnupg \
+      lsb-release \
+      apt-transport-https \
+      software-properties-common \
+      jq \
+      vim \
+      tree \
+      unzip \
+      build-essential
+
+    # Install Python and native sniffer dependencies
+    echo "🐍 Installing Python and sniffer dependencies..."
+    apt-get install -y -qq \
+      python3 \
+      python3-pip \
+      python3-dev \
+      python3-venv \
+      libpcap-dev \
+      libffi-dev \
+      libssl-dev
+
+    # Install Docker
+    echo "🐳 Installing Docker CE..."
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+    # Configure Docker
+    usermod -aG docker vagrant
+    systemctl enable docker
+    systemctl start docker
+
+    # Install k3s
+    echo "☸️  Installing k3s Kubernetes..."
+    curl -sfL https://get.k3s.io | sh -s - \
+      --write-kubeconfig-mode 644 \
+      --disable traefik \
+      --disable servicelb
+
+    # Install docker-compose standalone
+    echo "🔧 Installing docker-compose..."
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)
+    curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+    # Configure packet capture permissions
+    echo "🔐 Configuring packet capture permissions..."
+    setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
+    setcap cap_net_raw,cap_net_admin=eip /usr/bin/tshark
+    chmod +s /usr/bin/tcpdump
+
+    # Install Python dependencies for native sniffer
+    echo "🐍 Installing native sniffer Python dependencies..."
+    cd /home/vagrant/upgraded-happiness
+
+    # Install system-wide Python packages needed for sniffer
+    pip3 install --break-system-packages \
+      scapy \
+      pyzmq \
+      etcd3 \
+      protobuf==4.25.1 \
+      psutil \
+      requests \
+      cryptography
+
+    # Setup project directory
+    echo "📁 Configuring project directory..."
+    chown -R vagrant:vagrant /home/vagrant/upgraded-happiness
+
+    # Create network interface detection script
+    cat > /home/vagrant/detect-interfaces.sh << 'EOF'
+#!/bin/bash
+echo "🔍 Network Interface Detection Report"
+echo "===================================="
+echo ""
+echo "📡 Available network interfaces:"
+ip link show | grep -E "^[0-9]+:" | awk '{print "  " $2}' | sed 's/://'
+echo ""
+echo "📊 Interface details:"
+ip addr show | grep -E "inet |^[0-9]+:" | sed 's/^/  /'
+echo ""
+echo "🎯 Recommended interface for sniffer:"
+BRIDGE_IF=$(ip route | grep default | head -1 | awk '{print $5}' | head -1)
+if [ -n "$BRIDGE_IF" ]; then
+    echo "  $BRIDGE_IF (default route interface)"
+else
+    # Try to detect vagrant bridge interface
+    BRIDGE_IF=$(ip link show | grep -E "enp0s8|eth[1-9]" | head -1 | awk -F': ' '{print $2}' | cut -d'@' -f1)
+    if [ -n "$BRIDGE_IF" ]; then
+        echo "  $BRIDGE_IF (likely bridge interface)"
+    else
+        echo "  Unable to auto-detect - check interfaces manually"
+    fi
+fi
+echo ""
+echo "🔧 Current sniffer configuration:"
+if [ -f "/home/vagrant/upgraded-happiness/infrastructure/config/sniffer_config_docker.json" ]; then
+    grep -A1 '"interface"' /home/vagrant/upgraded-happiness/infrastructure/config/sniffer_config_docker.json | head -1 | sed 's/^/  /'
+else
+    echo "  Configuration file not found"
+fi
+EOF
+    chmod +x /home/vagrant/detect-interfaces.sh
+    chown vagrant:vagrant /home/vagrant/detect-interfaces.sh
+
+    # Create sniffer configuration update script
+    cat > /home/vagrant/update-sniffer-config.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Configuration paths - try multiple locations
+CONFIG_PATHS=(
+    "/home/vagrant/upgraded-happiness/infrastructure/config/sniffer_config_docker.json"
+    "/home/vagrant/upgraded-happiness/config/json/sniffer_config_docker.json"
+    "/home/vagrant/upgraded-happiness/configs/sniffer_config_docker.json"
+)
+
+CONFIG_FILE=""
+for path in "${CONFIG_PATHS[@]}"; do
+    if [ -f "$path" ]; then
+        CONFIG_FILE="$path"
+        break
+    fi
+done
+
+INTERFACE=${1:-$(ip route | grep default | head -1 | awk '{print $5}' | head -1)}
+
+if [ -z "$INTERFACE" ]; then
+    # Try to detect vagrant bridge interface
+    INTERFACE=$(ip link show | grep -E "enp0s8|eth[1-9]" | head -1 | awk -F': ' '{print $2}' | cut -d'@' -f1)
+fi
+
+if [ -z "$INTERFACE" ]; then
+    echo "❌ Could not detect network interface automatically"
+    echo "📡 Available interfaces:"
+    ip link show | grep -E "^[0-9]+:" | awk '{print "  " $2}' | sed 's/://'
+    echo ""
+    echo "💡 Usage: $0 <interface_name>"
+    echo "   Example: $0 enp0s8"
+    exit 1
+fi
+
+echo "🔧 Updating sniffer configuration..."
+echo "Interface: $INTERFACE"
+echo "Config file: $CONFIG_FILE"
+echo ""
+
+if [ -z "$CONFIG_FILE" ]; then
+    echo "❌ Sniffer configuration file not found"
+    exit 1
+fi
+
+# Backup original
+BACKUP_FILE="${CONFIG_FILE}.backup.$(date +%s)"
+cp "$CONFIG_FILE" "$BACKUP_FILE"
+echo "💾 Backup created: $BACKUP_FILE"
+
+# Update interface using sed (reliable method)
+echo "🔧 Updating with sed..."
+sed -i "s/\"interface\": \"[^\"]*\"/\"interface\": \"$INTERFACE\"/" "$CONFIG_FILE"
+
+echo "✅ Configuration updated successfully!"
+echo ""
+echo "📋 Current capture configuration:"
+grep -A5 -B2 '"interface"' "$CONFIG_FILE"
+EOF
+    chmod +x /home/vagrant/update-sniffer-config.sh
+    chown vagrant:vagrant /home/vagrant/update-sniffer-config.sh
+
+    # Create docker-compose override to exclude sniffer
+    cat > /home/vagrant/docker-compose.hybrid.yml << 'EOF'
+# Docker Compose override for hybrid architecture
+# This file excludes the sniffer service from containerized deployment
+version: '3.8'
+
+services:
+  # Remove sniffer from containerized services - it runs natively
+  # All other services remain as defined in the main docker-compose.yml
+
+  geoip:
+    # Ensure geoip can connect to native sniffer ZMQ socket
+    depends_on:
+      - etcd
+    ports:
+      - "5572:5572"  # GeoIP ZMQ output port
+
+  dashboard:
+    # Ensure dashboard has access to all services
+    depends_on:
+      - etcd
+      - geoip
+      - ml-detector
+      - scheduler-firewall
+      - simple-firewall-agent
+EOF
+    chown vagrant:vagrant /home/vagrant/docker-compose.hybrid.yml
+
+    # Create hybrid lab start script
+    cat > /home/vagrant/start-hybrid-lab.sh << 'EOF'
+#!/bin/bash
+set -e
+
+cd /home/vagrant/upgraded-happiness
+
+echo "🚀 Starting Upgraded Happiness Hybrid Lab v3.1-etcd"
+echo "===================================================="
+echo ""
+echo "🏗️  Architecture: Native Sniffer + Containerized Pipeline"
+echo ""
+
+# Check system requirements
+echo "🔍 Checking system requirements..."
+echo "  Docker: $(docker --version | cut -d' ' -f3)"
+echo "  Docker Compose: $(docker-compose --version | cut -d' ' -f4)"
+echo "  Python3: $(python3 --version)"
+echo ""
+
+# Detect and configure network interface for sniffer
+echo "🔧 Configuring network interface for native sniffer..."
+~/detect-interfaces.sh
+echo ""
+
+# Auto-update sniffer configuration with detected interface
+BRIDGE_IF=$(ip route | grep default | head -1 | awk '{print $5}' | head -1)
+if [ -z "$BRIDGE_IF" ]; then
+    BRIDGE_IF=$(ip link show | grep -E "enp0s8|eth[1-9]" | head -1 | awk -F': ' '{print $2}' | cut -d'@' -f1)
+fi
+
+if [ -n "$BRIDGE_IF" ]; then
+    echo "🎯 Auto-updating sniffer configuration with interface: $BRIDGE_IF"
+    ~/update-sniffer-config.sh "$BRIDGE_IF"
+    echo ""
+fi
+
+# Verify Docker is running
+if ! docker info >/dev/null 2>&1; then
+    echo "🐳 Starting Docker..."
+    sudo systemctl start docker
+    sleep 5
+fi
+
+# Build Docker images if needed
+echo "🔨 Checking Docker images..."
+IMAGES_TO_CHECK=(
+    "upgraded-happiness/geoip:v3.1-etcd"
+    "upgraded-happiness/ml-detector:v3.1-etcd"
+    "upgraded-happiness/scheduler:v3.1-etcd"
+    "upgraded-happiness/simple-firewall-agent:v3.1-etcd"
+    "upgraded-happiness/dashboard:v3.1-etcd"
+)
+
+MISSING_IMAGES=()
+for image in "${IMAGES_TO_CHECK[@]}"; do
+    if [ ! "$(docker images -q $image 2> /dev/null)" ]; then
+        MISSING_IMAGES+=("$image")
+    fi
+done
+
+if [ ${#MISSING_IMAGES[@]} -gt 0 ]; then
+    echo "🔨 Missing images detected. Building required images..."
+    echo "   Missing: ${MISSING_IMAGES[*]}"
+    echo ""
+
+    if [ -f "infrastructure/docker/build_all_images.sh" ]; then
+        echo "📦 Running build script (excluding sniffer)..."
+        chmod +x infrastructure/docker/build_all_images.sh
+        # Note: Build script should skip sniffer or handle missing sniffer deps gracefully
+        ./infrastructure/docker/build_all_images.sh || echo "⚠️  Some builds may have failed - continuing..."
+    else
+        echo "💡 Build images manually if needed"
+    fi
+else
+    echo "✅ All required Docker images present"
+fi
+echo ""
+
+# Clean up any previous containers
+echo "🧹 Cleaning up previous containers..."
+docker-compose -f infrastructure/docker/docker-compose.yml down --remove-orphans >/dev/null 2>&1 || true
+sleep 2
+
+# Start hybrid pipeline in sequence
+echo "🚀 Starting Hybrid Pipeline in sequence..."
+echo ""
+
+# Step 0: Start etcd
+echo "Step 0: 🗄️  Starting etcd..."
+docker-compose -f infrastructure/docker/docker-compose.yml up -d etcd
+
+# Wait for etcd to be healthy
+echo "⏳ Waiting for etcd to be healthy..."
+for i in {1..30}; do
+    if docker-compose -f infrastructure/docker/docker-compose.yml ps etcd | grep -q "healthy"; then
+        echo "✅ etcd is healthy"
+        break
+    elif [ $i -eq 30 ]; then
+        echo "❌ etcd health check timeout"
+        docker-compose -f infrastructure/docker/docker-compose.yml logs etcd
+        exit 1
+    fi
+    sleep 2
+    echo -n "."
+done
+echo ""
+
+# Step 1: Start native sniffer in background
+echo "Step 1: 📡 Starting native sniffer (background process)..."
+nohup sudo -E PYTHONPATH=/home/vagrant/upgraded-happiness python3 core/evolutionary_sniffer_standalone.py infrastructure/config/sniffer_config_docker.json > /tmp/sniffer.log 2>&1 &
+SNIFFER_PID=$!
+echo "✅ Native sniffer started with PID: $SNIFFER_PID"
+echo "📝 Logs available at: /tmp/sniffer.log"
+sleep 5
+
+# Verify sniffer is running
+if kill -0 $SNIFFER_PID 2>/dev/null; then
+    echo "✅ Sniffer process verified"
+else
+    echo "❌ Sniffer failed to start - check logs at /tmp/sniffer.log"
+    exit 1
+fi
+echo ""
+
+# Steps 2-6: Start containerized components in sequence
+echo "Step 2: 🌍 Starting geoip..."
+docker-compose -f infrastructure/docker/docker-compose.yml up -d geoip
+sleep 5
+
+echo "Step 3: 🤖 Starting ml-detector..."
+docker-compose -f infrastructure/docker/docker-compose.yml up -d ml-detector
+sleep 5
+
+echo "Step 4: ⚙️  Starting scheduler-firewall..."
+docker-compose -f infrastructure/docker/docker-compose.yml up -d scheduler-firewall
+sleep 5
+
+echo "Step 5: 🛡️  Starting simple-firewall-agent..."
+docker-compose -f infrastructure/docker/docker-compose.yml up -d simple-firewall-agent
+sleep 5
+
+echo "Step 6: 📊 Starting dashboard..."
+docker-compose -f infrastructure/docker/docker-compose.yml up -d dashboard
+sleep 5
+
+echo ""
+echo "✅ Hybrid Pipeline started successfully!"
+echo ""
+
+# Show status
+echo "📋 Hybrid System Status:"
+echo "========================"
+echo "Native Sniffer PID: $SNIFFER_PID"
+echo ""
+echo "Containerized Services:"
+docker-compose -f infrastructure/docker/docker-compose.yml ps --format "table {{.Name}}\t{{.State}}\t{{.Status}}"
+echo ""
+
+echo "🌐 Access Points:"
+echo "================="
+echo "  🖥️  Dashboard:     http://localhost:8080"
+echo "  🗄️  etcd:          http://localhost:12379"
+echo ""
+
+echo "🔍 Monitoring Commands:"
+echo "======================="
+echo "  📊 Sniffer logs:        tail -f /tmp/sniffer.log"
+echo "  📊 Container logs:      docker-compose -f infrastructure/docker/docker-compose.yml logs -f <service>"
+echo "  🔄 Restart container:   docker-compose -f infrastructure/docker/docker-compose.yml restart <service>"
+echo "  🛑 Stop all:            ~/stop-hybrid-lab.sh"
+echo "  🏥 Check status:        docker-compose -f infrastructure/docker/docker-compose.yml ps"
+echo ""
+
+echo "💡 Hybrid Architecture Notes:"
+echo "============================="
+echo "  • Sniffer runs natively with full packet capture privileges"
+echo "  • All other components run in secure containers"
+echo "  • Native sniffer communicates via ZMQ to containerized geoip"
+echo "  • Monitor sniffer performance with: ps aux | grep evolutionary_sniffer"
+echo ""
+
+# Save PID for stop script
+echo $SNIFFER_PID > /tmp/sniffer.pid
+EOF
+    chmod +x /home/vagrant/start-hybrid-lab.sh
+    chown vagrant:vagrant /home/vagrant/start-hybrid-lab.sh
+
+    # Create hybrid stop script
+    cat > /home/vagrant/stop-hybrid-lab.sh << 'EOF'
+#!/bin/bash
+cd /home/vagrant/upgraded-happiness
+
+echo "🛑 Stopping Upgraded Happiness Hybrid Lab..."
+
+# Stop containerized services
+if [ -f "infrastructure/docker/docker-compose.yml" ]; then
+    docker-compose -f infrastructure/docker/docker-compose.yml down
+    echo "✅ Containerized services stopped"
+fi
+
+# Stop native sniffer
+if [ -f "/tmp/sniffer.pid" ]; then
+    SNIFFER_PID=$(cat /tmp/sniffer.pid)
+    if kill -0 $SNIFFER_PID 2>/dev/null; then
+        sudo kill $SNIFFER_PID
+        echo "✅ Native sniffer stopped (PID: $SNIFFER_PID)"
+    else
+        echo "ℹ️  Native sniffer was not running"
+    fi
+    rm -f /tmp/sniffer.pid
+else
+    # Fallback: kill any running sniffer processes
+    sudo pkill -f "evolutionary_sniffer_standalone.py" || echo "ℹ️  No sniffer processes found"
+fi
+
+echo "✅ Hybrid lab stopped successfully!"
+EOF
+    chmod +x /home/vagrant/stop-hybrid-lab.sh
+    chown vagrant:vagrant /home/vagrant/stop-hybrid-lab.sh
+
+    # Create helpful aliases for hybrid architecture
+    cat >> /home/vagrant/.bashrc << 'EOF'
+
+# Upgraded Happiness Hybrid Lab aliases
+alias lab-start='~/start-hybrid-lab.sh'
+alias lab-stop='~/stop-hybrid-lab.sh'
+alias lab-sniffer-logs='tail -f /tmp/sniffer.log'
+alias lab-container-logs='cd ~/upgraded-happiness && docker-compose -f infrastructure/docker/docker-compose.yml logs -f'
+alias lab-status='cd ~/upgraded-happiness && docker-compose -f infrastructure/docker/docker-compose.yml ps && echo "Sniffer PID: $(cat /tmp/sniffer.pid 2>/dev/null || echo "Not running")"'
+alias lab-interfaces='~/detect-interfaces.sh'
+alias lab-update-sniffer='~/update-sniffer-config.sh'
+alias lab-restart-sniffer='~/stop-hybrid-lab.sh && sleep 3 && ~/start-hybrid-lab.sh'
+EOF
+
+    echo ""
+    echo "✅ Hybrid Architecture Provisioning completed successfully!"
+    echo "=========================================================="
+    echo ""
+    echo "🏗️  Architecture: Native Sniffer + Containerized Pipeline"
+    echo ""
+    echo "🎯 Next steps:"
+    echo "  1. Run: vagrant ssh"
+    echo "  2. Run: ./start-hybrid-lab.sh"
+    echo ""
+    echo "🔧 Available hybrid tools:"
+    echo "  • ~/detect-interfaces.sh - Detect network interfaces"
+    echo "  • ~/update-sniffer-config.sh [interface] - Update sniffer config"
+    echo "  • ~/start-hybrid-lab.sh - Start the complete hybrid lab"
+    echo "  • ~/stop-hybrid-lab.sh - Stop the hybrid lab"
+    echo ""
+    echo "⚡ Quick aliases available after ssh:"
+    echo "  • lab-start, lab-stop, lab-sniffer-logs, lab-container-logs"
+    echo "  • lab-status, lab-interfaces, lab-update-sniffer, lab-restart-sniffer"
+    echo ""
+    echo "💡 Key differences in hybrid mode:"
+    echo "  • Sniffer runs natively with sudo privileges for packet capture"
+    echo "  • All other components run in containers for isolation"
+    echo "  • Sequential startup ensures proper component dependencies"
+    echo ""
+  SHELL
+end

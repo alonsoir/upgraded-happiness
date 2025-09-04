@@ -42,46 +42,6 @@ services:
 
 
   # =============================================================================
-  # SNIFFER - Network Packet Capture Component
-  # =============================================================================
-  sniffer:
-    image: upgraded-happiness/sniffer:v3.1-etcd
-    container_name: sniffer
-    hostname: sniffer
-    network_mode: "host"
-    depends_on:
-      etcd:
-        condition: service_healthy
-    environment:
-      - ETCD_ENDPOINT=http://127.0.0.1:2379
-      - NODE_ID=sniffer_v31_etcd_001
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-    command: >
-      python /app/evolutionary_sniffer_standalone.py 
-      /app/config/json/sniffer_config_docker.json
-    volumes:
-      - sniffer_logs:/app/logs:rw
-      - sniffer_data:/app/data:rw
-    security_opt:
-      - apparmor:docker-default
-    read_only: false
-    tmpfs:
-      - /tmp:noexec,nodev,nosuid,size=50m
-    privileged: true
-    cap_add:
-      - SYS_ADMIN
-      - NET_RAW
-      - NET_ADMIN
-    healthcheck:
-      test: [ "CMD-SHELL", "python -c 'import sys; sys.exit(0)'" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    restart: unless-stopped
-
-  # =============================================================================
   # GEOIP ENRICHER - IP Geolocation Service
   # =============================================================================
   geoip:
@@ -111,7 +71,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:noexec,nodev,nosuid,size=50m
-    user: "1001:1001"
+    # user: "1001:1001"  # Temporarily disabled for packet capture
     cap_drop:
       - ALL
     healthcheck:

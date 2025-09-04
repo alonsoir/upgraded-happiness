@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-07-31T12:53:12.387982",
+  "feature_names": [
+    "dbytes"
+  ],
+  "model_params": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "class_weight": "balanced",
+    "criterion": "gini",
+    "max_depth": 20,
+    "max_features": "sqrt",
+    "max_leaf_nodes": null,
+    "max_samples": 0.8,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 10,
+    "min_samples_split": 20,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 300,
+    "n_jobs": -1,
+    "oob_score": true,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "oob_score": 0.4866666666666667,
+  "metrics": {
+    "auc_roc": 0.510088,
+    "confusion_matrix": [
+      [
+        127,
+        123
+      ],
+      [
+        121,
+        129
+      ]
+    ]
+  }
+}
