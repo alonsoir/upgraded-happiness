@@ -1,1 +1,0 @@
-{"virtualbox":{"/home/vagrant/upgraded-happiness":{"owner":"vagrant","group":"vagrant","mount_options":["dmode=755,fmode=644","uid=1000","gid=1000","_netdev"],"guestpath":"/home/vagrant/upgraded-happiness","hostpath":"/Users/aironman/git/upgraded-happiness/infrastructure/VM","disabled":false,"__vagrantfile":true}}}
