@@ -33,7 +33,7 @@
 
   "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA - DOCKER",
   "etcd_crypto": {
-    "etcd_host": "etcd",
+    "etcd_host": "localhost",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster",
     "node_id": "geoip_enricher_v31_001"
@@ -42,7 +42,7 @@
   "_comment_network": "🔌 Red optimizada - CRÍTICO: CONNECT a sniffer (5571), BIND para ML (5560) - DOCKER",
   "network": {
     "input_socket": {
-      "address": "sniffer",
+      "address": "localhost",
       "port": 5571,
       "mode": "connect",
       "socket_type": "PULL",
@@ -307,7 +307,7 @@
       },
       "file": {
         "enabled": true,
-        "path": "/app/logs/geoip_enricher_v31_tripartite_etcd.log",
+        "path": "./logs/geoip_enricher_v31_tripartite_etcd.log",
         "level": "DEBUG",
         "max_size": "25MB",
         "backup_count": 3,
@@ -558,7 +558,7 @@
       "network_security_clean_v31_pb2.py"
     ],
     "etcd_services": [
-      "ETCD cluster running on etcd:2379",
+      "ETCD cluster running on localhost:2379",
       "ETCD Crypto Coordinator"
     ],
     "setup_instructions": {
@@ -566,7 +566,7 @@
       "2": "Descargar GeoLite2-City.mmdb de MaxMind",
       "3": "Colocar en /app/data/geoip/GeoLite2-City.mmdb",
       "4": "export IPAPI_TOKEN='tu_token_real_aqui' (variable de entorno)",
-      "5": "Verificar que ETCD esté corriendo en etcd:2379",
+      "5": "Verificar que ETCD esté corriendo en localhost:2379",
       "6": "Verificar que evolutionary_sniffer_v31 envía protobuf v3.1 con network_features en puerto 5571",
       "7": "Configurar fallback_method como 'ipapi'",
       "8": "Compilar protobuf v3.1: network_security_clean_v31_pb2.py",

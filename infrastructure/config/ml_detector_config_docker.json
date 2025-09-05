@@ -32,7 +32,7 @@
 
   "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA - Sin token = NO ARRANCA",
   "etcd_crypto": {
-    "etcd_host": "etcd",
+    "etcd_host": "localhost",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster-v31",
     "node_id": "ml_detector_tricapa_v31_001"
@@ -40,7 +40,7 @@
 
   "network": {
     "input_socket": {
-      "address": "geoip",
+      "address": "localhost",
       "port": 5560,
       "mode": "connect",
       "socket_type": "PULL",
@@ -165,8 +165,8 @@
       "_comment_level1": "🥇 NIVEL 1: SIEMPRE ACTIVO (obligatorio)",
       "level1_attack_detector": {
         "enabled": true,
-        "model_file": "rf_production_sniffer_compatible.joblib",
-        "scaler_file": "rf_production_sniffer_compatible_scaler.joblib",
+        "model_file": "rf_production_final.joblib",
+        "scaler_file": "rf_production_final_scaler.joblib",
         "features_count": 23,
         "requires_scaling": true,
         "model_location": "production",
@@ -175,7 +175,7 @@
       "_comment_level2_ddos": "🔥 NIVEL 2 DDOS: Solo RF habilitado (LGB deshabilitado por HW)",
       "ddos_rf": {
         "enabled": true,
-        "model_file": "ddos_random_forest.joblib",
+        "model_file": "rf_normal_ultra.joblib",
         "features_count": 82,
         "requires_scaling": false,
         "model_location": "tricapa",
@@ -194,7 +194,7 @@
       "_comment_level2_ransomware": "🦠 NIVEL 2 RANSOMWARE: Solo RF habilitado",
       "ransomware_rf": {
         "enabled": true,
-        "model_file": "ransomware_random_forest.joblib",
+        "model_file": "rf_normal_ultra.joblib",
         "features_count": 82,
         "requires_scaling": false,
         "model_location": "tricapa",
@@ -213,7 +213,7 @@
       "_comment_level3": "🔍 NIVEL 3: Solo internal habilitado (web deshabilitado por HW)",
       "internal_detector": {
         "enabled": true,
-        "model_file": "internal_normal_detector.joblib",
+        "model_file": "rf_normal_ultra.joblib",
         "features_count": 4,
         "requires_scaling": false,
         "model_location": "tricapa_or_production",
@@ -271,7 +271,7 @@
       "level3_activation_strategy": "traffic_type_based"
     },
     "model_paths": {
-      "base_models_dir": "/app/models",
+      "base_models_dir": "./models",
       "production_subdir": "production",
       "tricapa_subdir": "production/tricapa",
       "auto_discover_models": true,
@@ -307,7 +307,7 @@
     },
     "protobuf_logging": {
       "enabled": true,
-      "protobuf_base_dir": "/app/logs/proto",
+      "protobuf_base_dir": "./logs/proto",
       "file_format": "events_{HHMMSS}.proto",
       "directory_structure": "{year}/{month:02d}/{day:02d}",
       "append_mode": true,
@@ -330,7 +330,7 @@
     "level": "INFO",
     "_comment_visible": "🔍 INFO level para VER SCORES ML",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [tricapa_v31:{node_id}] [pid:{pid}] - %(message)s",
-    "file": "/app/logs/tricapa_ml_detector_v31_etcd.log",
+    "file": "./logs/tricapa_ml_detector_v31_etcd.log",
     "max_file_size_mb": 50,
     "backup_count": 3,
     "performance_logging": {
@@ -506,13 +506,13 @@
     "portability": "Para HW mejor, cambiar enabled:false -> enabled:true en modelos LGB y web_detector",
     "performance_target": "OPTIMIZED_THROUGHPUT_WITH_PUBSUB_DISTRIBUTION_ETCD_CRYPTO",
     "compatible_orchestrators": ["docker", "k8s", "k3s", "podman"],
-    "required_volumes": ["/app/logs", "/app/models"],
-    "required_models": ["rf_production_sniffer_compatible.joblib"],
+    "required_volumes": ["/app/logs", "./models"],
+    "required_models": ["rf_production_final.joblib"],
     "docker_specific": {
       "network_mode": "bridge",
       "container_dependencies": ["etcd", "geoip"],
       "exposed_ports": [5580],
-      "volumes_needed": ["/app/models", "/app/logs"],
+      "volumes_needed": ["./models", "/app/logs"],
       "memory_limit": "512m"
     }
   },
@@ -557,7 +557,7 @@
 
   "_etcd_integration_requirements": {
     "mandatory_dependencies": [
-      "ETCD cluster running on etcd:2379",
+      "ETCD cluster running on localhost:2379",
       "ETCD Crypto Coordinator active",
       "Protobuf v3_1 compatibility (no dots in folder names)",
       "etcd3-py with compatible protobuf version"

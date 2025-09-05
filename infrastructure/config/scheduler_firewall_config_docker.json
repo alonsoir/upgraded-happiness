@@ -31,7 +31,7 @@
 
   "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA - Sin token = NO ARRANCA",
   "etcd_crypto": {
-    "etcd_host": "etcd",
+    "etcd_host": "localhost",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster-v31",
     "node_id": "scheduler_firewall_001"
@@ -40,7 +40,7 @@
   "_comment_architecture": "🎯 ARQUITECTURA: ml_detector:5580(PUB) → scheduler:5580(SUB) → firewall_agent:5582(PUSH) ↔ scheduler:5581(PULL)",
   "network": {
     "ml_events_input": {
-      "address": "ml-detector",
+      "address": "localhost",
       "port": 5580,
       "_comment_fix": "🔧 CORRECTO: 5580 para recibir de ml_detector PUB con ETCD crypto",
       "mode": "connect",
@@ -190,7 +190,7 @@
       },
       "file": {
         "enabled": true,
-        "path": "/app/logs/scheduler_firewall_etcd.log",
+        "path": "./logs/scheduler_firewall_etcd.log",
         "level": "INFO",
         "max_size": "50MB",
         "backup_count": 5,
@@ -198,7 +198,7 @@
       },
       "decision_log": {
         "enabled": true,
-        "path": "/app/logs/scheduler_decisions_etcd.log",
+        "path": "./logs/scheduler_decisions_etcd.log",
         "level": "INFO",
         "log_all_decisions": true,
         "log_rule_applications": true,
@@ -363,7 +363,7 @@
 
   "_etcd_integration_requirements": {
     "mandatory_dependencies": [
-      "ETCD cluster running on etcd:2379",
+      "ETCD cluster running on localhost:2379",
       "ETCD Crypto Coordinator active",
       "ML Detector tricapa running on port 5580 (PUB)",
       "Simple Firewall Agent on ports 5582/5581",

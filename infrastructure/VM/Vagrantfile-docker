@@ -1,6 +1,6 @@
 Vagrant.configure("2") do |config|
   # Ubuntu Server 24.04 LTS
-  config.vm.box = "ubuntu/noble64"
+  config.vm.box = "ubuntu/jammy64"
   config.vm.hostname = "lab-upgraded-happiness"
 
   # Upgraded Happiness Pipeline Ports
@@ -16,7 +16,6 @@ Vagrant.configure("2") do |config|
   config.vm.network "forwarded_port", guest: 3001, host: 3001, id: "grafana"
 
   # Bridge network for sniffing (Promiscuous Mode enabled)
-  # Auto-detect best interface, fallback to common ones
   config.vm.network "public_network",
     bridge: [
       "en0: Wi-Fi (AirPort)",    # macOS Wi-Fi
@@ -140,19 +139,25 @@ Vagrant.configure("2") do |config|
     setcap cap_net_raw,cap_net_admin=eip /usr/bin/tshark
     chmod +s /usr/bin/tcpdump
 
-    # Install Python dependencies for native sniffer
-    echo "🐍 Installing native sniffer Python dependencies..."
+    # Install Python dependencies from requirements file
+    echo "🐍 Installing Python dependencies from requirements-sniffer.txt..."
     cd /home/vagrant/upgraded-happiness
 
-    # Install system-wide Python packages needed for sniffer
-    pip3 install --break-system-packages \
-      scapy \
-      pyzmq \
-      etcd3 \
-      protobuf==4.25.1 \
-      psutil \
-      requests \
-      cryptography
+    # Create and activate virtual environment for sniffer
+    python3 -m venv /opt/sniffer-env
+    source /opt/sniffer-env/bin/activate
+    pip install --upgrade pip
+    pip install -r infrastructure/docker/requirements-sniffer.txt
+
+    # Create activation script for the sniffer
+    cat > /home/vagrant/activate-sniffer-env.sh << 'ENVEOF'
+    #!/bin/bash
+    source /opt/sniffer-env/bin/activate
+    export PYTHONPATH=/home/vagrant/upgraded-happiness
+    echo "🐍 Sniffer environment activated"
+    ENVEOF
+    chmod +x /home/vagrant/activate-sniffer-env.sh
+    chown vagrant:vagrant /home/vagrant/activate-sniffer-env.sh
 
     # Setup project directory
     echo "📁 Configuring project directory..."
@@ -356,7 +361,7 @@ if [ ${#MISSING_IMAGES[@]} -gt 0 ]; then
         echo "📦 Running build script (excluding sniffer)..."
         chmod +x infrastructure/docker/build_all_images.sh
         # Note: Build script should skip sniffer or handle missing sniffer deps gracefully
-        ./infrastructure/docker/build_all_images.sh || echo "⚠️  Some builds may have failed - continuing..."
+        ./infrastructure/docker/bubash infrastructure/docker/build_all_images.sh || echo "⚠️  Some builds may have failed - continuing..."
     else
         echo "💡 Build images manually if needed"
     fi
@@ -396,7 +401,7 @@ echo ""
 
 # Step 1: Start native sniffer in background
 echo "Step 1: 📡 Starting native sniffer (background process)..."
-nohup sudo -E PYTHONPATH=/home/vagrant/upgraded-happiness python3 core/evolutionary_sniffer_standalone.py infrastructure/config/sniffer_config_docker.json > /tmp/sniffer.log 2>&1 &
+nohup sudo -E PYTHONPATH=/home/vagrant/upgraded-happiness /opt/sniffer-env/bin/python3 core/evolutionary_sniffer_standalone.py infrastructure/config/sniffer_config_docker.json > /tmp/sniffer.log 2>&1 &
 SNIFFER_PID=$!
 echo "✅ Native sniffer started with PID: $SNIFFER_PID"
 echo "📝 Logs available at: /tmp/sniffer.log"

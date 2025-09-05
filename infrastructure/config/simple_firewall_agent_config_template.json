@@ -228,7 +228,7 @@
       },
       "file": {
         "enabled": true,
-        "path": "/app/logs/simple_firewall_agent_etcd.log",
+        "path": "./logs/simple_firewall_agent_etcd.log",
         "level": "{{ logging.level }}",
         "max_size": "50MB",
         "backup_count": 5,
@@ -236,7 +236,7 @@
       },
       "firewall_actions_log": {
         "enabled": true,
-        "path": "/app/logs/firewall_actions_v31_etcd.log",
+        "path": "./logs/firewall_actions_v31_etcd.log",
         "level": "{{ logging.level }}",
         "log_all_actions": true,
         "log_dual_communication": {% if environment == "local" %}true{% else %}false{% endif %},

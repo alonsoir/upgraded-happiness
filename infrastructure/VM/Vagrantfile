@@ -1,0 +1,295 @@
+Vagrant.configure("2") do |config|
+  # Ubuntu Server 24.04 LTS
+  config.vm.box = "ubuntu/jammy64"
+  config.vm.hostname = "lab-upgraded-happiness"
+
+  # Solo ports esenciales para pipeline nativo
+  config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh"
+  config.vm.network "forwarded_port", guest: 8080, host: 8080, id: "dashboard"
+  config.vm.network "forwarded_port", guest: 2379, host: 12379, id: "etcd"
+
+  # Red bridge para packet capture
+  config.vm.network "public_network",
+    use_dhcp_assigned_default_route: false,
+    auto_config: true
+
+  # VM resources
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "upgraded-happiness-native"
+    vb.memory = "4096"
+    vb.cpus = 2
+    vb.gui = false
+
+    # Network para sniffing
+    vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+  end
+
+  # Sync proyecto
+  config.vm.synced_folder "../..", "/home/vagrant/upgraded-happiness",
+    owner: "vagrant", group: "vagrant"
+
+  # Provisioning consolidado
+  config.vm.provision "shell", inline: <<-SHELL
+    set -e
+    echo "Setting up Upgraded Happiness Native Pipeline Lab..."
+
+    # Update system
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get upgrade -y -qq
+
+    # Install essentials + etcd
+    apt-get install -y -qq \
+      python3 python3-pip python3-dev python3-venv \
+      libpcap-dev libffi-dev libssl-dev \
+      tcpdump net-tools htop \
+      git curl wget jq vim \
+      etcd
+
+    # Configure packet capture permissions
+    setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
+    chmod +s /usr/bin/tcpdump
+
+    # Setup ETCD data directory
+    mkdir -p /var/lib/etcd
+    chown vagrant:vagrant /var/lib/etcd
+
+    # Create Python environment
+    python3 -m venv /opt/pipeline-env
+    source /opt/pipeline-env/bin/activate
+    pip install --upgrade pip
+
+    # Install pipeline dependencies
+    cd /home/vagrant/upgraded-happiness
+    pip install -r infrastructure/docker/requirements-sniffer.txt
+    pip install -r infrastructure/docker/requirements-geoip.txt
+    pip install -r infrastructure/docker/requirements-ml-detector.txt
+    pip install -r infrastructure/docker/requirements-scheduler.txt
+    pip install -r infrastructure/docker/requirements-simple-firewall-agent.txt
+    pip install -r infrastructure/docker/requirements-dashboard.txt
+
+    # Fix config paths from Docker to native
+    find infrastructure/config/ -name "*.json" -exec sed -i 's|/app/models|./models|g' {} \;
+    find infrastructure/config/ -name "*.json" -exec sed -i 's|/app/logs|./logs|g' {} \;
+
+    # Fix ML detector model mappings
+    sed -i 's|rf_production_sniffer_compatible.joblib|rf_production_final.joblib|g' infrastructure/config/ml_detector_config_docker.json
+    sed -i 's|ddos_random_forest.joblib|rf_normal_ultra.joblib|g' infrastructure/config/ml_detector_config_docker.json
+    sed -i 's|ransomware_random_forest.joblib|rf_normal_ultra.joblib|g' infrastructure/config/ml_detector_config_docker.json
+    sed -i 's|internal_normal_detector.joblib|rf_normal_ultra.joblib|g' infrastructure/config/ml_detector_config_docker.json
+    sed -i 's|rf_production_sniffer_compatible_scaler.joblib|rf_production_final_scaler.joblib|g' infrastructure/config/ml_detector_config_docker.json
+
+    # Set ownership
+    chown -R vagrant:vagrant /home/vagrant/upgraded-happiness
+    chown -R vagrant:vagrant /opt/pipeline-env
+
+    # Create ETCD startup script
+    cat > /home/vagrant/start-etcd.sh << 'EOF'
+#!/bin/bash
+echo "Starting ETCD server..."
+etcd --data-dir=/var/lib/etcd \
+     --listen-client-urls=http://0.0.0.0:2379 \
+     --advertise-client-urls=http://localhost:2379 \
+     > /tmp/etcd.log 2>&1 &
+ETCD_PID=$!
+echo $ETCD_PID > /tmp/etcd.pid
+echo "ETCD started with PID: $ETCD_PID"
+sleep 3
+curl -s http://localhost:2379/version && echo " - ETCD responding correctly"
+EOF
+
+    # Create ETCD stop script
+    cat > /home/vagrant/stop-etcd.sh << 'EOF'
+#!/bin/bash
+if [ -f "/tmp/etcd.pid" ]; then
+    ETCD_PID=$(cat /tmp/etcd.pid)
+    if kill -0 $ETCD_PID 2>/dev/null; then
+        kill $ETCD_PID
+        echo "ETCD stopped (PID: $ETCD_PID)"
+    fi
+    rm -f /tmp/etcd.pid
+else
+    pkill etcd || echo "No ETCD processes found"
+fi
+EOF
+
+    # Create pipeline startup script with ETCD integration
+    cat > /home/vagrant/start-pipeline.sh << 'EOF'
+#!/bin/bash
+source /opt/pipeline-env/bin/activate
+export PYTHONPATH=/home/vagrant/upgraded-happiness
+cd /home/vagrant/upgraded-happiness
+
+# Crear logs dir
+mkdir -p logs
+
+# Iniciar ETCD si no está corriendo
+if ! curl -s http://localhost:2379/version >/dev/null 2>&1; then
+    echo "Starting ETCD..."
+    ~/start-etcd.sh
+    sleep 5
+fi
+
+# Función para ejecutar componente en background
+start_component() {
+    local name=$1
+    local script=$2
+    local config1=$3
+    local config2_or_sudo=$4  # Puede ser config2 o needs_sudo si solo hay un config
+    local needs_sudo=$5       # Solo se usa si hay config2
+
+    local cmd_args="$script $config1"
+    local sudo_required="false"
+
+    # Determinar si tiene dos configs o solo uno
+    if [ $# -eq 4 ]; then
+        # Solo un config, el 4to parámetro es needs_sudo
+        sudo_required="$config2_or_sudo"
+    elif [ $# -eq 5 ]; then
+        # Dos configs
+        cmd_args="$script $config1 $config2_or_sudo"
+        sudo_required="$needs_sudo"
+    fi
+
+    echo "Starting $name..."
+    if [ "$sudo_required" = "true" ]; then
+        sudo -E /opt/pipeline-env/bin/python3 $cmd_args > logs/$name.log 2>&1 &
+    else
+        /opt/pipeline-env/bin/python3 $cmd_args > logs/$name.log 2>&1 &
+    fi
+    echo "$!" > logs/$name.pid
+    sleep 2
+}
+
+echo "Starting Upgraded Happiness Native Pipeline..."
+echo "=============================================="
+
+# Iniciar componentes en secuencia
+start_component "sniffer" "core/evolutionary_sniffer_standalone.py" "infrastructure/config/sniffer_config_docker.json" "true"
+start_component "geoip" "core/geoip_enricher_v31_etcd.py" "infrastructure/config/geoip_config_docker.json" "false"
+start_component "ml-detector" "core/ml_detector_v31_etcd.py" "infrastructure/config/ml_detector_config_docker.json" "false"
+start_component "scheduler-firewall" "core/scheduler_firewall_v31_etcd.py" "infrastructure/config/scheduler_firewall_config_docker.json" "infrastructure/config/firewall_rules_scheduler_config_docker.json" "false"
+start_component "firewall-agent" "core/simple_firewall_agent_v31_etcd.py" "infrastructure/config/simple_firewall_agent_config_docker.json" "infrastructure/config/firewall_rules_simple_agent_config_docker.json" "false"
+start_component "dashboard" "core/dashboard_v31_etcd.py" "infrastructure/config/dashboard_config_docker.json" "infrastructure/config/firewall_rules_dashboard_config_docker.json" "false"
+
+echo ""
+echo "Pipeline started! Check status:"
+echo "  - Logs: tail -f logs/<component>.log"
+echo "  - Status: ls -la logs/*.pid"
+echo "  - Stop: ~/stop-pipeline.sh"
+echo "  - Dashboard: http://localhost:8080 (if accessible)"
+EOF
+
+    # Create comprehensive stop script
+    cat > /home/vagrant/stop-pipeline.sh << 'EOF'
+#!/bin/bash
+cd /home/vagrant/upgraded-happiness
+
+echo "Stopping Upgraded Happiness Pipeline..."
+
+# Stop pipeline components
+if [ -d "logs" ]; then
+    for pid_file in logs/*.pid; do
+        if [ -f "$pid_file" ]; then
+            pid=$(cat "$pid_file")
+            component=$(basename "$pid_file" .pid)
+            if kill -0 "$pid" 2>/dev/null; then
+                sudo kill "$pid" 2>/dev/null || kill "$pid" 2>/dev/null
+                echo "Stopped $component (PID: $pid)"
+            fi
+            rm -f "$pid_file"
+        fi
+    done
+fi
+
+# Stop ETCD
+~/stop-etcd.sh
+
+echo "Pipeline stopped completely"
+EOF
+
+    # Create status checker script
+    cat > /home/vagrant/status-pipeline.sh << 'EOF'
+#!/bin/bash
+cd /home/vagrant/upgraded-happiness
+
+echo "Upgraded Happiness Pipeline Status"
+echo "=================================="
+
+# Check ETCD
+if curl -s http://localhost:2379/version >/dev/null 2>&1; then
+    echo "ETCD: Running"
+else
+    echo "ETCD: Stopped"
+fi
+
+# Check pipeline components
+if [ -d "logs" ]; then
+    echo ""
+    echo "Pipeline Components:"
+    for pid_file in logs/*.pid; do
+        if [ -f "$pid_file" ]; then
+            pid=$(cat "$pid_file")
+            component=$(basename "$pid_file" .pid)
+            if kill -0 "$pid" 2>/dev/null; then
+                echo "  $component: Running (PID: $pid)"
+            else
+                echo "  $component: Stopped"
+            fi
+        fi
+    done
+else
+    echo "No pipeline components detected"
+fi
+
+# Show recent log entries
+echo ""
+echo "Recent logs (last 3 lines each):"
+if [ -d "logs" ]; then
+    for log_file in logs/*.log; do
+        if [ -f "$log_file" ]; then
+            component=$(basename "$log_file" .log)
+            echo "  $component:"
+            tail -3 "$log_file" 2>/dev/null | sed 's/^/    /'
+        fi
+    done
+fi
+EOF
+
+    # Make all scripts executable
+    chmod +x /home/vagrant/start-etcd.sh
+    chmod +x /home/vagrant/stop-etcd.sh
+    chmod +x /home/vagrant/start-pipeline.sh
+    chmod +x /home/vagrant/stop-pipeline.sh
+    chmod +x /home/vagrant/status-pipeline.sh
+    chown vagrant:vagrant /home/vagrant/*.sh
+
+    # Create helpful aliases
+    cat >> /home/vagrant/.bashrc << 'EOF'
+
+# Upgraded Happiness Pipeline aliases
+alias lab-start='~/start-pipeline.sh'
+alias lab-stop='~/stop-pipeline.sh'
+alias lab-status='~/status-pipeline.sh'
+alias lab-logs='cd ~/upgraded-happiness && tail -f logs/*.log'
+alias lab-etcd-start='~/start-etcd.sh'
+alias lab-etcd-stop='~/stop-etcd.sh'
+EOF
+
+    echo ""
+    echo "✅ Upgraded Happiness Native Pipeline Lab ready!"
+    echo "================================================"
+    echo ""
+    echo "Quick start:"
+    echo "  1. vagrant ssh"
+    echo "  2. lab-start  (or ~/start-pipeline.sh)"
+    echo "  3. lab-status (to monitor)"
+    echo "  4. lab-stop   (to stop everything)"
+    echo ""
+    echo "Available commands:"
+    echo "  - lab-start, lab-stop, lab-status"
+    echo "  - lab-logs (tail all logs)"
+    echo "  - lab-etcd-start, lab-etcd-stop (ETCD only)"
+    echo ""
+  SHELL
+end

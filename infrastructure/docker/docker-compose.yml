@@ -13,7 +13,11 @@ services:
     image: registry.k8s.io/etcd:3.5.16-0
     container_name: etcd
     hostname: etcd
-    network_mode: "host"
+    networks:
+      - upgraded-happiness-network
+    ports:
+      - "2379:2379"
+      - "2380:2380"
     command: >
       /usr/local/bin/etcd
       --name s1
@@ -63,8 +67,7 @@ services:
     volumes:
       - geoip_logs:/app/logs:rw
       - geoip_data:/app/data:rw
-    networks:
-      - upgraded-happiness-network
+    network_mode: host
     security_opt:
       - apparmor:docker-default
       - no-new-privileges:true
@@ -108,8 +111,7 @@ services:
     volumes:
       - ml_detector_logs:/app/logs:rw
       - ml_detector_data:/app/data:rw
-    networks:
-      - upgraded-happiness-network
+    network_mode: host
     security_opt:
       - apparmor:docker-default
       - no-new-privileges:true
@@ -161,8 +163,7 @@ services:
     volumes:
       - scheduler_logs:/app/logs:rw
       - scheduler_data:/app/data:rw
-    networks:
-      - upgraded-happiness-network
+    network_mode: host
     security_opt:
       - apparmor:docker-default
       - no-new-privileges:true
@@ -205,8 +206,7 @@ services:
     volumes:
       - firewall_logs:/app/logs:rw
       - firewall_data:/app/data:rw
-    networks:
-      - upgraded-happiness-network
+    network_mode: host
     security_opt:
       - apparmor:docker-default
       - no-new-privileges:true
@@ -256,8 +256,7 @@ services:
     volumes:
       - dashboard_logs:/app/logs:rw
       - dashboard_data:/app/data:rw
-    networks:
-      - upgraded-happiness-network
+    network_mode: host
     security_opt:
       - apparmor:docker-default
       - no-new-privileges:true
@@ -274,21 +273,6 @@ services:
       retries: 3
       start_period: 25s
     restart: unless-stopped
-
-# =============================================================================
-# NETWORKS - Isolated network for secure communication
-# =============================================================================
-networks:
-  upgraded-happiness-network:
-    driver: bridge
-    name: upgraded-happiness-network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
-    driver_opts:
-      com.docker.network.bridge.name: uh-bridge
-      com.docker.network.driver.mtu: 1500
 
 # =============================================================================
 # VOLUMES - Persistent storage for each component

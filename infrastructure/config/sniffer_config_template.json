@@ -258,7 +258,7 @@
   "logging": {
     "level": "{{ logging.level }}",
     "format": "%(asctime)s - %(name)-25s - %(levelname)-8s - [node_id:{node_id}] [pid:{pid}] [v3.1] - %(message)s",
-    "file": "/app/logs/evolutionary_sniffer_v31.log",
+    "file": "./logs/evolutionary_sniffer_v31.log",
     "max_file_size_mb": 200,
     "backup_count": 10,
     "include_performance_logs": true,

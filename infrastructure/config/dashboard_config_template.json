@@ -297,7 +297,7 @@
       },
       "file": {
         "enabled": true,
-        "path": "/app/logs/dashboard_v31_etcd.log",
+        "path": "./logs/dashboard_v31_etcd.log",
         "level": "{{ logging.file_level | default('INFO') }}",
         "max_size": "{{ logging.max_size | default('50MB') }}",
         "backup_count": {{ logging.backup_count | default(5) }},
@@ -305,7 +305,7 @@
       },
       "web_access_log": {
         "enabled": {{ dashboard.log_web_access | default(true) }},
-        "path": "/app/logs/dashboard_web_access.log",
+        "path": "./logs/dashboard_web_access.log",
         "level": "INFO",
         "log_requests": true,
         "log_responses": {% if environment == "local" %}true{% else %}false{% endif %},
@@ -313,7 +313,7 @@
       },
       "fleet_communication_log": {
         "enabled": {{ dashboard.log_fleet_communication | default(true) }},
-        "path": "/app/logs/dashboard_fleet_comm.log",
+        "path": "./logs/dashboard_fleet_comm.log",
         "level": "{{ logging.fleet_comm_level | default('INFO') }}",
         "log_commands_sent": true,
         "log_responses_received": true,

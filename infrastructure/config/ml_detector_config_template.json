@@ -307,7 +307,7 @@
     },
     "protobuf_logging": {
       "enabled": {{ advanced_logging.protobuf_enabled | default(true) }},
-      "protobuf_base_dir": "/app/logs/proto",
+      "protobuf_base_dir": "./logs/proto",
       "file_format": "events_{HHMMSS}.proto",
       "directory_structure": "{year}/{month:02d}/{day:02d}",
       "append_mode": true,
@@ -330,7 +330,7 @@
     "level": "{{ logging.level }}",
     "_comment_visible": "🔍 INFO level para VER SCORES ML",
     "format": "%(asctime)s - %(name)s - %(levelname)s - [tricapa_v31:{node_id}] [pid:{pid}] - %(message)s",
-    "file": "/app/logs/tricapa_ml_detector_v31_etcd.log",
+    "file": "./logs/tricapa_ml_detector_v31_etcd.log",
     "max_file_size_mb": 50,
     "backup_count": 3,
     "performance_logging": {

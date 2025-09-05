@@ -31,7 +31,7 @@
 
   "_comment_etcd_crypto": "🔐 ETCD CRYPTO - OBLIGATORIO para DUAL COMMUNICATION",
   "etcd_crypto": {
-    "etcd_host": "etcd",
+    "etcd_host": "localhost",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster-v31",
     "node_id": "simple_firewall_agent_001"
@@ -60,7 +60,7 @@
       "description": "Sends encrypted responses to scheduler_firewall_etcd"
     },
     "dashboard_commands": {
-      "address": "dashboard",
+      "address": "localhost",
       "port": 5583,
       "_comment": "📊 DASHBOARD→AGENT: Recibe comandos del dashboard",
       "mode": "connect",
@@ -91,7 +91,7 @@
     },
     "scheduler_responses_output": {
       "description": "Output for firewall responses to scheduler",
-      "address": "scheduler-firewall",
+      "address": "localhost",
       "port": 5581,
       "mode": "connect",
       "socket_type": "PUSH",
@@ -228,7 +228,7 @@
       },
       "file": {
         "enabled": true,
-        "path": "/app/logs/simple_firewall_agent_etcd.log",
+        "path": "./logs/simple_firewall_agent_etcd.log",
         "level": "INFO",
         "max_size": "50MB",
         "backup_count": 5,
@@ -236,7 +236,7 @@
       },
       "firewall_actions_log": {
         "enabled": true,
-        "path": "/app/logs/firewall_actions_v31_etcd.log",
+        "path": "./logs/firewall_actions_v31_etcd.log",
         "level": "INFO",
         "log_all_actions": true,
         "log_dual_communication": true,
@@ -369,7 +369,7 @@
 
   "_etcd_integration_requirements": {
     "mandatory_dependencies": [
-      "ETCD cluster running on etcd:2379",
+      "ETCD cluster running on localhost:2379",
       "ETCD Crypto Coordinator active",
       "Scheduler Firewall running on ports 5582/5581",
       "Dashboard running on ports 5583/5584 (optional)",

@@ -36,7 +36,7 @@
 
   "_comment_etcd_crypto": "🔐 ETCD CRYPTO - NUEVA SECCIÓN OBLIGATORIA",
   "etcd_crypto": {
-    "etcd_host": "127.0.0.1",
+    "etcd_host": "localhost",
     "etcd_port": 2379,
     "cluster_name": "upgraded-happiness-cluster",
     "node_id": "evolutionary_sniffer_v31_001"
@@ -258,7 +258,7 @@
   "logging": {
     "level": "INFO",
     "format": "%(asctime)s - %(name)-25s - %(levelname)-8s - [node_id:{node_id}] [pid:{pid}] [v3.1] - %(message)s",
-    "file": "/app/logs/evolutionary_sniffer_v31.log",
+    "file": "./logs/evolutionary_sniffer_v31.log",
     "max_file_size_mb": 200,
     "backup_count": 10,
     "include_performance_logs": true,
@@ -315,7 +315,7 @@
     ],
     "node_registration": {
       "enabled": false,
-      "etcd_endpoints": ["127.0.0.1:2379"],
+      "etcd_endpoints": ["localhost:2379"],
       "registration_ttl_seconds": 60,
       "_comment": "etcd registration preparado para futuro k3s deployment"
     },
