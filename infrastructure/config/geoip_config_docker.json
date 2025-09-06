@@ -184,11 +184,11 @@
     "_comment_maxmind": "🌍 MaxMind HABILITADO como método primario",
     "maxmind": {
       "enabled": true,
-      "database_path": "/app/data/geoip/GeoLite2-City.mmdb",
+      "database_path": "./geodata/GeoLite2-City.mmdb",
       "auto_update": false,
       "fallback_to_country": true,
       "connection_pool_size": 8,
-      "fallback_database": "/app/data/geoip/GeoLite2-Country.mmdb",
+      "fallback_database": "./geodata/GeoLite2-Country.mmdb",
       "timeout_seconds": 2.0
     },
 
@@ -564,7 +564,7 @@
     "setup_instructions": {
       "1": "pip install geoip2 etcd3-py",
       "2": "Descargar GeoLite2-City.mmdb de MaxMind",
-      "3": "Colocar en /app/data/geoip/GeoLite2-City.mmdb",
+      "3": "Colocar en ./geodata/GeoLite2-City.mmdb",
       "4": "export IPAPI_TOKEN='tu_token_real_aqui' (variable de entorno)",
       "5": "Verificar que ETCD esté corriendo en localhost:2379",
       "6": "Verificar que evolutionary_sniffer_v31 envía protobuf v3.1 con network_features en puerto 5571",
