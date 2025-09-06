@@ -1,0 +1,379 @@
+Vagrant.configure("2") do |config|
+  # Ubuntu Server 24.04 LTS
+  config.vm.box = "ubuntu/noble64"
+  config.vm.hostname = "lab-upgraded-happiness"
+
+  # NAT network for SSH & provisioning
+  config.vm.network "forwarded_port", guest: 22, host: 2222, id: "ssh"
+  config.vm.network "forwarded_port", guest: 80, host: 8080, id: "http"
+  config.vm.network "forwarded_port", guest: 443, host: 8443, id: "https"
+  config.vm.network "forwarded_port", guest: 2379, host: 12379, id: "etcd"
+  config.vm.network "forwarded_port", guest: 6443, host: 6443, id: "k3s-api"
+  config.vm.network "forwarded_port", guest: 3000, host: 3000, id: "dashboard"
+  config.vm.network "forwarded_port", guest: 9090, host: 9090, id: "prometheus"
+  config.vm.network "forwarded_port", guest: 3001, host: 3001, id: "grafana"
+  config.vm.network "forwarded_port", guest: 5432, host: 15432, id: "postgres"
+
+  # Bridge network for sniffing (Promiscuous Mode enabled)
+  # Auto-detect best interface, fallback to common ones
+  config.vm.network "public_network",
+    bridge: [
+      "en0: Wi-Fi (AirPort)",    # macOS Wi-Fi
+      "en1: Ethernet",           # macOS Ethernet
+      "en0",                     # Generic Wi-Fi
+      "eth0",                    # Linux Ethernet
+      "wlan0"                    # Linux Wi-Fi
+    ],
+    use_dhcp_assigned_default_route: false,
+    auto_config: true
+
+  # VM configuration optimized for the project
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "upgraded-happiness-lab"
+    vb.memory = "6144"  # Increased for better performance
+    vb.cpus = 4         # Increased for parallel processing
+    vb.gui = false
+
+    # Enable nested virtualization for k8s
+    vb.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+
+    # Network configuration
+    vb.customize ["modifyvm", :id, "--nic1", "nat"]
+    vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
+    vb.customize ["modifyvm", :id, "--nic2", "bridged"]
+    vb.customize ["modifyvm", :id, "--nictype2", "virtio"]
+    vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+
+    # Performance optimizations
+    vb.customize ["modifyvm", :id, "--ioapic", "on"]
+    vb.customize ["modifyvm", :id, "--pae", "on"]
+    vb.customize ["modifyvm", :id, "--hwvirtex", "on"]
+  end
+
+  # Sync project folder with better permissions
+  config.vm.synced_folder ".", "/home/vagrant/upgraded-happiness",
+    owner: "vagrant",
+    group: "vagrant",
+    mount_options: ["dmode=755,fmode=644"],
+    type: "virtualbox"
+
+  # Main provisioning script
+  config.vm.provision "shell", inline: <<-SHELL
+    set -e
+
+    echo "🚀 Starting Upgraded Happiness Lab Provisioning..."
+    echo "==============================================="
+
+    # Update system
+    echo "🔄 Updating system packages..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get upgrade -y -qq
+
+    # Install essential packages
+    echo "📦 Installing essential packages..."
+    apt-get install -y -qq \
+      curl \
+      wget \
+      git \
+      htop \
+      iftop \
+      net-tools \
+      tcpdump \
+      wireshark-common \
+      tshark \
+      nmap \
+      iptables-persistent \
+      ca-certificates \
+      gnupg \
+      lsb-release \
+      apt-transport-https \
+      software-properties-common \
+      jq \
+      vim \
+      tree \
+      unzip
+
+    # Install Docker
+    echo "🐳 Installing Docker CE..."
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    apt-get update -qq
+    apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+    # Configure Docker
+    usermod -aG docker vagrant
+    systemctl enable docker
+    systemctl start docker
+
+    # Install k3s
+    echo "☸️  Installing k3s Kubernetes..."
+    curl -sfL https://get.k3s.io | sh -s - \
+      --write-kubeconfig-mode 644 \
+      --disable traefik \
+      --disable servicelb
+
+    # Install docker-compose standalone
+    echo "🔧 Installing docker-compose..."
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)
+    curl -L "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+    # Configure packet capture permissions
+    echo "🔐 Configuring packet capture permissions..."
+    setcap cap_net_raw,cap_net_admin=eip /usr/bin/tcpdump
+    setcap cap_net_raw,cap_net_admin=eip /usr/bin/tshark
+    chmod +s /usr/bin/tcpdump
+
+    # Setup project directory
+    echo "📁 Configuring project directory..."
+    cd /home/vagrant/upgraded-happiness
+    chown -R vagrant:vagrant /home/vagrant/upgraded-happiness
+
+    # Create network interface detection script
+    cat > /home/vagrant/detect-interfaces.sh << 'EOF'
+#!/bin/bash
+echo "🔍 Network Interface Detection Report"
+echo "===================================="
+echo ""
+echo "📡 Available network interfaces:"
+ip link show | grep -E "^[0-9]+:" | awk '{print "  " $2}' | sed 's/://'
+echo ""
+echo "📊 Interface details:"
+ip addr show | grep -E "inet |^[0-9]+:" | sed 's/^/  /'
+echo ""
+echo "🎯 Recommended interface for sniffer:"
+BRIDGE_IF=$(ip route | grep default | head -1 | awk '{print $5}' | head -1)
+if [ -n "$BRIDGE_IF" ]; then
+    echo "  $BRIDGE_IF (default route interface)"
+else
+    echo "  eth1 (likely bridge interface)"
+fi
+echo ""
+echo "🔧 Current sniffer configuration:"
+if [ -f "/home/vagrant/upgraded-happiness/infrastructure/configs/sniffer_config_docker.json" ]; then
+    grep -A1 '"interface"' /home/vagrant/upgraded-happiness/infrastructure/configs/sniffer_config_docker.json | head -1 | sed 's/^/  /'
+else
+    echo "  Configuration file not found"
+fi
+EOF
+    chmod +x /home/vagrant/detect-interfaces.sh
+    chown vagrant:vagrant /home/vagrant/detect-interfaces.sh
+
+    # Create sniffer configuration update script
+    cat > /home/vagrant/update-sniffer-config.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Configuration paths - try multiple locations
+CONFIG_PATHS=(
+    "/home/vagrant/upgraded-happiness/infrastructure/configs/sniffer_config_docker.json"
+    "/home/vagrant/upgraded-happiness/config/json/sniffer_config_docker.json"
+    "/home/vagrant/upgraded-happiness/configs/sniffer_config_docker.json"
+)
+
+CONFIG_FILE=""
+for path in "${CONFIG_PATHS[@]}"; do
+    if [ -f "$path" ]; then
+        CONFIG_FILE="$path"
+        break
+    fi
+done
+
+INTERFACE=${1:-$(ip route | grep default | head -1 | awk '{print $5}' | head -1)}
+
+if [ -z "$INTERFACE" ]; then
+    # Try to detect vagrant bridge interface
+    INTERFACE=$(ip link show | grep -E "eth[1-9]|enp" | head -1 | awk -F': ' '{print $2}' | cut -d'@' -f1)
+fi
+
+if [ -z "$INTERFACE" ]; then
+    echo "❌ Could not detect network interface automatically"
+    echo "📡 Available interfaces:"
+    ip link show | grep -E "^[0-9]+:" | awk '{print "  " $2}' | sed 's/://'
+    echo ""
+    echo "💡 Usage: $0 <interface_name>"
+    echo "   Example: $0 eth1"
+    exit 1
+fi
+
+echo "🔧 Updating sniffer configuration..."
+echo "Interface: $INTERFACE"
+echo "Config file: $CONFIG_FILE"
+echo ""
+
+if [ -z "$CONFIG_FILE" ]; then
+    echo "❌ Sniffer configuration file not found in any of these locations:"
+    for path in "${CONFIG_PATHS[@]}"; do
+        echo "  - $path"
+    done
+    echo ""
+    echo "📁 Searching for config files..."
+    find /home/vagrant/upgraded-happiness -name "*sniffer*config*.json" -type f 2>/dev/null | head -5
+    exit 1
+fi
+
+# Backup original
+BACKUP_FILE="${CONFIG_FILE}.backup.$(date +%s)"
+cp "$CONFIG_FILE" "$BACKUP_FILE"
+echo "💾 Backup created: $BACKUP_FILE"
+
+# Update interface using jq (preferred) or sed fallback
+if command -v jq >/dev/null 2>&1; then
+    echo "🔧 Updating with jq..."
+    jq --arg interface "$INTERFACE" '.capture.interface = $interface' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+    echo "✅ Configuration updated successfully!"
+    echo ""
+    echo "📋 Current capture configuration:"
+    jq '.capture | {interface, promiscuous_mode, filter_expression, buffer_size}' "$CONFIG_FILE"
+else
+    echo "🔧 Updating with sed (jq not available)..."
+    sed -i.bak "s/\"interface\": \"[^\"]*\"/\"interface\": \"$INTERFACE\"/" "$CONFIG_FILE"
+
+    echo "✅ Configuration updated successfully!"
+    echo ""
+    echo "📋 Updated interface setting:"
+    grep -A1 -B1 '"interface"' "$CONFIG_FILE"
+fi
+
+echo ""
+echo "💡 Tip: Restart sniffer container to apply changes:"
+echo "   docker-compose -f infrastructure/docker/docker-compose.yml restart sniffer"
+EOF
+    chmod +x /home/vagrant/update-sniffer-config.sh
+    chown vagrant:vagrant /home/vagrant/update-sniffer-config.sh
+
+    # Create comprehensive lab start script
+    cat > /home/vagrant/start-lab.sh << 'EOF'
+#!/bin/bash
+set -e
+
+cd /home/vagrant/upgraded-happiness
+
+echo "🚀 Starting Upgraded Happiness Lab"
+echo "=================================="
+echo ""
+
+# Check system requirements
+echo "🔍 Checking system requirements..."
+echo "  Docker: $(docker --version | cut -d' ' -f3)"
+echo "  Docker Compose: $(docker-compose --version | cut -d' ' -f4)"
+echo "  k3s: $(k3s --version | cut -d' ' -f3)"
+echo ""
+
+# Detect and configure network interface
+echo "🔧 Configuring network interface for sniffer..."
+./detect-interfaces.sh
+echo ""
+
+# Auto-update sniffer configuration
+BRIDGE_IF=$(ip route | grep default | head -1 | awk '{print $5}' | head -1)
+if [ -n "$BRIDGE_IF" ]; then
+    echo "🎯 Auto-updating sniffer configuration with interface: $BRIDGE_IF"
+    ./update-sniffer-config.sh "$BRIDGE_IF"
+    echo ""
+fi
+
+# Verify Docker is running
+if ! docker info >/dev/null 2>&1; then
+    echo "🐳 Starting Docker..."
+    sudo systemctl start docker
+    sleep 5
+fi
+
+# Build images if needed
+echo "🔨 Checking Docker images..."
+if [ -f "infrastructure/docker/build_all_images.sh" ]; then
+    if [ ! "$(docker images -q upgraded-happiness/sniffer 2> /dev/null)" ]; then
+        echo "🔨 Building Docker images..."
+        ./infrastructure/docker/build_all_images.sh
+    else
+        echo "✅ Docker images already built"
+    fi
+fi
+
+# Start the pipeline
+echo "🚀 Starting pipeline..."
+if [ -f "infrastructure/docker/docker-compose.yml" ]; then
+    docker-compose -f infrastructure/docker/docker-compose.yml up -d
+else
+    echo "❌ docker-compose.yml not found in expected location"
+    echo "📁 Available files:"
+    find . -name "docker-compose*.yml" -type f | head -5
+    exit 1
+fi
+
+echo ""
+echo "✅ Lab started successfully!"
+echo ""
+echo "📋 Services status:"
+docker-compose -f infrastructure/docker/docker-compose.yml ps
+echo ""
+echo "🌐 Access points:"
+echo "  🖥️  Dashboard: http://localhost:8080"
+echo "  ☸️  k3s API: https://localhost:6443"
+echo "  📊 Prometheus: http://localhost:9090"
+echo "  📈 Grafana: http://localhost:3001"
+echo ""
+echo "🔍 Useful commands:"
+echo "  📊 View logs: docker-compose -f infrastructure/docker/docker-compose.yml logs -f"
+echo "  🔄 Restart: docker-compose -f infrastructure/docker/docker-compose.yml restart"
+echo "  🛑 Stop: docker-compose -f infrastructure/docker/docker-compose.yml down"
+echo "  🔧 Detect interfaces: ./detect-interfaces.sh"
+echo "  ⚙️  Update sniffer: ./update-sniffer-config.sh [interface]"
+EOF
+    chmod +x /home/vagrant/start-lab.sh
+    chown vagrant:vagrant /home/vagrant/start-lab.sh
+
+    # Create stop lab script
+    cat > /home/vagrant/stop-lab.sh << 'EOF'
+#!/bin/bash
+cd /home/vagrant/upgraded-happiness
+
+echo "🛑 Stopping Upgraded Happiness Lab..."
+if [ -f "infrastructure/docker/docker-compose.yml" ]; then
+    docker-compose -f infrastructure/docker/docker-compose.yml down
+    echo "✅ Lab stopped successfully!"
+else
+    echo "❌ docker-compose.yml not found"
+fi
+EOF
+    chmod +x /home/vagrant/stop-lab.sh
+    chown vagrant:vagrant /home/vagrant/stop-lab.sh
+
+    # Create helpful aliases
+    cat >> /home/vagrant/.bashrc << 'EOF'
+
+# Upgraded Happiness Lab aliases
+alias lab-start='cd ~/upgraded-happiness && ./start-lab.sh'
+alias lab-stop='cd ~/upgraded-happiness && ./stop-lab.sh'
+alias lab-logs='cd ~/upgraded-happiness && docker-compose -f infrastructure/docker/docker-compose.yml logs -f'
+alias lab-status='cd ~/upgraded-happiness && docker-compose -f infrastructure/docker/docker-compose.yml ps'
+alias lab-interfaces='~/detect-interfaces.sh'
+alias lab-update-sniffer='~/update-sniffer-config.sh'
+EOF
+
+    echo ""
+    echo "✅ Provisioning completed successfully!"
+    echo "==============================================="
+    echo ""
+    echo "🎯 Next steps:"
+    echo "  1. Run: vagrant ssh"
+    echo "  2. Run: ./start-lab.sh"
+    echo ""
+    echo "🔧 Available tools:"
+    echo "  • ./detect-interfaces.sh - Detect network interfaces"
+    echo "  • ./update-sniffer-config.sh [interface] - Update sniffer config"
+    echo "  • ./start-lab.sh - Start the complete lab"
+    echo "  • ./stop-lab.sh - Stop the lab"
+    echo ""
+    echo "⚡ Quick aliases available after ssh:"
+    echo "  • lab-start, lab-stop, lab-logs, lab-status"
+    echo "  • lab-interfaces, lab-update-sniffer"
+    echo ""
+  SHELL
+end
